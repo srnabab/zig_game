@@ -1,45 +1,15 @@
 const std = @import("std");
-
-const targets: []const std.Target.Query = &.{
-    .{ .cpu_arch = .aarch64, .os_tag = .macos },
-    .{ .cpu_arch = .aarch64, .os_tag = .linux },
-    .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .gnu },
-    .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .musl },
-    .{ .cpu_arch = .x86_64, .os_tag = .windows },
-};
-
-const package = struct {
-    dep: *std.Build.Dependency,
-    lib: *std.Build.Step.Compile,
-    test_lib: *std.Build.Step.Compile,
-};
-
-fn sdl_library(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) package {
-    const sdl_dep = b.dependency("sdl", .{
-        .target = target,
-        .optimize = optimize,
-        //.preferred_linkage = .static,
-        //.strip = null,
-        //.sanitize_c = null,
-        //.pic = null,
-        //.lto = null,
-        //.emscripten_pthreads = false,
-        //.install_build_config_h = false,
-    });
-    const sdl_lib = sdl_dep.artifact("SDL3");
-    const sdl_test_lib = sdl_dep.artifact("SDL3_test");
-
-    return package{ .dep = sdl_dep, .lib = sdl_lib, .test_lib = sdl_test_lib };
-}
+const lazyP = @import("std").Build.LazyPath;
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const sdl = sdl_library(b, target, .ReleaseFast);
+    const enum_c_mod = b.createModule(.{ .root_source_file = b.path("src/enumFromC.zig"), .target = target, .optimize = optimize });
+    const video_mod = b.createModule(.{ .root_source_file = b.path("src/video/initVulkan.zig"), .target = target, .optimize = optimize });
 
     const exe_mod = b.createModule(.{
-        .root_source_file = b.path("src\\main.zig"),
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -48,18 +18,24 @@ pub fn build(b: *std.Build) void {
         .name = "game",
         .root_module = exe_mod,
     });
+    video_mod.addImport("enumFromC", enum_c_mod);
+    exe_mod.addImport("video", video_mod);
+    exe_mod.addImport("enumFromC", enum_c_mod);
 
-    exe.linkLibrary(sdl.lib);
-    exe.addIncludePath(sdl.dep.path("include"));
+    exe.addIncludePath(b.path("include/"));
+    exe.addLibraryPath(b.path("lib/"));
+    exe.linkLibC();
+    exe.linkSystemLibrary2("sdl3", .{ .preferred_link_mode = .static });
 
-    // 在 Windows 上链接必要的系统库
-    if (target.query.os_tag == .windows) {
-        exe.linkSystemLibrary("gdi32");
-        exe.linkSystemLibrary("shell32");
-        exe.linkSystemLibrary("ole32");
-        exe.linkSystemLibrary("imm32");
-        exe.linkSystemLibrary("version");
-    }
+    exe.linkSystemLibrary2("setupapi", .{ .preferred_link_mode = .static });
+    exe.linkSystemLibrary2("imm32", .{ .preferred_link_mode = .static });
+    exe.linkSystemLibrary2("version", .{ .preferred_link_mode = .static });
+    exe.linkSystemLibrary2("winmm", .{ .preferred_link_mode = .static });
+    exe.linkSystemLibrary2("ole32", .{ .preferred_link_mode = .static });
+    exe.linkSystemLibrary2("gdi32", .{ .preferred_link_mode = .static });
+    exe.linkSystemLibrary2("OleAut32", .{ .preferred_link_mode = .static });
+
+    exe.linkSystemLibrary2("vulkan-1", .{});
 
     b.installArtifact(exe);
 

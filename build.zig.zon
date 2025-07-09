@@ -67,7 +67,6 @@
         //    // actually used.
         //    .lazy = false,
         //},
-        .sdl = .{ .path = "lib\\SDL-release-3.2.16" },
     },
 
     // Specifies the set of files and directories that are included in this package.
