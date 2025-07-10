@@ -2,20 +2,22 @@ const vk = @cImport(@cInclude("vulkan/vulkan.h"));
 const std = @import("std");
 const heap = @import("std").heap;
 const Allocator = @import("std").mem.Allocator;
-const cEnum = @import("enumFromC");
+const VkSystemAllocationScope = vk.VkSystemAllocationScope;
+const VkError = @import("vulkanType.zig").VkError;
+const VkResult = @import("vulkanType.zig").VkResult;
+const VkResultToError = @import("resultToError.zig");
 
 fn comptime_print(comptime format: []const u8, comptime args: anytype) void {
-    // @compileLog 会在编译时无条件地打印信息到 stderr
     @compileLog(std.fmt.comptimePrint(format, args));
 }
 
-pub const VkResult = cEnum.generateEnumFromC(vk, vk.VkResult, "VK_SUCCESS", "VK_RESULT_MAX_ENUM");
+// pub const VkError = error{
+//     VulkanError,
+// };
 
-pub fn checkVkResult(result: vk.VkResult) VkResult {
-    return @enumFromInt(result);
+pub fn checkVkResult(result: vk.VkResult) VkError!void {
+    return VkResultToError.VkResultToError(@enumFromInt(result));
 }
-
-const VkSystemAllocationScope = vk.VkSystemAllocationScope;
 
 fn vkAlloc(pUserData: *anyopaque, size: c_ulonglong, alignment: c_ulonglong, allocationScope: VkSystemAllocationScope) callconv(.C) *anyopaque {
     _ = allocationScope;

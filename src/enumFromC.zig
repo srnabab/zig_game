@@ -51,7 +51,7 @@ pub fn generateEnumFromC(comptime import: anytype, comptime tag_type: anytype, c
             .tag_type = tag_type,
             .fields = enum_fields[0..count],
             .decls = &.{},
-            .is_exhaustive = true,
+            .is_exhaustive = false,
         },
     });
 }

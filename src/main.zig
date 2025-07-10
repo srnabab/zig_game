@@ -65,6 +65,8 @@ pub fn main() !void {
     for (args) |arg| {
         try stdout.print("arg: {s}\n", .{arg});
     }
-    const name = video.checkVkResult(vk.VK_ERROR_DEVICE_LOST);
-    std.debug.print("name {d}\n", .{@intFromEnum(name)});
+    video.checkVkResult(vk.VK_ERROR_DEVICE_LOST) catch |err| {
+        std.debug.print("name {s}\n", .{@errorName(err)});
+    };
+    // std.debug.print("value: {d}", .{@intFromEnum(@as(video.VkResult, @enumFromInt(-4)))});
 }
