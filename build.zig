@@ -5,6 +5,8 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const output_mod = b.createModule(.{ .root_source_file = b.path("src/stdOutPut.zig"), .target = target, .optimize = .ReleaseFast });
+
     const enum_c_mod = b.createModule(.{ .root_source_file = b.path("src/enumFromC.zig"), .target = target, .optimize = optimize });
 
     const gen_mod = b.createModule(.{ .root_source_file = b.path("src/video/gen.zig"), .target = target, .optimize = .ReleaseFast });
@@ -14,15 +16,6 @@ pub fn build(b: *std.Build) void {
     gen_exe.addIncludePath(b.path("include/"));
     gen_exe.addLibraryPath(b.path("lib/"));
     gen_exe.linkLibC();
-    // gen_exe.linkSystemLibrary2("sdl3", .{ .preferred_link_mode = .static });
-
-    // gen_exe.linkSystemLibrary2("setupapi", .{ .preferred_link_mode = .static });
-    // gen_exe.linkSystemLibrary2("imm32", .{ .preferred_link_mode = .static });
-    // gen_exe.linkSystemLibrary2("version", .{ .preferred_link_mode = .static });
-    // gen_exe.linkSystemLibrary2("winmm", .{ .preferred_link_mode = .static });
-    // gen_exe.linkSystemLibrary2("ole32", .{ .preferred_link_mode = .static });
-    // gen_exe.linkSystemLibrary2("gdi32", .{ .preferred_link_mode = .static });
-    // gen_exe.linkSystemLibrary2("OleAut32", .{ .preferred_link_mode = .static });
 
     gen_exe.linkSystemLibrary2("vulkan-1", .{});
     const run_gen_exe = b.addRunArtifact(gen_exe);
@@ -51,6 +44,7 @@ pub fn build(b: *std.Build) void {
     video_mod.addImport("enumFromC", enum_c_mod);
     exe_mod.addImport("video", video_mod);
     exe_mod.addImport("enumFromC", enum_c_mod);
+    exe_mod.addImport("output", output_mod);
 
     exe.addIncludePath(b.path("include/"));
     exe.addLibraryPath(b.path("lib/"));
@@ -66,6 +60,11 @@ pub fn build(b: *std.Build) void {
     exe.linkSystemLibrary2("OleAut32", .{ .preferred_link_mode = .static });
 
     exe.linkSystemLibrary2("vulkan-1", .{});
+
+    const waf = b.addWriteFiles();
+    _ = waf.addCopyFile(exe.getEmittedAsm(), "main.asm");
+    waf.step.dependOn(&exe.step);
+    b.getInstallStep().dependOn(&waf.step);
 
     b.installArtifact(exe);
 
