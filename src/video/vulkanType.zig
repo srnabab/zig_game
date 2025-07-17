@@ -20,3 +20,5 @@ pub const VkError: type = blk: {
     // 使用 .ErrorSet 来创建 error 集合
     break :blk @Type(.{ .error_set = error_names[0..count] });
 };
+
+pub const VkPhysicalDeviceType: type = cEnum.generateEnumFromC(vk, vk.VkPhysicalDeviceType, "VK_PHYSICAL_DEVICE_TYPE_OTHER", "VK_PHYSICAL_DEVICE_TYPE_MAX_ENUM");

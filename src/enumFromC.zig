@@ -6,6 +6,7 @@ pub fn generateEnumFromC(comptime import: anytype, comptime tag_type: anytype, c
     comptime var count = 0;
 
     comptime var begin = false;
+    @setEvalBranchQuota(10000);
     inline for (std.meta.declarations(import)) |decl| {
         if (begin == false) {
             // comptime_print("decl name: {s}", .{decl.name});
@@ -16,7 +17,6 @@ pub fn generateEnumFromC(comptime import: anytype, comptime tag_type: anytype, c
             }
         }
 
-        @setEvalBranchQuota(20000);
         comptime var has = false;
         comptime var i = count;
         while (i > 0) {
