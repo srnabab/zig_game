@@ -91,7 +91,8 @@ const VkQueueFamily = struct {
     familyIndice: i32 = -1,
     queueCount: u32 = 0,
 };
-const VkTheadQueue = struct { queue: vk.VkQueue = null, mutex: Mutex = .{} };
+const VkQueuStatus = enum { FREE, USING, EMPTY };
+const VkTheadQueue = struct { queue: vk.VkQueue = null, mutex: Mutex = .{}, status: VkQueuStatus = VkQueuStatus.EMPTY };
 
 pub const VkStruct = struct {
     const Self = @This();
@@ -106,10 +107,13 @@ pub const VkStruct = struct {
     device: vk.VkDevice = null,
     graphicQueueFamily: VkQueueFamily = .{},
     graphicQueue: [16]VkTheadQueue = undefined,
+    graphicQueueFreeCount: u32 = 0,
     computeQueueFamily: VkQueueFamily = .{},
     computeQueue: [16]VkTheadQueue = undefined,
+    computeQueueFreeCount: u32 = 0,
     transferQueueFamily: VkQueueFamily = .{},
     transferQueue: [8]VkTheadQueue = undefined,
+    transferQueueFreeCount: u32 = 0,
 
     pub fn init(allocator: Allocator) VkStruct {
         return VkStruct{ .allocator = allocator };
@@ -374,25 +378,26 @@ pub const VkStruct = struct {
             graphic = false;
             transfer = false;
             present = false;
+            compute = false;
             sparse = false;
             encode = false;
             decode = false;
-            if (queueFamily.queueFlags & vk.VK_QUEUE_GRAPHICS_BIT != 0) {
+            if ((queueFamily.queueFlags & vk.VK_QUEUE_GRAPHICS_BIT) != 0) {
                 graphic = true;
             }
-            if (queueFamily.queueFlags & vk.VK_QUEUE_COMPUTE_BIT != 0) {
+            if ((queueFamily.queueFlags & vk.VK_QUEUE_COMPUTE_BIT) != 0) {
                 compute = true;
             }
-            if (queueFamily.queueFlags & vk.VK_QUEUE_TRANSFER_BIT != 0) {
+            if ((queueFamily.queueFlags & vk.VK_QUEUE_TRANSFER_BIT) != 0) {
                 transfer = true;
             }
-            if (queueFamily.queueFlags & vk.VK_QUEUE_SPARSE_BINDING_BIT != 0) {
+            if ((queueFamily.queueFlags & vk.VK_QUEUE_SPARSE_BINDING_BIT) != 0) {
                 sparse = true;
             }
-            if (queueFamily.queueFlags & vk.VK_QUEUE_VIDEO_ENCODE_BIT_KHR != 0) {
+            if ((queueFamily.queueFlags & vk.VK_QUEUE_VIDEO_ENCODE_BIT_KHR) != 0) {
                 encode = true;
             }
-            if (queueFamily.queueFlags & vk.VK_QUEUE_VIDEO_DECODE_BIT_KHR != 0) {
+            if ((queueFamily.queueFlags & vk.VK_QUEUE_VIDEO_DECODE_BIT_KHR) != 0) {
                 decode = true;
             }
             var presentSupport: u32 = 0;
@@ -404,15 +409,22 @@ pub const VkStruct = struct {
             if (graphic and present) {
                 self.graphicQueueFamily.familyIndice = i_i32;
                 self.graphicQueueFamily.queueCount = queueFamily.queueCount;
+                self.graphicQueueFreeCount = queueFamily.queueCount;
+                // std.debug.print("family a g_P {d}\n", .{i_usize});
             }
 
             if (compute and !graphic) {
                 self.computeQueueFamily.familyIndice = i_i32;
                 self.computeQueueFamily.queueCount = queueFamily.queueCount;
+                self.computeQueueFreeCount = queueFamily.queueCount;
+                // std.debug.print("family a com {d}\n", .{i_usize});
             }
 
             if (transfer and !graphic and !compute and !decode and !encode) {
                 self.transferQueueFamily.familyIndice = i_i32;
+                self.transferQueueFamily.queueCount = queueFamily.queueCount;
+                self.transferQueueFreeCount = queueFamily.queueCount;
+                // std.debug.print("family a tra\n", .{});
             }
         }
     }
@@ -475,23 +487,96 @@ pub const VkStruct = struct {
     }
 
     fn createQueue(self: *Self) void {
-        if (self.graphicQueueFamily.familyIndice != -1) {
-            for (0..self.graphicQueueFamily.queueCount) |i_usize| {
-                const i: u32 = @truncate(i_usize);
-                vk.vkGetDeviceQueue(self.device, @bitCast(self.graphicQueueFamily.familyIndice), i, @ptrCast(&self.graphicQueue[i]));
-            }
-        }
-        if (self.computeQueueFamily.familyIndice != -1) {
-            for (0..self.computeQueueFamily.queueCount) |i_usize| {
-                const i: u32 = @truncate(i_usize);
-                vk.vkGetDeviceQueue(self.device, @bitCast(self.computeQueueFamily.familyIndice), i, @ptrCast(&self.computeQueue[i]));
-            }
-        }
-        if (self.transferQueueFamily.familyIndice != -1) {
-            for (0..self.transferQueueFamily.queueCount) |i_usize| {
-                const i: u32 = @truncate(i_usize);
-                vk.vkGetDeviceQueue(self.device, @bitCast(self.transferQueueFamily.familyIndice), i, @ptrCast(&self.transferQueue[i]));
+        const families = [3]VkQueueFamily{ self.graphicQueueFamily, self.computeQueueFamily, self.transferQueueFamily };
+        const queuess = [3][]VkTheadQueue{ self.graphicQueue[0..self.graphicQueue.len], self.computeQueue[0..self.computeQueue.len], self.transferQueue[0..self.transferQueue.len] };
+        for (families, queuess) |family, queues| {
+            if (family.familyIndice != -1) {
+                for (0..queues.len) |i_usize| {
+                    const i: u32 = @truncate(i_usize);
+                    if (i < family.queueCount) {
+                        vk.vkGetDeviceQueue(self.device, @bitCast(family.familyIndice), i, @ptrCast(&queues[i].queue));
+                        queues[i].mutex = .{};
+                        queues[i].status = .FREE;
+                        // std.debug.print("a queue\n", .{});
+                    } else {
+                        queues[i].queue = null;
+                        queues[i].status = .EMPTY;
+                        // std.debug.print("a empty queue\n", .{});
+                    }
+                }
             }
         }
     }
 };
+
+const Thread = std.Thread;
+
+var carshList = [_]usize{0} ** 16;
+var queuesTest = [_]usize{0} ** 16;
+var mutexs = [_]Mutex{.{}} ** 16;
+var gMutex: Mutex = .{};
+var done = false;
+
+fn getQueue() usize {
+    var minest: usize = carshList[0];
+    var index: usize = 0;
+    for (carshList, 0..carshList.len) |aaa, i| {
+        if (aaa == 0) {
+            carshList[i] += 1;
+            return i;
+        } else {
+            minest = @min(minest, aaa);
+            if (minest == aaa) {
+                index = i;
+            }
+        }
+    }
+    carshList[index] += 1;
+    return index;
+}
+
+fn releaseQueue(queu: usize) void {
+    if (carshList[queu] > 0) {
+        carshList[queu] -= 1;
+    }
+}
+
+fn testRun() void {
+    while (true) {
+        gMutex.lock();
+        const index = getQueue();
+        // std.debug.print("get index {d}\n", .{index});
+        gMutex.unlock();
+
+        mutexs[index].lock();
+        // std.debug.print("lock\n", .{});
+        std.debug.print("queue{d} using\n", .{index});
+        std.time.sleep(std.crypto.random.int(u64) % 1000000000);
+        // std.debug.print("unlock\n", .{});
+        mutexs[index].unlock();
+
+        gMutex.lock();
+        releaseQueue(index);
+        // std.debug.print("release index {d}\n", .{index});
+        gMutex.unlock();
+        if (done) break;
+    }
+}
+
+test "main queue test" {
+    // const status = [_]VkQueuStatus{.EMPTY} ** 16;
+
+    // var freeQueueCount: u32 = 16;
+    for (0..queuesTest.len) |i| {
+        queuesTest[i] += i;
+    }
+    var threads: [64]Thread = undefined;
+    for (0..threads.len) |i| {
+        threads[i] = try Thread.spawn(.{}, testRun, .{});
+    }
+    std.time.sleep(3000000000);
+    done = true;
+    for (threads) |thread| {
+        Thread.join(thread);
+    }
+}
