@@ -5,6 +5,7 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const ecs_mod = b.createModule(.{ .root_source_file = b.path("src/ecs/ecs.zig"), .target = target, .optimize = optimize });
     const output_mod = b.createModule(.{ .root_source_file = b.path("src/stdOutPut.zig"), .target = target, .optimize = .ReleaseFast });
 
     const enum_c_mod = b.createModule(.{ .root_source_file = b.path("src/enumFromC.zig"), .target = target, .optimize = optimize });
@@ -42,6 +43,7 @@ pub fn build(b: *std.Build) void {
     exe.step.dependOn(&run_gen_exe.step);
 
     video_mod.addImport("enumFromC", enum_c_mod);
+    exe_mod.addImport("ECS", ecs_mod);
     exe_mod.addImport("video", video_mod);
     exe_mod.addImport("enumFromC", enum_c_mod);
     exe_mod.addImport("output", output_mod);
