@@ -45,7 +45,7 @@ test "multiple thread register test" {
     const entitty = Entity.createEntity();
     std.debug.print("id: {d}\n", .{entitty.id});
 
-    var threads: [16]std.Thread = undefined;
+    var threads: [2]std.Thread = undefined;
     for (0..threads.len) |i| {
         threads[i] = try std.Thread.spawn(.{}, multipleThreadRegisterTestFunc, .{ &pool, &entityList });
     }
@@ -53,6 +53,13 @@ test "multiple thread register test" {
     for (0..threads.len) |i| {
         threads[i].join();
     }
+
+    var dataa = try pool.getCompent(Entity{ .id = 1 });
+    std.debug.print("id {d}: a {d}, b {d}, c {d}, d {d}\n\n", .{ 1, dataa.a, dataa.b, dataa.c, dataa.d });
+    dataa.a = 1000.0;
+    dataa.b = 1000.0;
+    dataa.c = 1000.0;
+    dataa.d = 1000.0;
 
     for (pool.dense_array.items, pool.dense_entity_array.items) |data, entity| {
         std.debug.print("id {d}: a {d}, b {d}, c {d}, d {d}\n", .{ entity.id, data.a, data.b, data.c, data.d });

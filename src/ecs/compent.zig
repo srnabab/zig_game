@@ -8,6 +8,8 @@ const CompentError = error{
     OutOfCapacity,
 };
 
+const u32_max = std.math.maxInt(u32);
+
 pub fn compentPool(comptime dataSet: type) type {
     return struct {
         const Self = @This();
@@ -36,6 +38,14 @@ pub fn compentPool(comptime dataSet: type) type {
                 .dense_array = dense_array,
                 .dense_entity_array = dense_entity_array,
             };
+        }
+
+        pub fn hasCompent(self: *Self, ent: Entity) bool {
+            if (self.sparse_array.items[ent.id] < u32_max + 1) {
+                return true;
+            } else {
+                return false;
+            }
         }
 
         pub fn register(self: *Self, ent: Entity, data: dataSet) !void {
@@ -68,7 +78,7 @@ pub fn compentPool(comptime dataSet: type) type {
             self.sparse_array.items[id_usize] = len;
         }
 
-        pub fn getData(self: *Self, ent: Entity) !dataSet {
+        pub fn getCompent(self: *Self, ent: Entity) !*dataSet {
             self.mutex.lock();
             defer self.mutex.unlock();
 
@@ -76,8 +86,12 @@ pub fn compentPool(comptime dataSet: type) type {
                 return CompentError.OutOfCapacity;
             }
 
-            const index = self.sparse_array.items[@intCast(ent.id)];
-            return self.dense_array.items[index];
+            if (self.hasCompent(ent)) {
+                const index = self.sparse_array.items[@intCast(ent.id)];
+                return &self.dense_array.items[index];
+            } else {
+                return CompentError.NotFound;
+            }
         }
 
         pub fn deinit(self: *Self) void {
