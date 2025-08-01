@@ -42,6 +42,10 @@ pub fn build(b: *std.Build) void {
     });
     exe.step.dependOn(&run_gen_exe.step);
 
+    const cpp_compileFlag = [_][]const u8{"-std=c++17"};
+
+    exe.addCSourceFile(.{ .file = b.path("src/steam_C/steamC.cpp"), .language = .cpp, .flags = &cpp_compileFlag });
+
     video_mod.addImport("enumFromC", enum_c_mod);
     exe_mod.addImport("ECS", ecs_mod);
     exe_mod.addImport("video", video_mod);
@@ -52,6 +56,7 @@ pub fn build(b: *std.Build) void {
     exe.addLibraryPath(b.path("lib/"));
     exe.linkLibC();
     exe.linkSystemLibrary2("sdl3", .{ .preferred_link_mode = .static });
+    exe.linkSystemLibrary2("steam_api64", .{});
 
     exe.linkSystemLibrary2("setupapi", .{ .preferred_link_mode = .static });
     exe.linkSystemLibrary2("imm32", .{ .preferred_link_mode = .static });

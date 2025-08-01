@@ -1,5 +1,6 @@
 const vk = @cImport(@cInclude("vulkan/vulkan.h"));
 const sdl = @cImport(@cInclude("SDL3/SDL_namespace.h"));
+const SDL_CheckResult = @import("../sdlError.zig").SDL_CheckResult;
 const std = @import("std");
 const output = @import("output");
 const Allocator = @import("std").mem.Allocator;
@@ -41,9 +42,9 @@ fn showErrorWithMessageBox(window: *sdl.SDL_Window, err: []const u8) void {
         break :blk backupMessage;
     };
 
-    if (sdl.SDL_ShowSimpleMessageBox(sdl.SDL_MESSAGEBOX_ERROR, "memory alloc failed", @ptrCast(buffers.ptr), window) == false) {
-        std.log.warn("show message box failed", .{});
-    }
+    SDL_CheckResult(sdl.SDL_ShowSimpleMessageBox(sdl.SDL_MESSAGEBOX_ERROR, "memory alloc failed", @ptrCast(buffers.ptr), window)) catch |err3| {
+        std.log.err("{s}", .{@errorName(err3)});
+    };
 }
 
 fn calculateMemoryGPU(memoryProperty: vk.VkPhysicalDeviceMemoryProperties) u64 {
@@ -119,7 +120,7 @@ pub const VkStruct = struct {
         return VkStruct{ .allocator = allocator };
     }
 
-    pub fn initVulkan(self: *Self) VkError!void {
+    pub fn initVulkan(self: *Self) !void {
         try self.*.createWindow();
         const version = try getVulkanVersion();
         printVersion(version);
@@ -143,6 +144,7 @@ pub const VkStruct = struct {
         if (temp) |window| {
             self.*.window = window;
         } else {
+            std.log.err("SDL error {s}", .{sdl.SDL_GetError()});
             return VkError.VK_ERROR_UNKNOWN;
         }
     }
@@ -268,20 +270,15 @@ pub const VkStruct = struct {
         return namesEnabled;
     }
 
-    fn createSurface(self: *Self) VkError!void {
-        if (sdl.SDL_Vulkan_CreateSurface(self.*.window, @ptrCast(self.*.instance), @ptrCast(self.*.pAllocCallBacks), @ptrCast(&self.*.surface)) == false) {
-            std.debug.print("SDL error: {s}\n", .{sdl.SDL_GetError()});
-            return VkError.VK_ERROR_UNKNOWN;
-        }
+    fn createSurface(self: *Self) !void {
+        try SDL_CheckResult(sdl.SDL_Vulkan_CreateSurface(self.*.window, @ptrCast(self.*.instance), @ptrCast(self.*.pAllocCallBacks), @ptrCast(&self.*.surface)));
     }
 
-    fn pickPhysicalDevice(self: *Self) VkError!void {
+    fn pickPhysicalDevice(self: *Self) !void {
         var deviceCount: u32 = 0;
         try checkVkResult(vk.vkEnumeratePhysicalDevices(self.*.instance, @ptrCast(&deviceCount), null));
         if (deviceCount == 0) {
-            if (sdl.SDL_ShowSimpleMessageBox(sdl.SDL_MESSAGEBOX_ERROR, "vulkan not support", "you device is not support vulkan", self.*.window) == false) {
-                std.log.err("show message box failed", .{});
-            }
+            try SDL_CheckResult(sdl.SDL_ShowSimpleMessageBox(sdl.SDL_MESSAGEBOX_ERROR, "vulkan not support", "you device is not support vulkan", self.*.window));
         }
 
         const physicalDevices: []vk.VkPhysicalDevice = self.*.allocator.alloc(vk.VkPhysicalDevice, deviceCount) catch |err| {
@@ -353,7 +350,7 @@ pub const VkStruct = struct {
         }
     }
 
-    fn setQueueFamilies(self: *Self) VkError!void {
+    fn setQueueFamilies(self: *Self) !void {
         var queueFamilyCount: u32 = 0;
         vk.vkGetPhysicalDeviceQueueFamilyProperties(self.*.physicalDevice, &queueFamilyCount, null);
 
@@ -425,7 +422,7 @@ pub const VkStruct = struct {
             }
         }
     }
-    fn createDevice(self: *Self) VkError!void {
+    fn createDevice(self: *Self) !void {
         var timelineSemaphoreFeature = vk.VkPhysicalDeviceTimelineSemaphoreFeatures{
             .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES,
             .pNext = null,

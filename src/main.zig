@@ -9,6 +9,7 @@ const builtin = @import("builtin");
 const output = @import("output");
 const log = std.log;
 const ECS = @import("ECS");
+const steam = @cImport(@cInclude("steam_C/steamC.h"));
 
 const gpaType = @TypeOf(std.heap.GeneralPurposeAllocator(.{}).init);
 const Allocator = std.mem.Allocator;
@@ -53,6 +54,8 @@ pub fn main() !void {
     log.info("render thread count {d}", .{render_thread});
 
     try SDL_CheckResult(sdl.SDL_Init(sdl.SDL_INIT_EVENTS | sdl.SDL_INIT_VIDEO | sdl.SDL_INIT_AUDIO | sdl.SDL_INIT_GAMEPAD));
+
+    _ = steam.SteamAPI_RestartAppIfNecessary_C(@as(u32, steam.k_uAppIdInvalid_C));
 
     var vulkan = video.VkStruct.init(gpa);
     try vulkan.initVulkan();
