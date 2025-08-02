@@ -45,6 +45,7 @@ pub fn build(b: *std.Build) void {
     const cpp_compileFlag = [_][]const u8{"-std=c++17"};
 
     exe.addCSourceFile(.{ .file = b.path("src/steam_C/steamC.cpp"), .language = .cpp, .flags = &cpp_compileFlag });
+    exe.addCSourceFile(.{ .file = b.path("src/steam_C/ISteamUserStats.cpp"), .language = .cpp, .flags = &cpp_compileFlag });
 
     video_mod.addImport("enumFromC", enum_c_mod);
     exe_mod.addImport("ECS", ecs_mod);

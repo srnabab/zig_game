@@ -501,4 +501,15 @@ pub const VkStruct = struct {
             }
         }
     }
+
+    fn createCommandPool(self: *Self, queueFamilyIndex: u32, pCommandPool: *vk.VkCommandPool) !void {
+        var createInfo = vk.VkCommandPoolCreateInfo{
+            .sType = vk.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+            .pNext = null,
+            .flags = 0,
+            .queueFamilyIndex = queueFamilyIndex,
+        };
+
+        try checkVkResult(vk.vkCreateCommandPool(self.device, @ptrCast(&createInfo), self.pAllocCallBacks, @ptrCast(pCommandPool)));
+    }
 };
