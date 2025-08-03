@@ -20,6 +20,14 @@ pub fn QueueConstructor(datatype: type) type {
             try self.datas.writeItem(data);
         }
 
+        pub fn enqueues(self: *Self, data: []datatype) !void {
+            try self.datas.write(data);
+        }
+
+        pub fn toOwnedSlice(self: *Self, data: []datatype) usize {
+            return self.datas.read(data);
+        }
+
         pub fn dequeue(self: *Self) ?datatype {
             return self.datas.readItem();
         }
@@ -30,6 +38,10 @@ pub fn QueueConstructor(datatype: type) type {
 
         pub fn count(self: *Self) usize {
             return self.datas.count;
+        }
+
+        pub fn reset(self: *Self) void {
+            self.datas.discard(self.datas.count);
         }
     };
 }

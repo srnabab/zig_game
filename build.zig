@@ -3,7 +3,7 @@ const lazyP = @import("std").Build.LazyPath;
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
-    const optimize = b.standardOptimizeOption(.{});
+    const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .Debug });
 
     const ecs_mod = b.createModule(.{ .root_source_file = b.path("src/ecs/ecs.zig"), .target = target, .optimize = optimize });
     const output_mod = b.createModule(.{ .root_source_file = b.path("src/stdOutPut.zig"), .target = target, .optimize = .ReleaseFast });
@@ -42,7 +42,7 @@ pub fn build(b: *std.Build) void {
     });
     exe.step.dependOn(&run_gen_exe.step);
 
-    const cpp_compileFlag = [_][]const u8{"-std=c++17"};
+    const cpp_compileFlag = [_][]const u8{ "-std=c++17", "-g" };
 
     exe.addCSourceFile(.{ .file = b.path("src/steam_C/steamC.cpp"), .language = .cpp, .flags = &cpp_compileFlag });
     exe.addCSourceFile(.{ .file = b.path("src/steam_C/ISteamUserStats.cpp"), .language = .cpp, .flags = &cpp_compileFlag });

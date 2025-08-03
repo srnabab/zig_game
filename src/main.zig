@@ -18,6 +18,8 @@ const render = @import("render.zig");
 const gpaType = @TypeOf(std.heap.GeneralPurposeAllocator(.{}).init);
 const Allocator = std.mem.Allocator;
 
+const global = @import("global.zig");
+
 var thread_count: usize = 0;
 var update_thread: usize = 0;
 var render_thread: usize = 0;
@@ -83,4 +85,7 @@ pub fn main() !void {
 
     var render_t = try Thread.spawn(.{ .allocator = gpa }, render.render_thread_func, .{ gpa, render_thread });
     defer render_t.join();
+
+    std.time.sleep(std.time.ns_per_s * 100);
+    global.down = true;
 }
