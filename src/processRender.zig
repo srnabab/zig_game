@@ -38,8 +38,15 @@ pub fn processStart() void {
     semaphore.post();
     const value = semaphoreValue.fetchAdd(1, .seq_cst);
     if (value > 1) {
-        _ = semaphoreValue.fetchSub(1, .seq_cst);
+        // std.log.info("value: {d}", .{value});
+        // if (value > 100) {
+        //     @breakpoint();
+        // }
         semaphore.wait();
+        _ = semaphoreValue.fetchSub(1, .seq_cst);
+        // semaphore.timedWait(std.time.ns_per_ms * 1) catch |err| {
+        //     std.log.warn("time out {s}", .{@errorName(err)});
+        // };
     }
 }
 
@@ -60,28 +67,29 @@ pub fn addProcesses(commands: []Drawable) !void {
 /// do not call this function from more than one thread simultaneous
 pub fn process() !void {
     semaphore.wait();
-    const value = semaphoreValue.fetchSub(1, .seq_cst);
-    std.log.info("value {d}", .{value});
+    // std.log.info("value {d}", .{value});
 
     var index: u32 = 0;
 
     var queue: []Drawable = undefined;
     {
-        std.log.info("process start", .{});
+        // std.log.info("process start", .{});
         mutex.lock();
         defer mutex.unlock();
-        std.log.info("1: {d}, 2: {d}, 3: {d}", .{ DrawableQueue[0].count(), DrawableQueue[1].count(), DrawableQueue[2].count() });
+        _ = semaphoreValue.fetchSub(1, .seq_cst);
+        // std.log.info("1: {d}, 2: {d}, 3: {d}", .{ DrawableQueue[0].count(), DrawableQueue[1].count(), DrawableQueue[2].count() });
         index = (queueIndex.load(.seq_cst) + 2) % 3;
-        std.log.info("process {d}", .{index});
+        // std.log.info("process {d}", .{index});
         queue = try gpa.alloc(Drawable, DrawableQueue[index].count());
         _ = DrawableQueue[index].toOwnedSlice(queue);
     }
     defer gpa.free(queue);
 
-    std.log.info("current time {d}", .{std.time.nanoTimestamp()});
+    // std.log.info("current time {d}", .{std.time.nanoTimestamp()});
     for (queue) |data| {
         if (data.draw) {
-            std.log.info("process once {} {d}", .{ data.draw, data.time });
+            try drawCProcess.addGraphicCommand(data.texture_t);
+            // std.log.info("process once {} {d}", .{ data.draw, data.time });
         }
     }
 }

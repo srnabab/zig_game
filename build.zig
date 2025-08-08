@@ -2,15 +2,31 @@ const std = @import("std");
 const lazyP = @import("std").Build.LazyPath;
 
 pub fn build(b: *std.Build) void {
-    const target = b.standardTargetOptions(.{});
+    const target = b.standardTargetOptions(.{ .default_target = .{} });
     const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .Debug });
 
-    const ecs_mod = b.createModule(.{ .root_source_file = b.path("src/ecs/ecs.zig"), .target = target, .optimize = optimize });
-    const output_mod = b.createModule(.{ .root_source_file = b.path("src/stdOutPut.zig"), .target = target, .optimize = .ReleaseFast });
+    const ecs_mod = b.createModule(.{
+        .root_source_file = b.path("src/ecs/ecs.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const output_mod = b.createModule(.{
+        .root_source_file = b.path("src/stdOutPut.zig"),
+        .target = target,
+        .optimize = .ReleaseFast,
+    });
 
-    const enum_c_mod = b.createModule(.{ .root_source_file = b.path("src/enumFromC.zig"), .target = target, .optimize = optimize });
+    const enum_c_mod = b.createModule(.{
+        .root_source_file = b.path("src/enumFromC.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
-    const gen_mod = b.createModule(.{ .root_source_file = b.path("src/video/gen.zig"), .target = target, .optimize = .ReleaseFast });
+    const gen_mod = b.createModule(.{
+        .root_source_file = b.path("src/video/gen.zig"),
+        .target = target,
+        .optimize = .ReleaseFast,
+    });
     gen_mod.addImport("enumFromC", enum_c_mod);
 
     const gen_exe = b.addExecutable(.{ .name = "gen", .root_module = gen_mod });

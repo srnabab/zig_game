@@ -2,7 +2,7 @@ const std = @import("std");
 const video = @import("video/initVulkan.zig");
 const process = @import("processRender.zig");
 const global = @import("global.zig");
-const drawC = @import("drawCommand.zig");
+const drawCommandProcess = @import("drawCommandProcess.zig");
 
 pub fn render_thread_func(gpa: std.mem.Allocator, thread_count: usize) !void {
     var vulkan = video.VkStruct.init(gpa);
@@ -20,10 +20,14 @@ pub fn render_thread_func(gpa: std.mem.Allocator, thread_count: usize) !void {
 }
 
 pub fn process_thread_func() !void {
+    drawCommandProcess.init(global.gpa);
+    defer drawCommandProcess.deinit();
+
     while (true) {
         try process.process();
         if (global.down) {
             break;
         }
     }
+    std.log.info("render process end", .{});
 }

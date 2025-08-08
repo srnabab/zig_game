@@ -11,6 +11,7 @@ const log = std.log;
 const ECS = @import("ECS");
 const steam = @import("steam_C//SteamC.zig");
 const steamInner = steam.steamInner;
+const textureSet = @import("textureSet.zig");
 
 const update = @import("update.zig");
 const render = @import("render.zig");
@@ -18,7 +19,6 @@ const render = @import("render.zig");
 const gpaType = @TypeOf(std.heap.GeneralPurposeAllocator(.{}).init);
 const Allocator = std.mem.Allocator;
 
-const memoryPool = std.heap.MemoryPool;
 const global = @import("global.zig");
 
 var thread_count: usize = 0;
@@ -36,9 +36,11 @@ pub fn main() !void {
     defer if (is_debug) {
         _ = debug_allocator.deinit();
     };
+    global.gpa = gpa;
 
     output.init();
-    global.init(gpa);
+    textureSet.init();
+    defer textureSet.deinit();
 
     const args = try process.argsAlloc(gpa);
     defer process.argsFree(gpa, args);
@@ -66,6 +68,7 @@ pub fn main() !void {
     log.info("render thread count {d}", .{render_thread});
 
     try SDL_CheckResult(sdl.SDL_Init(sdl.SDL_INIT_EVENTS | sdl.SDL_INIT_VIDEO | sdl.SDL_INIT_AUDIO | sdl.SDL_INIT_GAMEPAD));
+    defer sdl.SDL_Quit();
 
     if (steamInner.SteamAPI_RestartAppIfNecessary_C(@as(u32, steamInner.k_uAppIdInvalid_C))) {
         return error.SteamError;
@@ -91,6 +94,6 @@ pub fn main() !void {
     var process_t = try Thread.spawn(.{ .allocator = gpa }, render.process_thread_func, .{});
     defer process_t.join();
 
-    std.time.sleep(std.time.ns_per_s * 1);
+    std.time.sleep(std.time.ns_per_s * 2);
     global.down = true;
 }
