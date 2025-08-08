@@ -2,9 +2,13 @@ const std = @import("std");
 const Thread = std.Thread;
 const Atomic = std.atomic;
 const Queue = @import("queue.zig");
+const drawC = @import("drawCommand.zig");
+const drawCProcess = @import("drawCommandProcess.zig");
+const texture = @import("textureSet.zig");
 
 pub const Drawable = struct {
     draw: bool,
+    texture_t: *texture,
     time: i128,
 };
 const DrawableQueueType = Queue.QueueConstructor(Drawable);
