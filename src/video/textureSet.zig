@@ -1,11 +1,11 @@
 const std = @import("std");
 const Mutex = std.Thread.Mutex;
 const Atomic = std.atomic;
-const global = @import("global.zig");
+const global = @import("../global.zig");
 
 const Self = @This();
 
-pub const HashMapType = @import("linkedListHashMap.zig").AutoLinkedListHashMap(u64, Self, 16);
+pub const HashMapType = @import("../linkedListHashMap.zig").AutoLinkedListHashMap(u64, Self, 16);
 pub const Node = HashMapType.Node;
 
 ID: u64,

@@ -2,8 +2,8 @@ const drawCommand = @import("drawCommand.zig");
 const texture = @import("textureSet.zig");
 const std = @import("std");
 const Atomic = std.atomic;
-const global = @import("global.zig");
-const textureHashMap = global.textureHashMap;
+const global = @import("../global.zig");
+// const textureHashMap = global.textureHashMap;
 const DrawCommandMemoryPool = std.heap.MemoryPoolExtra(drawCommand, .{ .alignment = @alignOf(drawCommand) });
 
 const linkedList = std.SinglyLinkedList(drawCommand);

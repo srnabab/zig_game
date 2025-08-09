@@ -11,7 +11,7 @@ const log = std.log;
 const ECS = @import("ECS");
 const steam = @import("steam_C//SteamC.zig");
 const steamInner = steam.steamInner;
-const textureSet = @import("textureSet.zig");
+const textureSet = @import("video/textureSet.zig");
 
 const update = @import("update.zig");
 const render = @import("render.zig");

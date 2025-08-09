@@ -1,8 +1,8 @@
 const std = @import("std");
 const video = @import("video/initVulkan.zig");
-const process = @import("processRender.zig");
+const process = @import("video/processRender.zig");
 const global = @import("global.zig");
-const drawCommandProcess = @import("drawCommandProcess.zig");
+const drawCommandProcess = @import("video/drawCommandProcess.zig");
 
 pub fn render_thread_func(gpa: std.mem.Allocator, thread_count: usize) !void {
     var vulkan = video.VkStruct.init(gpa);

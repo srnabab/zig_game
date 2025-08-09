@@ -1,5 +1,6 @@
 const vk = @cImport(@cInclude("vulkan/vulkan.h"));
 const sdl = @cImport(@cInclude("SDL3/SDL_namespace.h"));
+const spirv = @cImport(@cInclude("spirv_reflect/spirv_reflect.h"));
 const SDL_CheckResult = @import("../sdlError.zig").SDL_CheckResult;
 const std = @import("std");
 const output = @import("output");
@@ -512,4 +513,6 @@ pub const VkStruct = struct {
 
         try checkVkResult(vk.vkCreateCommandPool(self.device, @ptrCast(&createInfo), self.pAllocCallBacks, @ptrCast(pCommandPool)));
     }
+
+    // fn createShaderModule(self: *Self) !void {}
 };

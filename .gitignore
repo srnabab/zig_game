@@ -3,3 +3,4 @@ zig-out/
 vendor/*/include/
 include/
 .vscode/
+.VSCodeCounter/
