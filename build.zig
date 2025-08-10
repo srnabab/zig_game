@@ -5,6 +5,18 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{ .default_target = .{} });
     const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .Debug });
 
+    const contenManger = b.addExecutable(.{
+        .root_source_file = b.path("src/content_manager/main.zig"),
+        .name = "ContentManger",
+        .target = target,
+        .optimize = optimize,
+    });
+
+    contenManger.addIncludePath(b.path("include"));
+    contenManger.addCSourceFile(.{ .file = b.path("src/sqlite3/sqlite3.c"), .language = .c });
+    contenManger.linkLibC();
+    b.installArtifact(contenManger);
+
     const ecs_mod = b.createModule(.{
         .root_source_file = b.path("src/ecs/ecs.zig"),
         .target = target,
