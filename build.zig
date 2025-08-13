@@ -13,9 +13,12 @@ pub fn build(b: *std.Build) void {
     });
 
     contenManger.addIncludePath(b.path("include"));
+    contenManger.addIncludePath(b.path("../../../../msys64/mingw64/include/"));
     contenManger.addLibraryPath(b.path("lib/"));
     contenManger.addCSourceFile(.{ .file = b.path("src/sqlite3/sqlite3.c"), .language = .c });
+    contenManger.addCSourceFile(.{ .file = b.path("src/content_manager/UUID.c"), .language = .c });
     contenManger.linkLibC();
+    contenManger.linkSystemLibrary2("blake3", .{ .preferred_link_mode = .static });
     contenManger.linkSystemLibrary2("sdl3", .{ .preferred_link_mode = .static });
     contenManger.linkSystemLibrary2("setupapi", .{ .preferred_link_mode = .static });
     contenManger.linkSystemLibrary2("imm32", .{ .preferred_link_mode = .static });
@@ -24,6 +27,7 @@ pub fn build(b: *std.Build) void {
     contenManger.linkSystemLibrary2("ole32", .{ .preferred_link_mode = .static });
     contenManger.linkSystemLibrary2("gdi32", .{ .preferred_link_mode = .static });
     contenManger.linkSystemLibrary2("OleAut32", .{ .preferred_link_mode = .static });
+    contenManger.linkSystemLibrary2("Rpcrt4", .{ .preferred_link_mode = .static });
     b.installArtifact(contenManger);
 
     const ecs_mod = b.createModule(.{

@@ -155,13 +155,13 @@ fn createInsertStruct(comptime pack: ParamsPack) type {
         fileds[fieldsCount].type = ty: {
             switch (para.paramType) {
                 .BLOB => {
-                    break :ty BLOB;
+                    break :ty ?BLOB;
                 },
                 .INTEGER => {
                     break :ty i64;
                 },
                 .TEXT => {
-                    break :ty [*]const u8;
+                    break :ty ?[*]u8;
                 },
             }
         };
@@ -243,7 +243,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                     bufferq[0..writeqCount],
                 });
             };
-            std.log.info("{s}", .{ssql});
+            // std.log.info("{s}", .{ssql});
 
             var stmt: ?*sqlite.sqlite3_stmt = null;
             prepare_v2(self.db, @ptrCast(ssql), -1, @ptrCast(&stmt), null);
@@ -256,7 +256,11 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                         _ = sqlite.sqlite3_bind_int64(stmt, @intCast(i + 1), @field(T, pp.paramName));
                     },
                     .BLOB => {
-                        _ = sqlite.sqlite3_bind_blob(stmt, @intCast(i + 1), @field(T, pp.paramName).data, @field(T, pp.paramName).len, sqlite.SQLITE_STATIC);
+                        if (@field(T, pp.paramName)) |b| {
+                            _ = sqlite.sqlite3_bind_blob(stmt, @intCast(i + 1), b.data, b.len, sqlite.SQLITE_STATIC);
+                        } else {
+                            _ = sqlite.sqlite3_bind_blob(stmt, @intCast(i + 1), null, 0, sqlite.SQLITE_STATIC);
+                        }
                     },
                     .TEXT => {
                         const res = sqlite.sqlite3_bind_text(stmt, @intCast(i + 1), @field(T, pp.paramName), -1, sqlite.SQLITE_STATIC);
