@@ -17,10 +17,52 @@ const ContentPath = sqlDB.Table(
     false,
 );
 const ImageLoadParameter = sqlDB.Table(
-    "CREATE TABLE IF NOT EXISTS ImageLoadParameter ( ID INTEGER PRIMARY KEY AUTOINCREMENT, FileName TEXT UNIQUE, InnerName TEXT UNIQUE, ContentHash BLOB UNIQUE, FileID TEXT, FOREIGN KEY(FileID) REFERENCES contentPath(ID) ON DELETE SET NULL ON UPDATE CASCADE);",
+    "CREATE TABLE IF NOT EXISTS ImageLoadParameter (FileName TEXT PRIMARY KEY, ContentHash BLOB UNIQUE, FileID TEXT, FOREIGN KEY(FileID) REFERENCES ContentPath(ID) ON DELETE SET NULL ON UPDATE CASCADE);",
     "ImageLoadParameter",
     true,
 );
+const ShaderLoadParameter = sqlDB.Table(
+    "CREATE TABLE IF NOT EXISTS ShaderLoadParameter (FileName TEXT PRIMARY KEY, ContentHash BLOB UNIQUE, RelativePath TEXT NOT NULL UNIQUE, FileSize INTEGER, FileID TEXT, FOREIGN KEY(FileID) REFERENCES ContentPath(ID) ON DELETE SET NULL ON UPDATE CASCADE);",
+    "ShaderLoadParameter",
+    false,
+);
+
+const tableNames = [_][]const u8{ "ImageLoadParameter", "ShaderLoadParameter" };
+
+const CreateTriggerContentPathOnInsertInsertIntoSubTable = tt: {
+    var buffer = [_]u8{0} ** 10240;
+    var st = std.io.fixedBufferStream(&buffer);
+    var writer = st.writer();
+    var count: usize = 0;
+
+    for (@typeInfo(FileType).@"enum".fields) |field| {
+        switch (@as(FileType, @enumFromInt(field.value))) {
+            .SPV => {
+                count += writer.write(std.fmt.comptimePrint("CREATE TRIGGER insertInto{s} AFTER INSERT ON ContentPath FOR EACH ROW WHEN NEW.FileType={d} BEGIN " ++
+                    "INSERT INTO ShaderLoadParameter (FileName,ContentHash,RelativePath,FileSize,FileID) VALUES " ++
+                    "(NEW.FileName,NEW.ContentHash,NEW.RelativePath,NEW.FileSize,NEW.ID); END;", .{ tableNames[1], field.value })) catch |err| {
+                    @compileError(std.fmt.comptimePrint("{s}", .{@errorName(err)}));
+                };
+            },
+            .PNG => {
+                count += writer.write(std.fmt.comptimePrint("CREATE TRIGGER insertInto{s} AFTER INSERT ON ContentPath FOR EACH ROW WHEN NEW.FileType={d} BEGIN " ++
+                    "INSERT INTO ImageLoadParameter (FileName,ContentHash,FileID) VALUES (NEW.FileName,NEW.ContentHash,NEW.ID);  END;", .{ tableNames[0], field.value })) catch |err| {
+                    @compileError(std.fmt.comptimePrint("{s}", .{@errorName(err)}));
+                };
+            },
+            else => {
+                continue;
+            },
+        }
+    }
+
+    break :tt std.fmt.comptimePrint("{s}", .{buffer});
+};
+const ShaderLoad = struct { subPath: []const u8, len: usize };
+
+const FileData = union {
+    shader: ShaderLoad,
+};
 
 const FileType = enum {
     DIR,
@@ -77,6 +119,14 @@ const FileTypeHashTable = map: {
     break :map maps;
 };
 
+fn executeSQL(SQL: []const u8, db: *sqlite.sqlite3) void {
+    const res = sqlite.sqlite3_exec(db, @ptrCast(SQL.ptr), null, null, null);
+
+    if (res != sqlite.SQLITE_OK) {
+        std.log.err("{s}", .{sqlite.sqlite3_errmsg(db)});
+    }
+}
+
 fn nameToFileType(name: []const u8) FileType {
     return FileTypeHashTable.get(name) orelse FileType.UNKNOWN;
 }
@@ -115,7 +165,9 @@ fn iterateFolderInsert(dir: std.fs.Dir, dirName: []const u8, parentID: []const u
         std.log.err("{s}", .{@errorName(err)});
         break :blk null;
     }) |tt| {
-        // std.log.info("{s}{s}{s}", .{ dirName, slash, tt.name });
+        std.log.info("{s}{s}{s}", .{ dirName, slash, tt.name });
+        var bufferZ = [_]u8{0} ** 128;
+        const nameZ = try std.fmt.bufPrintZ(&bufferZ, "{s}", .{tt.name});
 
         var relativePathBuffer = [_]u8{0} ** 256;
         _ = try std.fmt.bufPrintZ(&relativePathBuffer, "{s}{s}{s}", .{ dirName, slash, tt.name });
@@ -142,7 +194,7 @@ fn iterateFolderInsert(dir: std.fs.Dir, dirName: []const u8, parentID: []const u
                     .ID = &buffer,
                     .ParentID = @constCast(parentID.ptr),
                     .RelativePath = &relativePathBuffer,
-                    .FileName = @constCast(tt.name.ptr),
+                    .FileName = @constCast(nameZ.ptr),
                     .TYPE = @intFromEnum(cc.kind()),
                     .FileSize = @intCast(cc.size()),
                     .ContentHash = sqlDB.BLOB{ .data = &hashh, .len = hash.blake3.BLAKE3_OUT_LEN },
@@ -166,7 +218,7 @@ fn iterateFolderInsert(dir: std.fs.Dir, dirName: []const u8, parentID: []const u
                     .ID = &UUIDBuffer,
                     .ParentID = @constCast(parentID.ptr),
                     .RelativePath = &relativePathBuffer,
-                    .FileName = @constCast(tt.name.ptr),
+                    .FileName = @constCast(nameZ.ptr),
                     .TYPE = @intFromEnum(cc.kind()),
                     .FileSize = @intCast(cc.size()),
                     .ContentHash = null,
@@ -184,13 +236,24 @@ fn iterateFolderInsert(dir: std.fs.Dir, dirName: []const u8, parentID: []const u
     }
 }
 
+// fn insertFileTypeTable(file_type: FileType) !void {
+//     switch (file_type) {
+//         .SPV => {
+//             ShaderLoadParameter.insert(.{.Fil})
+//         }
+//     }
+// }
+
 var ContentPathT: ContentPath = undefined;
 var AliasNamePairT: AliasNamePair = undefined;
 var ImageLoadParameterT: ImageLoadParameter = undefined;
+var ShaderLoadParameterT: ShaderLoadParameter = undefined;
 
 var gpa: std.mem.Allocator = undefined;
 var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
 pub fn main() !void {
+    const start = std.time.nanoTimestamp();
+
     gpa, const is_debug = gpa: {
         break :gpa switch (builtin.mode) {
             .Debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
@@ -230,32 +293,39 @@ pub fn main() !void {
     try AliasNamePairT.createTable();
     ImageLoadParameterT = ImageLoadParameter.init(db.?);
     try ImageLoadParameterT.createTable();
+    ShaderLoadParameterT = ShaderLoadParameter.init(db.?);
+    try ShaderLoadParameterT.createTable();
+    executeSQL(CreateTriggerContentPathOnInsertInsertIntoSubTable, db.?);
+    std.log.info("{s}", .{CreateTriggerContentPathOnInsertInsertIntoSubTable});
 
     var content = try cwd.openDir("Content", .{ .iterate = true });
     defer content.close();
 
-    // if (exist) {
-    //     try iterateFolderInsert(content, "Content");
-    // } else {
-    const cc = try content.metadata();
-    const time = std.time.nanoTimestamp();
-    var buffer = [_]u8{0} ** UUID.len;
-    try UUID.createNewUUID(&buffer);
+    if (exist) {
+        // try iterateFolderInsert(content, "Content");
+    } else {
+        const cc = try content.metadata();
+        const time = std.time.nanoTimestamp();
+        var buffer = [_]u8{0} ** UUID.len;
+        try UUID.createNewUUID(&buffer);
 
-    ContentPathT.insert(.{
-        .ID = &buffer,
-        .ParentID = null,
-        .RelativePath = @constCast("Content"),
-        .FileName = @constCast("Content"),
-        .TYPE = @intFromEnum(cc.kind()),
-        .FileSize = @intCast(cc.size()),
-        .ContentHash = null,
-        .ModifiedTime = @as(i64, @truncate(cc.modified())),
-        .LastSeenTime = @as(i64, @truncate(time)),
-        .FileType = @intFromEnum(FileType.DIR),
-    });
+        ContentPathT.insert(.{
+            .ID = &buffer,
+            .ParentID = null,
+            .RelativePath = @constCast("Content"),
+            .FileName = @constCast("Content"),
+            .TYPE = @intFromEnum(cc.kind()),
+            .FileSize = @intCast(cc.size()),
+            .ContentHash = null,
+            .ModifiedTime = @as(i64, @truncate(cc.modified())),
+            .LastSeenTime = @as(i64, @truncate(time)),
+            .FileType = @intFromEnum(FileType.DIR),
+        });
 
-    try iterateFolderInsert(content, "Content", &buffer);
-    // }
-    _ = exist;
+        try iterateFolderInsert(content, "Content", &buffer);
+    }
+
+    const end = std.time.nanoTimestamp();
+
+    std.log.info("time: {d}", .{@as(f128, @floatFromInt(@divTrunc((end - start), std.time.ns_per_ms)))});
 }
