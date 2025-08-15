@@ -2,7 +2,11 @@ const sqlite = @cImport(@cInclude("sqlite3/sqlite3.h"));
 const sdl = @cImport(@cInclude("SDL3/SDL.h"));
 const std = @import("std");
 
-const sqliteError = error{SQLError};
+pub const sqliteError = error{
+    SQLError,
+    StepError,
+    Empty,
+};
 
 pub const innerType = enum {
     INTEGER,
@@ -20,6 +24,18 @@ fn stringToType(comptime str: []const u8) innerType {
     } else {
         @compileError(std.fmt.comptimePrint("unsupported type {s}", .{str}));
     }
+}
+
+fn isFixedLengthSlice(comptime T: type) bool {
+    const info = @typeInfo(T);
+
+    if (info != .array) return false;
+
+    const ArrayType = info.array.child;
+
+    if (ArrayType != u8) return false;
+
+    return true;
 }
 
 fn isCompileTimeString(comptime T: type) bool {
@@ -47,7 +63,7 @@ fn isCompileTimeString(comptime T: type) bool {
 
     // 5. 数组必须有一个哨兵
     // @compileLog("5");
-    const sentinel = array_info.array.sentinel() orelse return false;
+    const sentinel = array_info.array.sentinel();
 
     // 6. 哨兵的值必须是 0
     // @compileLog("6");
@@ -209,7 +225,9 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
             const expr = std.fmt.comptimePrint("SELECT name FROM sqlite_master WHERE TYPE='table' AND name='{s}';", .{tableName});
             var stmt: ?*sqlite.sqlite3_stmt = null;
 
-            prepare_v2(self.db, @ptrCast(expr), -1, @ptrCast(&stmt), null);
+            prepare_v2(self.db, @ptrCast(expr), -1, @ptrCast(&stmt), null) catch |err| {
+                return err == sqliteError.Empty;
+            };
             defer _ = sqlite.sqlite3_finalize(stmt);
 
             if (sqlite.sqlite3_step(stmt) == sqlite.SQLITE_ROW) return true;
@@ -217,7 +235,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
             return false;
         }
 
-        pub fn insert(self: *Self, T: insertStruct) void {
+        pub fn insert(self: *Self, T: insertStruct) !void {
             const ssql = comptime blk: {
                 var buffer = [_]u8{0} ** 256;
                 var bufferq = [_]u8{0} ** 64;
@@ -246,7 +264,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
             // std.log.info("{s}", .{ssql});
 
             var stmt: ?*sqlite.sqlite3_stmt = null;
-            prepare_v2(self.db, @ptrCast(ssql), -1, @ptrCast(&stmt), null);
+            try prepare_v2(self.db, @ptrCast(ssql), -1, @ptrCast(&stmt), null);
             defer _ = sqlite.sqlite3_finalize(stmt);
 
             inline for (Params.ps[0..Params.count], 0..Params.count) |pp, i| {
@@ -272,11 +290,12 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
             }
 
             if (sqlite.sqlite3_step(stmt) != sqlite.SQLITE_DONE) {
-                std.log.err("{s}", .{sqlite.sqlite3_errmsg(self.db)});
+                // @breakpoint();
+                std.log.err("insert {s}", .{sqlite.sqlite3_errmsg(self.db)});
             }
         }
 
-        pub fn update(self: *Self, comptime targets: []const u8, comptime constraint: []const u8, values: anytype) void {
+        pub fn update(self: *Self, comptime targets: []const u8, comptime constraint: []const u8, values: anytype) !void {
             const ArgsType = @TypeOf(values);
             const args_type_info = @typeInfo(ArgsType);
             if (args_type_info != .@"struct") {
@@ -309,15 +328,15 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
 
                 break :ss std.fmt.comptimePrint("UPDATE {s} SET {s} WHERE {s};", .{ tableName, buffer[0 .. count - 2], constraint });
             };
-            std.log.info("{s}", .{ssql});
+            // std.log.info("{s}", .{ssql});
 
             var stmt: ?*sqlite.sqlite3_stmt = null;
-            prepare_v2(self.db, @ptrCast(ssql), -1, @ptrCast(&stmt), null);
+            try prepare_v2(self.db, @ptrCast(ssql), -1, @ptrCast(&stmt), null);
             defer _ = sqlite.sqlite3_finalize(stmt);
 
             inline for (0..fields_info.len) |i| {
                 const ii: c_int = @intCast(i + 1);
-                std.log.info("cast c_int {d}", .{ii});
+                // std.log.info("cast c_int {d}", .{ii});
 
                 switch (fields_info[i].type) {
                     i64 => {
@@ -332,15 +351,41 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                             sqlite.SQLITE_STATIC,
                         );
                     },
+                    []const u8, []u8 => {
+                        const res = sqlite.sqlite3_bind_text(
+                            stmt,
+                            ii,
+                            @ptrCast(@field(values, fields_info[i].name).ptr),
+                            -1,
+                            sqlite.SQLITE_STATIC,
+                        );
+                        if (res != sqlite.SQLITE_OK) {
+                            std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
+                        }
+                    },
                     else => {
-                        const yes: bool = comptime l: {
+                        const yes = comptime l: {
                             break :l isCompileTimeString(fields_info[i].type);
+                        };
+                        const slice = comptime lc: {
+                            break :lc isFixedLengthSlice(fields_info[i].type);
                         };
                         if (yes) {
                             const res = sqlite.sqlite3_bind_text(
                                 stmt,
                                 ii,
                                 @field(values, fields_info[i].name),
+                                -1,
+                                sqlite.SQLITE_STATIC,
+                            );
+                            if (res != sqlite.SQLITE_OK) {
+                                std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
+                            }
+                        } else if (slice) {
+                            const res = sqlite.sqlite3_bind_text(
+                                stmt,
+                                ii,
+                                @ptrCast(&@field(values, fields_info[i].name)),
                                 -1,
                                 sqlite.SQLITE_STATIC,
                             );
@@ -382,7 +427,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
 
             inline for (0..fields_info.len) |i| {
                 const ii: c_int = @intCast(i + 1);
-                std.log.info("cast c_int {d}", .{ii});
+                // std.log.info("cast c_int {d}", .{ii});
 
                 switch (fields_info[i].type) {
                     i64 => {
@@ -401,11 +446,25 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                         const yes: bool = comptime l: {
                             break :l isCompileTimeString(fields_info[i].type);
                         };
+                        const slice = comptime lc: {
+                            break :lc isFixedLengthSlice(fields_info[i].type);
+                        };
                         if (yes) {
                             const res = sqlite.sqlite3_bind_text(
                                 stmt,
                                 ii,
                                 @field(values, fields_info[i].name),
+                                -1,
+                                sqlite.SQLITE_STATIC,
+                            );
+                            if (res != sqlite.SQLITE_OK) {
+                                std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
+                            }
+                        } else if (slice) {
+                            const res = sqlite.sqlite3_bind_text(
+                                stmt,
+                                ii,
+                                @ptrCast(&@field(values, fields_info[i].name)),
                                 -1,
                                 sqlite.SQLITE_STATIC,
                             );
@@ -441,15 +500,15 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
             const ssql = comptime ss: {
                 break :ss std.fmt.comptimePrint("SELECT {s} FROM {s} WHERE {s};", .{ targets, tableName, constraint });
             };
-            std.log.info("{s}", .{ssql});
+            // std.log.info("{s}", .{ssql});
 
             var stmt: ?*sqlite.sqlite3_stmt = null;
-            prepare_v2(self.db, @ptrCast(ssql), -1, @ptrCast(&stmt), null);
+            try prepare_v2(self.db, @ptrCast(ssql), -1, @ptrCast(&stmt), null);
             defer _ = sqlite.sqlite3_finalize(stmt);
 
             inline for (0..fields_info.len) |i| {
                 const ii: c_int = @intCast(i + 1);
-                std.log.info("cast c_int {d}", .{ii});
+                // std.log.info("cast c_int {d}", .{ii});
 
                 switch (fields_info[i].type) {
                     i64 => {
@@ -467,15 +526,53 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                             sqlite.SQLITE_STATIC,
                         );
                     },
+                    [:0]u8, []const u8 => {
+                        const res = sqlite.sqlite3_bind_text(
+                            stmt,
+                            ii,
+                            @ptrCast(@field(values, fields_info[i].name).ptr),
+                            -1,
+                            sqlite.SQLITE_STATIC,
+                        );
+                        if (res != sqlite.SQLITE_OK) {
+                            std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
+                        }
+                    },
+                    *const []const u8 => {
+                        const res = sqlite.sqlite3_bind_text(
+                            stmt,
+                            ii,
+                            @ptrCast(@field(values, fields_info[i].name)),
+                            -1,
+                            sqlite.SQLITE_STATIC,
+                        );
+                        if (res != sqlite.SQLITE_OK) {
+                            std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
+                        }
+                    },
                     else => {
                         const yes: bool = comptime l: {
                             break :l isCompileTimeString(fields_info[i].type);
+                        };
+                        const slice = comptime lc: {
+                            break :lc isFixedLengthSlice(fields_info[i].type);
                         };
                         if (yes) {
                             const res = sqlite.sqlite3_bind_text(
                                 stmt,
                                 ii,
                                 @field(values, fields_info[i].name),
+                                -1,
+                                sqlite.SQLITE_STATIC,
+                            );
+                            if (res != sqlite.SQLITE_OK) {
+                                std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
+                            }
+                        } else if (slice) {
+                            const res = sqlite.sqlite3_bind_text(
+                                stmt,
+                                ii,
+                                @ptrCast(&@field(values, fields_info[i].name)),
                                 -1,
                                 sqlite.SQLITE_STATIC,
                             );
@@ -492,7 +589,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
 
             const res = sqlite.sqlite3_step(stmt);
             if (res != sqlite.SQLITE_ROW) {
-                return sqliteError.SQLError;
+                return sqliteError.StepError;
             }
 
             for (0..types.len) |i| {
@@ -522,10 +619,10 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
             }
         }
 
-        fn prepare_v2(db: ?*sqlite.sqlite3, zSql: [*c]const u8, nByte: c_int, ppStmt: [*c]?*sqlite.sqlite3_stmt, pzTail: [*c][*c]const u8) void {
+        fn prepare_v2(db: ?*sqlite.sqlite3, zSql: [*c]const u8, nByte: c_int, ppStmt: [*c]?*sqlite.sqlite3_stmt, pzTail: [*c][*c]const u8) !void {
             if (sqlite.sqlite3_prepare_v2(db, zSql, nByte, ppStmt, pzTail) != sqlite.SQLITE_OK) {
-                std.log.warn("failed to prepare stmt\n {s}", .{sqlite.sqlite3_errmsg(db)});
-                // return sqliteError.SQLError;
+                std.log.warn("failed to prepare stmt\n {s}\n{s}", .{ sqlite.sqlite3_errmsg(db), zSql });
+                return sqliteError.SQLError;
             }
         }
     };
