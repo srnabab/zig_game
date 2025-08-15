@@ -17,12 +17,12 @@ const ContentPath = sqlDB.Table(
     false,
 );
 const ImageLoadParameter = sqlDB.Table(
-    "CREATE TABLE IF NOT EXISTS ImageLoadParameter (FileName TEXT PRIMARY KEY, ContentHash BLOB UNIQUE, FileID TEXT, FOREIGN KEY(FileID) REFERENCES ContentPath(ID) ON DELETE SET NULL ON UPDATE CASCADE);",
+    "CREATE TABLE IF NOT EXISTS ImageLoadParameter (FileName TEXT PRIMARY KEY, ContentHash BLOB UNIQUE, RelativePath TEXT UNIQUE, FileID TEXT, FOREIGN KEY(FileID) REFERENCES ContentPath(ID) ON DELETE SET NULL ON UPDATE CASCADE);",
     "ImageLoadParameter",
     true,
 );
 const ShaderLoadParameter = sqlDB.Table(
-    "CREATE TABLE IF NOT EXISTS ShaderLoadParameter (FileName TEXT PRIMARY KEY, ContentHash BLOB UNIQUE, RelativePath TEXT NOT NULL UNIQUE, FileSize INTEGER, FileID TEXT, FOREIGN KEY(FileID) REFERENCES ContentPath(ID) ON DELETE SET NULL ON UPDATE CASCADE);",
+    "CREATE TABLE IF NOT EXISTS ShaderLoadParameter (FileName TEXT PRIMARY KEY, ContentHash BLOB UNIQUE, RelativePath TEXT UNIQUE, FileSize INTEGER, FileID TEXT, FOREIGN KEY(FileID) REFERENCES ContentPath(ID) ON DELETE SET NULL ON UPDATE CASCADE);",
     "ShaderLoadParameter",
     false,
 );
@@ -38,15 +38,24 @@ const CreateTriggerContentPathOnInsertInsertIntoSubTable = tt: {
     for (@typeInfo(FileType).@"enum".fields) |field| {
         switch (@as(FileType, @enumFromInt(field.value))) {
             .SPV => {
-                count += writer.write(std.fmt.comptimePrint("CREATE TRIGGER IF NOT EXISTS insertInto{s} AFTER INSERT ON ContentPath FOR EACH ROW WHEN NEW.FileType={d} BEGIN " ++
-                    "INSERT INTO ShaderLoadParameter (FileName,ContentHash,RelativePath,FileSize,FileID) VALUES " ++
-                    "(NEW.FileName,NEW.ContentHash,NEW.RelativePath,NEW.FileSize,NEW.ID); END;", .{ tableNames[1], field.value })) catch |err| {
+                count += writer.write(std.fmt.comptimePrint(
+                    "CREATE TRIGGER IF NOT EXISTS insertInto{s} AFTER INSERT ON ContentPath " ++
+                        " FOR EACH ROW WHEN NEW.FileType={d} BEGIN INSERT INTO ShaderLoadParameter (FileName,ContentHash,RelativePath,FileSize,FileID) VALUES " ++
+                        "(NEW.FileName,NEW.ContentHash,NEW.RelativePath,NEW.FileSize,NEW.ID) ON CONFLICT(FileName,ContentHash) DO UPDATE SET " ++
+                        "FileID = NEW.ID, FileName = NEW.FileName, ContentHash = NEW.ContentHash, RelativePath = NEW.RelativePath, FileSize = NEW.FileSize; END;",
+                    .{ tableNames[1], field.value },
+                )) catch |err| {
                     @compileError(std.fmt.comptimePrint("{s}", .{@errorName(err)}));
                 };
             },
             .PNG => {
-                count += writer.write(std.fmt.comptimePrint("CREATE TRIGGER IF NOT EXISTS insertInto{s} AFTER INSERT ON ContentPath FOR EACH ROW WHEN NEW.FileType={d} BEGIN " ++
-                    "INSERT INTO ImageLoadParameter (FileName,ContentHash,FileID) VALUES (NEW.FileName,NEW.ContentHash,NEW.ID);  END;", .{ tableNames[0], field.value })) catch |err| {
+                count += writer.write(std.fmt.comptimePrint(
+                    "CREATE TRIGGER IF NOT EXISTS insertInto{s} AFTER INSERT ON ContentPath " ++
+                        "FOR EACH ROW WHEN NEW.FileType={d} BEGIN INSERT INTO ImageLoadParameter (FileName,ContentHash,RelativePath,FileID) VALUES " ++
+                        "(NEW.FileName,NEW.ContentHash,NEW.RelativePath,NEW.ID) ON CONFLICT(FileName,ContentHash) DO UPDATE SET " ++
+                        "FileID = NEW.ID, FileName = NEW.FileName, ContentHash = NEW.ContentHash, RelativePath = NEW.RelativePath; END;",
+                    .{ tableNames[0], field.value },
+                )) catch |err| {
                     @compileError(std.fmt.comptimePrint("{s}", .{@errorName(err)}));
                 };
             },
@@ -75,16 +84,54 @@ const createTriggerOnUpdateCascadeBetweenContentPathAndTablesOnContentHash = ct:
     break :ct std.fmt.comptimePrint("{s}", .{buffer});
 };
 
-const createTriggerOnInsertContentPathUpdateTablesFileIDWhereSameContentHash = cto: {
+const createTriggerOnUpdateCascadeBetweenContentPathAndTablesOnRelativePath = ct: {
     var buffer = [_]u8{0} ** 10240;
     var st = std.io.fixedBufferStream(&buffer);
     var writer = st.writer();
     var count: usize = 0;
 
     for (tableNames) |name| {
-        count += writer.write(std.fmt.comptimePrint("CREATE TRIGGER IF NOT EXISTS onInsertUpdataFileID{s} AFTER INSERT ON ContentPath FOR EACH ROW " ++
-            "WHEN NEW.ContentHash IS NOT NULL BEGIN UPDATE {s} SET FileID = NEW.ID, FileName = NEW.FileName WHERE ContentHash = NEW.ContentHash " ++
-            " OR FileName = NEW.FileName; END;", .{ name, name })) catch |err| {
+        count += writer.write(std.fmt.comptimePrint(
+            "CREATE TRIGGER IF NOT EXISTS cascadeRelativePath{s} AFTER UPDATE OF RelativePath ON ContentPath " ++
+                "FOR EACH ROW WHEN OLD.RelativePath IS NOT NEW.RelativePath BEGIN UPDATE {s} SET RelativePath = NEW.RelativePath WHERE FileID = NEW.ID; END;",
+            .{ name, name },
+        )) catch |err| {
+            @compileError(std.fmt.comptimePrint("{s}", .{@errorName(err)}));
+        };
+    }
+
+    break :ct std.fmt.comptimePrint("{s}", .{buffer});
+};
+
+const createUniqueIndexFileNameAndContentHash = cu: {
+    var buffer = [_]u8{0} ** 10240;
+    var st = std.io.fixedBufferStream(&buffer);
+    var writer = st.writer();
+    var count: usize = 0;
+
+    for (tableNames) |name| {
+        count += writer.write(
+            std.fmt.comptimePrint("CREATE UNIQUE INDEX IF NOT EXISTS index{s}FileNameHashTable ON {s}(FileName,ContentHash);", .{ name, name }),
+        ) catch |err| {
+            @compileError(std.fmt.comptimePrint("{s}", .{@errorName(err)}));
+        };
+    }
+
+    break :cu std.fmt.comptimePrint("{s}", .{buffer});
+};
+
+const createTriggerOnDeleteContentPathUpdateTablesRelativePathWhereSameContentHash = cto: {
+    var buffer = [_]u8{0} ** 10240;
+    var st = std.io.fixedBufferStream(&buffer);
+    var writer = st.writer();
+    var count: usize = 0;
+
+    for (tableNames) |name| {
+        count += writer.write(std.fmt.comptimePrint(
+            "CREATE TRIGGER IF NOT EXISTS onDeleteUpdataRelativePath{s} AFTER DELETE ON ContentPath FOR EACH ROW " ++
+                "WHEN OLD.ContentHash IS NOT NULL BEGIN UPDATE {s} SET RelativePath = NULL,FileID = NULL WHERE ContentHash = OLD.ContentHash; END;",
+            .{ name, name },
+        )) catch |err| {
             @compileError(std.fmt.comptimePrint("{s}", .{@errorName(err)}));
         };
     }
@@ -160,7 +207,7 @@ fn executeSQL(SQL: []const u8, db: *sqlite.sqlite3) void {
     const res = sqlite.sqlite3_exec(db, @ptrCast(SQL.ptr), null, null, null);
 
     if (res != sqlite.SQLITE_OK) {
-        std.log.err("{s}", .{sqlite.sqlite3_errmsg(db)});
+        std.log.err("{s}\n{s}", .{ sqlite.sqlite3_errmsg(db), SQL });
     }
 }
 
@@ -194,11 +241,12 @@ fn iterateFolderUpdate(dir: std.fs.Dir, dirName: []const u8, parentID: []const u
                 return err;
             },
             sqlDB.sqliteError.StepError => {
+                // std.log.err("modi", .{});
                 fileModifiedTime = -1;
             },
             sqlDB.sqliteError.Empty => {},
         };
-        // sdl.SDL_Log(@ptrCast(tt.name.ptr));
+        // if (fileModifiedTime == -1)
         // std.log.info("tt.name {s} {d} len{d}", .{ tt.name, fileModifiedTime, tt.name.len });
 
         getValues[0] = @ptrCast(&pathModifiedTime);
@@ -211,6 +259,8 @@ fn iterateFolderUpdate(dir: std.fs.Dir, dirName: []const u8, parentID: []const u
             },
             else => {},
         };
+        // if (pathModifiedTime == -1)
+        //     std.log.info("{s} {d}", .{ relativePathBuffer, pathModifiedTime });
 
         if (fileModifiedTime == -1) {
             var UUIDbuffer = [_]u8{0} ** UUID.len;
@@ -281,10 +331,10 @@ fn iterateFolderUpdate(dir: std.fs.Dir, dirName: []const u8, parentID: []const u
                             parentID,
                             modifiedTime,
                             time,
-                            tt.name,
+                            nameZ,
                         });
                     } else {
-                        try ContentPathT.update("RelativePath,ParentID,LastSeenTime", "FileName = ?", .{ relativePathBuffer, parentID, time, tt.name });
+                        try ContentPathT.update("RelativePath,ParentID,LastSeenTime", "FileName = ?", .{ relativePathBuffer, parentID, time, nameZ });
                     }
 
                     var pID = [_]u8{0} ** UUID.len;
@@ -301,6 +351,7 @@ fn iterateFolderUpdate(dir: std.fs.Dir, dirName: []const u8, parentID: []const u
 
                     var cc = try tempFile.metadata();
                     const modifiedTime: i64 = @truncate(cc.modified());
+                    // std.log.info("{d}", .{modifiedTime});
 
                     if (modifiedTime != fileModifiedTime) {
                         const content = try gpa.alloc(u8, cc.size());
@@ -315,10 +366,10 @@ fn iterateFolderUpdate(dir: std.fs.Dir, dirName: []const u8, parentID: []const u
                             modifiedTime,
                             time,
                             sqlDB.BLOB{ .data = &contentHash, .len = hash.blake3.BLAKE3_OUT_LEN },
-                            tt.name,
+                            nameZ,
                         });
                     } else {
-                        try ContentPathT.update("RelativePath,ParentID,LastSeenTime", "FileName = ?", .{ relativePathBuffer, parentID, time, tt.name });
+                        try ContentPathT.update("RelativePath,ParentID,LastSeenTime", "FileName = ?", .{ relativePathBuffer, parentID, time, nameZ });
                     }
                 },
                 else => {},
@@ -343,10 +394,10 @@ fn iterateFolderUpdate(dir: std.fs.Dir, dirName: []const u8, parentID: []const u
                             modifiedTime,
                             time,
                             sqlDB.BLOB{ .data = &contentHash, .len = hash.blake3.BLAKE3_OUT_LEN },
-                            tt.name,
+                            nameZ,
                         });
                     } else {
-                        try ContentPathT.update("LastSeenTime", "FileName = ?", .{ time, tt.name });
+                        try ContentPathT.update("LastSeenTime", "FileName = ?", .{ time, nameZ });
                     }
                 },
                 .directory => {
@@ -357,9 +408,9 @@ fn iterateFolderUpdate(dir: std.fs.Dir, dirName: []const u8, parentID: []const u
                     const modifiedTime: i64 = @truncate(cc.modified());
 
                     if (modifiedTime != fileModifiedTime) {
-                        try ContentPathT.update("ModifiedTime,LastSeenTime", "FileName = ?", .{ modifiedTime, time, tt.name });
+                        try ContentPathT.update("ModifiedTime,LastSeenTime", "FileName = ?", .{ modifiedTime, time, nameZ });
                     } else {
-                        try ContentPathT.update("LastSeenTime", "FileName = ?", .{ time, tt.name });
+                        try ContentPathT.update("LastSeenTime", "FileName = ?", .{ time, nameZ });
                     }
 
                     var pID = [_]u8{0} ** UUID.len;
@@ -501,17 +552,19 @@ pub fn main() !void {
     try ImageLoadParameterT.createTable();
     ShaderLoadParameterT = ShaderLoadParameter.init(db.?);
     try ShaderLoadParameterT.createTable();
+    executeSQL(createUniqueIndexFileNameAndContentHash, db.?);
     executeSQL(createTriggerOnInsertContentPathCheckContentHash, db.?);
     executeSQL(CreateTriggerContentPathOnInsertInsertIntoSubTable, db.?);
-    executeSQL(createTriggerOnInsertContentPathUpdateTablesFileIDWhereSameContentHash, db.?);
     executeSQL(createTriggerOnUpdateCascadeBetweenContentPathAndTablesOnContentHash, db.?);
+    executeSQL(createTriggerOnDeleteContentPathUpdateTablesRelativePathWhereSameContentHash, db.?);
+    executeSQL(createTriggerOnUpdateCascadeBetweenContentPathAndTablesOnRelativePath, db.?);
 
     var content = try cwd.openDir("Content", .{ .iterate = true });
     defer content.close();
 
     if (exist) {
         const cc = try content.metadata();
-        const time = std.time.nanoTimestamp();
+        const time: i64 = @truncate(std.time.nanoTimestamp());
         var modifiedTime: i64 = 0;
         var buffer = [_]u8{0} ** UUID.len;
 
@@ -524,13 +577,15 @@ pub fn main() !void {
         // std.log.info("{s}", .{buffer});
 
         if (cc.modified() != @as(i128, @intCast(modifiedTime))) {
-            try ContentPathT.update("ModifiedTime,LastSeenTime", "ID = ?", .{ modifiedTime, @as(i64, @truncate(time)), buffer });
+            try ContentPathT.update("ModifiedTime,LastSeenTime", "ID = ?", .{ modifiedTime, time, buffer });
             std.log.info("update", .{});
         } else {
-            try ContentPathT.update("LastSeenTime", "ID = ?", .{ @as(i64, @truncate(time)), buffer });
+            try ContentPathT.update("LastSeenTime", "ID = ?", .{ time, buffer });
         }
 
         try iterateFolderUpdate(content, "Content", &buffer);
+
+        try ContentPathT.delete("LastSeenTime < ?", .{time});
     } else {
         const cc = try content.metadata();
         const time = std.time.nanoTimestamp();

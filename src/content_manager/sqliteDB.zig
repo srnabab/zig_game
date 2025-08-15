@@ -351,7 +351,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                             sqlite.SQLITE_STATIC,
                         );
                     },
-                    []const u8, []u8 => {
+                    [:0]u8, []const u8, []u8 => {
                         const res = sqlite.sqlite3_bind_text(
                             stmt,
                             ii,
@@ -403,7 +403,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
             _ = sqlite.sqlite3_step(stmt);
         }
 
-        pub fn delete(self: *Self, comptime constraint: []const u8, values: anytype) void {
+        pub fn delete(self: *Self, comptime constraint: []const u8, values: anytype) !void {
             const ArgsType = @TypeOf(values);
             const args_type_info = @typeInfo(ArgsType);
             if (args_type_info != .@"struct") {
@@ -419,10 +419,10 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
             const ssql = comptime ss: {
                 break :ss std.fmt.comptimePrint("DELETE FROM {s} WHERE {s};", .{ tableName, constraint });
             };
-            std.log.info("{s}", .{ssql});
+            // std.log.info("{s}", .{ssql});
 
             var stmt: ?*sqlite.sqlite3_stmt = null;
-            prepare_v2(self.db, @ptrCast(ssql), -1, @ptrCast(&stmt), null);
+            try prepare_v2(self.db, @ptrCast(ssql), -1, @ptrCast(&stmt), null);
             defer _ = sqlite.sqlite3_finalize(stmt);
 
             inline for (0..fields_info.len) |i| {
