@@ -248,265 +248,149 @@ fn nameToFileType(name: []const u8) FileType {
     return FileTypeHashTable.get(name) orelse FileType.UNKNOWN;
 }
 
-fn iterateFolderUpdate(dir: std.fs.Dir, dirName: []const u8, parentID: []const u8) !void {
-    var contentIt = dir.iterate();
-    while (contentIt.next() catch |err| blk: {
-        std.log.err("{s}", .{@errorName(err)});
-        break :blk null;
-    }) |tt| {
-        var bufferZ = [_]u8{0} ** 128;
-        const nameZ = try std.fmt.bufPrintZ(&bufferZ, "{s}", .{tt.name});
+fn getDbModifiedTime(comptime where_clause: []const u8, params: anytype) !i64 {
+    var modifiedTime: i64 = -1;
+    var getValues: [1]*anyopaque = .{@ptrCast(&modifiedTime)};
+    var types = [_]sqlDB.innerType{.INTEGER};
 
-        var relativePathBuffer = [_]u8{0} ** 256;
-        const rPZ = try std.fmt.bufPrintZ(&relativePathBuffer, "{s}{s}{s}", .{ dirName, slash, tt.name });
-        const rpLen = rPZ.len;
+    ContentPathT.get("ModifiedTime", where_clause, params, &getValues, &types) catch |err| switch (err) {
+        sqlDB.sqliteError.SQLError => return err,
+        // 如果没找到，就返回 -1
+        sqlDB.sqliteError.StepError, sqlDB.sqliteError.Empty => return -1,
+    };
+    return modifiedTime;
+}
 
-        const time: i64 = @truncate(std.time.nanoTimestamp());
-        var fileModifiedTime: i64 = -1;
-        var pathModifiedTime: i64 = -1;
+fn processFile(
+    dir: std.fs.Dir,
+    name: []const u8,
+    rPZ: []const u8,
+    parentID: []const u8,
+    fileModifiedTime: i64,
+    pathModifiedTime: i64,
+) !void {
+    const time: i64 = @truncate(std.time.nanoTimestamp());
+    var tempFile = try dir.openFile(name, .{});
+    defer tempFile.close();
 
-        var getValues: [1]*anyopaque = undefined;
-        getValues[0] = @ptrCast(&fileModifiedTime);
-        var types = [_]sqlDB.innerType{.INTEGER};
+    const metadata = try tempFile.metadata();
+    const currentModifiedTime: i64 = @truncate(metadata.modified());
 
-        ContentPathT.get("ModifiedTime", "FileName = ?", .{nameZ}, &getValues, &types) catch |err| switch (err) {
-            sqlDB.sqliteError.SQLError => {
-                return err;
-            },
-            sqlDB.sqliteError.StepError => {
-                // std.log.err("modi", .{});
-                fileModifiedTime = -1;
-            },
-            sqlDB.sqliteError.Empty => {},
-        };
-        // if (fileModifiedTime == -1)
-        // std.log.info("tt.name {s} {d} len{d}", .{ tt.name, fileModifiedTime, tt.name.len });
-
-        getValues[0] = @ptrCast(&pathModifiedTime);
-        ContentPathT.get("ModifiedTime", "RelativePath = ?", .{relativePathBuffer}, &getValues, &types) catch |err| switch (err) {
-            sqlDB.sqliteError.SQLError => {
-                return err;
-            },
-            sqlDB.sqliteError.StepError => {
-                pathModifiedTime = -1;
-            },
-            else => {},
-        };
-        // if (pathModifiedTime == -1)
-        //     std.log.info("{s} {d}", .{ relativePathBuffer, pathModifiedTime });
-
-        if (fileModifiedTime == -1) {
-            var UUIDbuffer = [_]u8{0} ** UUID.len;
-            try UUID.createNewUUID(&UUIDbuffer);
-
-            switch (tt.kind) {
-                .file => {
-                    const index = std.mem.lastIndexOf(u8, tt.name, ".") orelse 0;
-
-                    try ContentPathInsertFile(
-                        &UUIDbuffer,
-                        parentID.ptr,
-                        &relativePathBuffer,
-                        nameZ,
-                        @truncate(time),
-                        nameToFileType(tt.name[index..tt.name.len]),
-                        dir,
-                    );
-                },
-                .directory => {
-                    var tempDir = try dir.openDir(tt.name, .{ .iterate = true });
-                    defer tempDir.close();
-
-                    var cc = try tempDir.metadata();
-
-                    try ContentPathT.insert(.{
-                        .ID = &UUIDbuffer,
-                        .ParentID = @constCast(parentID.ptr),
-                        .RelativePath = &relativePathBuffer,
-                        .FileName = @constCast(nameZ.ptr),
-                        .TYPE = @intFromEnum(cc.kind()),
-                        .FileSize = @intCast(cc.size()),
-                        .ContentHash = null,
-                        .ModifiedTime = @as(i64, @truncate(cc.modified())),
-                        .LastSeenTime = @as(i64, @truncate(time)),
-                        .FileType = @intFromEnum(FileType.DIR),
-                    });
-
-                    try iterateFolderUpdate(tempDir, relativePathBuffer[0..rpLen], &UUIDbuffer);
-                },
-                else => {},
-            }
-        } else if (pathModifiedTime == -1) {
-            switch (tt.kind) {
-                .directory => {
-                    var tempDir = try dir.openDir(tt.name, .{ .iterate = true });
-                    defer tempDir.close();
-
-                    var cc = try tempDir.metadata();
-                    const modifiedTime: i64 = @truncate(cc.modified());
-
-                    if (modifiedTime != fileModifiedTime) {
-                        try ContentPathT.update("RelativePath,ParentID,ModifiedTime,LastSeenTime", "FileName = ?", .{
-                            relativePathBuffer,
-                            parentID,
-                            modifiedTime,
-                            time,
-                            nameZ,
-                        });
-                    } else {
-                        try ContentPathT.update("RelativePath,ParentID,LastSeenTime", "FileName = ?", .{ relativePathBuffer, parentID, time, nameZ });
-                    }
-
-                    var pID = [_]u8{0} ** UUID.len;
-                    var ptrs = [_]*anyopaque{&pID};
-                    var typesa = [_]sqlDB.innerType{.TEXT};
-
-                    try ContentPathT.get("ID", "RelativePath = ?", .{relativePathBuffer}, &ptrs, &typesa);
-
-                    try iterateFolderUpdate(tempDir, relativePathBuffer[0..rpLen], &pID);
-                },
-                .file => {
-                    var tempFile = try dir.openFile(tt.name, .{});
-                    defer tempFile.close();
-
-                    var cc = try tempFile.metadata();
-                    const modifiedTime: i64 = @truncate(cc.modified());
-                    // std.log.info("{d}", .{modifiedTime});
-
-                    if (modifiedTime != fileModifiedTime) {
-                        const content = try gpa.alloc(u8, cc.size());
-                        defer gpa.free(content);
-
-                        _ = try tempFile.readAll(content);
-                        var contentHash = hash.blake3HashContent(content);
-
-                        try ContentPathT.update("RelativePath,ParentID,ModifiedTime,LastSeenTime,ContentHash", "FileName = ?", .{
-                            relativePathBuffer,
-                            parentID,
-                            modifiedTime,
-                            time,
-                            sqlDB.BLOB{ .data = &contentHash, .len = hash.blake3.BLAKE3_OUT_LEN },
-                            nameZ,
-                        });
-                    } else {
-                        try ContentPathT.update("RelativePath,ParentID,LastSeenTime", "FileName = ?", .{ relativePathBuffer, parentID, time, nameZ });
-                    }
-                },
-                else => {},
+    if (fileModifiedTime == -1) {
+        // 新文件：插入新记录
+        var uuidBuffer = [_]u8{0} ** UUID.len;
+        try UUID.createNewUUID(&uuidBuffer);
+        const index = std.mem.lastIndexOf(u8, name, ".") orelse name.len;
+        try ContentPathInsertFile(&uuidBuffer, parentID.ptr, rPZ.ptr, name, time, nameToFileType(name[index..]), dir);
+    } else {
+        const isModified = (currentModifiedTime != fileModifiedTime);
+        if (pathModifiedTime == -1) {
+            // 文件被移动：更新路径和父ID
+            if (isModified) {
+                const contentHash = try hashFileContent(&tempFile, metadata.size());
+                try ContentPathT.update("RelativePath,ParentID,ModifiedTime,LastSeenTime,ContentHash", "FileName = ?", .{ rPZ, parentID, currentModifiedTime, time, contentHash, name });
+            } else {
+                try ContentPathT.update("RelativePath,ParentID,LastSeenTime", "FileName = ?", .{ rPZ, parentID, time, name });
             }
         } else {
-            switch (tt.kind) {
-                .file => {
-                    var tempFile = try dir.openFile(tt.name, .{});
-                    defer tempFile.close();
-
-                    var cc = try tempFile.metadata();
-                    const modifiedTime: i64 = @truncate(cc.modified());
-
-                    if (modifiedTime != fileModifiedTime) {
-                        const content = try gpa.alloc(u8, cc.size());
-                        defer gpa.free(content);
-
-                        _ = try tempFile.readAll(content);
-                        var contentHash = hash.blake3HashContent(content);
-
-                        try ContentPathT.update("ModifiedTime,LastSeenTime,ContentHash", "FileName = ?", .{
-                            modifiedTime,
-                            time,
-                            sqlDB.BLOB{ .data = &contentHash, .len = hash.blake3.BLAKE3_OUT_LEN },
-                            nameZ,
-                        });
-                    } else {
-                        try ContentPathT.update("LastSeenTime", "FileName = ?", .{ time, nameZ });
-                    }
-                },
-                .directory => {
-                    var tempDir = try dir.openDir(tt.name, .{ .iterate = true });
-                    defer tempDir.close();
-
-                    var cc = try tempDir.metadata();
-                    const modifiedTime: i64 = @truncate(cc.modified());
-
-                    if (modifiedTime != fileModifiedTime) {
-                        try ContentPathT.update("ModifiedTime,LastSeenTime", "FileName = ?", .{ modifiedTime, time, nameZ });
-                    } else {
-                        try ContentPathT.update("LastSeenTime", "FileName = ?", .{ time, nameZ });
-                    }
-
-                    var pID = [_]u8{0} ** UUID.len;
-                    var ptrs = [_]*anyopaque{&pID};
-                    var typesa = [_]sqlDB.innerType{.TEXT};
-
-                    try ContentPathT.get("ID", "RelativePath = ?", .{relativePathBuffer}, &ptrs, &typesa);
-
-                    try iterateFolderUpdate(tempDir, relativePathBuffer[0..rpLen], &pID);
-                },
-                else => {},
+            // 已存在的文件：只更新时间和内容哈希（如果需要）
+            if (isModified) {
+                const contentHash = try hashFileContent(&tempFile, metadata.size());
+                try ContentPathT.update("ModifiedTime,LastSeenTime,ContentHash", "FileName = ?", .{ currentModifiedTime, time, contentHash, name });
+            } else {
+                try ContentPathT.update("LastSeenTime", "FileName = ?", .{ time, name });
             }
         }
     }
 }
 
-// fn iterateFolderInsert(dir: std.fs.Dir, dirName: []const u8, parentID: []const u8) !void {
-//     var contentIt = dir.iterate();
-//     while (contentIt.next() catch |err| blk: {
-//         std.log.err("{s}", .{@errorName(err)});
-//         break :blk null;
-//     }) |tt| {
-//         // std.log.info("{s}{s}{s}", .{ dirName, slash, tt.name });
-//         var bufferZ = [_]u8{0} ** 128;
-//         const nameZ = try std.fmt.bufPrintZ(&bufferZ, "{s}", .{tt.name});
+// 辅助函数：计算文件哈希
+fn hashFileContent(file: *std.fs.File, size: u64) !sqlDB.BLOB {
+    const content = try gpa.alloc(u8, size);
+    defer gpa.free(content);
+    _ = try file.readAll(content);
+    var contentHash = hash.blake3HashContent(content);
+    return sqlDB.BLOB{ .data = &contentHash, .len = hash.blake3.BLAKE3_OUT_LEN };
+}
 
-//         var relativePathBuffer = [_]u8{0} ** 256;
-//         const rPZ = try std.fmt.bufPrintZ(&relativePathBuffer, "{s}{s}{s}", .{ dirName, slash, tt.name });
-//         const rpLen = rPZ.len;
+fn processDirectory(
+    dir: std.fs.Dir,
+    name: []const u8,
+    rPZ: []const u8,
+    parentID: []const u8,
+    fileModifiedTime: i64,
+    pathModifiedTime: i64,
+) anyerror!void {
+    const time: i64 = @truncate(std.time.nanoTimestamp());
+    var tempDir = try dir.openDir(name, .{ .iterate = true });
+    defer tempDir.close();
 
-//         var UUIDbuffer = [_]u8{0} ** 38;
-//         try UUID.createNewUUID(&UUIDbuffer);
+    const metadata = try tempDir.metadata();
+    const currentModifiedTime: i64 = @truncate(metadata.modified());
+    var currentID: [UUID.len]u8 = undefined;
 
-//         const time = std.time.nanoTimestamp();
+    if (fileModifiedTime == -1) {
+        // 新目录：插入记录并获取新ID
+        try UUID.createNewUUID(&currentID);
+        try ContentPathT.insert(.{
+            .ID = &currentID,
+            .ParentID = @constCast(parentID.ptr),
+            .RelativePath = @constCast(rPZ.ptr),
+            .FileName = @constCast(name.ptr),
+            .TYPE = @intFromEnum(metadata.kind()),
+            .FileSize = @intCast(metadata.size()),
+            .ContentHash = null,
+            .ModifiedTime = currentModifiedTime,
+            .LastSeenTime = time,
+            .FileType = @intFromEnum(FileType.DIR),
+        });
+    } else {
+        const isModified = (currentModifiedTime != fileModifiedTime);
+        if (pathModifiedTime == -1) {
+            // 目录被移动：更新路径和父ID
+            if (isModified) {
+                try ContentPathT.update("RelativePath,ParentID,ModifiedTime,LastSeenTime", "FileName = ?", .{ rPZ, parentID, currentModifiedTime, time, name });
+            } else {
+                try ContentPathT.update("RelativePath,ParentID,LastSeenTime", "FileName = ?", .{ rPZ, parentID, time, name });
+            }
+        } else {
+            // 已存在的目录：更新时间
+            if (isModified) {
+                try ContentPathT.update("ModifiedTime,LastSeenTime", "FileName = ?", .{ currentModifiedTime, time, name });
+            } else {
+                try ContentPathT.update("LastSeenTime", "FileName = ?", .{ time, name });
+            }
+        }
+        // 对于已存在的目录，需要获取其ID以进行递归
+        var ptrs = [_]*anyopaque{&currentID};
+        var types = [_]sqlDB.innerType{.TEXT};
+        try ContentPathT.get("ID", "RelativePath = ?", .{rPZ}, &ptrs, &types);
+    }
 
-//         switch (tt.kind) {
-//             .file => {
-//                 const index = std.mem.lastIndexOf(u8, tt.name, ".") orelse 0;
+    // 对子目录进行递归
+    try iterateFolderUpdate(tempDir, rPZ, &currentID);
+}
 
-//                 try ContentPathInsertFile(
-//                     &UUIDbuffer,
-//                     parentID.ptr,
-//                     &relativePathBuffer,
-//                     nameZ,
-//                     @truncate(time),
-//                     nameToFileType(tt.name[index..tt.name.len]),
-//                     dir,
-//                 );
-//             },
-//             .directory => {
-//                 var tempDir = try dir.openDir(tt.name, .{ .iterate = true });
-//                 defer tempDir.close();
+fn iterateFolderUpdate(dir: std.fs.Dir, dirName: []const u8, parentID: []const u8) !void {
+    var contentIt = dir.iterate();
+    while (try contentIt.next()) |entry| {
+        var relativePathBuffer = [_]u8{0} ** 256;
+        const rPZ = try std.fmt.bufPrintZ(&relativePathBuffer, "{s}{s}{s}", .{ dirName, slash, entry.name });
 
-//                 var cc = try tempDir.metadata();
+        var bufferZ = [_]u8{0} ** 128;
+        const nameZ = try std.fmt.bufPrintZ(&bufferZ, "{s}", .{entry.name});
 
-//                 try ContentPathT.insert(.{
-//                     .ID = &UUIDbuffer,
-//                     .ParentID = @constCast(parentID.ptr),
-//                     .RelativePath = &relativePathBuffer,
-//                     .FileName = @constCast(nameZ.ptr),
-//                     .TYPE = @intFromEnum(cc.kind()),
-//                     .FileSize = @intCast(cc.size()),
-//                     .ContentHash = null,
-//                     .ModifiedTime = @as(i64, @truncate(cc.modified())),
-//                     .LastSeenTime = @as(i64, @truncate(time)),
-//                     .FileType = @intFromEnum(FileType.DIR),
-//                 });
+        // 提前获取两种可能存在的时间戳
+        const fileModifiedTime = try getDbModifiedTime("FileName = ?", .{nameZ});
+        const pathModifiedTime = try getDbModifiedTime("RelativePath = ?", .{rPZ});
 
-//                 try iterateFolderInsert(tempDir, relativePathBuffer[0..rpLen], &UUIDbuffer);
-//             },
-//             else => {
-//                 return error.unsupported;
-//             },
-//         }
-//     }
-// }
+        switch (entry.kind) {
+            .file => try processFile(dir, nameZ, rPZ, parentID, fileModifiedTime, pathModifiedTime),
+            .directory => try processDirectory(dir, nameZ, rPZ, parentID, fileModifiedTime, pathModifiedTime),
+            else => {},
+        }
+    }
+}
 
 var ContentPathT: ContentPath = undefined;
 var AliasNamePairT: AliasNamePair = undefined;
