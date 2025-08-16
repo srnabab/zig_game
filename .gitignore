@@ -4,3 +4,4 @@ vendor/*/include/
 include/
 .vscode/
 .VSCodeCounter/
+test*.zig

@@ -203,6 +203,39 @@ const FileTypeHashTable = map: {
     break :map maps;
 };
 
+fn ContentPathInsertFile(
+    UUIDbuffer: [*]const u8,
+    parentID: [*]const u8,
+    relativePath: [*]const u8,
+    fileName: []const u8,
+    lastSeenTime: i64,
+    fileType: FileType,
+    dir: std.fs.Dir,
+) !void {
+    var tempFile = try dir.openFile(fileName, .{});
+    defer tempFile.close();
+
+    var cc = try tempFile.metadata();
+    var content = try gpa.alloc(u8, cc.size());
+    defer gpa.free(content);
+    _ = try tempFile.readAll(content);
+
+    var hashh = hash.blake3HashContent(content[0..cc.size()]);
+
+    try ContentPathT.insert(.{
+        .ID = @constCast(UUIDbuffer),
+        .ParentID = @constCast(parentID),
+        .RelativePath = @constCast(relativePath),
+        .FileName = @constCast(fileName.ptr),
+        .TYPE = @intFromEnum(cc.kind()),
+        .FileSize = @intCast(cc.size()),
+        .ContentHash = sqlDB.BLOB{ .data = &hashh, .len = hash.blake3.BLAKE3_OUT_LEN },
+        .ModifiedTime = @as(i64, @truncate(cc.modified())),
+        .LastSeenTime = lastSeenTime,
+        .FileType = @intFromEnum(fileType),
+    });
+}
+
 fn executeSQL(SQL: []const u8, db: *sqlite.sqlite3) void {
     const res = sqlite.sqlite3_exec(db, @ptrCast(SQL.ptr), null, null, null);
 
@@ -270,28 +303,15 @@ fn iterateFolderUpdate(dir: std.fs.Dir, dirName: []const u8, parentID: []const u
                 .file => {
                     const index = std.mem.lastIndexOf(u8, tt.name, ".") orelse 0;
 
-                    var file = try dir.openFile(tt.name, .{});
-                    defer file.close();
-
-                    var cc = try file.metadata();
-                    const content = try gpa.alloc(u8, cc.size());
-                    defer gpa.free(content);
-
-                    _ = try file.readAll(content);
-                    const hashh = hash.blake3HashContent(content);
-
-                    try ContentPathT.insert(.{
-                        .ID = &UUIDbuffer,
-                        .ParentID = @constCast(parentID.ptr),
-                        .RelativePath = &relativePathBuffer,
-                        .FileName = @constCast(nameZ.ptr),
-                        .TYPE = @intFromEnum(cc.kind()),
-                        .FileSize = @intCast(cc.size()),
-                        .ContentHash = sqlDB.BLOB{ .data = &hashh, .len = hash.blake3.BLAKE3_OUT_LEN },
-                        .ModifiedTime = @as(i64, @truncate(cc.modified())),
-                        .LastSeenTime = @as(i64, @truncate(time)),
-                        .FileType = @intFromEnum(nameToFileType(tt.name[index..tt.name.len])),
-                    });
+                    try ContentPathInsertFile(
+                        &UUIDbuffer,
+                        parentID.ptr,
+                        &relativePathBuffer,
+                        nameZ,
+                        @truncate(time),
+                        nameToFileType(tt.name[index..tt.name.len]),
+                        dir,
+                    );
                 },
                 .directory => {
                     var tempDir = try dir.openDir(tt.name, .{ .iterate = true });
@@ -427,79 +447,66 @@ fn iterateFolderUpdate(dir: std.fs.Dir, dirName: []const u8, parentID: []const u
     }
 }
 
-fn iterateFolderInsert(dir: std.fs.Dir, dirName: []const u8, parentID: []const u8) !void {
-    var contentIt = dir.iterate();
-    while (contentIt.next() catch |err| blk: {
-        std.log.err("{s}", .{@errorName(err)});
-        break :blk null;
-    }) |tt| {
-        // std.log.info("{s}{s}{s}", .{ dirName, slash, tt.name });
-        var bufferZ = [_]u8{0} ** 128;
-        const nameZ = try std.fmt.bufPrintZ(&bufferZ, "{s}", .{tt.name});
+// fn iterateFolderInsert(dir: std.fs.Dir, dirName: []const u8, parentID: []const u8) !void {
+//     var contentIt = dir.iterate();
+//     while (contentIt.next() catch |err| blk: {
+//         std.log.err("{s}", .{@errorName(err)});
+//         break :blk null;
+//     }) |tt| {
+//         // std.log.info("{s}{s}{s}", .{ dirName, slash, tt.name });
+//         var bufferZ = [_]u8{0} ** 128;
+//         const nameZ = try std.fmt.bufPrintZ(&bufferZ, "{s}", .{tt.name});
 
-        var relativePathBuffer = [_]u8{0} ** 256;
-        const rPZ = try std.fmt.bufPrintZ(&relativePathBuffer, "{s}{s}{s}", .{ dirName, slash, tt.name });
-        const rpLen = rPZ.len;
+//         var relativePathBuffer = [_]u8{0} ** 256;
+//         const rPZ = try std.fmt.bufPrintZ(&relativePathBuffer, "{s}{s}{s}", .{ dirName, slash, tt.name });
+//         const rpLen = rPZ.len;
 
-        var UUIDbuffer = [_]u8{0} ** 38;
-        try UUID.createNewUUID(&UUIDbuffer);
+//         var UUIDbuffer = [_]u8{0} ** 38;
+//         try UUID.createNewUUID(&UUIDbuffer);
 
-        const time = std.time.nanoTimestamp();
+//         const time = std.time.nanoTimestamp();
 
-        switch (tt.kind) {
-            .file => {
-                const index = std.mem.lastIndexOf(u8, tt.name, ".") orelse 0;
+//         switch (tt.kind) {
+//             .file => {
+//                 const index = std.mem.lastIndexOf(u8, tt.name, ".") orelse 0;
 
-                var tempFile = try dir.openFile(tt.name, .{});
-                defer tempFile.close();
+//                 try ContentPathInsertFile(
+//                     &UUIDbuffer,
+//                     parentID.ptr,
+//                     &relativePathBuffer,
+//                     nameZ,
+//                     @truncate(time),
+//                     nameToFileType(tt.name[index..tt.name.len]),
+//                     dir,
+//                 );
+//             },
+//             .directory => {
+//                 var tempDir = try dir.openDir(tt.name, .{ .iterate = true });
+//                 defer tempDir.close();
 
-                var cc = try tempFile.metadata();
-                var content = try gpa.alloc(u8, cc.size());
-                defer gpa.free(content);
-                _ = try tempFile.readAll(content);
+//                 var cc = try tempDir.metadata();
 
-                var hashh = hash.blake3HashContent(content[0..cc.size()]);
+//                 try ContentPathT.insert(.{
+//                     .ID = &UUIDbuffer,
+//                     .ParentID = @constCast(parentID.ptr),
+//                     .RelativePath = &relativePathBuffer,
+//                     .FileName = @constCast(nameZ.ptr),
+//                     .TYPE = @intFromEnum(cc.kind()),
+//                     .FileSize = @intCast(cc.size()),
+//                     .ContentHash = null,
+//                     .ModifiedTime = @as(i64, @truncate(cc.modified())),
+//                     .LastSeenTime = @as(i64, @truncate(time)),
+//                     .FileType = @intFromEnum(FileType.DIR),
+//                 });
 
-                try ContentPathT.insert(.{
-                    .ID = &UUIDbuffer,
-                    .ParentID = @constCast(parentID.ptr),
-                    .RelativePath = &relativePathBuffer,
-                    .FileName = @constCast(nameZ.ptr),
-                    .TYPE = @intFromEnum(cc.kind()),
-                    .FileSize = @intCast(cc.size()),
-                    .ContentHash = sqlDB.BLOB{ .data = &hashh, .len = hash.blake3.BLAKE3_OUT_LEN },
-                    .ModifiedTime = @as(i64, @truncate(cc.modified())),
-                    .LastSeenTime = @as(i64, @truncate(time)),
-                    .FileType = @intFromEnum(nameToFileType(tt.name[index..tt.name.len])),
-                });
-            },
-            .directory => {
-                var tempDir = try dir.openDir(tt.name, .{ .iterate = true });
-                defer tempDir.close();
-
-                var cc = try tempDir.metadata();
-
-                try ContentPathT.insert(.{
-                    .ID = &UUIDbuffer,
-                    .ParentID = @constCast(parentID.ptr),
-                    .RelativePath = &relativePathBuffer,
-                    .FileName = @constCast(nameZ.ptr),
-                    .TYPE = @intFromEnum(cc.kind()),
-                    .FileSize = @intCast(cc.size()),
-                    .ContentHash = null,
-                    .ModifiedTime = @as(i64, @truncate(cc.modified())),
-                    .LastSeenTime = @as(i64, @truncate(time)),
-                    .FileType = @intFromEnum(FileType.DIR),
-                });
-
-                try iterateFolderInsert(tempDir, relativePathBuffer[0..rpLen], &UUIDbuffer);
-            },
-            else => {
-                return error.unsupported;
-            },
-        }
-    }
-}
+//                 try iterateFolderInsert(tempDir, relativePathBuffer[0..rpLen], &UUIDbuffer);
+//             },
+//             else => {
+//                 return error.unsupported;
+//             },
+//         }
+//     }
+// }
 
 var ContentPathT: ContentPath = undefined;
 var AliasNamePairT: AliasNamePair = undefined;
@@ -562,11 +569,12 @@ pub fn main() !void {
     var content = try cwd.openDir("Content", .{ .iterate = true });
     defer content.close();
 
+    var buffer = [_]u8{0} ** UUID.len;
+    const time: i64 = @truncate(std.time.nanoTimestamp());
+
     if (exist) {
         const cc = try content.metadata();
-        const time: i64 = @truncate(std.time.nanoTimestamp());
         var modifiedTime: i64 = 0;
-        var buffer = [_]u8{0} ** UUID.len;
 
         var getValues: [2]*anyopaque = undefined;
         getValues[0] = @ptrCast(&buffer);
@@ -582,14 +590,8 @@ pub fn main() !void {
         } else {
             try ContentPathT.update("LastSeenTime", "ID = ?", .{ time, buffer });
         }
-
-        try iterateFolderUpdate(content, "Content", &buffer);
-
-        try ContentPathT.delete("LastSeenTime < ?", .{time});
     } else {
         const cc = try content.metadata();
-        const time = std.time.nanoTimestamp();
-        var buffer = [_]u8{0} ** UUID.len;
         try UUID.createNewUUID(&buffer);
 
         try ContentPathT.insert(.{
@@ -604,9 +606,11 @@ pub fn main() !void {
             .LastSeenTime = @as(i64, @truncate(time)),
             .FileType = @intFromEnum(FileType.DIR),
         });
-
-        try iterateFolderInsert(content, "Content", &buffer);
     }
+
+    try iterateFolderUpdate(content, "Content", &buffer);
+
+    try ContentPathT.delete("LastSeenTime < ?", .{time});
 
     const end = std.time.nanoTimestamp();
 
