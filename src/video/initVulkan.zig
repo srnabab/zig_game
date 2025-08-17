@@ -107,6 +107,7 @@ pub const VkStruct = struct {
     surface: vk.VkSurfaceKHR = null,
     physicalDevice: vk.VkPhysicalDevice = null,
     device: vk.VkDevice = null,
+
     graphicQueueFamily: VkQueueFamily = .{},
     graphicQueue: [16]VkTheadQueue = undefined,
     graphicQueueCrashList: [16]usize = undefined,
@@ -116,6 +117,9 @@ pub const VkStruct = struct {
     transferQueueFamily: VkQueueFamily = .{},
     transferQueue: [8]VkTheadQueue = undefined,
     transferQueueCrashList: [8]usize = undefined,
+
+    shaderModules: [16]vk.VkShaderModule = undefined,
+    shaderModuleCount: usize = 0,
 
     pub fn init(allocator: Allocator) VkStruct {
         return VkStruct{ .allocator = allocator };
@@ -513,6 +517,4 @@ pub const VkStruct = struct {
 
         try checkVkResult(vk.vkCreateCommandPool(self.device, @ptrCast(&createInfo), self.pAllocCallBacks, @ptrCast(pCommandPool)));
     }
-
-    // fn createShaderModule(self: *Self) !void {}
 };

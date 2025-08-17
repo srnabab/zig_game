@@ -339,8 +339,11 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                 // std.log.info("cast c_int {d}", .{ii});
 
                 switch (fields_info[i].type) {
-                    i64 => {
-                        _ = sqlite.sqlite3_bind_int64(stmt, ii, @field(values, fields_info[i].name));
+                    i32, u32, c_uint => {
+                        _ = sqlite.sqlite3_bind_int(stmt, ii, @intCast(@field(values, fields_info[i].name)));
+                    },
+                    i64, u64 => {
+                        _ = sqlite.sqlite3_bind_int64(stmt, ii, @intCast(@field(values, fields_info[i].name)));
                     },
                     BLOB => {
                         _ = sqlite.sqlite3_bind_blob(
@@ -350,6 +353,25 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                             @field(values, fields_info[i].name).len,
                             sqlite.SQLITE_STATIC,
                         );
+                    },
+                    ?BLOB => {
+                        if (@field(values, fields_info[i].name)) |data| {
+                            _ = sqlite.sqlite3_bind_blob(
+                                stmt,
+                                ii,
+                                data.data,
+                                data.len,
+                                sqlite.SQLITE_STATIC,
+                            );
+                        } else {
+                            _ = sqlite.sqlite3_bind_blob(
+                                stmt,
+                                ii,
+                                null,
+                                0,
+                                sqlite.SQLITE_STATIC,
+                            );
+                        }
                     },
                     [:0]u8, []const u8, []u8 => {
                         const res = sqlite.sqlite3_bind_text(

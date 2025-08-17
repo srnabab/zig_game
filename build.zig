@@ -5,30 +5,68 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{ .default_target = .{} });
     const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .Debug });
 
-    const contenManger = b.addExecutable(.{
-        .root_source_file = b.path("src/content_manager/main.zig"),
-        .name = "ContentManger",
+    const shader_compile = b.step("shader compile", "compile shader");
+    const script_cmd = b.addSystemCommand(&[_][]const u8{ "build_script/shaderCompile.bat", "Shaders", "zig-out/bin/Content" });
+    shader_compile.dependOn(&script_cmd.step);
+
+    const enum_c_mod = b.createModule(.{
+        .root_source_file = b.path("src/enumFromC.zig"),
         .target = target,
         .optimize = optimize,
     });
 
-    contenManger.addIncludePath(b.path("include"));
-    contenManger.addIncludePath(b.path("../../../../msys64/mingw64/include/"));
-    contenManger.addLibraryPath(b.path("lib/"));
-    contenManger.addCSourceFile(.{ .file = b.path("src/sqlite3/sqlite3.c"), .language = .c });
-    contenManger.addCSourceFile(.{ .file = b.path("src/content_manager/UUID.c"), .language = .c });
-    contenManger.linkLibC();
-    contenManger.linkSystemLibrary2("blake3", .{ .preferred_link_mode = .static });
-    contenManger.linkSystemLibrary2("sdl3", .{ .preferred_link_mode = .static });
-    contenManger.linkSystemLibrary2("setupapi", .{ .preferred_link_mode = .static });
-    contenManger.linkSystemLibrary2("imm32", .{ .preferred_link_mode = .static });
-    contenManger.linkSystemLibrary2("version", .{ .preferred_link_mode = .static });
-    contenManger.linkSystemLibrary2("winmm", .{ .preferred_link_mode = .static });
-    contenManger.linkSystemLibrary2("ole32", .{ .preferred_link_mode = .static });
-    contenManger.linkSystemLibrary2("gdi32", .{ .preferred_link_mode = .static });
-    contenManger.linkSystemLibrary2("OleAut32", .{ .preferred_link_mode = .static });
-    contenManger.linkSystemLibrary2("Rpcrt4", .{ .preferred_link_mode = .static });
-    b.installArtifact(contenManger);
+    const spReflectModule = b.createModule(.{
+        .root_source_file = b.path("src/sprivReflect/reflect.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+
+    spReflectModule.addImport("EnumC", enum_c_mod);
+
+    spReflectModule.addCSourceFile(.{ .file = b.path("src/sprivReflect/spirv_reflect.c"), .language = .c });
+    spReflectModule.addIncludePath(b.path("include"));
+
+    const contentManagerModule = b.createModule(.{
+        .root_source_file = b.path("src/content_manager/main.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+
+    contentManagerModule.addImport("reflect", spReflectModule);
+    contentManagerModule.addIncludePath(b.path("include"));
+    contentManagerModule.addIncludePath(b.path("../../../../msys64/mingw64/include/"));
+    contentManagerModule.addLibraryPath(b.path("lib/"));
+    contentManagerModule.addCSourceFile(.{ .file = b.path("src/sqlite3/sqlite3.c"), .language = .c });
+    contentManagerModule.addCSourceFile(.{ .file = b.path("src/content_manager/UUID.c"), .language = .c });
+
+    const contenManager = b.addExecutable(.{
+        .name = "ContentManager",
+        .root_module = contentManagerModule,
+    });
+
+    contenManager.step.dependOn(shader_compile);
+
+    contenManager.linkSystemLibrary2("blake3", .{ .preferred_link_mode = .static });
+    contenManager.linkSystemLibrary2("sdl3", .{ .preferred_link_mode = .static });
+    contenManager.linkSystemLibrary2("setupapi", .{ .preferred_link_mode = .static });
+    contenManager.linkSystemLibrary2("imm32", .{ .preferred_link_mode = .static });
+    contenManager.linkSystemLibrary2("version", .{ .preferred_link_mode = .static });
+    contenManager.linkSystemLibrary2("winmm", .{ .preferred_link_mode = .static });
+    contenManager.linkSystemLibrary2("ole32", .{ .preferred_link_mode = .static });
+    contenManager.linkSystemLibrary2("gdi32", .{ .preferred_link_mode = .static });
+    contenManager.linkSystemLibrary2("OleAut32", .{ .preferred_link_mode = .static });
+    contenManager.linkSystemLibrary2("Rpcrt4", .{ .preferred_link_mode = .static });
+
+    contenManager.linkSystemLibrary2("vulkan-1", .{});
+
+    b.installArtifact(contenManager);
+
+    const runContenManager = b.step("run content manager", "collect resources");
+    const contentManagerPath = b.getInstallPath(.bin, "ContentManager");
+    const runContenManager_cmd = b.addSystemCommand(&.{contentManagerPath});
+    runContenManager.dependOn(&runContenManager_cmd.step);
 
     const ecs_mod = b.createModule(.{
         .root_source_file = b.path("src/ecs/ecs.zig"),
@@ -39,12 +77,6 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/stdOutPut.zig"),
         .target = target,
         .optimize = .ReleaseFast,
-    });
-
-    const enum_c_mod = b.createModule(.{
-        .root_source_file = b.path("src/enumFromC.zig"),
-        .target = target,
-        .optimize = optimize,
     });
 
     const gen_mod = b.createModule(.{
@@ -82,6 +114,7 @@ pub fn build(b: *std.Build) void {
         .root_module = exe_mod,
     });
     exe.step.dependOn(&run_gen_exe.step);
+    exe.step.dependOn(runContenManager);
 
     const cpp_compileFlag = [_][]const u8{ "-std=c++17", "-g" };
 

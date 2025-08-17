@@ -5,6 +5,7 @@ const builtin = @import("builtin");
 const sqlDB = @import("sqliteDB.zig");
 const UUID = @import("UUID.zig");
 const hash = @import("blake_hash.zig");
+const reflect = @import("reflect");
 
 const AliasNamePair = sqlDB.Table(
     "CREATE TABLE IF NOT EXISTS AliasNamePair (ID INTEGER PRIMARY KEY AUTOINCREMENT, Alias TEXT NOT NULL UNIQUE, Name TEXT);",
@@ -22,7 +23,9 @@ const ImageLoadParameter = sqlDB.Table(
     true,
 );
 const ShaderLoadParameter = sqlDB.Table(
-    "CREATE TABLE IF NOT EXISTS ShaderLoadParameter (FileName TEXT PRIMARY KEY, ContentHash BLOB UNIQUE, RelativePath TEXT UNIQUE, FileSize INTEGER, FileID TEXT, FOREIGN KEY(FileID) REFERENCES ContentPath(ID) ON DELETE SET NULL ON UPDATE CASCADE);",
+    "CREATE TABLE IF NOT EXISTS ShaderLoadParameter (FileName TEXT PRIMARY KEY, ContentHash BLOB UNIQUE, RelativePath TEXT UNIQUE, FileSize INTEGER" ++
+        ", EntryName TEXT, Stage INTEGER, BindingCount INTEGER, Bindings BLOB, PushConstantSize INTEGER" ++
+        ", FileID TEXT, FOREIGN KEY(FileID) REFERENCES ContentPath(ID) ON DELETE SET NULL ON UPDATE CASCADE);",
     "ShaderLoadParameter",
     false,
 );
@@ -203,44 +206,53 @@ const FileTypeHashTable = map: {
     break :map maps;
 };
 
-fn ContentPathInsertFile(
-    UUIDbuffer: [*]const u8,
-    parentID: [*]const u8,
-    relativePath: [*]const u8,
-    fileName: []const u8,
-    lastSeenTime: i64,
-    fileType: FileType,
-    dir: std.fs.Dir,
-) !void {
-    var tempFile = try dir.openFile(fileName, .{});
-    defer tempFile.close();
-
-    var cc = try tempFile.metadata();
-    var content = try gpa.alloc(u8, cc.size());
-    defer gpa.free(content);
-    _ = try tempFile.readAll(content);
-
-    var hashh = hash.blake3HashContent(content[0..cc.size()]);
-
-    try ContentPathT.insert(.{
-        .ID = @constCast(UUIDbuffer),
-        .ParentID = @constCast(parentID),
-        .RelativePath = @constCast(relativePath),
-        .FileName = @constCast(fileName.ptr),
-        .TYPE = @intFromEnum(cc.kind()),
-        .FileSize = @intCast(cc.size()),
-        .ContentHash = sqlDB.BLOB{ .data = &hashh, .len = hash.blake3.BLAKE3_OUT_LEN },
-        .ModifiedTime = @as(i64, @truncate(cc.modified())),
-        .LastSeenTime = lastSeenTime,
-        .FileType = @intFromEnum(fileType),
-    });
-}
-
 fn executeSQL(SQL: []const u8, db: *sqlite.sqlite3) void {
     const res = sqlite.sqlite3_exec(db, @ptrCast(SQL.ptr), null, null, null);
 
     if (res != sqlite.SQLITE_OK) {
         std.log.err("{s}\n{s}", .{ sqlite.sqlite3_errmsg(db), SQL });
+    }
+}
+
+fn updateLoadParameter(tp: FileType, cc: std.fs.File.Metadata, content: []const u8, fileName: []const u8) !void {
+    switch (tp) {
+        .SPV => {
+            const res = try reflect.reflect(gpa, cc, content);
+            if (res.bindings != null) {
+                defer gpa.free(res.bindings.?);
+                const blob = sqlDB.BLOB{
+                    .data = @ptrCast(res.bindings.?.ptr),
+                    .len = @intCast(@sizeOf(reflect.binding) * res.bindingCount),
+                };
+                try ShaderLoadParameterT.update(
+                    "EntryName,Stage,BindingCount,Bindings,PushConstantSize",
+                    "FileName = ?",
+                    .{
+                        res.name,
+                        @intFromEnum(res.stage),
+                        res.bindingCount,
+                        blob,
+                        res.pushConstantSize,
+                        fileName,
+                    },
+                );
+            } else {
+                const blob: ?sqlDB.BLOB = null;
+                try ShaderLoadParameterT.update(
+                    "EntryName,Stage,BindingCount,Bindings,PushConstantSize",
+                    "FileName = ?",
+                    .{
+                        res.name,
+                        @intFromEnum(res.stage),
+                        res.bindingCount,
+                        blob,
+                        res.pushConstantSize,
+                        fileName,
+                    },
+                );
+            }
+        },
+        else => {},
     }
 }
 
@@ -281,22 +293,72 @@ fn processFile(
         var uuidBuffer = [_]u8{0} ** UUID.len;
         try UUID.createNewUUID(&uuidBuffer);
         const index = std.mem.lastIndexOf(u8, name, ".") orelse name.len;
-        try ContentPathInsertFile(&uuidBuffer, parentID.ptr, rPZ.ptr, name, time, nameToFileType(name[index..]), dir);
+        const fType = nameToFileType(name[index..]);
+        // try ContentPathInsertFile(&uuidBuffer, parentID.ptr, rPZ.ptr, name, time, fType, dir);
+
+        var content = try gpa.alloc(u8, metadata.size());
+        defer gpa.free(content);
+        _ = try tempFile.readAll(content);
+
+        var hashh = hash.blake3HashContent(content[0..metadata.size()]);
+
+        try ContentPathT.insert(.{
+            .ID = @constCast(&uuidBuffer),
+            .ParentID = @constCast(parentID.ptr),
+            .RelativePath = @constCast(rPZ.ptr),
+            .FileName = @constCast(name.ptr),
+            .TYPE = @intFromEnum(metadata.kind()),
+            .FileSize = @intCast(metadata.size()),
+            .ContentHash = sqlDB.BLOB{ .data = &hashh, .len = hash.blake3.BLAKE3_OUT_LEN },
+            .ModifiedTime = @as(i64, @truncate(metadata.modified())),
+            .LastSeenTime = time,
+            .FileType = @intFromEnum(fType),
+        });
+
+        try updateLoadParameter(fType, metadata, content, name);
     } else {
         const isModified = (currentModifiedTime != fileModifiedTime);
         if (pathModifiedTime == -1) {
             // 文件被移动：更新路径和父ID
             if (isModified) {
-                const contentHash = try hashFileContent(&tempFile, metadata.size());
-                try ContentPathT.update("RelativePath,ParentID,ModifiedTime,LastSeenTime,ContentHash", "FileName = ?", .{ rPZ, parentID, currentModifiedTime, time, contentHash, name });
+                const content = try gpa.alloc(u8, metadata.size());
+                defer gpa.free(content);
+                _ = try tempFile.readAll(content);
+
+                var contentHash = hash.blake3HashContent(content);
+                // const contentHash = try hashFileContent(&tempFile, metadata.size());
+                try ContentPathT.update(
+                    "RelativePath,ParentID,ModifiedTime,LastSeenTime,ContentHash",
+                    "FileName = ?",
+                    .{ rPZ, parentID, currentModifiedTime, time, sqlDB.BLOB{ .data = &contentHash, .len = contentHash.len }, name },
+                );
+
+                const index = std.mem.lastIndexOf(u8, name, ".") orelse name.len;
+                const fType = nameToFileType(name[index..]);
+
+                try updateLoadParameter(fType, metadata, content, name);
             } else {
                 try ContentPathT.update("RelativePath,ParentID,LastSeenTime", "FileName = ?", .{ rPZ, parentID, time, name });
             }
         } else {
             // 已存在的文件：只更新时间和内容哈希（如果需要）
             if (isModified) {
-                const contentHash = try hashFileContent(&tempFile, metadata.size());
-                try ContentPathT.update("ModifiedTime,LastSeenTime,ContentHash", "FileName = ?", .{ currentModifiedTime, time, contentHash, name });
+                const content = try gpa.alloc(u8, metadata.size());
+                defer gpa.free(content);
+                _ = try tempFile.readAll(content);
+
+                var contentHash = hash.blake3HashContent(content);
+
+                try ContentPathT.update(
+                    "ModifiedTime,LastSeenTime,ContentHash",
+                    "FileName = ?",
+                    .{ currentModifiedTime, time, sqlDB.BLOB{ .data = &contentHash, .len = contentHash.len }, name },
+                );
+
+                const index = std.mem.lastIndexOf(u8, name, ".") orelse name.len;
+                const fType = nameToFileType(name[index..]);
+
+                try updateLoadParameter(fType, metadata, content, name);
             } else {
                 try ContentPathT.update("LastSeenTime", "FileName = ?", .{ time, name });
             }
