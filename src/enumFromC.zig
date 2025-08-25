@@ -12,7 +12,7 @@ pub fn generateEnumFromC(comptime import: anytype, comptime tag_type: anytype, c
     // comptime_print("start {s}, end {s}", .{ startEnumMember, endEnumMember });
 
     comptime var begin = false;
-    @setEvalBranchQuota(10000);
+    @setEvalBranchQuota(100000);
     inline for (std.meta.declarations(import)) |decl| {
         if (begin == false) {
             if (std.mem.eql(u8, decl.name, startEnumMember)) {

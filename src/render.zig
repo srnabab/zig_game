@@ -1,7 +1,7 @@
 const std = @import("std");
 const video = @import("video/initVulkan.zig");
 const process = @import("video/processRender.zig");
-const global = @import("global.zig");
+const global = @import("global");
 const drawCommandProcess = @import("video/drawCommandProcess.zig");
 
 pub fn render_thread_func(gpa: std.mem.Allocator, thread_count: usize) !void {

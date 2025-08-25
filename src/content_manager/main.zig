@@ -1,17 +1,12 @@
-const sqlite = @cImport(@cInclude("sqlite3/sqlite3.h"));
+const sqlDB = @import("sqlDb");
+const sqlite = sqlDB.sqlite;
 const sdl = @cImport(@cInclude("SDL3/SDL.h"));
 const std = @import("std");
 const builtin = @import("builtin");
-const sqlDB = @import("sqliteDB.zig");
 const UUID = @import("UUID.zig");
 const hash = @import("blake_hash.zig");
 const reflect = @import("reflect");
 
-const AliasNamePair = sqlDB.Table(
-    "CREATE TABLE IF NOT EXISTS AliasNamePair (ID INTEGER PRIMARY KEY AUTOINCREMENT, Alias TEXT NOT NULL UNIQUE, Name TEXT);",
-    "AliasNamePair",
-    true,
-);
 const ContentPath = sqlDB.Table(
     "CREATE TABLE IF NOT EXISTS ContentPath (ID TEXT PRIMARY KEY,  ParentID TEXT,  RelativePath TEXT NOT NULL UNIQUE,  FileName TEXT,  TYPE INTEGER, FileSize INTEGER, ContentHash BLOB, ModifiedTime INTEGER, LastSeenTime INTEGER, FileType INTEGER);",
     "ContentPath",
@@ -218,8 +213,9 @@ fn updateLoadParameter(tp: FileType, cc: std.fs.File.Metadata, content: []const 
     switch (tp) {
         .SPV => {
             const res = try reflect.reflect(gpa, cc, content);
+            defer res.deinit(gpa);
+
             if (res.bindings != null) {
-                defer gpa.free(res.bindings.?);
                 const blob = sqlDB.BLOB{
                     .data = @ptrCast(res.bindings.?.ptr),
                     .len = @intCast(@sizeOf(reflect.binding) * res.bindingCount),
@@ -455,7 +451,6 @@ fn iterateFolderUpdate(dir: std.fs.Dir, dirName: []const u8, parentID: []const u
 }
 
 var ContentPathT: ContentPath = undefined;
-var AliasNamePairT: AliasNamePair = undefined;
 var ImageLoadParameterT: ImageLoadParameter = undefined;
 var ShaderLoadParameterT: ShaderLoadParameter = undefined;
 
@@ -478,16 +473,23 @@ pub fn main() !void {
     defer it.deinit();
 
     const rootExe = it.next().?;
-    std.log.info("{s}", .{rootExe});
+    std.log.info("exe: {s}", .{rootExe});
 
     var root: [256:0]u8 = undefined;
+
+    const realPath = it.next();
     @memset(root[0..root.len], 0);
-    std.mem.copyForwards(u8, &root, rootExe);
+
+    if (realPath) |rootPath| {
+        std.mem.copyForwards(u8, &root, rootPath);
+    } else {
+        std.mem.copyForwards(u8, &root, rootExe);
+    }
 
     const index = std.mem.lastIndexOf(u8, &root, slash) orelse 0;
     @memset(root[index..root.len], 0);
 
-    std.log.info("{s}", .{root});
+    std.log.info("path: {s}", .{root});
 
     var cwd = try std.fs.openDirAbsolute(&root, .{});
     try cwd.setAsCwd();
@@ -499,8 +501,6 @@ pub fn main() !void {
     ContentPathT = ContentPath.init(db.?);
     const exist = ContentPathT.exist();
     try ContentPathT.createTable();
-    AliasNamePairT = AliasNamePair.init(db.?);
-    try AliasNamePairT.createTable();
     ImageLoadParameterT = ImageLoadParameter.init(db.?);
     try ImageLoadParameterT.createTable();
     ShaderLoadParameterT = ShaderLoadParameter.init(db.?);

@@ -2,7 +2,7 @@ const drawCommand = @import("drawCommand.zig");
 const texture = @import("textureSet.zig");
 const std = @import("std");
 const Atomic = std.atomic;
-const global = @import("../global.zig");
+const global = @import("global");
 // const textureHashMap = global.textureHashMap;
 const DrawCommandMemoryPool = std.heap.MemoryPoolExtra(drawCommand, .{ .alignment = @alignOf(drawCommand) });
 

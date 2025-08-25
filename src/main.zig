@@ -16,10 +16,13 @@ const textureSet = @import("video/textureSet.zig");
 const update = @import("update.zig");
 const render = @import("render.zig");
 
+const file = @import("fileSystem");
+const pipeline = @import("video/pipeline/pipeline.zig");
+
 const gpaType = @TypeOf(std.heap.GeneralPurposeAllocator(.{}).init);
 const Allocator = std.mem.Allocator;
 
-const global = @import("global.zig");
+const global = @import("global");
 
 var thread_count: usize = 0;
 var update_thread: usize = 0;
@@ -38,9 +41,9 @@ pub fn main() !void {
     };
     global.gpa = gpa;
 
+    global.cwd = std.fs.cwd();
+
     output.init();
-    textureSet.init();
-    defer textureSet.deinit();
 
     const args = try process.argsAlloc(gpa);
     defer process.argsFree(gpa, args);
@@ -48,6 +51,14 @@ pub fn main() !void {
     for (args) |arg| {
         try output.out.print("arg: {s}\n", .{arg});
     }
+
+    file.init();
+    defer file.deinit();
+
+    try pipeline.parse("aaa.pipeline");
+
+    textureSet.init();
+    defer textureSet.deinit();
 
     thread_count = try Thread.getCpuCount();
     // const thread_count: u32 = 1023;

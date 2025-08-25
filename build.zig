@@ -27,6 +27,15 @@ pub fn build(b: *std.Build) void {
     spReflectModule.addCSourceFile(.{ .file = b.path("src/sprivReflect/spirv_reflect.c"), .language = .c });
     spReflectModule.addIncludePath(b.path("include"));
 
+    const sqliteModule = b.createModule(.{
+        .root_source_file = b.path("src/sqlite3/sqliteDB.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    sqliteModule.addCSourceFile(.{ .file = b.path("src/sqlite3/sqlite3.c"), .language = .c });
+    sqliteModule.addIncludePath(b.path("include"));
+
     const contentManagerModule = b.createModule(.{
         .root_source_file = b.path("src/content_manager/main.zig"),
         .target = target,
@@ -35,10 +44,10 @@ pub fn build(b: *std.Build) void {
     });
 
     contentManagerModule.addImport("reflect", spReflectModule);
+    contentManagerModule.addImport("sqlDb", sqliteModule);
     contentManagerModule.addIncludePath(b.path("include"));
     contentManagerModule.addIncludePath(b.path("../../../../msys64/mingw64/include/"));
     contentManagerModule.addLibraryPath(b.path("lib/"));
-    contentManagerModule.addCSourceFile(.{ .file = b.path("src/sqlite3/sqlite3.c"), .language = .c });
     contentManagerModule.addCSourceFile(.{ .file = b.path("src/content_manager/UUID.c"), .language = .c });
 
     const contenManager = b.addExecutable(.{
@@ -64,9 +73,9 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(contenManager);
 
     const runContenManager = b.step("run content manager", "collect resources");
-    const contentManagerPath = b.getInstallPath(.bin, "ContentManager");
-    const runContenManager_cmd = b.addSystemCommand(&.{contentManagerPath});
+    const runContenManager_cmd = b.addRunArtifact(contenManager);
     runContenManager.dependOn(&runContenManager_cmd.step);
+    runContenManager_cmd.addArg(b.getInstallPath(.bin, "ContentManager"));
 
     const ecs_mod = b.createModule(.{
         .root_source_file = b.path("src/ecs/ecs.zig"),
@@ -101,7 +110,25 @@ pub fn build(b: *std.Build) void {
     const gen_file_path = b.fmt("{s}/{s}", .{ root_path, "src/video/resultToError.zig" });
     run_gen_exe.addArg(b.fmt("{s}", .{gen_file_path}));
 
-    const video_mod = b.createModule(.{ .root_source_file = b.path("src/video/initVulkan.zig"), .target = target, .optimize = optimize });
+    const video_mod = b.createModule(.{
+        .root_source_file = b.path("src/video/initVulkan.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const global_mod = b.createModule(.{
+        .root_source_file = b.path("src/global.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const fileSystem_mod = b.createModule(.{
+        .root_source_file = b.path("src/fileSystem/fileSystem.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    fileSystem_mod.addImport("sqlDb", sqliteModule);
+    fileSystem_mod.addImport("global", global_mod);
 
     const exe_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
@@ -126,6 +153,8 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("video", video_mod);
     exe_mod.addImport("enumFromC", enum_c_mod);
     exe_mod.addImport("output", output_mod);
+    exe_mod.addImport("fileSystem", fileSystem_mod);
+    exe_mod.addImport("global", global_mod);
 
     exe.addIncludePath(b.path("include/"));
     exe.addLibraryPath(b.path("lib/"));

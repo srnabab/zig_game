@@ -1,7 +1,7 @@
 const std = @import("std");
 const ECS = @import("ECS");
 const process = @import("video/processRender.zig");
-const global = @import("global.zig");
+const global = @import("global");
 const textureSet = @import("video/textureSet.zig");
 
 const DrawableC = ECS.CompentPool(process.Drawable);

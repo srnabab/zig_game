@@ -1,4 +1,4 @@
-const sqlite = @cImport(@cInclude("sqlite3/sqlite3.h"));
+pub const sqlite = @cImport(@cInclude("sqlite3/sqlite3.h"));
 const sdl = @cImport(@cInclude("SDL3/SDL.h"));
 const std = @import("std");
 
