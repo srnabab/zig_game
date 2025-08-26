@@ -18,6 +18,7 @@ const render = @import("render.zig");
 
 const file = @import("fileSystem");
 const pipeline = @import("video/pipeline/pipeline.zig");
+const translate = @import("video/pipeline/translate.zig");
 
 const gpaType = @TypeOf(std.heap.GeneralPurposeAllocator(.{}).init);
 const Allocator = std.mem.Allocator;
@@ -62,6 +63,9 @@ pub fn main() !void {
 
     var pipelineInfo = try pipeline.parse("aaa.pipe");
     defer pipelineInfo.deinit();
+
+    var pipelineCreateStruct = try translate.toVulkan(&pipelineInfo, global.gpa);
+    defer pipelineCreateStruct.deinit();
 
     // @breakpoint();
     std.process.exit(0);

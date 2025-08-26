@@ -22,21 +22,14 @@ const attribute = struct {
     offset: u32,
 };
 
-const vertexInput = struct {
-    bindings: ?[]binding,
-    attributes: ?[]attribute,
-};
-
-const testStruct = struct { a: u32, pNext: ?*inputStatepNext };
-const testStruct2 = struct { b: u32, pNext: ?*inputStatepNext };
-
-const inputStatepNext = union { a: testStruct, b: testStruct2 };
-
-const inputState = struct {
-    pNext: ?inputStatepNext,
+const vertexInputStatepNext = union {};
+const vertexInputState = struct {
+    pNext: ?vertexInputStatepNext,
     flag: u32,
     vertexBindingDescriptionCount: u32,
+    bindings: ?[]binding,
     vertexAttributeDescriptionCount: u32,
+    attributes: ?[]attribute,
 };
 const inputAssemblyPNext = union {}; // New union for inputAssembly
 const inputAssembly = struct {
@@ -149,10 +142,9 @@ pub const pipelineInfo = struct {
     name: []const u8,
     pipeType: pipelineType,
     shaders: [5][]const u8,
-    vertexInputt: vertexInput,
-    inputStatee: inputState,
+    vertexInputstatee: vertexInputState,
     inputAssemblyy: inputAssembly,
-    tessellationStatee: tessellationState,
+    tessellationStatee: ?tessellationState,
     viewportStatee: viewportState,
     rasterizationStatee: rasterizationState,
     multisampleStatee: multisampleState,
@@ -204,28 +196,28 @@ fn parseVertexInput(jsonValue: json.Value, info: *pipelineInfo) !void {
     const bindings_field = vertexInput_obj.get("bindings");
     if (bindings_field) |bindings| {
         const array = bindings.array;
-        info.vertexInputt.bindings = try info.allocator.allocator().alloc(binding, array.items.len);
+        info.vertexInputstatee.bindings = try info.allocator.allocator().alloc(binding, array.items.len);
         for (array.items, 0..) |value, i| {
-            info.vertexInputt.bindings.?[i].bind = @intCast(value.object.get("binding").?.integer);
-            info.vertexInputt.bindings.?[i].stride = @intCast(value.object.get("stride").?.integer);
-            info.vertexInputt.bindings.?[i].inputRate = value.object.get("inputRate").?.string;
+            info.vertexInputstatee.bindings.?[i].bind = @intCast(value.object.get("binding").?.integer);
+            info.vertexInputstatee.bindings.?[i].stride = @intCast(value.object.get("stride").?.integer);
+            info.vertexInputstatee.bindings.?[i].inputRate = value.object.get("inputRate").?.string;
         }
     } else {
-        info.vertexInputt.bindings = null;
+        info.vertexInputstatee.bindings = null;
     }
 
     const attributes_field = vertexInput_obj.get("attributes");
     if (attributes_field) |attributes| {
         const array = attributes.array;
-        info.vertexInputt.attributes = try info.allocator.allocator().alloc(attribute, array.items.len);
+        info.vertexInputstatee.attributes = try info.allocator.allocator().alloc(attribute, array.items.len);
         for (array.items, 0..) |value, i| {
-            info.vertexInputt.attributes.?[i].location = @intCast(value.object.get("location").?.integer);
-            info.vertexInputt.attributes.?[i].binding = @intCast(value.object.get("binding").?.integer);
-            info.vertexInputt.attributes.?[i].format = value.object.get("format").?.string;
-            info.vertexInputt.attributes.?[i].offset = @intCast(value.object.get("offset").?.integer);
+            info.vertexInputstatee.attributes.?[i].location = @intCast(value.object.get("location").?.integer);
+            info.vertexInputstatee.attributes.?[i].binding = @intCast(value.object.get("binding").?.integer);
+            info.vertexInputstatee.attributes.?[i].format = value.object.get("format").?.string;
+            info.vertexInputstatee.attributes.?[i].offset = @intCast(value.object.get("offset").?.integer);
         }
     } else {
-        info.vertexInputt.attributes = null;
+        info.vertexInputstatee.attributes = null;
     }
 }
 
@@ -240,11 +232,11 @@ fn parseInputState(jsonValue: json.Value, info: *pipelineInfo) void {
             std.process.abort();
         }
     }
-    info.inputStatee.pNext = null;
+    info.vertexInputstatee.pNext = null;
 
-    info.inputStatee.flag = @intCast(inputState_obj.get("flag").?.integer);
-    info.inputStatee.vertexBindingDescriptionCount = @intCast(inputState_obj.get("vertexBindingDescriptionCount").?.integer);
-    info.inputStatee.vertexAttributeDescriptionCount = @intCast(inputState_obj.get("vertexAttributeDescriptionCount").?.integer);
+    info.vertexInputstatee.flag = @intCast(inputState_obj.get("flag").?.integer);
+    info.vertexInputstatee.vertexBindingDescriptionCount = @intCast(inputState_obj.get("vertexBindingDescriptionCount").?.integer);
+    info.vertexInputstatee.vertexAttributeDescriptionCount = @intCast(inputState_obj.get("vertexAttributeDescriptionCount").?.integer);
 }
 
 fn parseInputAssembly(jsonValue: json.Value, info: *pipelineInfo) void {
@@ -269,6 +261,11 @@ fn parseInputAssembly(jsonValue: json.Value, info: *pipelineInfo) void {
 
 fn parseTessellationState(jsonValue: json.Value, info: *pipelineInfo) void {
     const field = jsonValue.object.get("TessellationState").?;
+    if (field == .null) {
+        info.tessellationStatee = null;
+        return;
+    }
+
     const obj = field.object;
 
     const pNext = obj.get("pNext");
