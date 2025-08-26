@@ -250,7 +250,17 @@ fn parseInputState(jsonValue: json.Value, info: *pipelineInfo) void {
 fn parseInputAssembly(jsonValue: json.Value, info: *pipelineInfo) void {
     const field = jsonValue.object.get("inputAssembly").?;
     const obj = field.object;
+
+    const pNext = obj.get("pNext");
+    if (pNext) |next| {
+        if (next != .null) {
+            std.log.err("pNext is not supported for inputAssembly", .{});
+            std.process.abort();
+        }
+    }
+
     info.inputAssemblyy = .{
+        .pNext = null,
         .flags = @intCast(obj.get("flag").?.integer),
         .topology = obj.get("topology").?.string,
         .primitiveRestartEnable = obj.get("primitiveRestartEnable").?.bool,
@@ -260,7 +270,17 @@ fn parseInputAssembly(jsonValue: json.Value, info: *pipelineInfo) void {
 fn parseTessellationState(jsonValue: json.Value, info: *pipelineInfo) void {
     const field = jsonValue.object.get("TessellationState").?;
     const obj = field.object;
+
+    const pNext = obj.get("pNext");
+    if (pNext) |next| {
+        if (next != .null) {
+            std.log.err("pNext is not supported for TessellationState", .{});
+            std.process.abort();
+        }
+    }
+
     info.tessellationStatee = .{
+        .pNext = null,
         .flags = @intCast(obj.get("flag").?.integer),
         .patchControlPoints = @intCast(obj.get("patchControlPoints").?.integer),
     };
@@ -269,7 +289,17 @@ fn parseTessellationState(jsonValue: json.Value, info: *pipelineInfo) void {
 fn parseViewportState(jsonValue: json.Value, info: *pipelineInfo) void {
     const field = jsonValue.object.get("ViewportState").?;
     const obj = field.object;
+
+    const pNext = obj.get("pNext");
+    if (pNext) |next| {
+        if (next != .null) {
+            std.log.err("pNext is not supported for ViewportState", .{});
+            std.process.abort();
+        }
+    }
+
     info.viewportStatee = .{
+        .pNext = null,
         .flags = @intCast(obj.get("flag").?.integer),
         .viewportCount = @intCast(obj.get("viewportCount").?.integer),
         .scissorCount = @intCast(obj.get("scissorCount").?.integer),
@@ -279,7 +309,17 @@ fn parseViewportState(jsonValue: json.Value, info: *pipelineInfo) void {
 fn parseRasterizationState(jsonValue: json.Value, info: *pipelineInfo) void {
     const field = jsonValue.object.get("rasterizationState").?;
     const obj = field.object;
+
+    const pNext = obj.get("pNext");
+    if (pNext) |next| {
+        if (next != .null) {
+            std.log.err("pNext is not supported for rasterizationState", .{});
+            std.process.abort();
+        }
+    }
+
     info.rasterizationStatee = .{
+        .pNext = null,
         .flags = @intCast(obj.get("flag").?.integer),
         .depthClampEnable = obj.get("depthClampEnable").?.bool,
         .rasterizerDiscardEnable = obj.get("rasterizerDiscardEnable").?.bool,
@@ -297,7 +337,17 @@ fn parseRasterizationState(jsonValue: json.Value, info: *pipelineInfo) void {
 fn parseMultisampleState(jsonValue: json.Value, info: *pipelineInfo) void {
     const field = jsonValue.object.get("multisampleState").?;
     const obj = field.object;
+
+    const pNext = obj.get("pNext");
+    if (pNext) |next| {
+        if (next != .null) {
+            std.log.err("pNext is not supported for multisampleState", .{});
+            std.process.abort();
+        }
+    }
+
     info.multisampleStatee = .{
+        .pNext = null,
         .flags = @intCast(obj.get("flag").?.integer),
         .rasterizationSamples = obj.get("rasterizationSamples").?.string,
         .sampleShadingEnable = obj.get("sampleShadingEnable").?.bool,
@@ -324,6 +374,14 @@ fn parseDepthStencilState(jsonValue: json.Value, info: *pipelineInfo) void {
     const field = jsonValue.object.get("depthStencilState").?;
     const obj = field.object;
 
+    const pNext = obj.get("pNext");
+    if (pNext) |next| {
+        if (next != .null) {
+            std.log.err("pNext is not supported for depthStencilState", .{});
+            std.process.abort();
+        }
+    }
+
     var back: ?stencilOpState = null;
     if (obj.get("back")) |back_val| {
         if (back_val != .null) {
@@ -338,6 +396,7 @@ fn parseDepthStencilState(jsonValue: json.Value, info: *pipelineInfo) void {
     }
 
     info.depthStencilStatee = .{
+        .pNext = null,
         .flags = @intCast(obj.get("flag").?.integer),
         .depthTestEnable = obj.get("depthTestEnable").?.bool,
         .depthWriteEnable = obj.get("depthWriteEnable").?.bool,
@@ -354,6 +413,14 @@ fn parseDepthStencilState(jsonValue: json.Value, info: *pipelineInfo) void {
 fn parseColorBlendState(jsonValue: json.Value, info: *pipelineInfo) !void {
     const field = jsonValue.object.get("colorBlendState").?;
     const obj = field.object;
+
+    const pNext = obj.get("pNext");
+    if (pNext) |next| {
+        if (next != .null) {
+            std.log.err("pNext is not supported for colorBlendState", .{});
+            std.process.abort();
+        }
+    }
 
     const attachments_array = obj.get("attachments").?.array;
     const attachments_slice = try info.allocator.allocator().alloc(colorBlendAttachmentState, attachments_array.items.len);
@@ -385,6 +452,7 @@ fn parseColorBlendState(jsonValue: json.Value, info: *pipelineInfo) !void {
     }
 
     info.colorBlendStatee = .{
+        .pNext = null,
         .flags = @intCast(obj.get("flag").?.integer),
         .logicOpEnable = obj.get("logicOpEnable").?.bool,
         .logicOp = obj.get("logicOp").?.string,
@@ -396,12 +464,22 @@ fn parseColorBlendState(jsonValue: json.Value, info: *pipelineInfo) !void {
 fn parseDynamicStates(jsonValue: json.Value, info: *pipelineInfo) !void {
     const field = jsonValue.object.get("dynamicStates").?;
     const obj = field.object;
+
+    const pNext = obj.get("pNext");
+    if (pNext) |next| {
+        if (next != .null) {
+            std.log.err("pNext is not supported for dynamicStates", .{});
+            std.process.abort();
+        }
+    }
+
     const states_array = obj.get("States").?.array;
     const states_slice = try info.allocator.allocator().alloc([]const u8, states_array.items.len);
     for (states_array.items, 0..) |item, i| {
         states_slice[i] = item.string;
     }
 
+    info.dynamicStatess.pNext = null;
     info.dynamicStatess.States = states_slice;
 }
 

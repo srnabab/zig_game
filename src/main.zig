@@ -63,8 +63,8 @@ pub fn main() !void {
     var pipelineInfo = try pipeline.parse("aaa.pipe");
     defer pipelineInfo.deinit();
 
-    @breakpoint();
-    // std.process.exit(0);
+    // @breakpoint();
+    std.process.exit(0);
 
     textureSet.init();
     defer textureSet.deinit();
