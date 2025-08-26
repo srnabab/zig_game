@@ -528,6 +528,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
             try prepare_v2(self.db, @ptrCast(ssql), -1, @ptrCast(&stmt), null);
             defer _ = sqlite.sqlite3_finalize(stmt);
 
+            // std.log.info("fields len {d}", .{fields_info.len});
             inline for (0..fields_info.len) |i| {
                 const ii: c_int = @intCast(i + 1);
                 // std.log.info("cast c_int {d}", .{ii});
@@ -556,6 +557,8 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                             -1,
                             sqlite.SQLITE_STATIC,
                         );
+                        // sdl.SDL_Log(@ptrCast(@field(values, fields_info[i].name).ptr));
+                        // std.log.info("name {s}", .{@field(values, fields_info[i].name)});
                         if (res != sqlite.SQLITE_OK) {
                             std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
                         }
@@ -568,6 +571,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                             -1,
                             sqlite.SQLITE_STATIC,
                         );
+                        // std.log.info("name {s}", .{@field(values, fields_info[i].name)});
                         if (res != sqlite.SQLITE_OK) {
                             std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
                         }
@@ -587,6 +591,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                                 -1,
                                 sqlite.SQLITE_STATIC,
                             );
+                            // std.log.info("name {s}", .{@field(values, fields_info[i].name)});
                             if (res != sqlite.SQLITE_OK) {
                                 std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
                             }
@@ -598,6 +603,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                                 -1,
                                 sqlite.SQLITE_STATIC,
                             );
+                            // std.log.info("name {s}", .{@field(values, fields_info[i].name)});
                             if (res != sqlite.SQLITE_OK) {
                                 std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
                             }
@@ -610,34 +616,36 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
             }
 
             const res = sqlite.sqlite3_step(stmt);
-            if (res != sqlite.SQLITE_ROW) {
-                return sqliteError.StepError;
-            }
 
-            for (0..types.len) |i| {
-                const ii: c_int = @intCast(i);
+            if (res == sqlite.SQLITE_ROW) {
+                for (0..types.len) |i| {
+                    const ii: c_int = @intCast(i);
 
-                switch (types[i]) {
-                    .INTEGER => {
-                        //     const ptr = @as(*i32, @ptrCast(getValues[i]));
-                        //     ptr = @as(i32, sqlite.sqlite3_column_int(stmt, i));
-                        // },
-                        // => {
-                        const ptr = @as(*i64, @alignCast(@ptrCast(getValues[i])));
-                        ptr.* = @as(i64, sqlite.sqlite3_column_int64(stmt, ii));
-                    },
-                    .TEXT => {
-                        const ptr = @as([*]u8, @alignCast(@ptrCast(getValues[i])));
-                        const str = sqlite.sqlite3_column_text(stmt, ii);
-                        const len = sdl.SDL_strlen(str);
-                        @memcpy(ptr, str[0..len]);
-                    },
-                    .BLOB => {
-                        const ptr = @as(*VOID_, @alignCast(@ptrCast(getValues[i]))).*;
-                        const str = @as([*]u8, @ptrCast(@constCast(sqlite.sqlite3_column_blob(stmt, ii).?)));
-                        @memcpy(ptr.data, str[0..ptr.len]);
-                    },
+                    switch (types[i]) {
+                        .INTEGER => {
+                            //     const ptr = @as(*i32, @ptrCast(getValues[i]));
+                            //     ptr = @as(i32, sqlite.sqlite3_column_int(stmt, i));
+                            // },
+                            // => {
+                            const ptr = @as(*i64, @alignCast(@ptrCast(getValues[i])));
+                            ptr.* = @as(i64, sqlite.sqlite3_column_int64(stmt, ii));
+                        },
+                        .TEXT => {
+                            const ptr = @as([*]u8, @alignCast(@ptrCast(getValues[i])));
+                            const str = sqlite.sqlite3_column_text(stmt, ii);
+                            const len = sdl.SDL_strlen(str);
+                            @memcpy(ptr, str[0..len]);
+                            // std.log.info("ptr {s}", .{ptr[0..len]});
+                        },
+                        .BLOB => {
+                            const ptr = @as(*VOID_, @alignCast(@ptrCast(getValues[i]))).*;
+                            const str = @as([*]u8, @ptrCast(@constCast(sqlite.sqlite3_column_blob(stmt, ii).?)));
+                            @memcpy(ptr.data, str[0..ptr.len]);
+                        },
+                    }
                 }
+            } else {
+                return sqliteError.StepError;
             }
         }
 

@@ -41,8 +41,6 @@ pub fn main() !void {
     };
     global.gpa = gpa;
 
-    global.cwd = std.fs.cwd();
-
     output.init();
 
     const args = try process.argsAlloc(gpa);
@@ -52,10 +50,21 @@ pub fn main() !void {
         try output.out.print("arg: {s}\n", .{arg});
     }
 
+    {
+        const index = std.mem.lastIndexOf(u8, args[0], "\\").?;
+        // std.log.info("{s}", .{args[0][0..index]});
+        global.cwd = try std.fs.openDirAbsolute(args[0][0..index], .{});
+        try global.cwd.setAsCwd();
+    }
+
     file.init();
     defer file.deinit();
 
-    try pipeline.parse("aaa.pipeline");
+    var pipelineInfo = try pipeline.parse("aaa.pipe");
+    defer pipelineInfo.deinit();
+
+    @breakpoint();
+    // std.process.exit(0);
 
     textureSet.init();
     defer textureSet.deinit();

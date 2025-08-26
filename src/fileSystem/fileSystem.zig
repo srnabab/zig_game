@@ -12,7 +12,7 @@ const ContentPath = sqlDB.Table(
 const ImageLoadParameter = sqlDB.Table(
     "CREATE TABLE IF NOT EXISTS ImageLoadParameter (FileName TEXT PRIMARY KEY, ContentHash BLOB UNIQUE, RelativePath TEXT UNIQUE, FileID TEXT, FOREIGN KEY(FileID) REFERENCES ContentPath(ID) ON DELETE SET NULL ON UPDATE CASCADE);",
     "ImageLoadParameter",
-    true,
+    false,
 );
 const ShaderLoadParameter = sqlDB.Table(
     "CREATE TABLE IF NOT EXISTS ShaderLoadParameter (FileName TEXT PRIMARY KEY, ContentHash BLOB UNIQUE, RelativePath TEXT UNIQUE, FileSize INTEGER" ++
@@ -29,11 +29,14 @@ var ShaderLoadParameterT: ShaderLoadParameter = undefined;
 
 fn getRelativePath(fileName: []const u8, result: []u8) !void {
     var ptrs: [1]*anyopaque = undefined;
-    ptrs[0] = result.ptr;
+    ptrs[0] = @ptrCast(result.ptr);
 
     var types = [_]sqlDB.innerType{.TEXT};
+    // std.log.info("{*} {d}", .{ fileName.ptr, fileName.len });
 
-    try ContentPathT.get("RelativePath", "FileName = ?", .{fileName}, &ptrs, &types);
+    ContentPathT.get("RelativePath", "FileName = ?", .{fileName}, &ptrs, &types) catch |err| {
+        std.log.err("err {s} {s} fileName:{s}", .{ @errorName(err), result, fileName });
+    };
 }
 
 pub fn init() void {
@@ -49,7 +52,10 @@ pub fn getFile(fileName: []const u8) !std.fs.File {
     var buffer = [_]u8{0} ** 256;
 
     try getRelativePath(fileName, &buffer);
-    return try global.cwd.openFile(&buffer, .{});
+    const ptr = @as([*c]u8, buffer[0..256]);
+    const len = std.mem.len(ptr);
+
+    return global.cwd.openFile(buffer[0..len], .{});
 }
 
 pub fn deinit() void {

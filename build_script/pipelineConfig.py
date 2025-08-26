@@ -14,10 +14,9 @@ def generate_pipeline_config(pipeline_name):
     config = {
       "Name": pipeline_name,
       "PipelineType": "Graphics",
-      "Shaders": {
-        "vertex": f"{shader_basename}.vert.spv",
-        "fragment": f"{shader_basename}.frag.spv"
-      },
+      "Shaders": [
+        f"{shader_basename}.vert.spv", f"{shader_basename}.frag.spv"
+      ],
       "VertexInput": {
         "bindings": [
           # Example for a vertex with Position, Normal, and UV

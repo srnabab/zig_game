@@ -129,6 +129,7 @@ pub fn build(b: *std.Build) void {
     });
     fileSystem_mod.addImport("sqlDb", sqliteModule);
     fileSystem_mod.addImport("global", global_mod);
+    fileSystem_mod.addIncludePath(b.path("include"));
 
     const exe_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),

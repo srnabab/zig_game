@@ -15,7 +15,7 @@ const ContentPath = sqlDB.Table(
 const ImageLoadParameter = sqlDB.Table(
     "CREATE TABLE IF NOT EXISTS ImageLoadParameter (FileName TEXT PRIMARY KEY, ContentHash BLOB UNIQUE, RelativePath TEXT UNIQUE, FileID TEXT, FOREIGN KEY(FileID) REFERENCES ContentPath(ID) ON DELETE SET NULL ON UPDATE CASCADE);",
     "ImageLoadParameter",
-    true,
+    false,
 );
 const ShaderLoadParameter = sqlDB.Table(
     "CREATE TABLE IF NOT EXISTS ShaderLoadParameter (FileName TEXT PRIMARY KEY, ContentHash BLOB UNIQUE, RelativePath TEXT UNIQUE, FileSize INTEGER" ++
