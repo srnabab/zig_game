@@ -1,6 +1,6 @@
 const cEnum = @import("enumFromC");
 const std = @import("std");
-const vk = @cImport(@cInclude("vulkan/vulkan.h"));
+const vk = @import("vulkan").vulkan;
 
 pub const VkResult: type = cEnum.generateEnumFromC(vk, vk.VkResult, "VK_SUCCESS", "VK_RESULT_MAX_ENUM");
 

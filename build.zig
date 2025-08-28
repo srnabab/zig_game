@@ -88,16 +88,32 @@ pub fn build(b: *std.Build) void {
         .optimize = .ReleaseFast,
     });
 
+    const vk_mod = b.createModule(.{
+        .root_source_file = b.path("src/vulkan.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    vk_mod.addIncludePath(b.path("include"));
+
+    const vulkanType_mod = b.createModule(.{
+        .root_source_file = b.path("src/video/vulkanType.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    vulkanType_mod.addImport("enumFromC", enum_c_mod);
+    vulkanType_mod.addImport("vulkan", vk_mod);
+
     const gen_mod = b.createModule(.{
         .root_source_file = b.path("src/video/gen.zig"),
         .target = target,
         .optimize = .ReleaseFast,
     });
     gen_mod.addImport("enumFromC", enum_c_mod);
+    gen_mod.addImport("vulkanType", vulkanType_mod);
 
     const gen_exe = b.addExecutable(.{ .name = "gen", .root_module = gen_mod });
-    gen_exe.addIncludePath(b.path("include/"));
-    gen_exe.addLibraryPath(b.path("lib/"));
+    gen_exe.addIncludePath(b.path("include"));
+    gen_exe.addLibraryPath(b.path("lib"));
     gen_exe.linkLibC();
 
     gen_exe.linkSystemLibrary2("vulkan-1", .{});
@@ -110,17 +126,36 @@ pub fn build(b: *std.Build) void {
     const gen_file_path = b.fmt("{s}/{s}", .{ root_path, "src/video/resultToError.zig" });
     run_gen_exe.addArg(b.fmt("{s}", .{gen_file_path}));
 
+    const sdl_mod = b.createModule(.{
+        .root_source_file = b.path("src/sdl.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    sdl_mod.addIncludePath(b.path("include"));
+
+    const sdlError_mod = b.createModule(.{
+        .root_source_file = b.path("src/sdlError.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    sdlError_mod.addImport("sdl", sdl_mod);
+
     const video_mod = b.createModule(.{
         .root_source_file = b.path("src/video/initVulkan.zig"),
         .target = target,
         .optimize = optimize,
     });
 
+    video_mod.addImport("sdl", sdl_mod);
+    video_mod.addImport("sdlError", sdlError_mod);
+    video_mod.addImport("vulkan", vk_mod);
+
     const global_mod = b.createModule(.{
         .root_source_file = b.path("src/global.zig"),
         .target = target,
         .optimize = optimize,
     });
+    global_mod.addImport("video", video_mod);
 
     const fileSystem_mod = b.createModule(.{
         .root_source_file = b.path("src/fileSystem/fileSystem.zig"),
@@ -156,6 +191,7 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("output", output_mod);
     exe_mod.addImport("fileSystem", fileSystem_mod);
     exe_mod.addImport("global", global_mod);
+    exe_mod.addImport("sdlError", sdlError_mod);
 
     exe.addIncludePath(b.path("include/"));
     exe.addLibraryPath(b.path("lib/"));

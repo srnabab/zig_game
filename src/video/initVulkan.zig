@@ -1,13 +1,14 @@
-const vk = @cImport(@cInclude("vulkan/vulkan.h"));
-const sdl = @cImport(@cInclude("SDL3/SDL_namespace.h"));
+const vk = @import("vulkan").vulkan;
+const sdl = @import("sdl").sdl;
 const spirv = @cImport(@cInclude("spirv_reflect/spirv_reflect.h"));
-const SDL_CheckResult = @import("../sdlError.zig").SDL_CheckResult;
+const SDL_CheckResult = @import("sdlError").SDL_CheckResult;
 const std = @import("std");
 const output = @import("output");
-const Allocator = @import("std").mem.Allocator;
-const VkError = @import("vulkanType.zig").VkError;
-const VkResult = @import("vulkanType.zig").VkResult;
-const VkPhysicalType = @import("vulkanType.zig").VkPhysicalDeviceType;
+const Allocator = std.mem.Allocator;
+const vulkanType = @import("vulkanType.zig");
+const VkError = vulkanType.VkError;
+const VkResult = vulkanType.VkResult;
+const VkPhysicalType = vulkanType.VkPhysicalDeviceType;
 const VkResultToError = @import("resultToError.zig");
 const Mutex = std.Thread.Mutex;
 const Thread = std.Thread;
@@ -99,7 +100,7 @@ const VkTheadQueue = struct { queue: vk.VkQueue = null, mutex: Mutex = .{} };
 pub const VkStruct = struct {
     const Self = @This();
 
-    allocator: Allocator = undefined,
+    allocator: Allocator,
     allocCallBacks: vk.VkAllocationCallbacks = undefined,
     pAllocCallBacks: [*c]vk.VkAllocationCallbacks = null,
     window: *sdl.SDL_Window = undefined,
@@ -118,11 +119,15 @@ pub const VkStruct = struct {
     transferQueue: [8]VkTheadQueue = undefined,
     transferQueueCrashList: [8]usize = undefined,
 
-    shaderModules: [16]vk.VkShaderModule = undefined,
-    shaderModuleCount: usize = 0,
+    shaderModules: std.StringHashMap(vk.VkShaderModule),
+    entryNames: std.StringHashMap(void),
 
     pub fn init(allocator: Allocator) VkStruct {
-        return VkStruct{ .allocator = allocator };
+        return VkStruct{
+            .allocator = allocator,
+            .shaderModules = std.StringHashMap(vk.VkShaderModule).init(allocator),
+            .entryNames = std.StringHashMap(void).init(allocator),
+        };
     }
 
     pub fn initVulkan(self: *Self) !void {
@@ -138,6 +143,16 @@ pub const VkStruct = struct {
     }
 
     pub fn deinit(self: *Self) void {
+        var entryNames = self.entryNames.keyIterator();
+        while (entryNames.next()) |name| {
+            self.allocator.free(name.*);
+        }
+
+        var shaderCodes = self.shaderModules.valueIterator();
+        while (shaderCodes.next()) |code| {
+            vk.vkDestroyShaderModule(self.device, code.*, self.pAllocCallBacks);
+        }
+
         vk.vkDestroyDevice(self.device, self.pAllocCallBacks);
         sdl.SDL_Vulkan_DestroySurface(@ptrCast(self.*.instance), @ptrCast(self.*.surface), @ptrCast(self.*.pAllocCallBacks));
         vk.vkDestroyInstance(self.*.instance, self.*.pAllocCallBacks);
@@ -516,5 +531,45 @@ pub const VkStruct = struct {
         };
 
         try checkVkResult(vk.vkCreateCommandPool(self.device, @ptrCast(&createInfo), self.pAllocCallBacks, @ptrCast(pCommandPool)));
+    }
+
+    pub fn collectEntryName(self: *Self, entryName: []const u8) !*[]const u8 {
+        const ptr = @as([*c]const u8, entryName[0..64]);
+        const len = std.mem.len(ptr);
+
+        if (self.entryNames.contains(entryName[0..len])) {
+            return self.entryNames.getKeyPtr(entryName[0..len]).?;
+        }
+
+        const name = try self.allocator.alloc(u8, len);
+        @memcpy(name, entryName[0..len]);
+        const res = try self.entryNames.getOrPutValue(name, void{});
+        // @breakpoint();
+        return res.key_ptr;
+    }
+
+    pub fn createShaderModule(self: *Self, shaderCode: []const u8, shaderName: []const u8) !vk.VkShaderModule {
+        var res = try self.shaderModules.getOrPut(shaderName);
+
+        if (!res.found_existing) {
+            var info = vk.VkShaderModuleCreateInfo{
+                .sType = vk.VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                .pNext = null,
+                .flags = 0,
+                .codeSize = shaderCode.len,
+                .pCode = @ptrCast(@alignCast(shaderCode.ptr)),
+            };
+            const module = try self.allocator.create(vk.VkShaderModule);
+
+            try checkVkResult(vk.vkCreateShaderModule(
+                self.device,
+                @ptrCast(&info),
+                self.pAllocCallBacks,
+                @ptrCast(module),
+            ));
+            res.value_ptr = module;
+        }
+
+        return res.value_ptr.*;
     }
 };

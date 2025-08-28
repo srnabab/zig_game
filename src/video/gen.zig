@@ -1,8 +1,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const process = @import("std").process;
-const VkError = @import("vulkanType.zig").VkError;
-const VkResult = @import("vulkanType.zig").VkResult;
+const VkError = @import("vulkanType").VkError;
+const VkResult = @import("vulkanType").VkResult;
 
 fn comptime_print(comptime format: []const u8, comptime args: anytype) void {
     @compileLog(std.fmt.comptimePrint(format, args));

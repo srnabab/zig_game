@@ -2,7 +2,7 @@ const std = @import("std");
 const process = std.process;
 
 const sdl = @cImport(@cInclude("SDL3/SDL.h"));
-const SDL_CheckResult = @import("sdlError.zig").SDL_CheckResult;
+const SDL_CheckResult = @import("sdlError").SDL_CheckResult;
 
 const Thread = std.Thread;
 const builtin = @import("builtin");
@@ -15,6 +15,7 @@ const textureSet = @import("video/textureSet.zig");
 
 const update = @import("update.zig");
 const render = @import("render.zig");
+const video = @import("video");
 
 const file = @import("fileSystem");
 const pipeline = @import("video/pipeline/pipeline.zig");
@@ -61,11 +62,21 @@ pub fn main() !void {
     file.init();
     defer file.deinit();
 
-    var pipelineInfo = try pipeline.parse("aaa.pipe");
+    var vulkan = video.VkStruct.init(gpa);
+    try vulkan.initVulkan();
+    defer vulkan.deinit();
+
+    global.vulkan = vulkan;
+
+    const start1 = std.time.nanoTimestamp();
+    var pipelineInfo = try pipeline.parse("model3d.pipe");
     defer pipelineInfo.deinit();
 
     var pipelineCreateStruct = try translate.toVulkan(&pipelineInfo, global.gpa);
     defer pipelineCreateStruct.deinit();
+    const end1 = std.time.nanoTimestamp();
+
+    std.log.info("time 1(parse pipeline json) {d}", .{end1 - start1});
 
     // @breakpoint();
     std.process.exit(0);

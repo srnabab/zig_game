@@ -10,6 +10,7 @@ pub const sqliteError = error{
 
 pub const innerType = enum {
     INTEGER,
+    INTEGER32,
     TEXT,
     BLOB,
 };
@@ -83,7 +84,7 @@ pub const BLOB = struct {
     data: [*]const u8,
     len: c_int,
 };
-pub const VOID_ = struct {
+pub const BLOBForGet = struct {
     data: [*]u8,
     len: usize,
 };
@@ -175,6 +176,9 @@ fn createInsertStruct(comptime pack: ParamsPack) type {
                 },
                 .INTEGER => {
                     break :ty i64;
+                },
+                .INTEGER32 => {
+                    break :ty i32;
                 },
                 .TEXT => {
                     break :ty ?[*]u8;
@@ -272,6 +276,9 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                 switch (pp.paramType) {
                     .INTEGER => {
                         _ = sqlite.sqlite3_bind_int64(stmt, @intCast(i + 1), @field(T, pp.paramName));
+                    },
+                    .INTEGER32 => {
+                        _ = sqlite.sqlite3_bind_int(stmt, @intCast(i + 1), @field(T, pp.paramName));
                     },
                     .BLOB => {
                         if (@field(T, pp.paramName)) |b| {
@@ -504,7 +511,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
             _ = sqlite.sqlite3_step(stmt);
         }
 
-        pub fn get(self: *Self, comptime targets: []const u8, comptime constraint: []const u8, values: anytype, getValues: []*anyopaque, types: []innerType) !void {
+        pub fn get(self: *Self, comptime targets: []const u8, comptime constraint: []const u8, values: anytype, getValues: []*anyopaque, types: []innerType) sqliteError!void {
             if (getValues.len != types.len) {
                 return sqliteError.SQLError;
             }
@@ -630,6 +637,10 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                             const ptr = @as(*i64, @alignCast(@ptrCast(getValues[i])));
                             ptr.* = @as(i64, sqlite.sqlite3_column_int64(stmt, ii));
                         },
+                        .INTEGER32 => {
+                            const ptr = @as(*i32, @alignCast(@ptrCast(getValues[i])));
+                            ptr.* = @as(i32, sqlite.sqlite3_column_int(stmt, ii));
+                        },
                         .TEXT => {
                             const ptr = @as([*]u8, @alignCast(@ptrCast(getValues[i])));
                             const str = sqlite.sqlite3_column_text(stmt, ii);
@@ -638,7 +649,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                             // std.log.info("ptr {s}", .{ptr[0..len]});
                         },
                         .BLOB => {
-                            const ptr = @as(*VOID_, @alignCast(@ptrCast(getValues[i]))).*;
+                            const ptr = @as(*BLOBForGet, @alignCast(@ptrCast(getValues[i]))).*;
                             const str = @as([*]u8, @ptrCast(@constCast(sqlite.sqlite3_column_blob(stmt, ii).?)));
                             @memcpy(ptr.data, str[0..ptr.len]);
                         },

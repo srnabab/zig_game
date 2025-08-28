@@ -22,8 +22,8 @@ const attribute = struct {
     offset: u32,
 };
 
-const vertexInputStatepNext = union {};
-const vertexInputState = struct {
+pub const vertexInputStatepNext = union {};
+pub const vertexInputState = struct {
     pNext: ?vertexInputStatepNext,
     flag: u32,
     vertexBindingDescriptionCount: u32,
@@ -31,31 +31,32 @@ const vertexInputState = struct {
     vertexAttributeDescriptionCount: u32,
     attributes: ?[]attribute,
 };
-const inputAssemblyPNext = union {}; // New union for inputAssembly
-const inputAssembly = struct {
+
+pub const inputAssemblyPNext = union {}; // New union for inputAssembly
+pub const inputAssembly = struct {
     pNext: ?inputAssemblyPNext = null,
     flags: u32,
     topology: []const u8,
     primitiveRestartEnable: bool,
 };
 
-const tessellationStatePNext = union {}; // New union for tessellationState
-const tessellationState = struct {
+pub const tessellationStatePNext = union {}; // New union for tessellationState
+pub const tessellationState = struct {
     pNext: ?tessellationStatePNext = null,
     flags: u32,
     patchControlPoints: u32,
 };
 
-const viewportStatePNext = union {}; // New union for viewportState
-const viewportState = struct {
+pub const viewportStatePNext = union {}; // New union for viewportState
+pub const viewportState = struct {
     pNext: ?viewportStatePNext = null,
     flags: u32,
     viewportCount: u32,
     scissorCount: u32,
 };
 
-const rasterizationStatePNext = union {}; // New union for rasterizationState
-const rasterizationState = struct {
+pub const rasterizationStatePNext = union {}; // New union for rasterizationState
+pub const rasterizationState = struct {
     pNext: ?rasterizationStatePNext = null,
     flags: u32,
     depthClampEnable: bool,
@@ -70,8 +71,8 @@ const rasterizationState = struct {
     lineWidth: f32,
 };
 
-const multisampleStatePNext = union {}; // New union for multisampleState
-const multisampleState = struct {
+pub const multisampleStatePNext = union {}; // New union for multisampleState
+pub const multisampleState = struct {
     pNext: ?multisampleStatePNext = null,
     flags: u32,
     rasterizationSamples: []const u8,
@@ -91,8 +92,8 @@ const stencilOpState = struct {
     reference: u32,
 };
 
-const depthStencilStatePNext = union {}; // New union for depthStencilState
-const depthStencilState = struct {
+pub const depthStencilStatePNext = union {}; // New union for depthStencilState
+pub const depthStencilState = struct {
     pNext: ?depthStencilStatePNext = null,
     flags: u32,
     depthTestEnable: bool,
@@ -106,7 +107,7 @@ const depthStencilState = struct {
     maxDepthBounds: f32,
 };
 
-const colorBlendAttachmentState = struct {
+pub const colorBlendAttachmentState = struct {
     blendEnable: bool,
     srcColorBlendFactor: []const u8,
     dstColorBlendFactor: []const u8,
@@ -117,8 +118,8 @@ const colorBlendAttachmentState = struct {
     colorWriteMask: []const []const u8,
 };
 
-const colorBlendStatePNext = union {}; // New union for colorBlendState
-const colorBlendState = struct {
+pub const colorBlendStatePNext = union {}; // New union for colorBlendState
+pub const colorBlendState = struct {
     pNext: ?colorBlendStatePNext = null,
     flags: u32,
     logicOpEnable: bool,
@@ -127,8 +128,8 @@ const colorBlendState = struct {
     blendConstants: [4]f32,
 };
 
-const dynamicStatesPNext = union {}; // New union for dynamicStates
-const dynamicStates = struct {
+pub const dynamicStatesPNext = union {}; // New union for dynamicStates
+pub const dynamicStates = struct {
     pNext: ?dynamicStatesPNext = null,
     flags: u32,
     States: [][]const u8,
@@ -141,6 +142,7 @@ pub const pipelineInfo = struct {
     parser: std.json.Parsed(json.Value),
     name: []const u8,
     pipeType: pipelineType,
+    shaderCount: u32,
     shaders: [5][]const u8,
     vertexInputstatee: vertexInputState,
     inputAssemblyy: inputAssembly,
@@ -159,14 +161,14 @@ pub const pipelineInfo = struct {
 };
 
 fn parseName(jsonValue: json.Value, info: *pipelineInfo) void {
-    const name_field = jsonValue.object.get("name").?;
+    const name_field = jsonValue.object.get("Name").?;
     const name = name_field.string;
     info.name = name;
     std.log.debug("name {s}", .{info.name});
 }
 
 fn parsePipelineType(jsonValue: json.Value, info: *pipelineInfo) void {
-    const pipelineType_field = jsonValue.object.get("pipelineType").?;
+    const pipelineType_field = jsonValue.object.get("PipelineType").?;
     const pipelineTypeName = pipelineType_field.string;
     inline for (@typeInfo(pipelineType).@"enum".fields) |field| {
         if (std.mem.eql(u8, pipelineTypeName, field.name)) {
@@ -178,7 +180,7 @@ fn parsePipelineType(jsonValue: json.Value, info: *pipelineInfo) void {
 }
 
 fn parseShaders(jsonValue: json.Value, info: *pipelineInfo) !void {
-    const shaders_field = jsonValue.object.get("shaders").?;
+    const shaders_field = jsonValue.object.get("Shaders").?;
     const shaders = shaders_field.array;
 
     if (shaders.items.len > 5) return error.TooManyShaderInOnePipeline;
@@ -187,10 +189,11 @@ fn parseShaders(jsonValue: json.Value, info: *pipelineInfo) !void {
         info.shaders[i] = shader.string;
         std.log.debug("shader {s}", .{info.shaders[i]});
     }
+    info.shaderCount = @intCast(shaders.items.len);
 }
 
 fn parseVertexInput(jsonValue: json.Value, info: *pipelineInfo) !void {
-    const vertexInput_field = jsonValue.object.get("vertexInput").?;
+    const vertexInput_field = jsonValue.object.get("VertexInput").?;
     const vertexInput_obj = vertexInput_field.object;
 
     const bindings_field = vertexInput_obj.get("bindings");
@@ -222,7 +225,7 @@ fn parseVertexInput(jsonValue: json.Value, info: *pipelineInfo) !void {
 }
 
 fn parseInputState(jsonValue: json.Value, info: *pipelineInfo) void {
-    const inputState_field = jsonValue.object.get("inputState").?;
+    const inputState_field = jsonValue.object.get("InputState").?;
     const inputState_obj = inputState_field.object;
 
     const pNext = inputState_obj.get("pNext");
@@ -240,7 +243,7 @@ fn parseInputState(jsonValue: json.Value, info: *pipelineInfo) void {
 }
 
 fn parseInputAssembly(jsonValue: json.Value, info: *pipelineInfo) void {
-    const field = jsonValue.object.get("inputAssembly").?;
+    const field = jsonValue.object.get("InputAssembly").?;
     const obj = field.object;
 
     const pNext = obj.get("pNext");
@@ -304,7 +307,7 @@ fn parseViewportState(jsonValue: json.Value, info: *pipelineInfo) void {
 }
 
 fn parseRasterizationState(jsonValue: json.Value, info: *pipelineInfo) void {
-    const field = jsonValue.object.get("rasterizationState").?;
+    const field = jsonValue.object.get("RasterizationState").?;
     const obj = field.object;
 
     const pNext = obj.get("pNext");
@@ -332,7 +335,7 @@ fn parseRasterizationState(jsonValue: json.Value, info: *pipelineInfo) void {
 }
 
 fn parseMultisampleState(jsonValue: json.Value, info: *pipelineInfo) void {
-    const field = jsonValue.object.get("multisampleState").?;
+    const field = jsonValue.object.get("MultisampleState").?;
     const obj = field.object;
 
     const pNext = obj.get("pNext");
@@ -368,7 +371,7 @@ fn parseStencilOpState(value: json.Value) stencilOpState {
 }
 
 fn parseDepthStencilState(jsonValue: json.Value, info: *pipelineInfo) void {
-    const field = jsonValue.object.get("depthStencilState").?;
+    const field = jsonValue.object.get("DepthStencilState").?;
     const obj = field.object;
 
     const pNext = obj.get("pNext");
@@ -408,7 +411,7 @@ fn parseDepthStencilState(jsonValue: json.Value, info: *pipelineInfo) void {
 }
 
 fn parseColorBlendState(jsonValue: json.Value, info: *pipelineInfo) !void {
-    const field = jsonValue.object.get("colorBlendState").?;
+    const field = jsonValue.object.get("ColorBlendState").?;
     const obj = field.object;
 
     const pNext = obj.get("pNext");
@@ -459,7 +462,7 @@ fn parseColorBlendState(jsonValue: json.Value, info: *pipelineInfo) !void {
 }
 
 fn parseDynamicStates(jsonValue: json.Value, info: *pipelineInfo) !void {
-    const field = jsonValue.object.get("dynamicStates").?;
+    const field = jsonValue.object.get("DynamicStates").?;
     const obj = field.object;
 
     const pNext = obj.get("pNext");

@@ -1,4 +1,4 @@
-const sdl = @cImport(@cInclude("SDL3/SDL_namespace.h"));
+const sdl = @import("sdl").sdl;
 const std = @import("std");
 
 const SDL_Error = error{

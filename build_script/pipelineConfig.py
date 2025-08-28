@@ -131,13 +131,17 @@ def generate_pipeline_config(pipeline_name):
 
 def main():
     """ Main execution function """
-    if len(sys.argv) != 2:
-        print(f"Usage: python {sys.argv[0]} <PipelineName>")
+    if len(sys.argv) < 2:
+        print(f"Usage: python {sys.argv[0]} <PipelineName> (output)")
         print("Example: python create_pipeline_config.py PBR_Opaque_StaticMesh")
         sys.exit(1)
         
     pipeline_name = sys.argv[1]
+
+
     output_filename = f"{pipeline_name}.pipe"
+    if len(sys.argv) > 2:
+      output_filename = sys.argv[2]
     
     if os.path.exists(output_filename):
         print(f"Error: File '{output_filename}' already exists.")

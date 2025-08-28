@@ -1,12 +1,12 @@
 const pipeline = @import("pipeline.zig");
 const vk = @cImport(@cInclude("vulkan/vulkan.h"));
-const efc = @import("enumFromC");
+const file = @import("fileSystem");
 const std = @import("std");
+const global = @import("global");
 
 fn comptime_print(comptime format: []const u8, comptime args: anytype) void {
     @compileLog(std.fmt.comptimePrint(format, args));
 }
-// 使用编译期元编程来自动生成formatMap
 pub fn createStaticStringMap(
     comptime import: anytype,
     comptime tag_type: anytype,
@@ -15,11 +15,9 @@ pub fn createStaticStringMap(
     comptime prefix: [:0]const u8,
 ) std.StaticStringMap(tag_type) {
     return std.StaticStringMap(tag_type).initComptime(blk: {
-        // 1. 创建一个临时的、空的条目切片
         var entries: [10000]struct { []const u8, vk.VkFormat } = undefined;
         var count: u32 = 0;
 
-        // 2. 使用`inline for`在编译时遍历Vulkan绑定文件中的所有声明
         comptime var begin = false;
         @setEvalBranchQuota(100000);
         inline for (std.meta.declarations(import)) |decl| {
@@ -30,12 +28,9 @@ pub fn createStaticStringMap(
                     continue;
                 }
             }
-            // comptime_print("decl name: {s}", .{decl.name});
 
             const key = decl.name[prefix.len..];
             const value = @field(import, decl.name);
-
-            // comptime_print("{s}", .{key});
 
             entries[count].@"0" = key;
             entries[count].@"1" = value;
@@ -46,7 +41,6 @@ pub fn createStaticStringMap(
             }
         }
 
-        // 6. `break`语句将最终的条目列表作为 comptime 块的结果返回
         break :blk entries[0..count];
     });
 }
@@ -63,21 +57,13 @@ pub const VulkanPipelineInfo = struct {
     depthStencilInfo: vk.VkPipelineDepthStencilStateCreateInfo,
     colorBlendInfo: vk.VkPipelineColorBlendStateCreateInfo,
     dynamicStateInfo: vk.VkPipelineDynamicStateCreateInfo,
-    // shaderStageCreateInfo: vk.VkPipelineShaderStageCreateInfo,
+    shaderStageCreateInfo: []vk.VkPipelineShaderStageCreateInfo,
     // pipelineLayout: vk.VkPipelineLayout,
 
-    // Store slices that the Vulkan structs point to
-    allocator: std.mem.Allocator,
-    vertexBindings: []vk.VkVertexInputBindingDescription,
-    vertexAttributes: []vk.VkVertexInputAttributeDescription,
-    colorBlendAttachments: []vk.VkPipelineColorBlendAttachmentState,
-    dynamicStates: []vk.VkDynamicState,
+    allocator: std.heap.ArenaAllocator,
 
     pub fn deinit(self: *Self) void {
-        self.allocator.free(self.vertexBindings);
-        self.allocator.free(self.vertexAttributes);
-        self.allocator.free(self.colorBlendAttachments);
-        self.allocator.free(self.dynamicStates);
+        self.allocator.deinit();
     }
 };
 
@@ -127,21 +113,35 @@ fn translateColorWriteMask(mask_slice: []const []const u8) vk.VkColorComponentFl
     }
     return flags;
 }
+const VulkanVertexInputInfo = struct {
+    createInfo: vk.VkPipelineVertexInputStateCreateInfo,
+    bindings: []vk.VkVertexInputBindingDescription,
+    attributes: []vk.VkVertexInputAttributeDescription,
+};
 
-pub fn toVulkan(info: *pipeline.pipelineInfo, allocator: std.mem.Allocator) !VulkanPipelineInfo {
-    // Vertex Input
-    const vertexBindings = try allocator.alloc(vk.VkVertexInputBindingDescription, info.vertexInputstatee.bindings.?.len);
-    for (info.vertexInputstatee.bindings.?, 0..) |binding, i| {
-        vertexBindings[i] = .{
+const VulkanColorBlendInfo = struct {
+    createInfo: vk.VkPipelineColorBlendStateCreateInfo,
+    attachments: []vk.VkPipelineColorBlendAttachmentState,
+};
+
+const VulkanDynamicStateInfo = struct {
+    createInfo: vk.VkPipelineDynamicStateCreateInfo,
+    states: []vk.VkDynamicState,
+};
+
+fn createVertexInputInfo(info: *const pipeline.vertexInputState, allocator: *std.heap.ArenaAllocator) !VulkanVertexInputInfo {
+    const bindings = try allocator.allocator().alloc(vk.VkVertexInputBindingDescription, info.bindings.?.len);
+    for (info.bindings.?, 0..) |binding, i| {
+        bindings[i] = .{
             .binding = binding.bind,
             .stride = binding.stride,
             .inputRate = inputRateMap.get(binding.inputRate).?,
         };
     }
 
-    const vertexAttributes = try allocator.alloc(vk.VkVertexInputAttributeDescription, info.vertexInputstatee.attributes.?.len);
-    for (info.vertexInputstatee.attributes.?, 0..) |attribute, i| {
-        vertexAttributes[i] = .{
+    const attributes = try allocator.allocator().alloc(vk.VkVertexInputAttributeDescription, info.attributes.?.len);
+    for (info.attributes.?, 0..) |attribute, i| {
+        attributes[i] = .{
             .location = attribute.location,
             .binding = attribute.binding,
             .format = formatMap.get(attribute.format).?,
@@ -149,88 +149,100 @@ pub fn toVulkan(info: *pipeline.pipelineInfo, allocator: std.mem.Allocator) !Vul
         };
     }
 
-    const vertexInputInfo: vk.VkPipelineVertexInputStateCreateInfo = .{
+    const createInfo: vk.VkPipelineVertexInputStateCreateInfo = .{
         .sType = vk.VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
         .pNext = null,
-        .flags = info.vertexInputstatee.flag,
-        .vertexBindingDescriptionCount = @intCast(vertexBindings.len),
-        .pVertexBindingDescriptions = vertexBindings.ptr,
-        .vertexAttributeDescriptionCount = @intCast(vertexAttributes.len),
-        .pVertexAttributeDescriptions = vertexAttributes.ptr,
+        .flags = info.flag,
+        .vertexBindingDescriptionCount = @intCast(bindings.len),
+        .pVertexBindingDescriptions = bindings.ptr,
+        .vertexAttributeDescriptionCount = @intCast(attributes.len),
+        .pVertexAttributeDescriptions = attributes.ptr,
     };
 
-    // Input Assembly
-    const inputAssemblyInfo: vk.VkPipelineInputAssemblyStateCreateInfo = .{
+    return .{
+        .createInfo = createInfo,
+        .bindings = bindings,
+        .attributes = attributes,
+    };
+}
+
+fn createInputAssemblyInfo(info: *const pipeline.inputAssembly) vk.VkPipelineInputAssemblyStateCreateInfo {
+    return .{
         .sType = vk.VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
         .pNext = null,
-        .flags = info.inputAssemblyy.flags,
-        .topology = topologyMap.get(info.inputAssemblyy.topology).?,
-        .primitiveRestartEnable = @intFromBool(info.inputAssemblyy.primitiveRestartEnable),
+        .flags = info.flags,
+        .topology = topologyMap.get(info.topology).?,
+        .primitiveRestartEnable = @intFromBool(info.primitiveRestartEnable),
     };
+}
 
-    // Tessellation
-    var tessellationInfo: ?vk.VkPipelineTessellationStateCreateInfo = null;
-    if (info.tessellationStatee) |tessellationStatee| {
-        tessellationInfo = .{
+fn createTessellationInfo(info: ?pipeline.tessellationState) ?vk.VkPipelineTessellationStateCreateInfo {
+    if (info) |tess_info| {
+        return vk.VkPipelineTessellationStateCreateInfo{
             .sType = vk.VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO,
             .pNext = null,
-            .flags = tessellationStatee.flags,
-            .patchControlPoints = tessellationStatee.patchControlPoints,
+            .flags = tess_info.flags,
+            .patchControlPoints = tess_info.patchControlPoints,
         };
     }
+    return null;
+}
 
-    // Viewport
-    const viewportInfo: vk.VkPipelineViewportStateCreateInfo = .{
+fn createViewportInfo(info: *const pipeline.viewportState) vk.VkPipelineViewportStateCreateInfo {
+    return .{
         .sType = vk.VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
         .pNext = null,
-        .flags = info.viewportStatee.flags,
-        .viewportCount = info.viewportStatee.viewportCount,
-        .pViewports = null, // Dynamic state
-        .scissorCount = info.viewportStatee.scissorCount,
-        .pScissors = null, // Dynamic state
+        .flags = info.flags,
+        .viewportCount = info.viewportCount,
+        .pViewports = null, // dynamic
+        .scissorCount = info.scissorCount,
+        .pScissors = null, // dynamic
     };
+}
 
-    // Rasterization
-    const rasterizationInfo: vk.VkPipelineRasterizationStateCreateInfo = .{
+fn createRasterizationInfo(info: *const pipeline.rasterizationState) vk.VkPipelineRasterizationStateCreateInfo {
+    return .{
         .sType = vk.VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
         .pNext = null,
-        .flags = info.rasterizationStatee.flags,
-        .depthClampEnable = @intFromBool(info.rasterizationStatee.depthClampEnable),
-        .rasterizerDiscardEnable = @intFromBool(info.rasterizationStatee.rasterizerDiscardEnable),
-        .polygonMode = polygonModeMap.get(info.rasterizationStatee.polygonMode).?,
-        .cullMode = cullModeMap.get(info.rasterizationStatee.cullMode).?,
-        .frontFace = frontFaceMap.get(info.rasterizationStatee.frontFace).?,
-        .depthBiasEnable = @intFromBool(info.rasterizationStatee.depthBiasEnable),
-        .depthBiasConstantFactor = info.rasterizationStatee.depthBiasConstantFactor,
-        .depthBiasClamp = info.rasterizationStatee.depthBiasClamp,
-        .depthBiasSlopeFactor = info.rasterizationStatee.depthBiasSlopeFactor,
-        .lineWidth = info.rasterizationStatee.lineWidth,
+        .flags = info.flags,
+        .depthClampEnable = @intFromBool(info.depthClampEnable),
+        .rasterizerDiscardEnable = @intFromBool(info.rasterizerDiscardEnable),
+        .polygonMode = polygonModeMap.get(info.polygonMode).?,
+        .cullMode = cullModeMap.get(info.cullMode).?,
+        .frontFace = frontFaceMap.get(info.frontFace).?,
+        .depthBiasEnable = @intFromBool(info.depthBiasEnable),
+        .depthBiasConstantFactor = info.depthBiasConstantFactor,
+        .depthBiasClamp = info.depthBiasClamp,
+        .depthBiasSlopeFactor = info.depthBiasSlopeFactor,
+        .lineWidth = info.lineWidth,
     };
+}
 
-    // Multisample
-    const multisampleInfo: vk.VkPipelineMultisampleStateCreateInfo = .{
+fn createMultisampleInfo(info: *const pipeline.multisampleState) vk.VkPipelineMultisampleStateCreateInfo {
+    return .{
         .sType = vk.VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
         .pNext = null,
-        .flags = info.multisampleStatee.flags,
-        .rasterizationSamples = sampleCountMap.get(info.multisampleStatee.rasterizationSamples).?,
-        .sampleShadingEnable = @intFromBool(info.multisampleStatee.sampleShadingEnable),
-        .minSampleShading = info.multisampleStatee.minSampleShading,
+        .flags = info.flags,
+        .rasterizationSamples = sampleCountMap.get(info.rasterizationSamples).?,
+        .sampleShadingEnable = @intFromBool(info.sampleShadingEnable),
+        .minSampleShading = info.minSampleShading,
         .pSampleMask = null,
-        .alphaToCoverageEnable = @intFromBool(info.multisampleStatee.alphaToCoverageEnable),
-        .alphaToOneEnable = @intFromBool(info.multisampleStatee.alphaToOneEnable),
+        .alphaToCoverageEnable = @intFromBool(info.alphaToCoverageEnable),
+        .alphaToOneEnable = @intFromBool(info.alphaToOneEnable),
     };
+}
 
-    // Depth Stencil
-    const depthStencilInfo: vk.VkPipelineDepthStencilStateCreateInfo = .{
+fn createDepthStencilInfo(info: *const pipeline.depthStencilState) vk.VkPipelineDepthStencilStateCreateInfo {
+    return .{
         .sType = vk.VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
         .pNext = null,
-        .flags = info.depthStencilStatee.flags,
-        .depthTestEnable = @intFromBool(info.depthStencilStatee.depthTestEnable),
-        .depthWriteEnable = @intFromBool(info.depthStencilStatee.depthWriteEnable),
-        .depthCompareOp = compareOpMap.get(info.depthStencilStatee.depthCompareOp).?,
-        .depthBoundsTestEnable = @intFromBool(info.depthStencilStatee.depthBoundsTestEnable),
-        .stencilTestEnable = @intFromBool(info.depthStencilStatee.stencilTestEnable),
-        .front = if (info.depthStencilStatee.front) |front| .{
+        .flags = info.flags,
+        .depthTestEnable = @intFromBool(info.depthTestEnable),
+        .depthWriteEnable = @intFromBool(info.depthWriteEnable),
+        .depthCompareOp = compareOpMap.get(info.depthCompareOp).?,
+        .depthBoundsTestEnable = @intFromBool(info.depthBoundsTestEnable),
+        .stencilTestEnable = @intFromBool(info.stencilTestEnable),
+        .front = if (info.front) |front| .{
             .failOp = stencilOpMap.get(front.failOp).?,
             .passOp = stencilOpMap.get(front.passOp).?,
             .depthFailOp = stencilOpMap.get(front.depthFailOp).?,
@@ -239,7 +251,7 @@ pub fn toVulkan(info: *pipeline.pipelineInfo, allocator: std.mem.Allocator) !Vul
             .writeMask = front.writeMask,
             .reference = front.reference,
         } else .{},
-        .back = if (info.depthStencilStatee.back) |back| .{
+        .back = if (info.back) |back| .{
             .failOp = stencilOpMap.get(back.failOp).?,
             .passOp = stencilOpMap.get(back.passOp).?,
             .depthFailOp = stencilOpMap.get(back.depthFailOp).?,
@@ -248,14 +260,15 @@ pub fn toVulkan(info: *pipeline.pipelineInfo, allocator: std.mem.Allocator) !Vul
             .writeMask = back.writeMask,
             .reference = back.reference,
         } else .{},
-        .minDepthBounds = info.depthStencilStatee.minDepthBounds,
-        .maxDepthBounds = info.depthStencilStatee.maxDepthBounds,
+        .minDepthBounds = info.minDepthBounds,
+        .maxDepthBounds = info.maxDepthBounds,
     };
+}
 
-    // Color Blend
-    const colorBlendAttachments = try allocator.alloc(vk.VkPipelineColorBlendAttachmentState, info.colorBlendStatee.attachments.len);
-    for (info.colorBlendStatee.attachments, 0..) |attachment, i| {
-        colorBlendAttachments[i] = .{
+fn createColorBlendInfo(info: *const pipeline.colorBlendState, allocator: *std.heap.ArenaAllocator) !VulkanColorBlendInfo {
+    const attachments = try allocator.allocator().alloc(vk.VkPipelineColorBlendAttachmentState, info.attachments.len);
+    for (info.attachments, 0..) |attachment, i| {
+        attachments[i] = .{
             .blendEnable = @intFromBool(attachment.blendEnable),
             .srcColorBlendFactor = blendFactorMap.get(attachment.srcColorBlendFactor).?,
             .dstColorBlendFactor = blendFactorMap.get(attachment.dstColorBlendFactor).?,
@@ -267,47 +280,104 @@ pub fn toVulkan(info: *pipeline.pipelineInfo, allocator: std.mem.Allocator) !Vul
         };
     }
 
-    const colorBlendInfo: vk.VkPipelineColorBlendStateCreateInfo = .{
+    const createInfo: vk.VkPipelineColorBlendStateCreateInfo = .{
         .sType = vk.VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
         .pNext = null,
-        .flags = info.colorBlendStatee.flags,
-        .logicOpEnable = @intFromBool(info.colorBlendStatee.logicOpEnable),
-        .logicOp = logicOpMap.get(info.colorBlendStatee.logicOp).?,
-        .attachmentCount = @intCast(colorBlendAttachments.len),
-        .pAttachments = colorBlendAttachments.ptr,
-        .blendConstants = info.colorBlendStatee.blendConstants,
+        .flags = info.flags,
+        .logicOpEnable = @intFromBool(info.logicOpEnable),
+        .logicOp = logicOpMap.get(info.logicOp).?,
+        .attachmentCount = @intCast(attachments.len),
+        .pAttachments = attachments.ptr,
+        .blendConstants = info.blendConstants,
     };
 
-    // Dynamic State
-    const dynamicStates = try allocator.alloc(vk.VkDynamicState, info.dynamicStatess.States.len);
-    for (info.dynamicStatess.States, 0..) |state, i| {
-        dynamicStates[i] = dynamicStateMap.get(state).?;
+    return .{
+        .createInfo = createInfo,
+        .attachments = attachments,
+    };
+}
+
+fn createDynamicStateInfo(info: *const pipeline.dynamicStates, allocator: *std.heap.ArenaAllocator) !VulkanDynamicStateInfo {
+    const states = try allocator.allocator().alloc(vk.VkDynamicState, info.States.len);
+    for (info.States, 0..) |state, i| {
+        states[i] = dynamicStateMap.get(state).?;
     }
 
-    const dynamicStateInfo: vk.VkPipelineDynamicStateCreateInfo = .{
+    const createInfo: vk.VkPipelineDynamicStateCreateInfo = .{
         .sType = vk.VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
         .pNext = null,
         .flags = 0,
-        .dynamicStateCount = @intCast(dynamicStates.len),
-        .pDynamicStates = dynamicStates.ptr,
+        .dynamicStateCount = @intCast(states.len),
+        .pDynamicStates = states.ptr,
     };
 
+    return .{
+        .createInfo = createInfo,
+        .states = states,
+    };
+}
+
+fn getPipelineShaderInfos(shaders: [5][]const u8, count: u32, allocator: *std.heap.ArenaAllocator) ![]file.PipelineShaderInfo {
+    var infos = try allocator.allocator().alloc(file.PipelineShaderInfo, count);
+    var nameBuffer = [_]u8{0} ** 256;
+    var nameZ: [:0]u8 = undefined;
+    for (0..count) |i| {
+        nameZ = try std.fmt.bufPrintZ(&nameBuffer, "{s}", .{shaders[i]});
+        infos[i] = try file.getShaderLoadParameter(nameZ);
+    }
+    return infos;
+}
+
+fn createShaderStageCreateInfo(shaderInfos: []file.PipelineShaderInfo, shaderNames: [5][]const u8, allocator: *std.heap.ArenaAllocator) ![]vk.VkPipelineShaderStageCreateInfo {
+    var createInfo = try allocator.allocator().alloc(vk.VkPipelineShaderStageCreateInfo, shaderInfos.len);
+    for (shaderInfos, 0..) |info, i| {
+        {
+            const shaderCode = try allocator.allocator().alloc(u8, info.fileSize);
+            defer allocator.allocator().free(shaderCode);
+            _ = try info.file.readAll(shaderCode);
+            defer info.file.close();
+
+            const entryName = (try global.vulkan.collectEntryName(&info.entryName));
+
+            createInfo[i] = vk.VkPipelineShaderStageCreateInfo{
+                .sType = vk.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                .pNext = null,
+                .flags = 0,
+                .stage = info.stage,
+                .pName = @ptrCast(entryName.ptr),
+                .module = try global.vulkan.createShaderModule(shaderCode, shaderNames[i]),
+                .pSpecializationInfo = null,
+            };
+        }
+    }
+    return createInfo;
+}
+
+pub fn toVulkan(info: *pipeline.pipelineInfo, allocator: std.mem.Allocator) !VulkanPipelineInfo {
+    var arena = std.heap.ArenaAllocator.init(allocator);
+
+    const vertexInput = try createVertexInputInfo(&info.vertexInputstatee, &arena);
+    const colorBlend = try createColorBlendInfo(&info.colorBlendStatee, &arena);
+    const dynamicState = try createDynamicStateInfo(&info.dynamicStatess, &arena);
+
+    var shaderInfos = try getPipelineShaderInfos(info.shaders, info.shaderCount, &arena);
+    defer for (0..shaderInfos.len) |i| {
+        shaderInfos[i].deinit();
+    };
+    const shaderStageCreateInfo = try createShaderStageCreateInfo(shaderInfos, info.shaders, &arena);
+
     return VulkanPipelineInfo{
-        .vertexInputInfo = vertexInputInfo,
-        .inputAssemblyInfo = inputAssemblyInfo,
-        .tessellationInfo = tessellationInfo,
-        .viewportInfo = viewportInfo,
-        .rasterizationInfo = rasterizationInfo,
-        .multisampleInfo = multisampleInfo,
-        .depthStencilInfo = depthStencilInfo,
-        .colorBlendInfo = colorBlendInfo,
-        .dynamicStateInfo = dynamicStateInfo,
-        // .pipelineLayout = ,
-        // .shaderStageCreateInfo = ,
-        .allocator = allocator,
-        .vertexBindings = vertexBindings,
-        .vertexAttributes = vertexAttributes,
-        .colorBlendAttachments = colorBlendAttachments,
-        .dynamicStates = dynamicStates,
+        .vertexInputInfo = vertexInput.createInfo,
+        .inputAssemblyInfo = createInputAssemblyInfo(&info.inputAssemblyy),
+        .tessellationInfo = createTessellationInfo(info.tessellationStatee),
+        .viewportInfo = createViewportInfo(&info.viewportStatee),
+        .rasterizationInfo = createRasterizationInfo(&info.rasterizationStatee),
+        .multisampleInfo = createMultisampleInfo(&info.multisampleStatee),
+        .depthStencilInfo = createDepthStencilInfo(&info.depthStencilStatee),
+        .colorBlendInfo = colorBlend.createInfo,
+        .dynamicStateInfo = dynamicState.createInfo,
+        .shaderStageCreateInfo = shaderStageCreateInfo,
+
+        .allocator = arena,
     };
 }
