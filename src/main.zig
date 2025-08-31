@@ -18,8 +18,8 @@ const render = @import("render.zig");
 const video = @import("video");
 
 const file = @import("fileSystem");
-const pipeline = @import("pipeline");
-const translate = @import("translate");
+// const pipeline = @import("pipeline");
+// const translate = @import("translate");
 
 const gpaType = @TypeOf(std.heap.GeneralPurposeAllocator(.{}).init);
 const Allocator = std.mem.Allocator;
@@ -71,28 +71,28 @@ pub fn main() !void {
     // var pipelineInfo = try pipeline.parse("model3d.pipe");
     // var pipelineCreateStruct = try translate.toVulkan(&pipelineInfo, global.gpa);
 
-    const start1 = std.time.nanoTimestamp();
-    var pipelineInfo = try pipeline.parse("model3d.pipe");
-    const end1 = std.time.nanoTimestamp();
-    std.log.info("time 1(parse pipeline json) {d}", .{end1 - start1});
+    // const start1 = std.time.nanoTimestamp();
+    // var pipelineInfo = try pipeline.parse("model3d.pipe");
+    // const end1 = std.time.nanoTimestamp();
+    // std.log.info("time 1(parse pipeline json) {d}", .{end1 - start1});
 
-    const start2 = std.time.nanoTimestamp();
-    const pipelineCreateStruct = try translate.toVulkan(&pipelineInfo, global.gpa);
-    defer global.gpa.destroy(pipelineCreateStruct);
-    pipelineInfo.deinit();
-    const end2 = std.time.nanoTimestamp();
-    std.log.info("time 2(translate pipeline to vulkan) {d}", .{end2 - start2});
+    // const start2 = std.time.nanoTimestamp();
+    // const pipelineCreateStruct = try translate.toVulkan(&pipelineInfo, global.gpa);
+    // defer global.gpa.destroy(pipelineCreateStruct);
+    // pipelineInfo.deinit();
+    // const end2 = std.time.nanoTimestamp();
+    // std.log.info("time 2(translate pipeline to vulkan) {d}", .{end2 - start2});
 
-    const start3 = std.time.nanoTimestamp();
-    try vulkan.addPipelineCreateInfo(pipelineCreateStruct);
-    const end3 = std.time.nanoTimestamp();
-    std.log.info("time 3(add pipeline info) {d}", .{end3 - start3});
-    std.log.info("all {d}", .{end3 - start1});
+    // const start3 = std.time.nanoTimestamp();
+    // try vulkan.addPipelineCreateInfo(pipelineCreateStruct);
+    // const end3 = std.time.nanoTimestamp();
+    // std.log.info("time 3(add pipeline info) {d}", .{end3 - start3});
+    // std.log.info("all {d}", .{end3 - start1});
 
-    try vulkan.createAllPipelinesAdded();
+    // try vulkan.createAllPipelinesAdded();
 
     // @breakpoint();
-    std.process.exit(0);
+    // std.process.exit(0);
 
     textureSet.init();
     defer textureSet.deinit();

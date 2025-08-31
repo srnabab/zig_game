@@ -9,6 +9,27 @@ pub fn build(b: *std.Build) void {
     const script_cmd = b.addSystemCommand(&[_][]const u8{ "build_script/shaderCompile.bat", "Shaders", "zig-out/bin/Content" });
     shader_compile.dependOn(&script_cmd.step);
 
+    const vk_mod = b.createModule(.{
+        .root_source_file = b.path("src/vulkan.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    vk_mod.addIncludePath(b.path("include"));
+
+    const pipelineJsonParse_mod = b.createModule(.{
+        .root_source_file = b.path("src/video/pipeline/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    pipelineJsonParse_mod.addIncludePath(b.path("include"));
+    pipelineJsonParse_mod.addImport("vulkan", vk_mod);
+
+    const pipelineJsonParse_exe = b.addExecutable(.{
+        .name = "pipelineJsonParse",
+        .root_module = pipelineJsonParse_mod,
+    });
+    b.installArtifact(pipelineJsonParse_exe);
+
     const enum_c_mod = b.createModule(.{
         .root_source_file = b.path("src/enumFromC.zig"),
         .target = target,
@@ -88,13 +109,6 @@ pub fn build(b: *std.Build) void {
         .optimize = .ReleaseFast,
     });
 
-    const vk_mod = b.createModule(.{
-        .root_source_file = b.path("src/vulkan.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    vk_mod.addIncludePath(b.path("include"));
-
     const vulkanType_mod = b.createModule(.{
         .root_source_file = b.path("src/video/vulkanType.zig"),
         .target = target,
@@ -140,18 +154,18 @@ pub fn build(b: *std.Build) void {
     });
     sdlError_mod.addImport("sdl", sdl_mod);
 
-    const pipeline_mod = b.createModule(.{
-        .root_source_file = b.path("src/video/pipeline/pipeline.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
+    // const pipeline_mod = b.createModule(.{
+    //     .root_source_file = b.path("src/video/pipeline/pipeline.zig"),
+    //     .target = target,
+    //     .optimize = optimize,
+    // });
 
     const translate_mod = b.createModule(.{
         .root_source_file = b.path("src/video/pipeline/translate.zig"),
         .target = target,
         .optimize = optimize,
     });
-    translate_mod.addImport("pipeline", pipeline_mod);
+    // translate_mod.addImport("pipeline", pipeline_mod);
     translate_mod.addImport("vulkan", vk_mod);
 
     const video_mod = b.createModule(.{
@@ -187,8 +201,8 @@ pub fn build(b: *std.Build) void {
     fileSystem_mod.addImport("sqlDb", sqliteModule);
     fileSystem_mod.addImport("global", global_mod);
     fileSystem_mod.addImport("tables", tables_mod);
-    pipeline_mod.addImport("fileSystem", fileSystem_mod);
-    pipeline_mod.addImport("global", global_mod);
+    // pipeline_mod.addImport("fileSystem", fileSystem_mod);
+    // pipeline_mod.addImport("global", global_mod);
     translate_mod.addImport("fileSystem", fileSystem_mod);
     translate_mod.addImport("global", global_mod);
     translate_mod.addImport("enumFromC", enum_c_mod);
@@ -222,7 +236,7 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("global", global_mod);
     exe_mod.addImport("sdlError", sdlError_mod);
     exe_mod.addImport("translate", translate_mod);
-    exe_mod.addImport("pipeline", pipeline_mod);
+    // exe_mod.addImport("pipeline", pipeline_mod);
 
     exe.addIncludePath(b.path("include/"));
     exe.addLibraryPath(b.path("lib/"));

@@ -1,8 +1,6 @@
 const std = @import("std");
 const json = std.json;
 const fs = std.fs;
-const file = @import("fileSystem");
-const global = @import("global");
 
 const pipelineType = enum {
     Graphics,
@@ -559,21 +557,21 @@ fn parseRendering(jsonValue: json.Value, info: *pipelineInfo) void {
     }
 }
 
-pub fn parse(pipelineFileName: []const u8) !pipelineInfo {
-    const pipelineFile = try file.getFile(pipelineFileName);
+pub fn parse(pipelineFileName: []const u8, allocator: std.mem.Allocator) !pipelineInfo {
+    const pipelineFile = try std.fs.openFileAbsolute(pipelineFileName, .{});
     defer pipelineFile.close();
 
     var res: pipelineInfo = undefined;
 
     const metadata = try pipelineFile.metadata();
-    var content = try global.gpa.alloc(u8, metadata.size());
-    defer global.gpa.free(content);
+    var content = try allocator.alloc(u8, metadata.size());
+    defer allocator.free(content);
 
     _ = try pipelineFile.readAll(content[0..metadata.size()]);
 
-    const parser = try json.parseFromSlice(json.Value, global.gpa, content, .{});
+    const parser = try json.parseFromSlice(json.Value, allocator, content, .{});
     res.parser = parser;
-    res.allocator = std.heap.ArenaAllocator.init(global.gpa);
+    res.allocator = std.heap.ArenaAllocator.init(allocator);
 
     const jsonValue = parser.value;
 
