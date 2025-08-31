@@ -3,24 +3,11 @@ const sqlite = sqlDB.sqlite;
 const std = @import("std");
 const global = @import("global");
 const assert = std.debug.assert;
+const tables = @import("tables");
 
-const ContentPath = sqlDB.Table(
-    "CREATE TABLE IF NOT EXISTS ContentPath (ID TEXT PRIMARY KEY,  ParentID TEXT,  RelativePath TEXT NOT NULL UNIQUE,  FileName TEXT,  TYPE INTEGER, FileSize INTEGER, ContentHash BLOB, ModifiedTime INTEGER, LastSeenTime INTEGER, FileType INTEGER);",
-    "ContentPath",
-    false,
-);
-const ImageLoadParameter = sqlDB.Table(
-    "CREATE TABLE IF NOT EXISTS ImageLoadParameter (FileName TEXT PRIMARY KEY, ContentHash BLOB UNIQUE, RelativePath TEXT UNIQUE, FileID TEXT, FOREIGN KEY(FileID) REFERENCES ContentPath(ID) ON DELETE SET NULL ON UPDATE CASCADE);",
-    "ImageLoadParameter",
-    false,
-);
-const ShaderLoadParameter = sqlDB.Table(
-    "CREATE TABLE IF NOT EXISTS ShaderLoadParameter (FileName TEXT PRIMARY KEY, ContentHash BLOB UNIQUE, RelativePath TEXT UNIQUE, FileSize INTEGER" ++
-        ", EntryName TEXT, Stage INTEGER, BindingCount INTEGER, Bindings BLOB, PushConstantSize INTEGER" ++
-        ", FileID TEXT, FOREIGN KEY(FileID) REFERENCES ContentPath(ID) ON DELETE SET NULL ON UPDATE CASCADE);",
-    "ShaderLoadParameter",
-    false,
-);
+const ContentPath = tables.ContentPath;
+const ImageLoadParameter = tables.ImageLoadParameter;
+const ShaderLoadParameter = tables.ShaderLoadParameter;
 
 var db: ?*sqlite.sqlite3 = null;
 var ContentPathT: ContentPath = undefined;
@@ -101,6 +88,7 @@ pub const PipelineShaderInfo = struct {
     fileSize: u64,
     entryName: [64:0]u8,
     stage: vk.VkShaderStageFlags,
+    setCount: u32,
     bindingCount: u32,
     bindings: ?[]binding,
     pushConstantSize: u64,
@@ -118,18 +106,19 @@ pub fn getShaderLoadParameter(name: []const u8) !PipelineShaderInfo {
         var res: PipelineShaderInfo = undefined;
         @memset(res.entryName[0..64], 0);
         var path = [_:0]u8{0} ** 256;
-        var ptrs: [6]*anyopaque = undefined;
+        var ptrs: [7]*anyopaque = undefined;
         ptrs[0] = @ptrCast(&path);
         ptrs[1] = @ptrCast(&res.fileSize);
         ptrs[2] = @ptrCast(&res.entryName);
         ptrs[3] = @ptrCast(&res.stage);
         ptrs[4] = @ptrCast(&res.bindingCount);
         ptrs[5] = @ptrCast(&res.pushConstantSize);
+        ptrs[6] = @ptrCast(&res.setCount);
 
-        var types = [_]sqlDB.innerType{ .TEXT, .INTEGER, .TEXT, .INTEGER32, .INTEGER32, .INTEGER };
+        var types = [_]sqlDB.innerType{ .TEXT, .INTEGER, .TEXT, .INTEGER32, .INTEGER32, .INTEGER, .INTEGER32 };
 
         try ShaderLoadParameterT.get(
-            "RelativePath,FileSize,EntryName,Stage,BindingCount,PushConstantSize",
+            "RelativePath,FileSize,EntryName,Stage,BindingCount,PushConstantSize,SetCount",
             "FileName = ?",
             .{name},
             &ptrs,
@@ -158,6 +147,7 @@ pub fn getShaderLoadParameter(name: []const u8) !PipelineShaderInfo {
             .fileSize = res.fileSize,
             .entryName = res.entryName,
             .stage = res.stage,
+            .setCount = res.setCount,
             .bindingCount = res.bindingCount,
             .bindings = res.bindings,
             .pushConstantSize = res.pushConstantSize,

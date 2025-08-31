@@ -13,6 +13,7 @@ const VkResultToError = @import("resultToError.zig");
 const Mutex = std.Thread.Mutex;
 const Thread = std.Thread;
 const builtin = @import("builtin");
+const VulkanPipelineInfo = @import("translate").VulkanPipelineInfo;
 
 const layerNeeded = layer: {
     break :layer switch (builtin.mode) {
@@ -21,8 +22,24 @@ const layerNeeded = layer: {
     };
 };
 const extensionNeeded = [_][*c]const u8{ "VK_KHR_surface", "VK_KHR_win32_surface" };
-const deviceExtensionNeeded = [_][*c]const u8{ "VK_KHR_swapchain", "VK_EXT_descriptor_indexing", "VK_KHR_maintenance3", "VK_KHR_synchronization2", "VK_KHR_timeline_semaphore", "VK_KHR_dynamic_rendering", "VK_EXT_extended_dynamic_state" };
-const featureNeed = [_][]const u8{ "geometryShader", "independentBlend", "samplerAnisotropy", "logicOp", "depthClamp", "depthBiasClamp", "wideLines" };
+const deviceExtensionNeeded = [_][*c]const u8{
+    "VK_KHR_swapchain",
+    "VK_EXT_descriptor_indexing",
+    "VK_KHR_maintenance3",
+    "VK_KHR_synchronization2",
+    "VK_KHR_timeline_semaphore",
+    "VK_KHR_dynamic_rendering",
+    "VK_EXT_extended_dynamic_state",
+};
+const featureNeed = [_][]const u8{
+    "geometryShader",
+    "independentBlend",
+    "samplerAnisotropy",
+    "logicOp",
+    "depthClamp",
+    "depthBiasClamp",
+    "wideLines",
+};
 const featureIndexingNeed = [_][]const u8{
     "shaderUniformBufferArrayNonUniformIndexing",
     "shaderStorageBufferArrayNonUniformIndexing",
@@ -31,6 +48,7 @@ const featureIndexingNeed = [_][]const u8{
     "runtimeDescriptorArray",
 };
 const featureTimelineSemaphoreNeed = [_][]const u8{"timelineSemaphore"};
+const featureDynamicRenderingNeed = [_][]const u8{"dynamicRendering"};
 
 fn comptime_print(comptime format: []const u8, comptime args: anytype) void {
     @compileLog(std.fmt.comptimePrint(format, args));
@@ -84,6 +102,12 @@ fn featureNeededCheck(comptime featureType: type, featurePack: anytype) bool {
                 count += @field(featurePack, feature);
             }
         },
+        vk.VkPhysicalDeviceDynamicRenderingFeatures => {
+            len = featureDynamicRenderingNeed.len;
+            inline for (featureDynamicRenderingNeed) |feature| {
+                count += @field(featurePack, feature);
+            }
+        },
         else => {
             @compileError("unsupported");
         },
@@ -121,6 +145,12 @@ pub const VkStruct = struct {
 
     shaderModules: std.StringHashMap(vk.VkShaderModule),
     entryNames: std.StringHashMap(void),
+
+    pipelineCache: vk.VkPipelineCache = null,
+
+    graphicPipelineCreateInfo: [10]vk.VkGraphicsPipelineCreateInfo = undefined,
+    preGraphicInfoPtrs: [10]VulkanPipelineInfo = undefined,
+    graphicInfoCount: u32 = 0,
 
     pub fn init(allocator: Allocator) VkStruct {
         return VkStruct{
@@ -321,15 +351,23 @@ pub const VkStruct = struct {
                 var deviceProperty: vk.VkPhysicalDeviceProperties = undefined;
                 var deviceMemoryProperty: vk.VkPhysicalDeviceMemoryProperties = undefined;
                 var deviceFeatures: vk.VkPhysicalDeviceFeatures = undefined;
-                var deviceFeatures2: vk.VkPhysicalDeviceFeatures2 = undefined;
-                var indexingFeature: vk.VkPhysicalDeviceDescriptorIndexingFeatures = undefined;
-                var timelineFeature: vk.VkPhysicalDeviceTimelineSemaphoreFeatures = undefined;
-                timelineFeature.sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES;
-                timelineFeature.pNext = null;
-                indexingFeature.sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
-                indexingFeature.pNext = &timelineFeature;
-                deviceFeatures2.sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-                deviceFeatures2.pNext = &indexingFeature;
+
+                var renderingFeature = vk.VkPhysicalDeviceDynamicRenderingFeatures{
+                    .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
+                    .pNext = null,
+                };
+                var timelineFeature = vk.VkPhysicalDeviceTimelineSemaphoreFeatures{
+                    .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES,
+                    .pNext = &renderingFeature,
+                };
+                var indexingFeature = vk.VkPhysicalDeviceDescriptorIndexingFeatures{
+                    .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES,
+                    .pNext = &timelineFeature,
+                };
+                var deviceFeatures2 = vk.VkPhysicalDeviceFeatures2{
+                    .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+                    .pNext = &indexingFeature,
+                };
 
                 vk.vkGetPhysicalDeviceProperties(devicee, @ptrCast(&deviceProperty));
                 vk.vkGetPhysicalDeviceMemoryProperties(devicee, @ptrCast(&deviceMemoryProperty));
@@ -345,8 +383,9 @@ pub const VkStruct = struct {
                 const featureSupported = featureNeededCheck(vk.VkPhysicalDeviceFeatures, deviceFeatures);
                 const featureIndexingSupported = featureNeededCheck(vk.VkPhysicalDeviceDescriptorIndexingFeatures, indexingFeature);
                 const featureTimelineSemaphoreSupported = featureNeededCheck(vk.VkPhysicalDeviceTimelineSemaphoreFeatures, timelineFeature);
+                const featureDynamicRenderingSupported = featureNeededCheck(vk.VkPhysicalDeviceDynamicRenderingFeatures, renderingFeature);
 
-                if (featureSupported and featureIndexingSupported and featureTimelineSemaphoreSupported) {
+                if (featureSupported and featureIndexingSupported and featureTimelineSemaphoreSupported and featureDynamicRenderingSupported) {
                     switch (deviceProperty.deviceType) {
                         vk.VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU => {
                             self.*.physicalDevice = devicee;
@@ -443,9 +482,16 @@ pub const VkStruct = struct {
         }
     }
     fn createDevice(self: *Self) !void {
+        var dynamicRenderingFeature = vk.VkPhysicalDeviceDynamicRenderingFeatures{
+            .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
+            .pNext = null,
+        };
+        inline for (featureDynamicRenderingNeed) |feature| {
+            @field(dynamicRenderingFeature, feature) = 1;
+        }
         var timelineSemaphoreFeature = vk.VkPhysicalDeviceTimelineSemaphoreFeatures{
             .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES,
-            .pNext = null,
+            .pNext = &dynamicRenderingFeature,
         };
         inline for (featureTimelineSemaphoreNeed) |feature| {
             @field(timelineSemaphoreFeature, feature) = 1;
@@ -571,5 +617,85 @@ pub const VkStruct = struct {
         }
 
         return res.value_ptr.*;
+    }
+
+    pub fn clearAllShaderModule(self: *Self) void {
+        var shaderCodes = self.shaderModules.valueIterator();
+        while (shaderCodes.next()) |code| {
+            vk.vkDestroyShaderModule(self.device, code.*, self.pAllocCallBacks);
+        }
+
+        self.shaderModules.clearAndFree();
+    }
+
+    pub fn createDescriptorSetLayout(self: *Self, createInfo: vk.VkDescriptorSetLayoutCreateInfo) !vk.VkDescriptorSetLayout {
+        var res: vk.VkDescriptorSetLayout = undefined;
+        try checkVkResult(vk.vkCreateDescriptorSetLayout(self.device, @ptrCast(&createInfo), self.pAllocCallBacks, @ptrCast(&res)));
+        return res;
+    }
+
+    pub fn destroyDescriptorSetLayout(self: *Self, descriptorSetLayout: vk.VkDescriptorSetLayout) void {
+        vk.vkDestroyDescriptorSetLayout(self.device, descriptorSetLayout, self.pAllocCallBacks);
+    }
+
+    pub fn createPipelineLayout(self: *Self, createInfo: vk.VkPipelineLayoutCreateInfo) !vk.VkPipelineLayout {
+        var res: vk.VkPipelineLayout = undefined;
+        try checkVkResult(vk.vkCreatePipelineLayout(self.device, @ptrCast(&createInfo), self.pAllocCallBacks, @ptrCast(&res)));
+        return res;
+    }
+
+    pub fn destroyPipelineLayout(self: *Self, pipelineLayout: vk.VkPipelineLayout) void {
+        vk.vkDestroyPipelineLayout(self.device, pipelineLayout, self.pAllocCallBacks);
+    }
+
+    pub fn addPipelineCreateInfo(self: *Self, info: *VulkanPipelineInfo) !void {
+        if (self.graphicInfoCount > self.graphicPipelineCreateInfo.len) {
+            return error.OutOfCapacity;
+        }
+        var tempInfo = [1]VulkanPipelineInfo{info.*};
+        @memcpy(self.preGraphicInfoPtrs[self.graphicInfoCount .. self.graphicInfoCount + 1], tempInfo[0..1]);
+        self.graphicPipelineCreateInfo[self.graphicInfoCount] = vk.VkGraphicsPipelineCreateInfo{
+            .sType = vk.VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+            .pNext = pn: {
+                if (self.preGraphicInfoPtrs[self.graphicInfoCount].renderingInfo != null) {
+                    break :pn @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].renderingInfo.?.info);
+                }
+                break :pn null;
+            },
+            .flags = 0,
+            .basePipelineHandle = null,
+            .basePipelineIndex = -1,
+            .layout = self.preGraphicInfoPtrs[self.graphicInfoCount].pipelineLayout,
+            .pColorBlendState = @ptrCast(
+                &self.preGraphicInfoPtrs[self.graphicInfoCount].colorBlendInfo.createInfo,
+            ),
+            .pDepthStencilState = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].depthStencilInfo),
+            .pDynamicState = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].dynamicStateInfo),
+            .pInputAssemblyState = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].inputAssemblyInfo),
+            .pMultisampleState = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].multisampleInfo),
+            .pRasterizationState = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].rasterizationInfo),
+            .pStages = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].shaderStageCreateInfo),
+            .pTessellationState = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].tessellationInfo),
+            .pVertexInputState = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].vertexInputInfo.createInfo),
+            .pViewportState = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].viewportInfo),
+            .stageCount = @intCast(self.preGraphicInfoPtrs[self.graphicInfoCount].shaderStageCount),
+            .renderPass = null,
+            .subpass = 0,
+        };
+        self.graphicInfoCount += 1;
+    }
+
+    pub fn createAllPipelinesAdded(self: *Self) !void {
+        var temp: vk.VkPipeline = null;
+        try checkVkResult(vk.vkCreateGraphicsPipelines(
+            self.device,
+            self.pipelineCache,
+            self.graphicInfoCount,
+            @ptrCast(&self.graphicPipelineCreateInfo),
+            self.pAllocCallBacks,
+            @ptrCast(&temp),
+        ));
+        self.graphicInfoCount = 0;
+        vk.vkDestroyPipeline(self.device, temp, self.pAllocCallBacks);
     }
 };

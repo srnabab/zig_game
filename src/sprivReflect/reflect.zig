@@ -26,6 +26,7 @@ const shaderInfo = struct {
     name: [64:0]u8,
     stage: VkShaderStageFlagBits,
     pushConstantSize: u32,
+    setCount: u32,
     bindingCount: u32,
     inputCount: u32,
     bindings: ?[]binding,
@@ -54,6 +55,8 @@ pub fn reflect(allocator: std.mem.Allocator, cc: std.fs.File.Metadata, content: 
     _ = try std.fmt.bufPrintZ(&res.name, "{s}", .{module.entry_point_name});
     res.stage = @enumFromInt(module.shader_stage);
 
+    var biggerstSet: i32 = -1;
+
     var var_count: u32 = 0;
     spv_result = s.spvReflectEnumerateDescriptorBindings(@ptrCast(&module), @ptrCast(&var_count), null);
     assert(spv_result == s.SPV_REFLECT_RESULT_SUCCESS);
@@ -68,6 +71,7 @@ pub fn reflect(allocator: std.mem.Allocator, cc: std.fs.File.Metadata, content: 
         for (bindings, 0..) |bbb, i| {
             bs[i].binding = bbb.*.binding;
             bs[i].set = bbb.*.set;
+            biggerstSet = @max(@as(i32, @intCast(bbb.*.set)), biggerstSet);
             bs[i].descriptorType = @enumFromInt(bbb.*.descriptor_type);
             bs[i].descriptorCount = bbb.*.count;
         }
@@ -77,6 +81,8 @@ pub fn reflect(allocator: std.mem.Allocator, cc: std.fs.File.Metadata, content: 
         res.bindingCount = 0;
         res.bindings = null;
     }
+
+    res.setCount = @intCast(biggerstSet + 1);
 
     var_count = 0;
     spv_result = s.spvReflectEnumeratePushConstantBlocks(@ptrCast(&module), @ptrCast(&var_count), null);

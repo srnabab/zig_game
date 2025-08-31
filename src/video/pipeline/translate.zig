@@ -1,8 +1,9 @@
-const pipeline = @import("pipeline.zig");
-const vk = @cImport(@cInclude("vulkan/vulkan.h"));
+const pipeline = @import("pipeline");
+const vk = @import("vulkan").vulkan;
 const file = @import("fileSystem");
 const std = @import("std");
 const global = @import("global");
+const efc = @import("enumFromC");
 
 fn comptime_print(comptime format: []const u8, comptime args: anytype) void {
     @compileLog(std.fmt.comptimePrint(format, args));
@@ -48,23 +49,21 @@ pub fn createStaticStringMap(
 pub const VulkanPipelineInfo = struct {
     const Self = @This();
 
-    vertexInputInfo: vk.VkPipelineVertexInputStateCreateInfo,
+    vertexInputInfo: VulkanVertexInputInfo,
     inputAssemblyInfo: vk.VkPipelineInputAssemblyStateCreateInfo,
     tessellationInfo: ?vk.VkPipelineTessellationStateCreateInfo,
     viewportInfo: vk.VkPipelineViewportStateCreateInfo,
     rasterizationInfo: vk.VkPipelineRasterizationStateCreateInfo,
     multisampleInfo: vk.VkPipelineMultisampleStateCreateInfo,
     depthStencilInfo: vk.VkPipelineDepthStencilStateCreateInfo,
-    colorBlendInfo: vk.VkPipelineColorBlendStateCreateInfo,
-    dynamicStateInfo: vk.VkPipelineDynamicStateCreateInfo,
-    shaderStageCreateInfo: []vk.VkPipelineShaderStageCreateInfo,
-    // pipelineLayout: vk.VkPipelineLayout,
-
-    allocator: std.heap.ArenaAllocator,
-
-    pub fn deinit(self: *Self) void {
-        self.allocator.deinit();
-    }
+    colorBlendInfo: VulkanColorBlendInfo,
+    dynamicStateInfo: VulkanDynamicStateInfo,
+    shaderStageCreateInfo: [5]vk.VkPipelineShaderStageCreateInfo,
+    shaderStageCount: u32,
+    descriptorSetLayouts: pipelineLayoutCreateInfo,
+    pipelineLayout: vk.VkPipelineLayout,
+    renderingInfo: ?vulkanRenderingInfo,
+    name: [64]u8,
 };
 
 const formatMap = createStaticStringMap(vk, vk.VkFormat, "VK_FORMAT_UNDEFINED", "VK_FORMAT_MAX_ENUM", "VK_FORMAT_");
@@ -113,56 +112,67 @@ fn translateColorWriteMask(mask_slice: []const []const u8) vk.VkColorComponentFl
     }
     return flags;
 }
+
+const vertexInputBindingDescriptionLimit = 16;
+const vertexInputAttributeDescriptionLimit = 64;
 const VulkanVertexInputInfo = struct {
     createInfo: vk.VkPipelineVertexInputStateCreateInfo,
-    bindings: []vk.VkVertexInputBindingDescription,
-    attributes: []vk.VkVertexInputAttributeDescription,
+    bindingCount: u8,
+    attributeCount: u8,
+    bindings: [vertexInputBindingDescriptionLimit]vk.VkVertexInputBindingDescription,
+    attributes: [vertexInputAttributeDescriptionLimit]vk.VkVertexInputAttributeDescription,
 };
 
+const colorBlendAttachmentStateLimit = 32;
 const VulkanColorBlendInfo = struct {
     createInfo: vk.VkPipelineColorBlendStateCreateInfo,
-    attachments: []vk.VkPipelineColorBlendAttachmentState,
+    attachments: [colorBlendAttachmentStateLimit]vk.VkPipelineColorBlendAttachmentState,
+    attachmentCount: u32,
 };
 
+const dynamicStateLimit = 16;
 const VulkanDynamicStateInfo = struct {
     createInfo: vk.VkPipelineDynamicStateCreateInfo,
-    states: []vk.VkDynamicState,
+    states: [dynamicStateLimit]vk.VkDynamicState,
+    stateCount: u32,
 };
 
-fn createVertexInputInfo(info: *const pipeline.vertexInputState, allocator: *std.heap.ArenaAllocator) !VulkanVertexInputInfo {
-    const bindings = try allocator.allocator().alloc(vk.VkVertexInputBindingDescription, info.bindings.?.len);
-    for (info.bindings.?, 0..) |binding, i| {
-        bindings[i] = .{
-            .binding = binding.bind,
-            .stride = binding.stride,
-            .inputRate = inputRateMap.get(binding.inputRate).?,
-        };
+fn createVertexInputInfo(info: *const pipeline.vertexInputState, pipeRes: *VulkanPipelineInfo) void {
+    var res = &pipeRes.vertexInputInfo;
+    res.bindingCount = 0;
+    res.attributeCount = 0;
+
+    if (info.bindings != null) {
+        for (info.bindings.?, 0..) |binding, i| {
+            res.bindings[i] = .{
+                .binding = binding.bind,
+                .stride = binding.stride,
+                .inputRate = inputRateMap.get(binding.inputRate).?,
+            };
+            res.bindingCount += 1;
+        }
     }
 
-    const attributes = try allocator.allocator().alloc(vk.VkVertexInputAttributeDescription, info.attributes.?.len);
-    for (info.attributes.?, 0..) |attribute, i| {
-        attributes[i] = .{
-            .location = attribute.location,
-            .binding = attribute.binding,
-            .format = formatMap.get(attribute.format).?,
-            .offset = attribute.offset,
-        };
+    if (info.attributes != null) {
+        for (info.attributes.?, 0..) |attribute, i| {
+            res.attributes[i] = .{
+                .location = attribute.location,
+                .binding = attribute.binding,
+                .format = formatMap.get(attribute.format).?,
+                .offset = attribute.offset,
+            };
+            res.attributeCount += 1;
+        }
     }
 
-    const createInfo: vk.VkPipelineVertexInputStateCreateInfo = .{
+    res.createInfo = .{
         .sType = vk.VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
         .pNext = null,
         .flags = info.flag,
-        .vertexBindingDescriptionCount = @intCast(bindings.len),
-        .pVertexBindingDescriptions = bindings.ptr,
-        .vertexAttributeDescriptionCount = @intCast(attributes.len),
-        .pVertexAttributeDescriptions = attributes.ptr,
-    };
-
-    return .{
-        .createInfo = createInfo,
-        .bindings = bindings,
-        .attributes = attributes,
+        .vertexBindingDescriptionCount = @intCast(res.bindingCount),
+        .pVertexBindingDescriptions = @ptrCast(&res.bindings),
+        .vertexAttributeDescriptionCount = @intCast(res.attributeCount),
+        .pVertexAttributeDescriptions = @ptrCast(&res.attributes),
     };
 }
 
@@ -193,10 +203,10 @@ fn createViewportInfo(info: *const pipeline.viewportState) vk.VkPipelineViewport
         .sType = vk.VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
         .pNext = null,
         .flags = info.flags,
-        .viewportCount = info.viewportCount,
-        .pViewports = null, // dynamic
-        .scissorCount = info.scissorCount,
-        .pScissors = null, // dynamic
+        .viewportCount = @intCast(info.viewports.len),
+        .pViewports = @ptrCast(info.viewports.ptr), // dynamic
+        .scissorCount = @intCast(info.scissors.len),
+        .pScissors = @ptrCast(info.scissors.ptr), // dynamic
     };
 }
 
@@ -265,10 +275,12 @@ fn createDepthStencilInfo(info: *const pipeline.depthStencilState) vk.VkPipeline
     };
 }
 
-fn createColorBlendInfo(info: *const pipeline.colorBlendState, allocator: *std.heap.ArenaAllocator) !VulkanColorBlendInfo {
-    const attachments = try allocator.allocator().alloc(vk.VkPipelineColorBlendAttachmentState, info.attachments.len);
+fn createColorBlendInfo(info: *const pipeline.colorBlendState, pipeRes: *VulkanPipelineInfo) void {
+    var res = &pipeRes.colorBlendInfo;
+    res.attachmentCount = 0;
+
     for (info.attachments, 0..) |attachment, i| {
-        attachments[i] = .{
+        res.attachments[i] = .{
             .blendEnable = @intFromBool(attachment.blendEnable),
             .srcColorBlendFactor = blendFactorMap.get(attachment.srcColorBlendFactor).?,
             .dstColorBlendFactor = blendFactorMap.get(attachment.dstColorBlendFactor).?,
@@ -278,47 +290,41 @@ fn createColorBlendInfo(info: *const pipeline.colorBlendState, allocator: *std.h
             .alphaBlendOp = blendOpMap.get(attachment.alphaBlendOp).?,
             .colorWriteMask = translateColorWriteMask(attachment.colorWriteMask),
         };
+        res.attachmentCount += 1;
     }
 
-    const createInfo: vk.VkPipelineColorBlendStateCreateInfo = .{
+    res.createInfo = .{
         .sType = vk.VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
         .pNext = null,
         .flags = info.flags,
         .logicOpEnable = @intFromBool(info.logicOpEnable),
         .logicOp = logicOpMap.get(info.logicOp).?,
-        .attachmentCount = @intCast(attachments.len),
-        .pAttachments = attachments.ptr,
+        .attachmentCount = @intCast(res.attachmentCount),
+        .pAttachments = @ptrCast(&res.attachments),
         .blendConstants = info.blendConstants,
-    };
-
-    return .{
-        .createInfo = createInfo,
-        .attachments = attachments,
     };
 }
 
-fn createDynamicStateInfo(info: *const pipeline.dynamicStates, allocator: *std.heap.ArenaAllocator) !VulkanDynamicStateInfo {
-    const states = try allocator.allocator().alloc(vk.VkDynamicState, info.States.len);
+fn createDynamicStateInfo(info: *const pipeline.dynamicStates, pipeRes: *VulkanPipelineInfo) void {
+    var res = &pipeRes.dynamicStateInfo;
+    res.stateCount = 0;
+
     for (info.States, 0..) |state, i| {
-        states[i] = dynamicStateMap.get(state).?;
+        res.states[i] = dynamicStateMap.get(state).?;
+        res.stateCount += 1;
     }
 
-    const createInfo: vk.VkPipelineDynamicStateCreateInfo = .{
+    res.createInfo = .{
         .sType = vk.VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
         .pNext = null,
         .flags = 0,
-        .dynamicStateCount = @intCast(states.len),
-        .pDynamicStates = states.ptr,
-    };
-
-    return .{
-        .createInfo = createInfo,
-        .states = states,
+        .dynamicStateCount = @intCast(res.stateCount),
+        .pDynamicStates = @ptrCast(&res.states),
     };
 }
 
-fn getPipelineShaderInfos(shaders: [5][]const u8, count: u32, allocator: *std.heap.ArenaAllocator) ![]file.PipelineShaderInfo {
-    var infos = try allocator.allocator().alloc(file.PipelineShaderInfo, count);
+fn getPipelineShaderInfos(shaders: [5][]const u8, count: u32, allocator: std.mem.Allocator) ![]file.PipelineShaderInfo {
+    var infos = try allocator.alloc(file.PipelineShaderInfo, count);
     var nameBuffer = [_]u8{0} ** 256;
     var nameZ: [:0]u8 = undefined;
     for (0..count) |i| {
@@ -328,18 +334,26 @@ fn getPipelineShaderInfos(shaders: [5][]const u8, count: u32, allocator: *std.he
     return infos;
 }
 
-fn createShaderStageCreateInfo(shaderInfos: []file.PipelineShaderInfo, shaderNames: [5][]const u8, allocator: *std.heap.ArenaAllocator) ![]vk.VkPipelineShaderStageCreateInfo {
-    var createInfo = try allocator.allocator().alloc(vk.VkPipelineShaderStageCreateInfo, shaderInfos.len);
+fn createShaderStageCreateInfo(
+    shaderInfos: []file.PipelineShaderInfo,
+    shaderNames: [5][]const u8,
+    pipeRes: *VulkanPipelineInfo,
+    allocator: std.mem.Allocator,
+) !void {
+    const res = &pipeRes.shaderStageCreateInfo;
+    const count = &pipeRes.shaderStageCount;
+    count.* = 0;
+
     for (shaderInfos, 0..) |info, i| {
         {
-            const shaderCode = try allocator.allocator().alloc(u8, info.fileSize);
-            defer allocator.allocator().free(shaderCode);
+            const shaderCode = try allocator.alloc(u8, info.fileSize);
+            defer allocator.free(shaderCode);
             _ = try info.file.readAll(shaderCode);
             defer info.file.close();
 
-            const entryName = (try global.vulkan.collectEntryName(&info.entryName));
+            const entryName = try global.vulkan.collectEntryName(&info.entryName);
 
-            createInfo[i] = vk.VkPipelineShaderStageCreateInfo{
+            res.*[i] = vk.VkPipelineShaderStageCreateInfo{
                 .sType = vk.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
                 .pNext = null,
                 .flags = 0,
@@ -348,36 +362,162 @@ fn createShaderStageCreateInfo(shaderInfos: []file.PipelineShaderInfo, shaderNam
                 .module = try global.vulkan.createShaderModule(shaderCode, shaderNames[i]),
                 .pSpecializationInfo = null,
             };
+            count.* += 1;
         }
     }
-    return createInfo;
+}
+const VkDescriptorType: type = efc.generateEnumFromC(vk, vk.VkDescriptorType, "VK_DESCRIPTOR_TYPE_SAMPLER", "VK_DESCRIPTOR_TYPE_MAX_ENUM");
+fn descriptorCountByDescriptorType(descriptorType: VkDescriptorType) u32 {
+    switch (descriptorType) {
+        .VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER => return 1024,
+        else => {
+            std.debug.panic("not process", .{});
+        },
+    }
 }
 
-pub fn toVulkan(info: *pipeline.pipelineInfo, allocator: std.mem.Allocator) !VulkanPipelineInfo {
-    var arena = std.heap.ArenaAllocator.init(allocator);
+const pushConstantRangeLimit = 16;
+const setLayoutLimit = 8;
+const pipelineLayoutCreateInfo = struct {
+    pushConstantCount: u32,
+    pushConstants: [pushConstantRangeLimit]vk.VkPushConstantRange,
+    setLayoutCount: u32,
+    setLayouts: [setLayoutLimit]vk.VkDescriptorSetLayout,
+};
+const bindingLimit: u32 = 5;
+fn createPipelineLayoutCreateInfo(shaderInfos: []file.PipelineShaderInfo, pipeRes: *VulkanPipelineInfo) !void {
+    const pushConstants = &pipeRes.descriptorSetLayouts.pushConstants;
+    const pushConstantCount = &pipeRes.descriptorSetLayouts.pushConstantCount;
+    pushConstantCount.* = 0;
 
-    const vertexInput = try createVertexInputInfo(&info.vertexInputstatee, &arena);
-    const colorBlend = try createColorBlendInfo(&info.colorBlendStatee, &arena);
-    const dynamicState = try createDynamicStateInfo(&info.dynamicStatess, &arena);
+    var pushConstantOffset: u32 = 0;
+    const setCount = sc: {
+        var max: u32 = 0;
+        for (shaderInfos) |value| {
+            max = @max(value.setCount, max);
+        }
+        break :sc max;
+    };
+    var setLayouts: [setLayoutLimit][bindingLimit]vk.VkDescriptorSetLayoutBinding = undefined;
+    var bindingCount = [_]u32{0} ** bindingLimit;
+    var bindingFlags: [setLayoutLimit][bindingLimit]vk.VkDescriptorBindingFlags = undefined;
+    var bindless = [_]bool{false} ** bindingLimit;
+    const descriptorSetLayouts = &pipeRes.descriptorSetLayouts.setLayouts;
+    for (shaderInfos) |sInfo| {
+        if (sInfo.pushConstantSize > 0) {
+            pushConstants.*[pushConstantCount.*].stageFlags = sInfo.stage;
+            pushConstants.*[pushConstantCount.*].size = @intCast(sInfo.pushConstantSize);
+            pushConstants.*[pushConstantCount.*].offset = pushConstantOffset;
+            pushConstantOffset += pushConstants.*[pushConstantCount.*].size;
+            pushConstantCount.* += 1;
+        }
+        if (sInfo.bindings) |bindings| {
+            for (bindings) |binding| {
+                setLayouts[binding.set][binding.binding] = vk.VkDescriptorSetLayoutBinding{
+                    .binding = binding.binding,
+                    .stageFlags = sInfo.stage,
+                    .descriptorType = binding.descriptorType,
+                    .descriptorCount = ct: {
+                        if (binding.descriptorCount == 0) {
+                            break :ct descriptorCountByDescriptorType(@enumFromInt(binding.descriptorType));
+                        } else {
+                            break :ct binding.descriptorCount;
+                        }
+                    },
+                };
+                if (binding.descriptorCount == 0) {
+                    bindless[binding.set] = true;
+                    bindingFlags[binding.set][binding.binding] = vk.VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT |
+                        vk.VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT_EXT;
+                } else {
+                    bindingFlags[binding.set][binding.binding] = 0;
+                }
+                bindingCount[binding.set] += 1;
+            }
+        }
+    }
+    for (0..setCount) |i| {
+        var createInfo: vk.VkDescriptorSetLayoutCreateInfo = undefined;
+        createInfo.sType = vk.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 
-    var shaderInfos = try getPipelineShaderInfos(info.shaders, info.shaderCount, &arena);
+        if (bindless[i]) {
+            createInfo.flags = vk.VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+            // createInfo.pNext =
+        } else {
+            createInfo.flags = 0;
+            createInfo.pNext = null;
+            createInfo.bindingCount = bindingCount[i];
+            createInfo.pBindings = @ptrCast(&setLayouts[i]);
+
+            descriptorSetLayouts.*[i] = try global.vulkan.createDescriptorSetLayout(createInfo);
+        }
+    }
+    pipeRes.descriptorSetLayouts.setLayoutCount = setCount;
+}
+
+fn createPipelineLayout(pipeRes: *VulkanPipelineInfo) !vk.VkPipelineLayout {
+    const createInfo = vk.VkPipelineLayoutCreateInfo{
+        .sType = vk.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .pNext = null,
+        .flags = 0,
+        .setLayoutCount = pipeRes.descriptorSetLayouts.setLayoutCount,
+        .pSetLayouts = @ptrCast(&pipeRes.descriptorSetLayouts.setLayouts),
+        .pushConstantRangeCount = pipeRes.descriptorSetLayouts.pushConstantCount,
+        .pPushConstantRanges = @ptrCast(&pipeRes.descriptorSetLayouts.pushConstants),
+    };
+    return try global.vulkan.createPipelineLayout(createInfo);
+}
+
+const renderingColorAttachmentCount = 16;
+const vulkanRenderingInfo = struct {
+    colorAttachment: [renderingColorAttachmentCount]vk.VkFormat,
+    info: vk.VkPipelineRenderingCreateInfo,
+};
+fn createRenderingInfo(renderingInfo: ?pipeline.renderingInfo, pipeRes: *VulkanPipelineInfo) void {
+    const res = &pipeRes.renderingInfo;
+    if (renderingInfo) |info| {
+        for (renderingInfo.?.colorAttachment[0..renderingInfo.?.colorAttachmentCount], 0..) |value, i| {
+            std.log.info("{s}", .{value});
+            res.*.?.colorAttachment[i] = formatMap.get(value).?;
+        }
+        res.*.?.info = vk.VkPipelineRenderingCreateInfo{
+            .sType = vk.VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+            .pNext = null,
+            .viewMask = 0,
+            .colorAttachmentCount = info.colorAttachmentCount,
+            .pColorAttachmentFormats = @ptrCast(&res.*.?.colorAttachment),
+            .depthAttachmentFormat = formatMap.get(info.depthAttachment).?,
+            .stencilAttachmentFormat = formatMap.get(info.stencilAttachment).?,
+        };
+    } else {
+        res.* = null;
+    }
+}
+
+pub fn toVulkan(info: *pipeline.pipelineInfo, allocator: std.mem.Allocator) !*VulkanPipelineInfo {
+    var res = try allocator.create(VulkanPipelineInfo);
+
+    createVertexInputInfo(&info.vertexInputstatee, res);
+    res.inputAssemblyInfo = createInputAssemblyInfo(&info.inputAssemblyy);
+    res.tessellationInfo = createTessellationInfo(info.tessellationStatee);
+    res.viewportInfo = createViewportInfo(&info.viewportStatee);
+    res.rasterizationInfo = createRasterizationInfo(&info.rasterizationStatee);
+    res.multisampleInfo = createMultisampleInfo(&info.multisampleStatee);
+    res.depthStencilInfo = createDepthStencilInfo(&info.depthStencilStatee);
+    createColorBlendInfo(&info.colorBlendStatee, res);
+    createDynamicStateInfo(&info.dynamicStatess, res);
+
+    var shaderInfos = try getPipelineShaderInfos(info.shaders, info.shaderCount, allocator);
     defer for (0..shaderInfos.len) |i| {
         shaderInfos[i].deinit();
     };
-    const shaderStageCreateInfo = try createShaderStageCreateInfo(shaderInfos, info.shaders, &arena);
+    try createShaderStageCreateInfo(shaderInfos, info.shaders, res, allocator);
 
-    return VulkanPipelineInfo{
-        .vertexInputInfo = vertexInput.createInfo,
-        .inputAssemblyInfo = createInputAssemblyInfo(&info.inputAssemblyy),
-        .tessellationInfo = createTessellationInfo(info.tessellationStatee),
-        .viewportInfo = createViewportInfo(&info.viewportStatee),
-        .rasterizationInfo = createRasterizationInfo(&info.rasterizationStatee),
-        .multisampleInfo = createMultisampleInfo(&info.multisampleStatee),
-        .depthStencilInfo = createDepthStencilInfo(&info.depthStencilStatee),
-        .colorBlendInfo = colorBlend.createInfo,
-        .dynamicStateInfo = dynamicState.createInfo,
-        .shaderStageCreateInfo = shaderStageCreateInfo,
+    try createPipelineLayoutCreateInfo(shaderInfos, res);
+    res.pipelineLayout = try createPipelineLayout(res);
+    createRenderingInfo(info.rendering, res);
 
-        .allocator = arena,
-    };
+    std.mem.copyBackwards(u8, &res.name, info.name);
+
+    return res;
 }

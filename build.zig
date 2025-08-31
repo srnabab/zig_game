@@ -140,6 +140,20 @@ pub fn build(b: *std.Build) void {
     });
     sdlError_mod.addImport("sdl", sdl_mod);
 
+    const pipeline_mod = b.createModule(.{
+        .root_source_file = b.path("src/video/pipeline/pipeline.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const translate_mod = b.createModule(.{
+        .root_source_file = b.path("src/video/pipeline/translate.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    translate_mod.addImport("pipeline", pipeline_mod);
+    translate_mod.addImport("vulkan", vk_mod);
+
     const video_mod = b.createModule(.{
         .root_source_file = b.path("src/video/initVulkan.zig"),
         .target = target,
@@ -149,6 +163,7 @@ pub fn build(b: *std.Build) void {
     video_mod.addImport("sdl", sdl_mod);
     video_mod.addImport("sdlError", sdlError_mod);
     video_mod.addImport("vulkan", vk_mod);
+    video_mod.addImport("translate", translate_mod);
 
     const global_mod = b.createModule(.{
         .root_source_file = b.path("src/global.zig"),
@@ -157,6 +172,13 @@ pub fn build(b: *std.Build) void {
     });
     global_mod.addImport("video", video_mod);
 
+    const tables_mod = b.createModule(.{
+        .root_source_file = b.path("src/content_manager/tables.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    tables_mod.addImport("sqlDb", sqliteModule);
+
     const fileSystem_mod = b.createModule(.{
         .root_source_file = b.path("src/fileSystem/fileSystem.zig"),
         .target = target,
@@ -164,6 +186,13 @@ pub fn build(b: *std.Build) void {
     });
     fileSystem_mod.addImport("sqlDb", sqliteModule);
     fileSystem_mod.addImport("global", global_mod);
+    fileSystem_mod.addImport("tables", tables_mod);
+    pipeline_mod.addImport("fileSystem", fileSystem_mod);
+    pipeline_mod.addImport("global", global_mod);
+    translate_mod.addImport("fileSystem", fileSystem_mod);
+    translate_mod.addImport("global", global_mod);
+    translate_mod.addImport("enumFromC", enum_c_mod);
+
     fileSystem_mod.addIncludePath(b.path("include"));
 
     const exe_mod = b.createModule(.{
@@ -192,6 +221,8 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("fileSystem", fileSystem_mod);
     exe_mod.addImport("global", global_mod);
     exe_mod.addImport("sdlError", sdlError_mod);
+    exe_mod.addImport("translate", translate_mod);
+    exe_mod.addImport("pipeline", pipeline_mod);
 
     exe.addIncludePath(b.path("include/"));
     exe.addLibraryPath(b.path("lib/"));

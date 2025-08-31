@@ -51,8 +51,8 @@ def generate_pipeline_config(pipeline_name):
       "ViewportState": {
         "ViewportStatepNext": None,
         "flag": 0,
-          "viewportCount": 1,
-          "scissorCount": 1,
+        "viewports": [{"x": 0.0,"y": 0.0, "width": 800,"height":600,"minDepth":0.0,"maxDepth":1.0}],
+        "scissors": [{"offset": {"x": 0,"y":0}, "extent": {"width":800,"height":600}}] 
       },
       "RasterizationState": {
         "RasterizationStatepNext": None,
@@ -125,6 +125,11 @@ def generate_pipeline_config(pipeline_name):
         "SCISSOR",
       ]
       },
+      "PipelineRendering": {
+          "color": ["B8G8R8A8_SRGB "],
+          "depth": "D32_SFLOAT",
+          "stencil": "UNDEFINED"
+      }
     }
     
     return config

@@ -6,24 +6,11 @@ const builtin = @import("builtin");
 const UUID = @import("UUID.zig");
 const hash = @import("blake_hash.zig");
 const reflect = @import("reflect");
+const tables = @import("tables.zig");
 
-const ContentPath = sqlDB.Table(
-    "CREATE TABLE IF NOT EXISTS ContentPath (ID TEXT PRIMARY KEY,  ParentID TEXT,  RelativePath TEXT NOT NULL UNIQUE,  FileName TEXT,  TYPE INTEGER, FileSize INTEGER, ContentHash BLOB, ModifiedTime INTEGER, LastSeenTime INTEGER, FileType INTEGER);",
-    "ContentPath",
-    false,
-);
-const ImageLoadParameter = sqlDB.Table(
-    "CREATE TABLE IF NOT EXISTS ImageLoadParameter (FileName TEXT PRIMARY KEY, ContentHash BLOB UNIQUE, RelativePath TEXT UNIQUE, FileID TEXT, FOREIGN KEY(FileID) REFERENCES ContentPath(ID) ON DELETE SET NULL ON UPDATE CASCADE);",
-    "ImageLoadParameter",
-    false,
-);
-const ShaderLoadParameter = sqlDB.Table(
-    "CREATE TABLE IF NOT EXISTS ShaderLoadParameter (FileName TEXT PRIMARY KEY, ContentHash BLOB UNIQUE, RelativePath TEXT UNIQUE, FileSize INTEGER" ++
-        ", EntryName TEXT, Stage INTEGER, BindingCount INTEGER, Bindings BLOB, PushConstantSize INTEGER" ++
-        ", FileID TEXT, FOREIGN KEY(FileID) REFERENCES ContentPath(ID) ON DELETE SET NULL ON UPDATE CASCADE);",
-    "ShaderLoadParameter",
-    false,
-);
+const ContentPath = tables.ContentPath;
+const ImageLoadParameter = tables.ImageLoadParameter;
+const ShaderLoadParameter = tables.ShaderLoadParameter;
 
 const tableNames = [_][]const u8{ "ImageLoadParameter", "ShaderLoadParameter" };
 
@@ -221,11 +208,12 @@ fn updateLoadParameter(tp: FileType, cc: std.fs.File.Metadata, content: []const 
                     .len = @intCast(@sizeOf(reflect.binding) * res.bindingCount),
                 };
                 try ShaderLoadParameterT.update(
-                    "EntryName,Stage,BindingCount,Bindings,PushConstantSize",
+                    "EntryName,Stage,SetCount,BindingCount,Bindings,PushConstantSize",
                     "FileName = ?",
                     .{
                         res.name,
                         @intFromEnum(res.stage),
+                        res.setCount,
                         res.bindingCount,
                         blob,
                         res.pushConstantSize,
@@ -235,11 +223,12 @@ fn updateLoadParameter(tp: FileType, cc: std.fs.File.Metadata, content: []const 
             } else {
                 const blob: ?sqlDB.BLOB = null;
                 try ShaderLoadParameterT.update(
-                    "EntryName,Stage,BindingCount,Bindings,PushConstantSize",
+                    "EntryName,Stage,SetCount,BindingCount,Bindings,PushConstantSize",
                     "FileName = ?",
                     .{
                         res.name,
                         @intFromEnum(res.stage),
+                        res.setCount,
                         res.bindingCount,
                         blob,
                         res.pushConstantSize,

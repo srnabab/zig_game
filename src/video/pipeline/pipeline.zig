@@ -47,12 +47,24 @@ pub const tessellationState = struct {
     patchControlPoints: u32,
 };
 
+const viewport = struct {
+    x: f32,
+    y: f32,
+    width: u32,
+    height: u32,
+    minDepth: f32,
+    maxDepth: f32,
+};
+const scissor = struct {
+    offset: struct { x: i32, y: i32 },
+    extent: struct { width: u32, height: u32 },
+};
 pub const viewportStatePNext = union {}; // New union for viewportState
 pub const viewportState = struct {
     pNext: ?viewportStatePNext = null,
     flags: u32,
-    viewportCount: u32,
-    scissorCount: u32,
+    viewports: []viewport,
+    scissors: []scissor,
 };
 
 pub const rasterizationStatePNext = union {}; // New union for rasterizationState
@@ -135,6 +147,13 @@ pub const dynamicStates = struct {
     States: [][]const u8,
 };
 
+pub const renderingInfo = struct {
+    colorAttachment: [10][]const u8,
+    colorAttachmentCount: u32,
+    depthAttachment: []const u8,
+    stencilAttachment: []const u8,
+};
+
 pub const pipelineInfo = struct {
     const Self = @This();
 
@@ -153,6 +172,7 @@ pub const pipelineInfo = struct {
     depthStencilStatee: depthStencilState,
     colorBlendStatee: colorBlendState,
     dynamicStatess: dynamicStates,
+    rendering: ?renderingInfo,
 
     pub fn deinit(self: *Self) void {
         self.allocator.deinit();
@@ -286,7 +306,28 @@ fn parseTessellationState(jsonValue: json.Value, info: *pipelineInfo) void {
     };
 }
 
-fn parseViewportState(jsonValue: json.Value, info: *pipelineInfo) void {
+fn parseViewport(obj: json.ObjectMap) viewport {
+    return viewport{
+        .x = @floatCast(obj.get("x").?.float),
+        .y = @floatCast(obj.get("y").?.float),
+        .width = @intCast(obj.get("width").?.integer),
+        .height = @intCast(obj.get("height").?.integer),
+        .minDepth = @floatCast(obj.get("minDepth").?.float),
+        .maxDepth = @floatCast(obj.get("maxDepth").?.float),
+    };
+}
+fn parseScissor(obj: json.ObjectMap) scissor {
+    const offset = obj.get("offset").?.object;
+    const extent = obj.get("extent").?.object;
+    return scissor{ .offset = .{
+        .x = @intCast(offset.get("x").?.integer),
+        .y = @intCast(offset.get("y").?.integer),
+    }, .extent = .{
+        .width = @intCast(extent.get("width").?.integer),
+        .height = @intCast(extent.get("height").?.integer),
+    } };
+}
+fn parseViewportState(jsonValue: json.Value, info: *pipelineInfo) !void {
     const field = jsonValue.object.get("ViewportState").?;
     const obj = field.object;
 
@@ -298,11 +339,22 @@ fn parseViewportState(jsonValue: json.Value, info: *pipelineInfo) void {
         }
     }
 
+    const viewports = obj.get("viewports").?.array;
+    var vs = try info.allocator.allocator().alloc(viewport, viewports.items.len);
+    for (viewports.items, 0..) |val, i| {
+        vs[i] = parseViewport(val.object);
+    }
+    const scissors = obj.get("scissors").?.array;
+    var ss = try info.allocator.allocator().alloc(scissor, scissors.items.len);
+    for (scissors.items, 0..) |val, i| {
+        ss[i] = parseScissor(val.object);
+    }
+
     info.viewportStatee = .{
         .pNext = null,
         .flags = @intCast(obj.get("flag").?.integer),
-        .viewportCount = @intCast(obj.get("viewportCount").?.integer),
-        .scissorCount = @intCast(obj.get("scissorCount").?.integer),
+        .viewports = vs,
+        .scissors = ss,
     };
 }
 
@@ -483,6 +535,30 @@ fn parseDynamicStates(jsonValue: json.Value, info: *pipelineInfo) !void {
     info.dynamicStatess.States = states_slice;
 }
 
+fn parseRendering(jsonValue: json.Value, info: *pipelineInfo) void {
+    const field = jsonValue.object.get("PipelineRendering").?;
+    if (field == .null) {
+        info.rendering = null;
+    } else {
+        const obj = field.object;
+        const color = obj.get("color").?;
+        if (color == .null) {
+            info.rendering.?.colorAttachmentCount = 0;
+        } else {
+            const array = color.array;
+            if (array.items.len > 10) {
+                std.debug.panic("not supported", .{});
+            }
+            for (array.items, 0..) |value, i| {
+                info.rendering.?.colorAttachment[i] = value.string;
+            }
+            info.rendering.?.colorAttachmentCount = @intCast(array.items.len);
+        }
+        info.rendering.?.depthAttachment = obj.get("depth").?.string;
+        info.rendering.?.stencilAttachment = obj.get("stencil").?.string;
+    }
+}
+
 pub fn parse(pipelineFileName: []const u8) !pipelineInfo {
     const pipelineFile = try file.getFile(pipelineFileName);
     defer pipelineFile.close();
@@ -503,30 +579,19 @@ pub fn parse(pipelineFileName: []const u8) !pipelineInfo {
 
     if (jsonValue == .object) {
         parseName(jsonValue, &res);
-
         parsePipelineType(jsonValue, &res);
-
         try parseShaders(jsonValue, &res);
-
         try parseVertexInput(jsonValue, &res);
-
         parseInputState(jsonValue, &res);
-
         parseInputAssembly(jsonValue, &res);
-
         parseTessellationState(jsonValue, &res);
-
-        parseViewportState(jsonValue, &res);
-
+        try parseViewportState(jsonValue, &res);
         parseRasterizationState(jsonValue, &res);
-
         parseMultisampleState(jsonValue, &res);
-
         parseDepthStencilState(jsonValue, &res);
-
         try parseColorBlendState(jsonValue, &res);
-
         try parseDynamicStates(jsonValue, &res);
+        parseRendering(jsonValue, &res);
     }
 
     return res;
