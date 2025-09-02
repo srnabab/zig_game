@@ -1,0 +1,228 @@
+{
+  "Name": "model3d",
+  "PipelineType": "Graphics",
+  "Shaders": [
+    "model3d.vert.spv",
+    "model3d.frag.spv"
+  ],
+  "VertexInput": {
+    "bindings": [
+      {
+        "binding": 0,
+        "stride": 48,
+        "inputRate": "VERTEX"
+      },
+      {
+        "binding": 1,
+        "stride": 64,
+        "inputRate": "INSTANCE"
+      },
+      {
+        "binding": 2,
+        "stride":64,
+        "inputRate":"INSTANCE"
+      }
+    ],
+    "attributes": [
+      {
+        "location": 0,
+        "binding": 0,
+        "format": "R32G32B32_SFLOAT",
+        "offset": 0
+      },
+      {
+        "location": 1,
+        "binding": 0,
+        "format": "R32G32B32_SFLOAT",
+        "offset": 12
+      },
+      {
+        "location": 2,
+        "binding": 0,
+        "format": "R32G32_SFLOAT",
+        "offset": 24
+      },
+      {
+        "location": 3,
+        "binding":0,
+        "format":"R32G32B32_SFLOAT",
+        "offset":32
+      },
+      {
+        "location":4,
+        "binding": 1,
+        "format": "R32G32B32A32_SFLOAT",
+        "offset":0
+      },
+      {
+        "location":5,
+        "binding": 1,
+        "format": "R32G32B32A32_SFLOAT",
+        "offset":16
+      },
+      {
+        "location":6,
+        "binding": 1,
+        "format": "R32G32B32A32_SFLOAT",
+        "offset":32
+      },
+      {
+        "location":7,
+        "binding": 1,
+        "format": "R32G32B32A32_SFLOAT",
+        "offset":48
+      },
+      {
+        "location":8,
+        "binding": 2,
+        "format": "R32G32B32A32_SFLOAT",
+        "offset":0
+      },
+      {
+        "location":9,
+        "binding": 2,
+        "format": "R32G32B32A32_SFLOAT",
+        "offset":16
+      },
+      {
+        "location":10,
+        "binding": 2,
+        "format": "R32G32B32A32_SFLOAT",
+        "offset":32
+      },
+      {
+        "location":11,
+        "binding": 2,
+        "format": "R32G32B32A32_SFLOAT",
+        "offset":48
+      }
+    ]
+  },
+  "InputState": {
+    "InputStatepNext": null,
+    "flag": 0,
+    "vertexBindingDescriptionCount": 3,
+    "vertexAttributeDescriptionCount": 12
+  },
+  "InputAssembly": {
+    "InputAssemblypNext": null,
+    "flag": 0,
+    "topology": "TRIANGLE_LIST",
+    "primitiveRestartEnable": false
+  },
+  "TessellationState": null,
+  "ViewportState": {
+    "ViewportStatepNext": null,
+    "flag": 0,
+    "viewports": [{"x": 0.0,"y": 0.0, "width": 800,"height":600,"minDepth":0.0,"maxDepth":1.0}],
+    "scissors": [{"offset": {"x": 0,"y":0}, "extent": {"width":800,"height":600}}] 
+  },
+  "RasterizationState": {
+    "RasterizationStatepNext": null,
+    "flag": 0,
+    "depthClampEnable": false,
+    "rasterizerDiscardEnable": false,
+    "polygonMode": "FILL",
+    "cullMode": "BACK_BIT",
+    "frontFace": "COUNTER_CLOCKWISE",
+    "depthBiasEnable": false,
+    "depthBiasConstantFactor": 0.0,
+    "depthBiasClamp": 0.0,
+    "depthBiasSlopeFactor": 0.0,
+    "lineWidth": 1.0
+  },
+  "MultisampleState": {
+    "MultisampleStatepNext": null,
+    "flag": 0,
+    "rasterizationSamples": "1_BIT",
+    "sampleShadingEnable": false,
+    "minSampleShading": 1.0,
+    "alphaToCoverageEnable": false,
+    "alphaToOneEnable": false
+  },
+  "DepthStencilState": {
+    "DepthStencilStatepNext": null,
+    "flag": 0,
+    "depthTestEnable": true,
+    "depthWriteEnable": true,
+    "depthCompareOp": "LESS",
+    "depthBoundsTestEnable": false,
+    "stencilTestEnable": false,
+    "front": null,
+    "back": null,
+    "minDepthBounds": 0.0,
+    "maxDepthBounds": 1.0
+  },
+  "ColorBlendState": {
+    "ColorBlendStatepNext": null,
+    "flag": 0,
+    "logicOpEnable": false,
+    "logicOp": "COPY",
+    "attachments": [
+      {
+        "blendEnable":true,
+        "srcColorBlendFactor": "SRC_ALPHA",
+        "dstColorBlendFactor": "ONE_MINUS_SRC_ALPHA",
+        "colorBlendOp": "ADD",
+        "srcAlphaBlendFactor":"ONE",
+        "dstAlphaBlendFactor":"ONE_MINUS_SRC_ALPHA",
+        "alphaBlendOp": "ADD",
+        "colorWriteMask": [
+          "R",
+          "G",
+          "B",
+          "A"
+        ]
+      },
+            {
+        "blendEnable":true,
+        "srcColorBlendFactor": "SRC_ALPHA",
+        "dstColorBlendFactor": "ONE_MINUS_SRC_ALPHA",
+        "colorBlendOp": "ADD",
+        "srcAlphaBlendFactor":"ONE",
+        "dstAlphaBlendFactor":"ONE_MINUS_SRC_ALPHA",
+        "alphaBlendOp": "ADD",
+        "colorWriteMask": [
+          "R",
+          "G",
+          "B",
+          "A"
+        ]
+      },
+      {
+        "blendEnable": false,
+        "srcColorBlendFactor": "SRC_ALPHA",
+        "dstColorBlendFactor": "ONE_MINUS_SRC_ALPHA",
+        "colorBlendOp": "ADD",
+        "srcAlphaBlendFactor": "ONE",
+        "dstAlphaBlendFactor": "ONE_MINUS_SRC_ALPHA",
+        "alphaBlendOp": "ADD",
+        "colorWriteMask": [
+          "R",
+          "G",
+          "B",
+          "A"
+        ]
+      }
+    ],
+    "blendConstants": [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "DynamicStates": {
+    "DynamicStatespNext": null,
+    "flag": 0,
+    "States": [
+      "VIEWPORT",
+      "SCISSOR"
+    ]
+  },
+  "PipelineRendering": {
+      "color": ["B8G8R8A8_SRGB", "B8G8R8A8_SRGB","B8G8R8A8_SRGB"],
+      "depth": "D32_SFLOAT",
+      "stencil": "UNDEFINED"
+  }
+}

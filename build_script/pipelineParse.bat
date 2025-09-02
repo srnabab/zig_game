@@ -9,6 +9,8 @@ if "%~1"=="" (
     goto :eof
 )
 
+set "INPUT_DIR=%~1"
+
 if "%~2"=="" (
     echo [error] need output dir
     echo.
@@ -17,7 +19,6 @@ if "%~2"=="" (
     goto :eof
 )
 
-set "INPUT_DIR=%~1"
 set "OUTPUT_DIR=%~2"
 
 where glslc >nul 2>nul
@@ -36,15 +37,15 @@ if not exist "%OUTPUT_DIR%" (
 )
 
 set "SHADER_COUNT=0"
-for %%f in ("%INPUT_DIR%\*.frag" "%INPUT_DIR%\*.vert" "%INPUT_DIR%\*.comp") do (
+for %%f in ("%INPUT_DIR%\*.pipe") do (
     if exist "%%f" (
-        glslc.exe "%%f" -o "%OUTPUT_DIR%\%%~nxf.spv"
+        C:\D\code\zig\game\zig-out\bin\pipelineJsonParse.exe "%%f" "%OUTPUT_DIR%\%%~nxf"b"
         @REM echo "%OUTPUT_DIR%\%%f.spv"
         set /a SHADER_COUNT+=1
     )
 )
 
 echo.
-echo [done] %SHADER_COUNT%  shader files
+echo [done] %SHADER_COUNT%  pipeline files
 
 endlocal

@@ -6,8 +6,12 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .Debug });
 
     const shader_compile = b.step("shader compile", "compile shader");
-    const script_cmd = b.addSystemCommand(&[_][]const u8{ "build_script/shaderCompile.bat", "Shaders", "zig-out/bin/Content" });
+    const script_cmd = b.addSystemCommand(&[_][]const u8{ "build_script/shaderCompile.bat", "Shaders", "zig-out/bin/Content/Shaders" });
     shader_compile.dependOn(&script_cmd.step);
+
+    const pipeline_compile = b.step("pipeline parse", "parse pipeline json");
+    const pipeline_script_cmd = b.addSystemCommand(&[_][]const u8{ "build_script/pipelineParse.bat", "Pipeline", "zig-out/bin/Content/Pipeline" });
+    pipeline_compile.dependOn(&pipeline_script_cmd.step);
 
     const vk_mod = b.createModule(.{
         .root_source_file = b.path("src/vulkan.zig"),
@@ -29,6 +33,7 @@ pub fn build(b: *std.Build) void {
         .root_module = pipelineJsonParse_mod,
     });
     b.installArtifact(pipelineJsonParse_exe);
+    // pipeline_compile.dependOn(&pipelineJsonParse_exe.step);
 
     const enum_c_mod = b.createModule(.{
         .root_source_file = b.path("src/enumFromC.zig"),
@@ -77,6 +82,7 @@ pub fn build(b: *std.Build) void {
     });
 
     contenManager.step.dependOn(shader_compile);
+    contenManager.step.dependOn(pipeline_compile);
 
     contenManager.linkSystemLibrary2("blake3", .{ .preferred_link_mode = .static });
     contenManager.linkSystemLibrary2("sdl3", .{ .preferred_link_mode = .static });

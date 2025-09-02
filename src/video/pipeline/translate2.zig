@@ -6,6 +6,7 @@ const VulkanPipelineInfo = s.VulkanPipelineInfo;
 
 pub fn toVulkan2(info: *pipeline.pipelineInfo, allocator: std.mem.Allocator) !*VulkanPipelineInfo {
     var res = try allocator.create(VulkanPipelineInfo);
+    res.* = std.mem.zeroes(VulkanPipelineInfo);
 
     s.createVertexInputInfo(&info.vertexInputstatee, res);
     res.vertexInputInfo.createInfo.pVertexAttributeDescriptions = null;
@@ -34,7 +35,7 @@ pub fn toVulkan2(info: *pipeline.pipelineInfo, allocator: std.mem.Allocator) !*V
 
     // @breakpoint();
     for (0..info.shaderCount) |i| {
-        std.mem.copyForwards(u8, res.shaderName[i][0..64], info.shaders[i]);
+        std.mem.copyForwards(u8, res.shaderName[i][0..info.shaders[i].len], info.shaders[i]);
     }
 
     for (0..res.shaderStageCreateInfo.len) |i| {

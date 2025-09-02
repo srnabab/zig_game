@@ -15,20 +15,21 @@ pub fn main() !void {
         _ = debug_allocator.deinit();
     };
 
+    // @breakpoint();
     var argsIt = try std.process.argsWithAllocator(gpa);
     defer argsIt.deinit();
     var argCount: u32 = 0;
     var args: [10][:0]const u8 = undefined;
     args[2] = "a.pipeb";
     while (argsIt.next()) |arg| {
-        std.log.info("{s}", .{arg});
+        // std.log.info("{s}", .{arg});
         args[argCount] = arg;
 
         argCount += 1;
         if (argCount > 3) break;
     }
     if (argCount < 2 or argCount > 3) {
-        std.log.err("pipe.exe [jsonFile] [output]", .{});
+        std.log.err("pipe.exe [jsonFile] [output] {d}", .{argCount});
         std.process.exit(1);
     }
 
@@ -37,11 +38,22 @@ pub fn main() !void {
     const res = try trans.toVulkan2(&jsonP, gpa);
     defer gpa.destroy(res);
 
-    var outputFile = std.fs.cwd().openFile(args[2], .{ .mode = .write_only }) catch |err| switch (err) {
-        error.FileNotFound => try std.fs.cwd().createFile(args[2], .{}),
-        else => {
-            return err;
-        },
+    var outputFile = ps: {
+        if (std.fs.path.isAbsolute(args[2])) {
+            break :ps std.fs.openFileAbsolute(args[2], .{ .mode = .write_only }) catch |err| switch (err) {
+                error.FileNotFound => try std.fs.createFileAbsolute(args[2], .{}),
+                else => {
+                    return err;
+                },
+            };
+        } else {
+            break :ps std.fs.cwd().openFile(args[2], .{ .mode = .write_only }) catch |err| switch (err) {
+                error.FileNotFound => try std.fs.cwd().createFile(args[2], .{}),
+                else => {
+                    return err;
+                },
+            };
+        }
     };
     defer outputFile.close();
 

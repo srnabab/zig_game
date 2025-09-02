@@ -43,7 +43,7 @@ pub fn createStaticStringMap(
 fn comptime_print(comptime format: []const u8, comptime args: anytype) void {
     @compileLog(std.fmt.comptimePrint(format, args));
 }
-pub const formatMap = createStaticStringMap(vk, vk.VkFormat, "VK_FORMAT_UNDEFINED", "VK_FORMAT_MAX_ENUM", "VK_FORMAT_");
+const formatMap = createStaticStringMap(vk, vk.VkFormat, "VK_FORMAT_UNDEFINED", "VK_FORMAT_MAX_ENUM", "VK_FORMAT_");
 
 const inputRateMap = createStaticStringMap(
     vk,
@@ -152,8 +152,8 @@ pub const VulkanPipelineInfo = extern struct {
     shaderStageCount: u32,
     renderingInfo: vulkanRenderingInfo,
     hasRendering: bool,
-    name: [64]u8,
-    shaderName: [5][64]u8,
+    name: [64]u8 = std.mem.zeroes([64]u8),
+    shaderName: [5][64]u8 = std.mem.zeroes([5][64]u8),
 
     /// need create runtime resources
     shaderStageCreateInfo: [5]vk.VkPipelineShaderStageCreateInfo,
@@ -380,7 +380,7 @@ pub fn createRenderingInfo(renderingInfo: ?pipeline.renderingInfo, pipeRes: *Vul
     const res = &pipeRes.renderingInfo;
     if (renderingInfo) |info| {
         for (renderingInfo.?.colorAttachment[0..renderingInfo.?.colorAttachmentCount], 0..) |value, i| {
-            std.log.info("{s}", .{value});
+            // std.log.info("{s}", .{value});
             res.*.colorAttachment[i] = formatMap.get(value).?;
         }
         res.*.info = vk.VkPipelineRenderingCreateInfo{

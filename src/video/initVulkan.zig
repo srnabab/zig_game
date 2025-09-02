@@ -121,6 +121,14 @@ const VkQueueFamily = struct {
 };
 const VkTheadQueue = struct { queue: vk.VkQueue = null, mutex: Mutex = .{} };
 
+const setLayoutLimit = @import("translate").setLayoutLimit;
+const Pipeline = struct {
+    descriptorSetLayouts: [setLayoutLimit]vk.VkDescriptorSetLayout,
+    setCount: u32,
+    pipelineLayout: vk.VkPipelineLayout,
+    pipeline: vk.VkPipeline,
+};
+
 pub const VkStruct = struct {
     const Self = @This();
 
@@ -152,11 +160,14 @@ pub const VkStruct = struct {
     preGraphicInfoPtrs: [10]VulkanPipelineInfo = undefined,
     graphicInfoCount: u32 = 0,
 
+    pipelines: std.StringHashMap(Pipeline),
+
     pub fn init(allocator: Allocator) VkStruct {
         return VkStruct{
             .allocator = allocator,
             .shaderModules = std.StringHashMap(vk.VkShaderModule).init(allocator),
             .entryNames = std.StringHashMap(void).init(allocator),
+            .pipelines = std.StringHashMap(Pipeline).init(allocator),
         };
     }
 
@@ -173,6 +184,19 @@ pub const VkStruct = struct {
     }
 
     pub fn deinit(self: *Self) void {
+        var pipelines = self.pipelines.valueIterator();
+        while (pipelines.next()) |val| {
+            vk.vkDestroyPipeline(self.device, val.pipeline, self.pAllocCallBacks);
+            vk.vkDestroyPipelineLayout(self.device, val.pipelineLayout, self.pAllocCallBacks);
+            for (0..val.setCount) |i| {
+                vk.vkDestroyDescriptorSetLayout(
+                    self.device,
+                    val.descriptorSetLayouts[i],
+                    self.pAllocCallBacks,
+                );
+            }
+        }
+
         var entryNames = self.entryNames.keyIterator();
         while (entryNames.next()) |name| {
             self.allocator.free(name.*);
@@ -657,8 +681,8 @@ pub const VkStruct = struct {
         self.graphicPipelineCreateInfo[self.graphicInfoCount] = vk.VkGraphicsPipelineCreateInfo{
             .sType = vk.VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
             .pNext = pn: {
-                if (self.preGraphicInfoPtrs[self.graphicInfoCount].renderingInfo != null) {
-                    break :pn @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].renderingInfo.?.info);
+                if (self.preGraphicInfoPtrs[self.graphicInfoCount].hasRendering) {
+                    break :pn @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].renderingInfo.info);
                 }
                 break :pn null;
             },
@@ -675,9 +699,15 @@ pub const VkStruct = struct {
             .pMultisampleState = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].multisampleInfo),
             .pRasterizationState = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].rasterizationInfo),
             .pStages = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].shaderStageCreateInfo),
-            .pTessellationState = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].tessellationInfo),
+            .pTessellationState = tn: {
+                if (self.preGraphicInfoPtrs[self.graphicInfoCount].haveTessella) {
+                    break :tn @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].tessellationInfo);
+                } else {
+                    break :tn null;
+                }
+            },
             .pVertexInputState = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].vertexInputInfo.createInfo),
-            .pViewportState = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].viewportInfo),
+            .pViewportState = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].viewportInfo.info),
             .stageCount = @intCast(self.preGraphicInfoPtrs[self.graphicInfoCount].shaderStageCount),
             .renderPass = null,
             .subpass = 0,
@@ -686,7 +716,8 @@ pub const VkStruct = struct {
     }
 
     pub fn createAllPipelinesAdded(self: *Self) !void {
-        var temp: vk.VkPipeline = null;
+        var temp = [_]vk.VkPipeline{null} ** 10;
+
         try checkVkResult(vk.vkCreateGraphicsPipelines(
             self.device,
             self.pipelineCache,
@@ -695,7 +726,32 @@ pub const VkStruct = struct {
             self.pAllocCallBacks,
             @ptrCast(&temp),
         ));
+
+        var pp: Pipeline = undefined;
+        for (0..self.graphicInfoCount) |i| {
+            pp = Pipeline{
+                .descriptorSetLayouts = self.preGraphicInfoPtrs[i].descriptorSetLayouts.setLayouts,
+                .setCount = self.preGraphicInfoPtrs[i].descriptorSetLayouts.setLayoutCount,
+                .pipelineLayout = self.preGraphicInfoPtrs[i].pipelineLayout,
+                .pipeline = temp[i],
+            };
+            try self.pipelines.put(&self.preGraphicInfoPtrs[i].name, pp);
+        }
         self.graphicInfoCount = 0;
-        vk.vkDestroyPipeline(self.device, temp, self.pAllocCallBacks);
+    }
+
+    pub fn destroyPipeline(self: *Self, name: []const u8) !void {
+        const kv = self.pipelines.fetchRemove(name);
+        if (kv) |val| {
+            try checkVkResult(vk.vkDestroyPipeline(self.device, val.value.pipeline, self.pAllocCallBacks));
+            try checkVkResult(vk.vkDestroyPipelineLayout(self.device, val.value.pipelineLayout, self.pAllocCallBacks));
+            for (0..val.value.setCount) |i| {
+                try checkVkResult(vk.vkDestroyDescriptorSetLayout(
+                    self.device,
+                    val.value.descriptorSetLayouts[i],
+                    self.pAllocCallBacks,
+                ));
+            }
+        }
     }
 };

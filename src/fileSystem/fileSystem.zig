@@ -25,7 +25,7 @@ const vk = @cImport(@cInclude("vulkan/vulkan.h"));
 pub const PipelineShaderInfo = base.PipelineShaderInfo;
 
 pub fn getShaderLoadParameter(name: []const u8) !PipelineShaderInfo {
-    return base.getShaderLoadParameter(name, global.databaseName, global.cwd);
+    return base.getShaderLoadParameter(name, global.gpa, global.cwd);
 }
 
 pub fn deinit() void {

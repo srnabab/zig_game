@@ -6,10 +6,12 @@ const efc = @import("enumFromC");
 const s = @import("translateBase.zig");
 
 pub const VulkanPipelineInfo = s.VulkanPipelineInfo;
+pub const setLayoutLimit = s.setLayoutLimit;
 
-fn getPipelineShaderInfos(shaders: [5][]const u8, count: u32, allocator: std.mem.Allocator) ![]file.PipelineShaderInfo {
+fn getPipelineShaderInfos(shaders: [5][64]u8, count: u32, allocator: std.mem.Allocator) ![]file.PipelineShaderInfo {
     var infos = try allocator.alloc(file.PipelineShaderInfo, count);
-    var nameBuffer = [_]u8{0} ** 256;
+    errdefer allocator.free(infos);
+    var nameBuffer = [_]u8{0} ** 128;
     var nameZ: [:0]u8 = undefined;
     for (0..count) |i| {
         nameZ = try std.fmt.bufPrintZ(&nameBuffer, "{s}", .{shaders[i]});
@@ -20,7 +22,7 @@ fn getPipelineShaderInfos(shaders: [5][]const u8, count: u32, allocator: std.mem
 
 fn createShaderStageCreateInfo(
     shaderInfos: []file.PipelineShaderInfo,
-    shaderNames: [5][]const u8,
+    shaderNames: [5][64]u8,
     pipeRes: *VulkanPipelineInfo,
     allocator: std.mem.Allocator,
 ) !void {
@@ -43,7 +45,7 @@ fn createShaderStageCreateInfo(
                 .flags = 0,
                 .stage = info.stage,
                 .pName = @ptrCast(entryName.ptr),
-                .module = try global.vulkan.createShaderModule(shaderCode, shaderNames[i]),
+                .module = try global.vulkan.createShaderModule(shaderCode, &shaderNames[i]),
                 .pSpecializationInfo = null,
             };
             count.* += 1;
@@ -150,10 +152,24 @@ pub fn toVulkan(partialFillInfo: *VulkanPipelineInfo, allocator: std.mem.Allocat
         allocator,
     );
     defer for (0..shaderInfos.len) |i| {
-        shaderInfos[i].deinit();
+        shaderInfos[i].deinit(allocator);
     };
     try createShaderStageCreateInfo(shaderInfos, partialFillInfo.shaderName, partialFillInfo, allocator);
 
     try createPipelineLayoutCreateInfo(shaderInfos, partialFillInfo);
     partialFillInfo.pipelineLayout = try createPipelineLayout(partialFillInfo);
+
+    partialFillInfo.vertexInputInfo.createInfo.pVertexAttributeDescriptions = @ptrCast(&partialFillInfo.vertexInputInfo.attributes);
+    partialFillInfo.vertexInputInfo.createInfo.pVertexBindingDescriptions = @ptrCast(&partialFillInfo.vertexInputInfo.bindings);
+
+    partialFillInfo.viewportInfo.info.pScissors = @ptrCast(&partialFillInfo.viewportInfo.scissors);
+    partialFillInfo.viewportInfo.info.pViewports = @ptrCast(&partialFillInfo.viewportInfo.viewports);
+
+    partialFillInfo.colorBlendInfo.createInfo.pAttachments = @ptrCast(&partialFillInfo.colorBlendInfo.attachments);
+
+    partialFillInfo.dynamicStateInfo.createInfo.pDynamicStates = @ptrCast(&partialFillInfo.dynamicStateInfo.states);
+
+    if (partialFillInfo.hasRendering) {
+        partialFillInfo.renderingInfo.info.pColorAttachmentFormats = @ptrCast(&partialFillInfo.renderingInfo.colorAttachment);
+    }
 }

@@ -182,7 +182,7 @@ fn parseName(jsonValue: json.Value, info: *pipelineInfo) void {
     const name_field = jsonValue.object.get("Name").?;
     const name = name_field.string;
     info.name = name;
-    std.log.debug("name {s}", .{info.name});
+    // std.log.debug("name {s}", .{info.name});
 }
 
 fn parsePipelineType(jsonValue: json.Value, info: *pipelineInfo) void {
@@ -194,7 +194,7 @@ fn parsePipelineType(jsonValue: json.Value, info: *pipelineInfo) void {
             break;
         }
     }
-    std.log.debug("type {s}", .{@tagName(info.pipeType)});
+    // std.log.debug("type {s}", .{@tagName(info.pipeType)});
 }
 
 fn parseShaders(jsonValue: json.Value, info: *pipelineInfo) !void {
@@ -205,7 +205,7 @@ fn parseShaders(jsonValue: json.Value, info: *pipelineInfo) !void {
 
     for (shaders.items, 0..) |shader, i| {
         info.shaders[i] = shader.string;
-        std.log.debug("shader {s}", .{info.shaders[i]});
+        // std.log.debug("shader {s}", .{info.shaders[i]});
     }
     info.shaderCount = @intCast(shaders.items.len);
 }
@@ -558,7 +558,14 @@ fn parseRendering(jsonValue: json.Value, info: *pipelineInfo) void {
 }
 
 pub fn parse(pipelineFileName: []const u8, allocator: std.mem.Allocator) !pipelineInfo {
-    const pipelineFile = try std.fs.openFileAbsolute(pipelineFileName, .{});
+    const pipelineFile = ps: {
+        if (std.fs.path.isAbsolute(pipelineFileName)) {
+            break :ps try std.fs.openFileAbsolute(pipelineFileName, .{});
+        } else {
+            break :ps try std.fs.cwd().openFile(pipelineFileName, .{});
+        }
+    };
+
     defer pipelineFile.close();
 
     var res: pipelineInfo = undefined;
