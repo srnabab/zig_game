@@ -289,8 +289,8 @@ pub const VkStruct = struct {
         try checkVkResult(vk.vkCreateInstance(createInfo, self.*.pAllocCallBacks, @ptrCast(&self.*.instance)));
     }
 
-    fn chooseEnabledLayers(self: *Self, comptime fields: type, comptime field_name: []const u8, neededName: []const [*c]const u8, physicalDevice: vk.VkPhysicalDevice) VkError!std.ArrayList([*c]const u8) {
-        var namesEnabled = std.ArrayList([*c]const u8).init(self.*.allocator);
+    fn chooseEnabledLayers(self: *Self, comptime fields: type, comptime field_name: []const u8, neededName: []const [*c]const u8, physicalDevice: vk.VkPhysicalDevice) VkError!std.array_list.Managed([*c]const u8) {
+        var namesEnabled = std.array_list.Managed([*c]const u8).init(self.*.allocator);
 
         var count: u32 = 0;
         var vulkanNames: []fields = undefined;
@@ -689,7 +689,7 @@ pub const VkStruct = struct {
             .flags = 0,
             .basePipelineHandle = null,
             .basePipelineIndex = -1,
-            .layout = self.preGraphicInfoPtrs[self.graphicInfoCount].pipelineLayout,
+            .layout = self.preGraphicInfoPtrs[self.graphicInfoCount].pipelineLayout.layout,
             .pColorBlendState = @ptrCast(
                 &self.preGraphicInfoPtrs[self.graphicInfoCount].colorBlendInfo.createInfo,
             ),
@@ -732,7 +732,7 @@ pub const VkStruct = struct {
             pp = Pipeline{
                 .descriptorSetLayouts = self.preGraphicInfoPtrs[i].descriptorSetLayouts.setLayouts,
                 .setCount = self.preGraphicInfoPtrs[i].descriptorSetLayouts.setLayoutCount,
-                .pipelineLayout = self.preGraphicInfoPtrs[i].pipelineLayout,
+                .pipelineLayout = self.preGraphicInfoPtrs[i].pipelineLayout.layout,
                 .pipeline = temp[i],
             };
             try self.pipelines.put(&self.preGraphicInfoPtrs[i].name, pp);

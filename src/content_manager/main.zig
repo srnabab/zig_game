@@ -196,7 +196,7 @@ fn executeSQL(SQL: []const u8, db: *sqlite.sqlite3) void {
     }
 }
 
-fn updateLoadParameter(tp: FileType, cc: std.fs.File.Metadata, content: []const u8, fileName: []const u8) !void {
+fn updateLoadParameter(tp: FileType, cc: std.fs.File.Stat, content: []const u8, fileName: []const u8) !void {
     switch (tp) {
         .SPV => {
             const res = try reflect.reflect(gpa, cc, content);
@@ -212,7 +212,7 @@ fn updateLoadParameter(tp: FileType, cc: std.fs.File.Metadata, content: []const 
                     "FileName = ?",
                     .{
                         res.name,
-                        @intFromEnum(res.stage),
+                        res.stage,
                         res.setCount,
                         res.bindingCount,
                         blob,
@@ -227,7 +227,7 @@ fn updateLoadParameter(tp: FileType, cc: std.fs.File.Metadata, content: []const 
                     "FileName = ?",
                     .{
                         res.name,
-                        @intFromEnum(res.stage),
+                        res.stage,
                         res.setCount,
                         res.bindingCount,
                         blob,
@@ -270,8 +270,8 @@ fn processFile(
     var tempFile = try dir.openFile(name, .{});
     defer tempFile.close();
 
-    const metadata = try tempFile.metadata();
-    const currentModifiedTime: i64 = @truncate(metadata.modified());
+    const metadata = try tempFile.stat();
+    const currentModifiedTime: i64 = @truncate(metadata.mtime);
 
     if (fileModifiedTime == -1) {
         // 新文件：插入新记录
@@ -281,21 +281,21 @@ fn processFile(
         const fType = nameToFileType(name[index..]);
         // try ContentPathInsertFile(&uuidBuffer, parentID.ptr, rPZ.ptr, name, time, fType, dir);
 
-        var content = try gpa.alloc(u8, metadata.size());
+        var content = try gpa.alloc(u8, metadata.size);
         defer gpa.free(content);
         _ = try tempFile.readAll(content);
 
-        var hashh = hash.blake3HashContent(content[0..metadata.size()]);
+        var hashh = hash.blake3HashContent(content[0..metadata.size]);
 
         try ContentPathT.insert(.{
             .ID = @constCast(&uuidBuffer),
             .ParentID = @constCast(parentID.ptr),
             .RelativePath = @constCast(rPZ.ptr),
             .FileName = @constCast(name.ptr),
-            .TYPE = @intFromEnum(metadata.kind()),
-            .FileSize = @intCast(metadata.size()),
+            .TYPE = @intFromEnum(metadata.kind),
+            .FileSize = @intCast(metadata.size),
             .ContentHash = sqlDB.BLOB{ .data = &hashh, .len = hash.blake3.BLAKE3_OUT_LEN },
-            .ModifiedTime = @as(i64, @truncate(metadata.modified())),
+            .ModifiedTime = @as(i64, @truncate(metadata.mtime)),
             .LastSeenTime = time,
             .FileType = @intFromEnum(fType),
         });
@@ -306,7 +306,7 @@ fn processFile(
         if (pathModifiedTime == -1) {
             // 文件被移动：更新路径和父ID
             if (isModified) {
-                const content = try gpa.alloc(u8, metadata.size());
+                const content = try gpa.alloc(u8, metadata.size);
                 defer gpa.free(content);
                 _ = try tempFile.readAll(content);
 
@@ -328,7 +328,7 @@ fn processFile(
         } else {
             // 已存在的文件：只更新时间和内容哈希（如果需要）
             if (isModified) {
-                const content = try gpa.alloc(u8, metadata.size());
+                const content = try gpa.alloc(u8, metadata.size);
                 defer gpa.free(content);
                 _ = try tempFile.readAll(content);
 
@@ -372,8 +372,8 @@ fn processDirectory(
     var tempDir = try dir.openDir(name, .{ .iterate = true });
     defer tempDir.close();
 
-    const metadata = try tempDir.metadata();
-    const currentModifiedTime: i64 = @truncate(metadata.modified());
+    const metadata = try tempDir.stat();
+    const currentModifiedTime: i64 = @truncate(metadata.mtime);
     var currentID: [UUID.len]u8 = undefined;
 
     if (fileModifiedTime == -1) {
@@ -384,8 +384,8 @@ fn processDirectory(
             .ParentID = @constCast(parentID.ptr),
             .RelativePath = @constCast(rPZ.ptr),
             .FileName = @constCast(name.ptr),
-            .TYPE = @intFromEnum(metadata.kind()),
-            .FileSize = @intCast(metadata.size()),
+            .TYPE = @intFromEnum(metadata.kind),
+            .FileSize = @intCast(metadata.size),
             .ContentHash = null,
             .ModifiedTime = currentModifiedTime,
             .LastSeenTime = time,
@@ -508,7 +508,7 @@ pub fn main() !void {
     const time: i64 = @truncate(std.time.nanoTimestamp());
 
     if (exist) {
-        const cc = try content.metadata();
+        const cc = try content.stat();
         var modifiedTime: i64 = 0;
 
         var getValues: [2]*anyopaque = undefined;
@@ -519,14 +519,14 @@ pub fn main() !void {
         try ContentPathT.get("ID,ModifiedTime", "RelativePath = ?", .{"Content"}, &getValues, &types);
         // std.log.info("{s}", .{buffer});
 
-        if (cc.modified() != @as(i128, @intCast(modifiedTime))) {
+        if (cc.mtime != @as(i128, @intCast(modifiedTime))) {
             try ContentPathT.update("ModifiedTime,LastSeenTime", "ID = ?", .{ modifiedTime, time, buffer });
             std.log.info("update", .{});
         } else {
             try ContentPathT.update("LastSeenTime", "ID = ?", .{ time, buffer });
         }
     } else {
-        const cc = try content.metadata();
+        const cc = try content.stat();
         try UUID.createNewUUID(&buffer);
 
         try ContentPathT.insert(.{
@@ -534,10 +534,10 @@ pub fn main() !void {
             .ParentID = null,
             .RelativePath = @constCast("Content"),
             .FileName = @constCast("Content"),
-            .TYPE = @intFromEnum(cc.kind()),
-            .FileSize = @intCast(cc.size()),
+            .TYPE = @intFromEnum(cc.kind),
+            .FileSize = @intCast(cc.size),
             .ContentHash = null,
-            .ModifiedTime = @as(i64, @truncate(cc.modified())),
+            .ModifiedTime = @as(i64, @truncate(cc.mtime)),
             .LastSeenTime = @as(i64, @truncate(time)),
             .FileType = @intFromEnum(FileType.DIR),
         });

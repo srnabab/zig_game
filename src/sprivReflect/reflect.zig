@@ -4,27 +4,23 @@ const v = @cImport(@cInclude("vulkan/vulkan.h"));
 const efc = @import("EnumC");
 const assert = std.debug.assert;
 
-const VkShaderStageFlagBits: type = efc.generateEnumFromC(v, v.VkShaderStageFlagBits, "VK_SHADER_STAGE_VERTEX_BIT", "VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM");
-const VkDescriptorType: type = efc.generateEnumFromC(v, v.VkDescriptorType, "VK_DESCRIPTOR_TYPE_SAMPLER", "VK_DESCRIPTOR_TYPE_MAX_ENUM");
-const VkFormat: type = efc.generateEnumFromC(v, v.VkFormat, "VK_FORMAT_UNDEFINED", "VK_FORMAT_MAX_ENUM");
-
 pub const binding = struct {
     set: u32,
     binding: u32,
     descriptorCount: u32,
-    descriptorType: VkDescriptorType,
+    descriptorType: v.VkDescriptorType,
 };
 
 pub const input = struct {
     location: u32,
-    varType: VkFormat,
+    varType: v.VkFormat,
 };
 
 const shaderInfo = struct {
     const Self = @This();
 
     name: [64:0]u8,
-    stage: VkShaderStageFlagBits,
+    stage: v.VkShaderStageFlagBits,
     pushConstantSize: u32,
     setCount: u32,
     bindingCount: u32,
@@ -42,18 +38,18 @@ const shaderInfo = struct {
     }
 };
 
-pub fn reflect(allocator: std.mem.Allocator, cc: std.fs.File.Metadata, content: []const u8) !shaderInfo {
+pub fn reflect(allocator: std.mem.Allocator, cc: std.fs.File.Stat, content: []const u8) !shaderInfo {
     var res: shaderInfo = undefined;
 
     var spv_result: s.SpvReflectResult = 0;
     var module: s.SpvReflectShaderModule = undefined;
 
-    spv_result = s.spvReflectCreateShaderModule(@intCast(cc.size()), @ptrCast(content.ptr), @ptrCast(&module));
+    spv_result = s.spvReflectCreateShaderModule(@intCast(cc.size), @ptrCast(content.ptr), @ptrCast(&module));
     defer s.spvReflectDestroyShaderModule(@ptrCast(&module));
     assert(spv_result == s.SPV_REFLECT_RESULT_SUCCESS);
 
     _ = try std.fmt.bufPrintZ(&res.name, "{s}", .{module.entry_point_name});
-    res.stage = @enumFromInt(module.shader_stage);
+    res.stage = module.shader_stage;
 
     var biggerstSet: i32 = -1;
 
@@ -72,7 +68,7 @@ pub fn reflect(allocator: std.mem.Allocator, cc: std.fs.File.Metadata, content: 
             bs[i].binding = bbb.*.binding;
             bs[i].set = bbb.*.set;
             biggerstSet = @max(@as(i32, @intCast(bbb.*.set)), biggerstSet);
-            bs[i].descriptorType = @enumFromInt(bbb.*.descriptor_type);
+            bs[i].descriptorType = bbb.*.descriptor_type;
             bs[i].descriptorCount = bbb.*.count;
         }
         res.bindingCount = var_count;
@@ -112,7 +108,7 @@ pub fn reflect(allocator: std.mem.Allocator, cc: std.fs.File.Metadata, content: 
 
         for (inputs, 0..) |bbb, i| {
             is[i].location = bbb.*.location;
-            is[i].varType = @enumFromInt(bbb.*.format);
+            is[i].varType = bbb.*.format;
         }
         res.inputs = is;
         res.inputCount = var_count;

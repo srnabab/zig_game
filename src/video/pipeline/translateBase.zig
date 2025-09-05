@@ -122,10 +122,14 @@ const vulkanViewport = extern struct {
 
 const pushConstantRangeLimit = 16;
 pub const setLayoutLimit = 8;
+pub const bindingLimit = 5;
 pub const pipelineLayoutCreateInfo = extern struct {
     pushConstantCount: u32,
     pushConstants: [pushConstantRangeLimit]vk.VkPushConstantRange,
     setLayoutCount: u32,
+    setLayoutBinding: [setLayoutLimit][bindingLimit]vk.VkDescriptorSetLayoutBinding,
+    bindingFlags: [setLayoutLimit][bindingLimit]vk.VkDescriptorBindingFlags,
+    setLayoutCreateInfos: [setLayoutLimit]vk.VkDescriptorSetLayoutCreateInfo,
     setLayouts: [setLayoutLimit]vk.VkDescriptorSetLayout,
 };
 
@@ -133,6 +137,16 @@ const renderingColorAttachmentCount = 16;
 const vulkanRenderingInfo = extern struct {
     colorAttachment: [renderingColorAttachmentCount]vk.VkFormat,
     info: vk.VkPipelineRenderingCreateInfo,
+};
+
+const shaderStageCreateInfo = extern struct {
+    info: vk.VkPipelineShaderStageCreateInfo,
+    entryName: [64]u8 = std.mem.zeroes([64]u8),
+};
+
+const pipelineLayout = extern struct {
+    info: vk.VkPipelineLayoutCreateInfo,
+    layout: vk.VkPipelineLayout,
 };
 
 pub const VulkanPipelineInfo = extern struct {
@@ -156,11 +170,11 @@ pub const VulkanPipelineInfo = extern struct {
     shaderName: [5][64]u8 = std.mem.zeroes([5][64]u8),
 
     /// need create runtime resources
-    shaderStageCreateInfo: [5]vk.VkPipelineShaderStageCreateInfo,
+    shaderStageCreateInfo: [5]shaderStageCreateInfo,
     /// need create runtime resources
     descriptorSetLayouts: pipelineLayoutCreateInfo,
     /// need create runtime resources
-    pipelineLayout: vk.VkPipelineLayout,
+    pipelineLayout: pipelineLayout,
 };
 
 pub fn createVertexInputInfo(info: *const pipeline.vertexInputState, pipeRes: *VulkanPipelineInfo) void {

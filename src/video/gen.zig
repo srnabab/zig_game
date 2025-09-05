@@ -48,7 +48,7 @@ pub fn main() !void {
     const func_start = "const VkError = @import(\"vulkanType.zig\").VkError;\nconst VkResult = @import(\"vulkanType.zig\").VkResult;\npub fn VkResultToError(result: VkResult) VkError!void {\nreturn switch(result) {\n";
     const func_end = "};\n}";
 
-    var func = std.ArrayList(u8).init(gpa);
+    var func = std.array_list.Managed(u8).init(gpa);
     defer func.deinit();
 
     const writer = func.writer();

@@ -49,7 +49,8 @@ pub fn main() !void {
     defer process.argsFree(gpa, args);
 
     for (args) |arg| {
-        try output.out.print("arg: {s}\n", .{arg});
+        // try output.out.print("arg: {s}\n", .{arg});
+        std.log.debug("arg: {s}", .{arg});
     }
 
     {

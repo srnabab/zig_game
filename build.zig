@@ -10,7 +10,12 @@ pub fn build(b: *std.Build) void {
     shader_compile.dependOn(&script_cmd.step);
 
     const pipeline_compile = b.step("pipeline parse", "parse pipeline json");
-    const pipeline_script_cmd = b.addSystemCommand(&[_][]const u8{ "build_script/pipelineParse.bat", "Pipeline", "zig-out/bin/Content/Pipeline" });
+    const pipeline_script_cmd = b.addSystemCommand(&[_][]const u8{
+        "build_script/pipelineParse.bat",
+        "Pipeline",
+        "zig-out/bin/Content/Shaders",
+        "zig-out/bin/Content/Pipeline",
+    });
     pipeline_compile.dependOn(&pipeline_script_cmd.step);
 
     const vk_mod = b.createModule(.{
@@ -19,21 +24,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     vk_mod.addIncludePath(b.path("include"));
-
-    const pipelineJsonParse_mod = b.createModule(.{
-        .root_source_file = b.path("src/video/pipeline/main.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    pipelineJsonParse_mod.addIncludePath(b.path("include"));
-    pipelineJsonParse_mod.addImport("vulkan", vk_mod);
-
-    const pipelineJsonParse_exe = b.addExecutable(.{
-        .name = "pipelineJsonParse",
-        .root_module = pipelineJsonParse_mod,
-    });
-    b.installArtifact(pipelineJsonParse_exe);
-    // pipeline_compile.dependOn(&pipelineJsonParse_exe.step);
 
     const enum_c_mod = b.createModule(.{
         .root_source_file = b.path("src/enumFromC.zig"),
@@ -49,9 +39,24 @@ pub fn build(b: *std.Build) void {
     });
 
     spReflectModule.addImport("EnumC", enum_c_mod);
-
     spReflectModule.addCSourceFile(.{ .file = b.path("src/sprivReflect/spirv_reflect.c"), .language = .c });
     spReflectModule.addIncludePath(b.path("include"));
+
+    const pipelineJsonParse_mod = b.createModule(.{
+        .root_source_file = b.path("src/video/pipeline/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    pipelineJsonParse_mod.addIncludePath(b.path("include"));
+    pipelineJsonParse_mod.addImport("vulkan", vk_mod);
+    pipelineJsonParse_mod.addImport("reflect", spReflectModule);
+
+    const pipelineJsonParse_exe = b.addExecutable(.{
+        .name = "pipelineJsonParse",
+        .root_module = pipelineJsonParse_mod,
+    });
+    b.installArtifact(pipelineJsonParse_exe);
+    // pipeline_compile.dependOn(&pipelineJsonParse_exe.step);
 
     const sqliteModule = b.createModule(.{
         .root_source_file = b.path("src/sqlite3/sqliteDB.zig"),

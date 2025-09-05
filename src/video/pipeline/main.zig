@@ -28,27 +28,33 @@ pub fn main() !void {
         argCount += 1;
         if (argCount > 3) break;
     }
-    if (argCount < 2 or argCount > 3) {
-        std.log.err("pipe.exe [jsonFile] [output] {d}", .{argCount});
+    if (argCount < 2 or argCount > 4) {
+        std.log.err("pipe.exe [jsonFile] [shaderFolder] [output] {d}", .{argCount});
         std.process.exit(1);
     }
 
     var jsonP = try parse.parse(args[1], gpa);
     defer jsonP.deinit();
-    const res = try trans.toVulkan2(&jsonP, gpa);
-    defer gpa.destroy(res);
+    const res = try trans.toVulkan2(&jsonP, args[2], gpa);
+    defer {
+        gpa.destroy(res.info);
+        for (res.shaderCodes) |value| {
+            gpa.free(value);
+        }
+        gpa.free(res.shaderCodes);
+    }
 
     var outputFile = ps: {
-        if (std.fs.path.isAbsolute(args[2])) {
-            break :ps std.fs.openFileAbsolute(args[2], .{ .mode = .write_only }) catch |err| switch (err) {
-                error.FileNotFound => try std.fs.createFileAbsolute(args[2], .{}),
+        if (std.fs.path.isAbsolute(args[3])) {
+            break :ps std.fs.openFileAbsolute(args[3], .{ .mode = .write_only }) catch |err| switch (err) {
+                error.FileNotFound => try std.fs.createFileAbsolute(args[3], .{}),
                 else => {
                     return err;
                 },
             };
         } else {
-            break :ps std.fs.cwd().openFile(args[2], .{ .mode = .write_only }) catch |err| switch (err) {
-                error.FileNotFound => try std.fs.cwd().createFile(args[2], .{}),
+            break :ps std.fs.cwd().openFile(args[3], .{ .mode = .write_only }) catch |err| switch (err) {
+                error.FileNotFound => try std.fs.cwd().createFile(args[3], .{}),
                 else => {
                     return err;
                 },
@@ -57,7 +63,22 @@ pub fn main() !void {
     };
     defer outputFile.close();
 
-    const slice = std.mem.asBytes(res);
+    const slice = std.mem.asBytes(res.info);
+    var totalLen: u64 = 0;
+    totalLen += @sizeOf(trans.VulkanPipelineInfo);
+    std.log.debug("total len {d}", .{totalLen});
+    for (0..res.shaderCodes.len) |i| {
+        totalLen += res.shaderCodes[i].len + @sizeOf(usize);
+        std.log.debug("total len {d}", .{totalLen});
+    }
 
-    try outputFile.writeAll(slice);
+    var buffer = [_]u8{0} ** 102400;
+    var writer = outputFile.writer(buffer[0..totalLen]);
+    _ = try writer.interface.write(slice);
+    for (0..res.shaderCodes.len) |i| {
+        var val = std.mem.toBytes(res.shaderCodes[i].len);
+        _ = try writer.interface.write(&val);
+        _ = try writer.interface.write(res.shaderCodes[i]);
+    }
+    try writer.end();
 }

@@ -570,11 +570,11 @@ pub fn parse(pipelineFileName: []const u8, allocator: std.mem.Allocator) !pipeli
 
     var res: pipelineInfo = undefined;
 
-    const metadata = try pipelineFile.metadata();
-    var content = try allocator.alloc(u8, metadata.size());
+    const metadata = try pipelineFile.stat();
+    var content = try allocator.alloc(u8, metadata.size);
     defer allocator.free(content);
 
-    _ = try pipelineFile.readAll(content[0..metadata.size()]);
+    _ = try pipelineFile.readAll(content[0..metadata.size]);
 
     const parser = try json.parseFromSlice(json.Value, allocator, content, .{});
     res.parser = parser;

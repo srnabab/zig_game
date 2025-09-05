@@ -169,25 +169,21 @@ fn createInsertStruct(comptime pack: ParamsPack) type {
     for (pack.ps[0..pack.count]) |para| {
         fileds[fieldsCount].name = std.fmt.comptimePrint("{s}", .{para.paramName});
         // @compileLog(std.fmt.comptimePrint("{s}", .{fileds[fieldsCount].name}));
-        fileds[fieldsCount].type = ty: {
-            switch (para.paramType) {
-                .BLOB => {
-                    break :ty ?BLOB;
-                },
-                .INTEGER => {
-                    break :ty i64;
-                },
-                .INTEGER32 => {
-                    break :ty i32;
-                },
-                .TEXT => {
-                    break :ty ?[*]u8;
-                },
-            }
+        fileds[fieldsCount].type = switch (para.paramType) {
+            .BLOB => ?BLOB,
+            .INTEGER => i64,
+            .INTEGER32 => i32,
+            .TEXT => ?[*]u8,
         };
+
         fileds[fieldsCount].default_value_ptr = null;
         fileds[fieldsCount].is_comptime = false;
-        fileds[fieldsCount].alignment = 0;
+        fileds[fieldsCount].alignment = switch (para.paramType) {
+            .BLOB => @alignOf(?BLOB),
+            .INTEGER => @alignOf(i64),
+            .INTEGER32 => @alignOf(i32),
+            .TEXT => @alignOf(?[*]u8),
+        };
         fieldsCount += 1;
         // @compileLog(std.fmt.comptimePrint("count {d}", .{fieldsCount}));
     }
@@ -634,22 +630,22 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                             //     ptr = @as(i32, sqlite.sqlite3_column_int(stmt, i));
                             // },
                             // => {
-                            const ptr = @as(*i64, @alignCast(@ptrCast(getValues[i])));
+                            const ptr = @as(*i64, @ptrCast(@alignCast(getValues[i])));
                             ptr.* = @as(i64, sqlite.sqlite3_column_int64(stmt, ii));
                         },
                         .INTEGER32 => {
-                            const ptr = @as(*i32, @alignCast(@ptrCast(getValues[i])));
+                            const ptr = @as(*i32, @ptrCast(@alignCast(getValues[i])));
                             ptr.* = @as(i32, sqlite.sqlite3_column_int(stmt, ii));
                         },
                         .TEXT => {
-                            const ptr = @as([*]u8, @alignCast(@ptrCast(getValues[i])));
+                            const ptr = @as([*]u8, @ptrCast(@alignCast(getValues[i])));
                             const str = sqlite.sqlite3_column_text(stmt, ii);
                             const len = sdl.SDL_strlen(str);
                             @memcpy(ptr, str[0..len]);
                             // std.log.info("ptr {s}", .{ptr[0..len]});
                         },
                         .BLOB => {
-                            const ptr = @as(*BLOBForGet, @alignCast(@ptrCast(getValues[i]))).*;
+                            const ptr = @as(*BLOBForGet, @ptrCast(@alignCast(getValues[i]))).*;
                             const str = @as([*]u8, @ptrCast(@constCast(sqlite.sqlite3_column_blob(stmt, ii).?)));
                             @memcpy(ptr.data, str[0..ptr.len]);
                         },
