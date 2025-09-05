@@ -10,9 +10,8 @@ const tables = @import("tables.zig");
 
 const ContentPath = tables.ContentPath;
 const ImageLoadParameter = tables.ImageLoadParameter;
-const ShaderLoadParameter = tables.ShaderLoadParameter;
 
-const tableNames = [_][]const u8{ "ImageLoadParameter", "ShaderLoadParameter" };
+const tableNames = [_][]const u8{"ImageLoadParameter"};
 
 const CreateTriggerContentPathOnInsertInsertIntoSubTable = tt: {
     var buffer = [_]u8{0} ** 10240;
@@ -22,17 +21,17 @@ const CreateTriggerContentPathOnInsertInsertIntoSubTable = tt: {
 
     for (@typeInfo(FileType).@"enum".fields) |field| {
         switch (@as(FileType, @enumFromInt(field.value))) {
-            .SPV => {
-                count += writer.write(std.fmt.comptimePrint(
-                    "CREATE TRIGGER IF NOT EXISTS insertInto{s} AFTER INSERT ON ContentPath " ++
-                        " FOR EACH ROW WHEN NEW.FileType={d} BEGIN INSERT INTO ShaderLoadParameter (FileName,ContentHash,RelativePath,FileSize,FileID) VALUES " ++
-                        "(NEW.FileName,NEW.ContentHash,NEW.RelativePath,NEW.FileSize,NEW.ID) ON CONFLICT(FileName,ContentHash) DO UPDATE SET " ++
-                        "FileID = NEW.ID, FileName = NEW.FileName, ContentHash = NEW.ContentHash, RelativePath = NEW.RelativePath, FileSize = NEW.FileSize; END;",
-                    .{ tableNames[1], field.value },
-                )) catch |err| {
-                    @compileError(std.fmt.comptimePrint("{s}", .{@errorName(err)}));
-                };
-            },
+            // .SPV => {
+            //     count += writer.write(std.fmt.comptimePrint(
+            //         "CREATE TRIGGER IF NOT EXISTS insertInto{s} AFTER INSERT ON ContentPath " ++
+            //             " FOR EACH ROW WHEN NEW.FileType={d} BEGIN INSERT INTO ShaderLoadParameter (FileName,ContentHash,RelativePath,FileSize,FileID) VALUES " ++
+            //             "(NEW.FileName,NEW.ContentHash,NEW.RelativePath,NEW.FileSize,NEW.ID) ON CONFLICT(FileName,ContentHash) DO UPDATE SET " ++
+            //             "FileID = NEW.ID, FileName = NEW.FileName, ContentHash = NEW.ContentHash, RelativePath = NEW.RelativePath, FileSize = NEW.FileSize; END;",
+            //         .{ tableNames[1], field.value },
+            //     )) catch |err| {
+            //         @compileError(std.fmt.comptimePrint("{s}", .{@errorName(err)}));
+            //     };
+            // },
             .PNG => {
                 count += writer.write(std.fmt.comptimePrint(
                     "CREATE TRIGGER IF NOT EXISTS insertInto{s} AFTER INSERT ON ContentPath " ++
@@ -197,46 +196,10 @@ fn executeSQL(SQL: []const u8, db: *sqlite.sqlite3) void {
 }
 
 fn updateLoadParameter(tp: FileType, cc: std.fs.File.Stat, content: []const u8, fileName: []const u8) !void {
+    _ = cc;
+    _ = content;
+    _ = fileName;
     switch (tp) {
-        .SPV => {
-            const res = try reflect.reflect(gpa, cc, content);
-            defer res.deinit(gpa);
-
-            if (res.bindings != null) {
-                const blob = sqlDB.BLOB{
-                    .data = @ptrCast(res.bindings.?.ptr),
-                    .len = @intCast(@sizeOf(reflect.binding) * res.bindingCount),
-                };
-                try ShaderLoadParameterT.update(
-                    "EntryName,Stage,SetCount,BindingCount,Bindings,PushConstantSize",
-                    "FileName = ?",
-                    .{
-                        res.name,
-                        res.stage,
-                        res.setCount,
-                        res.bindingCount,
-                        blob,
-                        res.pushConstantSize,
-                        fileName,
-                    },
-                );
-            } else {
-                const blob: ?sqlDB.BLOB = null;
-                try ShaderLoadParameterT.update(
-                    "EntryName,Stage,SetCount,BindingCount,Bindings,PushConstantSize",
-                    "FileName = ?",
-                    .{
-                        res.name,
-                        res.stage,
-                        res.setCount,
-                        res.bindingCount,
-                        blob,
-                        res.pushConstantSize,
-                        fileName,
-                    },
-                );
-            }
-        },
         else => {},
     }
 }
@@ -441,7 +404,6 @@ fn iterateFolderUpdate(dir: std.fs.Dir, dirName: []const u8, parentID: []const u
 
 var ContentPathT: ContentPath = undefined;
 var ImageLoadParameterT: ImageLoadParameter = undefined;
-var ShaderLoadParameterT: ShaderLoadParameter = undefined;
 
 var gpa: std.mem.Allocator = undefined;
 var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
@@ -492,8 +454,6 @@ pub fn main() !void {
     try ContentPathT.createTable();
     ImageLoadParameterT = ImageLoadParameter.init(db.?);
     try ImageLoadParameterT.createTable();
-    ShaderLoadParameterT = ShaderLoadParameter.init(db.?);
-    try ShaderLoadParameterT.createTable();
     executeSQL(createUniqueIndexFileNameAndContentHash, db.?);
     executeSQL(createTriggerOnInsertContentPathCheckContentHash, db.?);
     executeSQL(CreateTriggerContentPathOnInsertInsertIntoSubTable, db.?);

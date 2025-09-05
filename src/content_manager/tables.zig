@@ -10,10 +10,10 @@ pub const ImageLoadParameter = sqlDB.Table(
     "ImageLoadParameter",
     false,
 );
-pub const ShaderLoadParameter = sqlDB.Table(
-    "CREATE TABLE IF NOT EXISTS ShaderLoadParameter (FileName TEXT PRIMARY KEY, ContentHash BLOB UNIQUE, RelativePath TEXT UNIQUE, FileSize INTEGER" ++
-        ", EntryName TEXT, Stage INTEGER, SetCount INTEGER, BindingCount INTEGER, Bindings BLOB, PushConstantSize INTEGER" ++
-        ", FileID TEXT, FOREIGN KEY(FileID) REFERENCES ContentPath(ID) ON DELETE SET NULL ON UPDATE CASCADE);",
-    "ShaderLoadParameter",
-    false,
-);
+// pub const ShaderLoadParameter = sqlDB.Table(
+//     "CREATE TABLE IF NOT EXISTS ShaderLoadParameter (FileName TEXT PRIMARY KEY, ContentHash BLOB UNIQUE, RelativePath TEXT UNIQUE, FileSize INTEGER" ++
+//         ", EntryName TEXT, Stage INTEGER, SetCount INTEGER, BindingCount INTEGER, Bindings BLOB, PushConstantSize INTEGER" ++
+//         ", FileID TEXT, FOREIGN KEY(FileID) REFERENCES ContentPath(ID) ON DELETE SET NULL ON UPDATE CASCADE);",
+//     "ShaderLoadParameter",
+//     false,
+// );
