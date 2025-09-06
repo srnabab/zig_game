@@ -96,63 +96,6 @@ pub const PipelineShaderInfo = struct {
     }
 };
 
-// pub fn getShaderLoadParameter(name: []const u8, allocator: std.mem.Allocator, cwd: std.fs.Dir) !PipelineShaderInfo {
-//     const fileType = try getFileType(name);
-//     if (fileType == .SPV) {
-//         var res: PipelineShaderInfo = undefined;
-//         @memset(res.entryName[0..64], 0);
-//         var path = [_:0]u8{0} ** 256;
-//         var ptrs: [7]*anyopaque = undefined;
-//         ptrs[0] = @ptrCast(&path);
-//         ptrs[1] = @ptrCast(&res.fileSize);
-//         ptrs[2] = @ptrCast(&res.entryName);
-//         ptrs[3] = @ptrCast(&res.stage);
-//         ptrs[4] = @ptrCast(&res.bindingCount);
-//         ptrs[5] = @ptrCast(&res.pushConstantSize);
-//         ptrs[6] = @ptrCast(&res.setCount);
-
-//         var types = [_]sqlDB.innerType{ .TEXT, .INTEGER, .TEXT, .INTEGER32, .INTEGER32, .INTEGER, .INTEGER32 };
-
-//         try ShaderLoadParameterT.get(
-//             "RelativePath,FileSize,EntryName,Stage,BindingCount,PushConstantSize,SetCount",
-//             "FileName = ?",
-//             .{name},
-//             &ptrs,
-//             &types,
-//         );
-
-//         if (res.bindingCount > 0) {
-//             res.bindings = try allocator.alloc(PipelineShaderInfo.binding, res.bindingCount);
-//             var blob = sqlDB.BLOBForGet{
-//                 .data = @ptrCast(res.bindings.?.ptr),
-//                 .len = @sizeOf(PipelineShaderInfo.binding) * res.bindings.?.len,
-//             };
-//             var pptrs: [1]*anyopaque = undefined;
-//             pptrs[0] = @ptrCast(&blob);
-//             var typess = [_]sqlDB.innerType{.BLOB};
-
-//             try ShaderLoadParameterT.get("Bindings", "FileName = ?", .{name}, &pptrs, &typess);
-//         } else {
-//             res.bindings = null;
-//         }
-
-//         const ptr = @as([*c]u8, path[0..256]);
-//         const len = std.mem.len(ptr);
-
-//         return PipelineShaderInfo{
-//             .fileSize = res.fileSize,
-//             .entryName = res.entryName,
-//             .stage = res.stage,
-//             .setCount = res.setCount,
-//             .bindingCount = res.bindingCount,
-//             .bindings = res.bindings,
-//             .pushConstantSize = res.pushConstantSize,
-//             .file = try cwd.openFile(path[0..len], .{}),
-//         };
-//     }
-//     return error.NotShader;
-// }
-
 pub fn deinit() void {
     _ = sqlite.sqlite3_close(db.?);
 }

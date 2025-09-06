@@ -145,33 +145,35 @@ pub const setLayoutLimit = s.setLayoutLimit;
 //     return try global.vulkan.createPipelineLayout(createInfo);
 // }//
 
-pub fn toVulkan(partialFillInfo: *VulkanPipelineInfo, allocator: std.mem.Allocator) !void {
-    _ = allocator;
-    // var shaderInfos = try getPipelineShaderInfos(
-    //     partialFillInfo.shaderName,
-    //     partialFillInfo.shaderStageCount,
-    //     allocator,
-    // );
-    // defer for (0..shaderInfos.len) |i| {
-    //     shaderInfos[i].deinit(allocator);
-    // };
-    // try createShaderStageCreateInfo(shaderInfos, partialFillInfo.shaderName, partialFillInfo, allocator);
-
-    // try createPipelineLayoutCreateInfo(shaderInfos, partialFillInfo);
-    // partialFillInfo.pipelineLayout = try createPipelineLayout(partialFillInfo);
-    // a
-
-    partialFillInfo.vertexInputInfo.createInfo.pVertexAttributeDescriptions = @ptrCast(&partialFillInfo.vertexInputInfo.attributes);
-    partialFillInfo.vertexInputInfo.createInfo.pVertexBindingDescriptions = @ptrCast(&partialFillInfo.vertexInputInfo.bindings);
-
-    partialFillInfo.viewportInfo.info.pScissors = @ptrCast(&partialFillInfo.viewportInfo.scissors);
-    partialFillInfo.viewportInfo.info.pViewports = @ptrCast(&partialFillInfo.viewportInfo.viewports);
-
-    partialFillInfo.colorBlendInfo.createInfo.pAttachments = @ptrCast(&partialFillInfo.colorBlendInfo.attachments);
-
-    partialFillInfo.dynamicStateInfo.createInfo.pDynamicStates = @ptrCast(&partialFillInfo.dynamicStateInfo.states);
-
-    if (partialFillInfo.hasRendering) {
-        partialFillInfo.renderingInfo.info.pColorAttachmentFormats = @ptrCast(&partialFillInfo.renderingInfo.colorAttachment);
+fn haveBindless(flags: []u32) bool {
+    for (flags) |fs| {
+        if (fs != 0) return true;
     }
+    return false;
+}
+pub fn toVulkan(partialFillInfo: *VulkanPipelineInfo, shaderCodes: [5][]u8) !void {
+    for (0..partialFillInfo.shaderStageCount) |i| {
+        const pEntryName = try global.vulkan.collectEntryName(&partialFillInfo.entryNames[i]);
+        std.log.debug("entry name {s} outer", .{pEntryName.*});
+        partialFillInfo.shaderStageCreateInfo[i].pName = @ptrCast(pEntryName.ptr);
+        partialFillInfo.shaderStageCreateInfo[i].module = try global.vulkan.createShaderModule(shaderCodes[i], &partialFillInfo.shaderName[i]);
+    }
+    for (0..partialFillInfo.descriptorSetLayouts.setLayoutCount) |i| {
+        if (haveBindless(&partialFillInfo.descriptorSetLayouts.bindingFlags[i])) {
+            partialFillInfo.descriptorSetLayouts.bindingFlagInfo[i] = vk.VkDescriptorSetLayoutBindingFlagsCreateInfo{
+                .sType = vk.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+                .bindingCount = partialFillInfo.descriptorSetLayouts.setLayoutCreateInfos[i].bindingCount,
+                .pBindingFlags = @ptrCast(&partialFillInfo.descriptorSetLayouts.bindingFlags[i]),
+                .pNext = null,
+            };
+            partialFillInfo.descriptorSetLayouts.setLayoutCreateInfos[i].pNext = @ptrCast(&partialFillInfo.descriptorSetLayouts.bindingFlagInfo[i]);
+        } else {
+            partialFillInfo.descriptorSetLayouts.setLayoutCreateInfos[i].pNext = null;
+        }
+        partialFillInfo.descriptorSetLayouts.setLayoutCreateInfos[i].pBindings = @ptrCast(&partialFillInfo.descriptorSetLayouts.setLayoutBinding[i]);
+        partialFillInfo.descriptorSetLayouts.setLayouts[i] = try global.vulkan.createDescriptorSetLayout(partialFillInfo.descriptorSetLayouts.setLayoutCreateInfos[i]);
+    }
+    partialFillInfo.pipelineLayout.info.pPushConstantRanges = @ptrCast(&partialFillInfo.descriptorSetLayouts.pushConstants);
+    partialFillInfo.pipelineLayout.info.pSetLayouts = @ptrCast(&partialFillInfo.descriptorSetLayouts.setLayouts);
+    partialFillInfo.pipelineLayout.layout = try global.vulkan.createPipelineLayout(partialFillInfo.pipelineLayout.info);
 }

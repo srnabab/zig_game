@@ -50,6 +50,7 @@ pub fn build(b: *std.Build) void {
     pipelineJsonParse_mod.addIncludePath(b.path("include"));
     pipelineJsonParse_mod.addImport("vulkan", vk_mod);
     pipelineJsonParse_mod.addImport("reflect", spReflectModule);
+    pipelineJsonParse_mod.addImport("enumFromC", enum_c_mod);
 
     const pipelineJsonParse_exe = b.addExecutable(.{
         .name = "pipelineJsonParse",

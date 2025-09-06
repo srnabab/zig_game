@@ -18,13 +18,13 @@ const render = @import("render.zig");
 const video = @import("video");
 
 const file = @import("fileSystem");
-// const pipeline = @import("video/pipeline/pipeline.zig");
 const translate = @import("translate");
 
 const gpaType = @TypeOf(std.heap.GeneralPurposeAllocator(.{}).init);
 const Allocator = std.mem.Allocator;
 
 const global = @import("global");
+const assert = std.debug.assert;
 
 var thread_count: usize = 0;
 var update_thread: usize = 0;
@@ -72,12 +72,28 @@ pub fn main() !void {
     const start1 = std.time.nanoTimestamp();
     var pFile = try file.getFile("model3d.pipeb");
     defer pFile.close();
+    const fileSize = (try pFile.stat()).size;
+    var fileContent = try gpa.alloc(u8, fileSize);
+    defer gpa.free(fileContent);
+    _ = try pFile.readAll(fileContent);
 
-    var content = [_]u8{0} ** @sizeOf(translate.VulkanPipelineInfo);
-    _ = try pFile.readAll(&content);
-    const pipelineInfo: *translate.VulkanPipelineInfo = @alignCast(std.mem.bytesAsValue(translate.VulkanPipelineInfo, &content));
+    var shaderCodes: [5][]u8 = undefined;
+    var pos: u64 = 0;
 
-    try translate.toVulkan(pipelineInfo, global.gpa);
+    const pipelineInfo: *translate.VulkanPipelineInfo = @alignCast(std.mem.bytesAsValue(
+        translate.VulkanPipelineInfo,
+        fileContent[0..@sizeOf(translate.VulkanPipelineInfo)],
+    ));
+    pos += @sizeOf(translate.VulkanPipelineInfo);
+    for (0..5) |i| {
+        if (pos >= fileSize) break;
+
+        const len = std.mem.bytesToValue(usize, fileContent[pos .. pos + 8]);
+        pos += 8;
+        shaderCodes[i] = fileContent[pos .. pos + len];
+        pos += len;
+    }
+    try translate.toVulkan(pipelineInfo, shaderCodes);
     const end1 = std.time.nanoTimestamp();
     std.log.info("time 1(parse pipeline json) {d}", .{end1 - start1});
 
@@ -85,9 +101,11 @@ pub fn main() !void {
     try vulkan.addPipelineCreateInfo(pipelineInfo);
     const end3 = std.time.nanoTimestamp();
     std.log.info("time 3(add pipeline info) {d}", .{end3 - start3});
-    std.log.info("all {d}", .{end3 - start1});
 
+    const start4 = std.time.nanoTimestamp();
     try vulkan.createAllPipelinesAdded();
+    const end4 = std.time.nanoTimestamp();
+    std.log.info("time 4(add pipeline info) {d}", .{end4 - start4});
 
     // @breakpoint();
     std.process.exit(0);

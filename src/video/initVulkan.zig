@@ -614,6 +614,7 @@ pub const VkStruct = struct {
         const name = try self.allocator.alloc(u8, len);
         @memcpy(name, entryName[0..len]);
         const res = try self.entryNames.getOrPutValue(name, void{});
+        std.log.debug("entry name {s}", .{res.key_ptr.*});
         // @breakpoint();
         return res.key_ptr;
     }
@@ -678,6 +679,21 @@ pub const VkStruct = struct {
         }
         var tempInfo = [1]VulkanPipelineInfo{info.*};
         @memcpy(self.preGraphicInfoPtrs[self.graphicInfoCount .. self.graphicInfoCount + 1], tempInfo[0..1]);
+
+        self.preGraphicInfoPtrs[self.graphicInfoCount].vertexInputInfo.createInfo.pVertexAttributeDescriptions = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].vertexInputInfo.attributes);
+        self.preGraphicInfoPtrs[self.graphicInfoCount].vertexInputInfo.createInfo.pVertexBindingDescriptions = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].vertexInputInfo.bindings);
+
+        self.preGraphicInfoPtrs[self.graphicInfoCount].viewportInfo.info.pScissors = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].viewportInfo.scissors);
+        self.preGraphicInfoPtrs[self.graphicInfoCount].viewportInfo.info.pViewports = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].viewportInfo.viewports);
+
+        self.preGraphicInfoPtrs[self.graphicInfoCount].colorBlendInfo.createInfo.pAttachments = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].colorBlendInfo.attachments);
+
+        self.preGraphicInfoPtrs[self.graphicInfoCount].dynamicStateInfo.createInfo.pDynamicStates = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].dynamicStateInfo.states);
+
+        if (self.preGraphicInfoPtrs[self.graphicInfoCount].hasRendering) {
+            self.preGraphicInfoPtrs[self.graphicInfoCount].renderingInfo.info.pColorAttachmentFormats = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].renderingInfo.colorAttachment);
+        }
+
         self.graphicPipelineCreateInfo[self.graphicInfoCount] = vk.VkGraphicsPipelineCreateInfo{
             .sType = vk.VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
             .pNext = pn: {

@@ -92,16 +92,16 @@ fn getPipelineShaderInfos(shaders: [5][]const u8, count: u32, shaderFolder: []co
 
 fn createShaderStageCreateInfo(
     shaderInfos: []PipelineShaderInfo,
-    shaderNames: [5][]const u8,
     pipeRes: *VulkanPipelineInfo,
 ) !void {
     const res = &pipeRes.shaderStageCreateInfo;
+    const names = &pipeRes.entryNames;
     const count = &pipeRes.shaderStageCount;
     count.* = 0;
 
     for (shaderInfos, 0..) |info, i| {
         {
-            res.*[i].info = vk.VkPipelineShaderStageCreateInfo{
+            res.*[i] = vk.VkPipelineShaderStageCreateInfo{
                 .sType = vk.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
                 .pNext = null,
                 .flags = 0,
@@ -110,7 +110,7 @@ fn createShaderStageCreateInfo(
                 .module = null,
                 .pSpecializationInfo = null,
             };
-            std.mem.copyForwards(u8, &res.*[i].entryName, shaderNames[i]);
+            std.mem.copyForwards(u8, &names.*[i], &shaderInfos[i].entryName);
             count.* += 1;
         }
     }
@@ -173,17 +173,16 @@ fn createPipelineLayoutCreateInfo(shaderInfos: []PipelineShaderInfo, pipeRes: *V
         }
     }
     for (0..setCount) |i| {
-        var createInfo: vk.VkDescriptorSetLayoutCreateInfo = undefined;
-        createInfo.sType = vk.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-
-        if (bindless[i]) {
-            createInfo.flags = vk.VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
-        } else {
-            createInfo.flags = 0;
-        }
-        createInfo.pNext = null;
-        createInfo.bindingCount = bindingCount[i];
-        createInfo.pBindings = null;
+        pipeRes.descriptorSetLayouts.setLayoutCreateInfos[i] = vk.VkDescriptorSetLayoutCreateInfo{
+            .sType = vk.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+            .flags = if (bindless[i])
+                vk.VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT
+            else
+                0,
+            .pNext = null,
+            .bindingCount = bindingCount[i],
+            .pBindings = null,
+        };
 
         descriptorSetLayouts.*[i] = null;
     }
@@ -196,9 +195,9 @@ fn createPipelineLayout(pipeRes: *VulkanPipelineInfo) !void {
         .pNext = null,
         .flags = 0,
         .setLayoutCount = pipeRes.descriptorSetLayouts.setLayoutCount,
-        .pSetLayouts = @ptrCast(&pipeRes.descriptorSetLayouts.setLayouts),
+        .pSetLayouts = null,
         .pushConstantRangeCount = pipeRes.descriptorSetLayouts.pushConstantCount,
-        .pPushConstantRanges = @ptrCast(&pipeRes.descriptorSetLayouts.pushConstants),
+        .pPushConstantRanges = null,
     };
     pipeRes.pipelineLayout.layout = null;
 }
@@ -229,7 +228,8 @@ pub fn toVulkan2(info: *pipeline.pipelineInfo, shaderFolder: []const u8, allocat
         codes[i] = shaderInfos[i].shaderCode;
     }
 
-    try createShaderStageCreateInfo(shaderInfos, info.shaders, res);
+    try createShaderStageCreateInfo(shaderInfos, res);
+    try createPipelineLayoutCreateInfo(shaderInfos, res);
     try createPipelineLayout(res);
 
     s.createVertexInputInfo(&info.vertexInputstatee, res);
