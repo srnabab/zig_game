@@ -3,6 +3,10 @@ const sqlite = sqlDB.sqlite;
 const std = @import("std");
 const assert = std.debug.assert;
 const tables = @import("tables");
+const fileNameID = @import("fileNameID.zig");
+
+pub const comptimeGetID = fileNameID.comptimeGetID;
+pub const getID = fileNameID.getID;
 
 const ContentPath = tables.ContentPath;
 const ImageLoadParameter = tables.ImageLoadParameter;
@@ -11,15 +15,15 @@ var db: ?*sqlite.sqlite3 = null;
 var ContentPathT: ContentPath = undefined;
 var ImageLoadParameterT: ImageLoadParameter = undefined;
 
-fn getRelativePath(fileName: []const u8, result: []u8) !void {
+fn getRelativePath(id: i64, result: []u8) !void {
     var ptrs: [1]*anyopaque = undefined;
     ptrs[0] = @ptrCast(result.ptr);
 
     var types = [_]sqlDB.innerType{.TEXT};
     // std.log.info("{*} {d}", .{ fileName.ptr, fileName.len });
 
-    ContentPathT.get("RelativePath", null, "FileName = ?", .{fileName}, &ptrs, &types) catch |err| {
-        std.log.err("err {s} {s} fileName:{s}", .{ @errorName(err), result, fileName });
+    ContentPathT.get("RelativePath", null, "ID = ?", .{id}, &ptrs, &types) catch |err| {
+        std.log.err("err {s} {s} ID{d} ", .{ @errorName(err), result, id });
     };
 }
 
@@ -31,12 +35,14 @@ pub fn init(databaseName: []const u8) void {
     ImageLoadParameterT = ImageLoadParameter.init(db.?);
 }
 
-pub fn getFile(fileName: []const u8, cwd: std.fs.Dir) !std.fs.File {
+pub fn getFile(id: i64, cwd: std.fs.Dir) !std.fs.File {
     var buffer = [_]u8{0} ** 256;
 
-    try getRelativePath(fileName, &buffer);
+    try getRelativePath(id, &buffer);
     const ptr = @as([*c]u8, buffer[0..256]);
     const len = std.mem.len(ptr);
+
+    std.log.debug("{s}", .{buffer[0..len]});
 
     return cwd.openFile(buffer[0..len], .{});
 }

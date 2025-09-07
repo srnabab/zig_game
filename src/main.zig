@@ -70,7 +70,7 @@ pub fn main() !void {
     global.vulkan = vulkan;
 
     const start1 = std.time.nanoTimestamp();
-    var pFile = try file.getFile("model3d.pipeb");
+    var pFile = try file.getFile(file.comptimeGetID("model3d.pipeb"));
     defer pFile.close();
     const fileSize = (try pFile.stat()).size;
     var fileContent = try gpa.alloc(u8, fileSize);

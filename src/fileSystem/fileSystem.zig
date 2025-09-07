@@ -10,9 +10,12 @@ pub fn init() void {
     base.init(global.databaseName);
 }
 
-pub fn getFile(fileName: []const u8) !std.fs.File {
-    return base.getFile(fileName, global.cwd);
+pub fn getFile(id: i64) !std.fs.File {
+    return base.getFile(id, global.cwd);
 }
+
+pub const comptimeGetID = base.comptimeGetID;
+pub const getID = base.getID;
 
 const FileType = base.FileType;
 

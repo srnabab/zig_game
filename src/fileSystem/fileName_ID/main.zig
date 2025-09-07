@@ -48,14 +48,11 @@ pub fn main() !void {
 
     var root: [256:0]u8 = undefined;
 
-    const realPath = it.next();
+    const realPath = it.next().?;
+    const outputPath = it.next().?;
     @memset(root[0..root.len], 0);
 
-    if (realPath) |rootPath| {
-        std.mem.copyForwards(u8, &root, rootPath);
-    } else {
-        std.mem.copyForwards(u8, &root, rootExe);
-    }
+    std.mem.copyForwards(u8, &root, realPath);
 
     const index = std.mem.lastIndexOf(u8, &root, slash) orelse 0;
     @memset(root[index..root.len], 0);
@@ -87,8 +84,36 @@ pub fn main() !void {
 
     try ContentPathT.gets("ID,FileName", null, null, .{}, ptrs[0..kvs.len], &types);
 
+    // for (kvs) |value| {
+    //     if (value.ID == -1) break;
+    //     std.log.debug("{s} {d}", .{ value.fileName, value.ID });
+    // }
+
+    const file = try std.fs.createFileAbsolute(outputPath, .{});
+    defer file.close();
+
+    var buffer = [_]u8{0} ** 102400;
+    const content = "const std = @import(\"std\");\n\nconst FileNameIdHashMap = map: {\nconst KV = struct {\n[]const u8,i64,\n};\nconst list = [_]KV{\n";
+    var stream = std.io.fixedBufferStream(&buffer);
+    var writer = stream.writer();
+    _ = try writer.write(content);
     for (kvs) |value| {
+        var sBuffer = [_]u8{0} ** 256;
         if (value.ID == -1) break;
-        std.log.debug("{s} {d}", .{ value.fileName, value.ID });
+        const cPtr = @as([*c]u8, @constCast(&value.fileName));
+        const nameLen = std.mem.len(cPtr);
+        const cc = try std.fmt.bufPrint(&sBuffer, ".{{ \"{s}\", {d} }},\n", .{ value.fileName[0..nameLen], value.ID });
+
+        _ = try writer.write(cc);
     }
+    const end = "};\n\nbreak: map std.StaticStringMap(i64).initComptime(list);\n};\n";
+    _ = try writer.write(end);
+
+    const func = " \n\n\npub fn comptimeGetID(comptime fileName: []const u8) i64 {" ++ "return comptime FileNameIdHashMap.get(fileName) orelse std.debug.panic(\"ilegal name\", .{{}});}\n\n" ++ "pub fn getID(fileName: []const u8) i64 {" ++ "    return FileNameIdHashMap.get(fileName) orelse std.debug.panic(\"ilegal name\", .{{}}); }";
+    _ = try writer.write(func);
+
+    const cPtr = @as([*c]u8, &buffer);
+    const nameLen = std.mem.len(cPtr);
+
+    _ = try file.write(buffer[0..nameLen]);
 }

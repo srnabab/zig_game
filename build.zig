@@ -132,11 +132,14 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(genFileNameIDexe);
 
+    const root_path = b.build_root.path orelse "";
+
     const runGenFileNameIdExe = b.step("create hash map", "create filename id static string hash map");
     const runGenFileNameIdExe_cmd = b.addRunArtifact(genFileNameIDexe);
     runGenFileNameIdExe.dependOn(&runGenFileNameIdExe_cmd.step);
     runGenFileNameIdExe_cmd.step.dependOn(runContenManager);
     runGenFileNameIdExe_cmd.addArg(b.getInstallPath(.bin, "genFileNameIdHashMap"));
+    runGenFileNameIdExe_cmd.addArg(b.fmt("{s}/{s}", .{ root_path, "src/fileSystem/fileNameID.zig" }));
 
     const ecs_mod = b.createModule(.{
         .root_source_file = b.path("src/ecs/ecs.zig"),
@@ -176,7 +179,6 @@ pub fn build(b: *std.Build) void {
     run_gen_exe.step.dependOn(&gen_exe.step);
 
     // const gen_file = run_gen_exe.addOutputFileArg("resultToError.zig");
-    const root_path = b.build_root.path orelse "";
     const gen_file_path = b.fmt("{s}/{s}", .{ root_path, "src/video/resultToError.zig" });
     run_gen_exe.addArg(b.fmt("{s}", .{gen_file_path}));
 
