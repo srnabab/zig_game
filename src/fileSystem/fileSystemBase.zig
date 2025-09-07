@@ -28,8 +28,22 @@ fn getRelativePath(id: i64, result: []u8) !void {
 }
 
 pub fn init(databaseName: []const u8) void {
-    const res = sqlite.sqlite3_open(@ptrCast(databaseName.ptr), @ptrCast(&db));
+    var disk_db: ?*sqlite.sqlite3 = null;
+    var backup: ?*sqlite.sqlite3_backup = null;
+
+    var res = sqlite.sqlite3_open(@ptrCast(databaseName.ptr), @ptrCast(&disk_db));
+    defer _ = sqlite.sqlite3_close(disk_db);
     assert(res == sqlite.SQLITE_OK);
+
+    res = sqlite.sqlite3_open(":memory:", @ptrCast(&db));
+    assert(res == sqlite.SQLITE_OK);
+
+    backup = sqlite.sqlite3_backup_init(db, "main", disk_db, "main");
+    assert(backup != null);
+
+    res = sqlite.sqlite3_backup_step(backup, -1);
+    defer _ = sqlite.sqlite3_backup_finish(backup);
+    assert(res == sqlite.SQLITE_DONE);
 
     ContentPathT = ContentPath.init(db.?);
     ImageLoadParameterT = ImageLoadParameter.init(db.?);
@@ -102,6 +116,20 @@ pub const PipelineShaderInfo = struct {
     }
 };
 
-pub fn deinit() void {
+pub fn deinit(databaseName: []const u8) void {
+    var disk_db: ?*sqlite.sqlite3 = null;
+    var backup: ?*sqlite.sqlite3_backup = null;
+
+    var res = sqlite.sqlite3_open(@ptrCast(databaseName.ptr), @ptrCast(&disk_db));
+    defer _ = sqlite.sqlite3_close(disk_db);
+    assert(res == sqlite.SQLITE_OK);
+
+    backup = sqlite.sqlite3_backup_init(disk_db, "main", db, "main");
+    assert(backup != null);
+
+    res = sqlite.sqlite3_backup_step(backup, -1);
+    defer _ = sqlite.sqlite3_backup_finish(backup);
+    assert(res == sqlite.SQLITE_DONE);
+
     _ = sqlite.sqlite3_close(db.?);
 }

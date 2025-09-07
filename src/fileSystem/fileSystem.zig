@@ -32,5 +32,5 @@ pub fn getShaderLoadParameter(name: []const u8) !PipelineShaderInfo {
 }
 
 pub fn deinit() void {
-    base.deinit();
+    base.deinit(global.databaseName);
 }
