@@ -6,7 +6,7 @@ const builtin = @import("builtin");
 const UUID = @import("UUID.zig");
 const hash = @import("blake_hash.zig");
 const reflect = @import("reflect");
-const tables = @import("tables.zig");
+const tables = @import("tables");
 
 const ContentPath = tables.ContentPath;
 const ImageLoadParameter = tables.ImageLoadParameter;
@@ -249,7 +249,7 @@ fn processFile(
     pathModifiedTime: i64,
 ) !void {
     const time: i64 = @truncate(std.time.nanoTimestamp());
-    std.log.debug("time {d} {s}", .{ time, name });
+    // std.log.debug("time {d} {s}", .{ time, name });
     var tempFile = try dir.openFile(name, .{});
     defer tempFile.close();
 
@@ -353,7 +353,7 @@ fn processDirectory(
     pathModifiedTime: i64,
 ) anyerror!void {
     const time: i64 = @truncate(std.time.nanoTimestamp());
-    std.log.debug("time {d} {s}", .{ time, name });
+    // std.log.debug("time {d} {s}", .{ time, name });
     var tempDir = try dir.openDir(name, .{ .iterate = true });
     defer tempDir.close();
 
@@ -447,7 +447,7 @@ pub fn main() !void {
     defer it.deinit();
 
     const rootExe = it.next().?;
-    std.log.info("exe: {s}", .{rootExe});
+    // std.log.info("exe: {s}", .{rootExe});
 
     var root: [256:0]u8 = undefined;
 
@@ -463,7 +463,7 @@ pub fn main() !void {
     const index = std.mem.lastIndexOf(u8, &root, slash) orelse 0;
     @memset(root[index..root.len], 0);
 
-    std.log.info("path: {s}", .{root});
+    // std.log.info("path: {s}", .{root});
 
     var cwd = try std.fs.openDirAbsolute(&root, .{});
     try cwd.setAsCwd();
@@ -490,7 +490,7 @@ pub fn main() !void {
 
     var buffer = [_]u8{0} ** UUID.len;
     const time: i64 = @truncate(std.time.nanoTimestamp());
-    std.log.debug("time {d}", .{time});
+    // std.log.debug("time {d}", .{time});
 
     if (exist) {
         const cc = try content.stat();

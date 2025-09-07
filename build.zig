@@ -68,6 +68,13 @@ pub fn build(b: *std.Build) void {
     sqliteModule.addCSourceFile(.{ .file = b.path("src/sqlite3/sqlite3.c"), .language = .c });
     sqliteModule.addIncludePath(b.path("include"));
 
+    const tables_mod = b.createModule(.{
+        .root_source_file = b.path("src/tables.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    tables_mod.addImport("sqlDb", sqliteModule);
+
     const contentManagerModule = b.createModule(.{
         .root_source_file = b.path("src/content_manager/main.zig"),
         .target = target,
@@ -77,6 +84,7 @@ pub fn build(b: *std.Build) void {
 
     contentManagerModule.addImport("reflect", spReflectModule);
     contentManagerModule.addImport("sqlDb", sqliteModule);
+    contentManagerModule.addImport("tables", tables_mod);
     contentManagerModule.addIncludePath(b.path("include"));
     contentManagerModule.addIncludePath(b.path("../../../../msys64/mingw64/include/"));
     contentManagerModule.addLibraryPath(b.path("lib/"));
@@ -109,6 +117,26 @@ pub fn build(b: *std.Build) void {
     const runContenManager_cmd = b.addRunArtifact(contenManager);
     runContenManager.dependOn(&runContenManager_cmd.step);
     runContenManager_cmd.addArg(b.getInstallPath(.bin, "ContentManager"));
+
+    const gen_fileName_ID_mod = b.createModule(.{
+        .root_source_file = b.path("src/fileSystem/fileName_ID/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    gen_fileName_ID_mod.addImport("sqlDb", sqliteModule);
+    gen_fileName_ID_mod.addImport("tables", tables_mod);
+
+    const genFileNameIDexe = b.addExecutable(.{
+        .root_module = gen_fileName_ID_mod,
+        .name = "genFileNameIdHashMap",
+    });
+    b.installArtifact(genFileNameIDexe);
+
+    const runGenFileNameIdExe = b.step("create hash map", "create filename id static string hash map");
+    const runGenFileNameIdExe_cmd = b.addRunArtifact(genFileNameIDexe);
+    runGenFileNameIdExe.dependOn(&runGenFileNameIdExe_cmd.step);
+    runGenFileNameIdExe_cmd.step.dependOn(runContenManager);
+    runGenFileNameIdExe_cmd.addArg(b.getInstallPath(.bin, "genFileNameIdHashMap"));
 
     const ecs_mod = b.createModule(.{
         .root_source_file = b.path("src/ecs/ecs.zig"),
@@ -198,13 +226,6 @@ pub fn build(b: *std.Build) void {
     });
     global_mod.addImport("video", video_mod);
 
-    const tables_mod = b.createModule(.{
-        .root_source_file = b.path("src/content_manager/tables.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    tables_mod.addImport("sqlDb", sqliteModule);
-
     const fileSystem_mod = b.createModule(.{
         .root_source_file = b.path("src/fileSystem/fileSystem.zig"),
         .target = target,
@@ -233,6 +254,7 @@ pub fn build(b: *std.Build) void {
     });
     exe.step.dependOn(&run_gen_exe.step);
     exe.step.dependOn(runContenManager);
+    exe.step.dependOn(runGenFileNameIdExe);
 
     const cpp_compileFlag = [_][]const u8{ "-std=c++17", "-g" };
 

@@ -1,5 +1,4 @@
 pub const sqlite = @cImport(@cInclude("sqlite3/sqlite3.h"));
-const sdl = @cImport(@cInclude("SDL3/SDL.h"));
 const std = @import("std");
 
 var ID: u64 = 0;
@@ -651,7 +650,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                         .TEXT => {
                             const ptr = @as([*]u8, @ptrCast(@alignCast(getValues[i])));
                             const str = sqlite.sqlite3_column_text(stmt, ii);
-                            const len = sdl.SDL_strlen(str);
+                            const len = std.mem.len(str);
                             @memcpy(ptr, str[0..len]);
                             // std.log.info("ptr {s}", .{ptr[0..len]});
                         },
@@ -667,7 +666,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
             }
         }
 
-        pub fn gets(self: *Self, comptime targets: []const u8, comptime others: ?[]const u8, comptime constraint: []const u8, values: anytype, getValues: [][]*anyopaque, types: []innerType) sqliteError!void {
+        pub fn gets(self: *Self, comptime targets: []const u8, comptime others: ?[]const u8, comptime constraint: ?[]const u8, values: anytype, getValues: [][]*anyopaque, types: []innerType) sqliteError!void {
             if (getValues[0].len != types.len) {
                 return sqliteError.SQLError;
             }
@@ -683,10 +682,17 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
             @setEvalBranchQuota(2000000);
 
             const ssql = comptime ss: {
-                break :ss std.fmt.comptimePrint(
-                    "SELECT {s} FROM {s} {s} WHERE {s};",
-                    .{ targets, if (others != null) others.? else "", tableName, constraint },
-                );
+                if (constraint != null) {
+                    break :ss std.fmt.comptimePrint(
+                        "SELECT {s} FROM {s} {s} WHERE {s};",
+                        .{ targets, if (others != null) others.? else "", tableName, constraint.? },
+                    );
+                } else {
+                    break :ss std.fmt.comptimePrint(
+                        "SELECT {s} FROM {s} {s};",
+                        .{ targets, if (others != null) others.? else "", tableName },
+                    );
+                }
             };
             // std.log.info("{s}", .{ssql});
 
@@ -781,7 +787,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                 }
             }
 
-            const res = sqlite.sqlite3_step(stmt);
+            var res = sqlite.sqlite3_step(stmt);
             var count: u32 = 0;
 
             while (res == sqlite.SQLITE_ROW) {
@@ -804,7 +810,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                         .TEXT => {
                             const ptr = @as([*]u8, @ptrCast(@alignCast(getValues[count][i])));
                             const str = sqlite.sqlite3_column_text(stmt, ii);
-                            const len = sdl.SDL_strlen(str);
+                            const len = std.mem.len(str);
                             @memcpy(ptr, str[0..len]);
                             // std.log.info("ptr {s}", .{ptr[0..len]});
                         },
