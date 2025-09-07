@@ -10,7 +10,7 @@ pub fn createStaticStringMap(
     comptime prefix: [:0]const u8,
 ) std.StaticStringMap(tag_type) {
     return std.StaticStringMap(tag_type).initComptime(blk: {
-        var entries: [10000]struct { []const u8, vk.VkFormat } = undefined;
+        var entries: [10000]struct { []const u8, tag_type } = undefined;
         var count: u32 = 0;
 
         comptime var begin = false;

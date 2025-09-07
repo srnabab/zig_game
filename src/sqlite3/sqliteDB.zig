@@ -2,6 +2,13 @@ pub const sqlite = @cImport(@cInclude("sqlite3/sqlite3.h"));
 const sdl = @cImport(@cInclude("SDL3/SDL.h"));
 const std = @import("std");
 
+var ID: u64 = 0;
+
+pub fn getGlobalIncrementID() u64 {
+    defer ID += 1;
+    return ID;
+}
+
 pub const sqliteError = error{
     SQLError,
     StepError,
@@ -507,7 +514,8 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
             _ = sqlite.sqlite3_step(stmt);
         }
 
-        pub fn get(self: *Self, comptime targets: []const u8, comptime constraint: []const u8, values: anytype, getValues: []*anyopaque, types: []innerType) sqliteError!void {
+        /// SELECT [targets] FROM [Table] [others] WHERE [constraint]
+        pub fn get(self: *Self, comptime targets: []const u8, comptime others: ?[]const u8, comptime constraint: []const u8, values: anytype, getValues: []*anyopaque, types: []innerType) sqliteError!void {
             if (getValues.len != types.len) {
                 return sqliteError.SQLError;
             }
@@ -523,7 +531,10 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
             @setEvalBranchQuota(2000000);
 
             const ssql = comptime ss: {
-                break :ss std.fmt.comptimePrint("SELECT {s} FROM {s} WHERE {s};", .{ targets, tableName, constraint });
+                break :ss std.fmt.comptimePrint(
+                    "SELECT {s} FROM {s} {s} WHERE {s};",
+                    .{ targets, if (others != null) others.? else "", tableName, constraint },
+                );
             };
             // std.log.info("{s}", .{ssql});
 
@@ -652,6 +663,163 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                     }
                 }
             } else {
+                return sqliteError.StepError;
+            }
+        }
+
+        pub fn gets(self: *Self, comptime targets: []const u8, comptime others: ?[]const u8, comptime constraint: []const u8, values: anytype, getValues: [][]*anyopaque, types: []innerType) sqliteError!void {
+            if (getValues[0].len != types.len) {
+                return sqliteError.SQLError;
+            }
+
+            const ArgsType = @TypeOf(values);
+            const args_type_info = @typeInfo(ArgsType);
+            if (args_type_info != .@"struct") {
+                @compileError("expected tuple or struct argument, found " ++ @typeName(ArgsType));
+            }
+
+            const fields_info = args_type_info.@"struct".fields;
+
+            @setEvalBranchQuota(2000000);
+
+            const ssql = comptime ss: {
+                break :ss std.fmt.comptimePrint(
+                    "SELECT {s} FROM {s} {s} WHERE {s};",
+                    .{ targets, if (others != null) others.? else "", tableName, constraint },
+                );
+            };
+            // std.log.info("{s}", .{ssql});
+
+            var stmt: ?*sqlite.sqlite3_stmt = null;
+            try prepare_v2(self.db, @ptrCast(ssql), -1, @ptrCast(&stmt), null);
+            defer _ = sqlite.sqlite3_finalize(stmt);
+
+            // std.log.info("fields len {d}", .{fields_info.len});
+            inline for (0..fields_info.len) |i| {
+                const ii: c_int = @intCast(i + 1);
+                // std.log.info("cast c_int {d}", .{ii});
+
+                switch (fields_info[i].type) {
+                    i64 => {
+                        _ = sqlite.sqlite3_bind_int64(stmt, ii, @field(values, fields_info[i].name));
+                    },
+                    i32 => {
+                        _ = sqlite.sqlite3_bind_int64(stmt, ii, @field(values, fields_info[i].name));
+                    },
+                    BLOB => {
+                        _ = sqlite.sqlite3_bind_blob(
+                            stmt,
+                            ii,
+                            @field(values, fields_info[i].name).data,
+                            @field(values, fields_info[i].name).len,
+                            sqlite.SQLITE_STATIC,
+                        );
+                    },
+                    [:0]u8, []const u8 => {
+                        const res = sqlite.sqlite3_bind_text(
+                            stmt,
+                            ii,
+                            @ptrCast(@field(values, fields_info[i].name).ptr),
+                            -1,
+                            sqlite.SQLITE_STATIC,
+                        );
+                        // sdl.SDL_Log(@ptrCast(@field(values, fields_info[i].name).ptr));
+                        // std.log.info("name {s}", .{@field(values, fields_info[i].name)});
+                        if (res != sqlite.SQLITE_OK) {
+                            std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
+                        }
+                    },
+                    *const []const u8 => {
+                        const res = sqlite.sqlite3_bind_text(
+                            stmt,
+                            ii,
+                            @ptrCast(@field(values, fields_info[i].name)),
+                            -1,
+                            sqlite.SQLITE_STATIC,
+                        );
+                        // std.log.info("name {s}", .{@field(values, fields_info[i].name)});
+                        if (res != sqlite.SQLITE_OK) {
+                            std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
+                        }
+                    },
+                    else => {
+                        const yes: bool = comptime l: {
+                            break :l isCompileTimeString(fields_info[i].type);
+                        };
+                        const slice = comptime lc: {
+                            break :lc isFixedLengthSlice(fields_info[i].type);
+                        };
+                        if (yes) {
+                            const res = sqlite.sqlite3_bind_text(
+                                stmt,
+                                ii,
+                                @field(values, fields_info[i].name),
+                                -1,
+                                sqlite.SQLITE_STATIC,
+                            );
+                            // std.log.info("name {s}", .{@field(values, fields_info[i].name)});
+                            if (res != sqlite.SQLITE_OK) {
+                                std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
+                            }
+                        } else if (slice) {
+                            const res = sqlite.sqlite3_bind_text(
+                                stmt,
+                                ii,
+                                @ptrCast(&@field(values, fields_info[i].name)),
+                                -1,
+                                sqlite.SQLITE_STATIC,
+                            );
+                            // std.log.info("name {s}", .{@field(values, fields_info[i].name)});
+                            if (res != sqlite.SQLITE_OK) {
+                                std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
+                            }
+                        } else {
+                            // @compileLog("sss");
+                            @compileError(std.fmt.comptimePrint("unsupported type {s} {}", .{ @typeName(fields_info[i].type), yes }));
+                        }
+                    },
+                }
+            }
+
+            const res = sqlite.sqlite3_step(stmt);
+            var count: u32 = 0;
+
+            while (res == sqlite.SQLITE_ROW) {
+                for (0..types.len) |i| {
+                    const ii: c_int = @intCast(i);
+
+                    switch (types[i]) {
+                        .INTEGER => {
+                            //     const ptr = @as(*i32, @ptrCast(getValues[i]));
+                            //     ptr = @as(i32, sqlite.sqlite3_column_int(stmt, i));
+                            // },
+                            // => {
+                            const ptr = @as(*i64, @ptrCast(@alignCast(getValues[count][i])));
+                            ptr.* = @as(i64, sqlite.sqlite3_column_int64(stmt, ii));
+                        },
+                        .INTEGER32 => {
+                            const ptr = @as(*i32, @ptrCast(@alignCast(getValues[count][i])));
+                            ptr.* = @as(i32, sqlite.sqlite3_column_int(stmt, ii));
+                        },
+                        .TEXT => {
+                            const ptr = @as([*]u8, @ptrCast(@alignCast(getValues[count][i])));
+                            const str = sqlite.sqlite3_column_text(stmt, ii);
+                            const len = sdl.SDL_strlen(str);
+                            @memcpy(ptr, str[0..len]);
+                            // std.log.info("ptr {s}", .{ptr[0..len]});
+                        },
+                        .BLOB => {
+                            const ptr = @as(*BLOBForGet, @ptrCast(@alignCast(getValues[count][i]))).*;
+                            const str = @as([*]u8, @ptrCast(@constCast(sqlite.sqlite3_column_blob(stmt, ii).?)));
+                            @memcpy(ptr.data, str[0..ptr.len]);
+                        },
+                    }
+                }
+                count += 1;
+                res = sqlite.sqlite3_step(stmt);
+            }
+            if (res != sqlite.SQLITE_DONE) {
+                std.log.err("total {d}", .{count});
                 return sqliteError.StepError;
             }
         }

@@ -18,7 +18,7 @@ fn getRelativePath(fileName: []const u8, result: []u8) !void {
     var types = [_]sqlDB.innerType{.TEXT};
     // std.log.info("{*} {d}", .{ fileName.ptr, fileName.len });
 
-    ContentPathT.get("RelativePath", "FileName = ?", .{fileName}, &ptrs, &types) catch |err| {
+    ContentPathT.get("RelativePath", null, "FileName = ?", .{fileName}, &ptrs, &types) catch |err| {
         std.log.err("err {s} {s} fileName:{s}", .{ @errorName(err), result, fileName });
     };
 }
@@ -63,7 +63,7 @@ pub fn getFileType(name: []const u8) sqlDB.sqliteError!FileType {
 
     var types = [_]sqlDB.innerType{.INTEGER};
 
-    try ContentPathT.get("FileType", "FileName = ?", .{name}, &ptrs, &types);
+    try ContentPathT.get("FileType", null, "FileName = ?", .{name}, &ptrs, &types);
 
     return @enumFromInt(res);
 }

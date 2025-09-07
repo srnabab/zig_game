@@ -35,9 +35,9 @@ const CreateTriggerContentPathOnInsertInsertIntoSubTable = tt: {
             .PNG => {
                 count += writer.write(std.fmt.comptimePrint(
                     "CREATE TRIGGER IF NOT EXISTS insertInto{s} AFTER INSERT ON ContentPath " ++
-                        "FOR EACH ROW WHEN NEW.FileType={d} BEGIN INSERT INTO ImageLoadParameter (FileName,ContentHash,RelativePath,FileID) VALUES " ++
-                        "(NEW.FileName,NEW.ContentHash,NEW.RelativePath,NEW.ID) ON CONFLICT(FileName,ContentHash) DO UPDATE SET " ++
-                        "FileID = NEW.ID, FileName = NEW.FileName, ContentHash = NEW.ContentHash, RelativePath = NEW.RelativePath; END;",
+                        "FOR EACH ROW WHEN NEW.FileType={d} BEGIN INSERT INTO ImageLoadParameter (ID,FileName,ContentHash,RelativePath,FileUUID) VALUES " ++
+                        "(NEW.ID,NEW.FileName,NEW.ContentHash,NEW.RelativePath,NEW.UUID) ON CONFLICT(FileName,ContentHash) DO UPDATE SET " ++
+                        "ID = NEW.ID, FileUUID = NEW.UUID, FileName = NEW.FileName, ContentHash = NEW.ContentHash, RelativePath = NEW.RelativePath; END;",
                     .{ tableNames[0], field.value },
                 )) catch |err| {
                     @compileError(std.fmt.comptimePrint("{s}", .{@errorName(err)}));
@@ -60,7 +60,7 @@ const createTriggerOnUpdateCascadeBetweenContentPathAndTablesOnContentHash = ct:
 
     for (tableNames) |name| {
         count += writer.write(std.fmt.comptimePrint("CREATE TRIGGER IF NOT EXISTS cascadeContentHash{s} AFTER UPDATE OF ContentHash ON ContentPath " ++
-            "FOR EACH ROW BEGIN UPDATE {s} SET ContentHash = NEW.ContentHash WHERE FileID = OLD.ID; END;", .{ name, name })) catch |err| {
+            "FOR EACH ROW BEGIN UPDATE {s} SET ContentHash = NEW.ContentHash WHERE FileUUID = OLD.UUID; END;", .{ name, name })) catch |err| {
             @compileError(std.fmt.comptimePrint("{s}", .{@errorName(err)}));
         };
     }
@@ -77,7 +77,26 @@ const createTriggerOnUpdateCascadeBetweenContentPathAndTablesOnRelativePath = ct
     for (tableNames) |name| {
         count += writer.write(std.fmt.comptimePrint(
             "CREATE TRIGGER IF NOT EXISTS cascadeRelativePath{s} AFTER UPDATE OF RelativePath ON ContentPath " ++
-                "FOR EACH ROW WHEN OLD.RelativePath IS NOT NEW.RelativePath BEGIN UPDATE {s} SET RelativePath = NEW.RelativePath WHERE FileID = NEW.ID; END;",
+                "FOR EACH ROW WHEN OLD.RelativePath IS NOT NEW.RelativePath BEGIN UPDATE {s} SET RelativePath = NEW.RelativePath WHERE FileUUID = NEW.UUID; END;",
+            .{ name, name },
+        )) catch |err| {
+            @compileError(std.fmt.comptimePrint("{s}", .{@errorName(err)}));
+        };
+    }
+
+    break :ct std.fmt.comptimePrint("{s}", .{buffer});
+};
+
+const createTriggerOnUpdateCascadeBetweenContentPathAndTablesOnID = ct: {
+    var buffer = [_]u8{0} ** 10240;
+    var st = std.io.fixedBufferStream(&buffer);
+    var writer = st.writer();
+    var count: usize = 0;
+
+    for (tableNames) |name| {
+        count += writer.write(std.fmt.comptimePrint(
+            "CREATE TRIGGER IF NOT EXISTS cascadeRelativePath{s} AFTER UPDATE OF ID ON ContentPath " ++
+                "FOR EACH ROW BEGIN UPDATE {s} SET ID = NEW.ID WHERE FileUUID = NEW.UUID; END;",
             .{ name, name },
         )) catch |err| {
             @compileError(std.fmt.comptimePrint("{s}", .{@errorName(err)}));
@@ -113,7 +132,7 @@ const createTriggerOnDeleteContentPathUpdateTablesRelativePathWhereSameContentHa
     for (tableNames) |name| {
         count += writer.write(std.fmt.comptimePrint(
             "CREATE TRIGGER IF NOT EXISTS onDeleteUpdataRelativePath{s} AFTER DELETE ON ContentPath FOR EACH ROW " ++
-                "WHEN OLD.ContentHash IS NOT NULL BEGIN UPDATE {s} SET RelativePath = NULL,FileID = NULL WHERE ContentHash = OLD.ContentHash; END;",
+                "WHEN OLD.ContentHash IS NOT NULL BEGIN UPDATE {s} SET RelativePath = NULL,FileUUID = NULL WHERE ContentHash = OLD.ContentHash; END;",
             .{ name, name },
         )) catch |err| {
             @compileError(std.fmt.comptimePrint("{s}", .{@errorName(err)}));
@@ -213,7 +232,7 @@ fn getDbModifiedTime(comptime where_clause: []const u8, params: anytype) !i64 {
     var getValues: [1]*anyopaque = .{@ptrCast(&modifiedTime)};
     var types = [_]sqlDB.innerType{.INTEGER};
 
-    ContentPathT.get("ModifiedTime", where_clause, params, &getValues, &types) catch |err| switch (err) {
+    ContentPathT.get("ModifiedTime", null, where_clause, params, &getValues, &types) catch |err| switch (err) {
         sqlDB.sqliteError.SQLError => return err,
         // 如果没找到，就返回 -1
         sqlDB.sqliteError.StepError, sqlDB.sqliteError.Empty => return -1,
@@ -230,6 +249,7 @@ fn processFile(
     pathModifiedTime: i64,
 ) !void {
     const time: i64 = @truncate(std.time.nanoTimestamp());
+    std.log.debug("time {d} {s}", .{ time, name });
     var tempFile = try dir.openFile(name, .{});
     defer tempFile.close();
 
@@ -251,8 +271,9 @@ fn processFile(
         var hashh = hash.blake3HashContent(content[0..metadata.size]);
 
         try ContentPathT.insert(.{
-            .ID = @constCast(&uuidBuffer),
-            .ParentID = @constCast(parentID.ptr),
+            .ID = @intCast(sqlDB.getGlobalIncrementID()),
+            .UUID = @constCast(&uuidBuffer),
+            .ParentUUID = @constCast(parentID.ptr),
             .RelativePath = @constCast(rPZ.ptr),
             .FileName = @constCast(name.ptr),
             .TYPE = @intFromEnum(metadata.kind),
@@ -276,9 +297,9 @@ fn processFile(
                 var contentHash = hash.blake3HashContent(content);
                 // const contentHash = try hashFileContent(&tempFile, metadata.size());
                 try ContentPathT.update(
-                    "RelativePath,ParentID,ModifiedTime,LastSeenTime,ContentHash",
+                    "ID,RelativePath,ParentID,ModifiedTime,LastSeenTime,ContentHash",
                     "FileName = ?",
-                    .{ rPZ, parentID, currentModifiedTime, time, sqlDB.BLOB{ .data = &contentHash, .len = contentHash.len }, name },
+                    .{ sqlDB.getGlobalIncrementID(), rPZ, parentID, currentModifiedTime, time, sqlDB.BLOB{ .data = &contentHash, .len = contentHash.len }, name },
                 );
 
                 const index = std.mem.lastIndexOf(u8, name, ".") orelse name.len;
@@ -286,7 +307,7 @@ fn processFile(
 
                 try updateLoadParameter(fType, metadata, content, name);
             } else {
-                try ContentPathT.update("RelativePath,ParentID,LastSeenTime", "FileName = ?", .{ rPZ, parentID, time, name });
+                try ContentPathT.update("ID,RelativePath,ParentID,LastSeenTime", "FileName = ?", .{ sqlDB.getGlobalIncrementID(), rPZ, parentID, time, name });
             }
         } else {
             // 已存在的文件：只更新时间和内容哈希（如果需要）
@@ -298,9 +319,9 @@ fn processFile(
                 var contentHash = hash.blake3HashContent(content);
 
                 try ContentPathT.update(
-                    "ModifiedTime,LastSeenTime,ContentHash",
+                    "ID,ModifiedTime,LastSeenTime,ContentHash",
                     "FileName = ?",
-                    .{ currentModifiedTime, time, sqlDB.BLOB{ .data = &contentHash, .len = contentHash.len }, name },
+                    .{ sqlDB.getGlobalIncrementID(), currentModifiedTime, time, sqlDB.BLOB{ .data = &contentHash, .len = contentHash.len }, name },
                 );
 
                 const index = std.mem.lastIndexOf(u8, name, ".") orelse name.len;
@@ -308,7 +329,7 @@ fn processFile(
 
                 try updateLoadParameter(fType, metadata, content, name);
             } else {
-                try ContentPathT.update("LastSeenTime", "FileName = ?", .{ time, name });
+                try ContentPathT.update("ID,LastSeenTime", "FileName = ?", .{ sqlDB.getGlobalIncrementID(), time, name });
             }
         }
     }
@@ -332,6 +353,7 @@ fn processDirectory(
     pathModifiedTime: i64,
 ) anyerror!void {
     const time: i64 = @truncate(std.time.nanoTimestamp());
+    std.log.debug("time {d} {s}", .{ time, name });
     var tempDir = try dir.openDir(name, .{ .iterate = true });
     defer tempDir.close();
 
@@ -343,8 +365,9 @@ fn processDirectory(
         // 新目录：插入记录并获取新ID
         try UUID.createNewUUID(&currentID);
         try ContentPathT.insert(.{
-            .ID = &currentID,
-            .ParentID = @constCast(parentID.ptr),
+            .ID = @intCast(sqlDB.getGlobalIncrementID()),
+            .UUID = &currentID,
+            .ParentUUID = @constCast(parentID.ptr),
             .RelativePath = @constCast(rPZ.ptr),
             .FileName = @constCast(name.ptr),
             .TYPE = @intFromEnum(metadata.kind),
@@ -359,22 +382,22 @@ fn processDirectory(
         if (pathModifiedTime == -1) {
             // 目录被移动：更新路径和父ID
             if (isModified) {
-                try ContentPathT.update("RelativePath,ParentID,ModifiedTime,LastSeenTime", "FileName = ?", .{ rPZ, parentID, currentModifiedTime, time, name });
+                try ContentPathT.update("ID,RelativePath,ParentUUID,ModifiedTime,LastSeenTime", "FileName = ?", .{ sqlDB.getGlobalIncrementID(), rPZ, parentID, currentModifiedTime, time, name });
             } else {
-                try ContentPathT.update("RelativePath,ParentID,LastSeenTime", "FileName = ?", .{ rPZ, parentID, time, name });
+                try ContentPathT.update("ID,RelativePath,ParentUUID,LastSeenTime", "FileName = ?", .{ sqlDB.getGlobalIncrementID(), rPZ, parentID, time, name });
             }
         } else {
             // 已存在的目录：更新时间
             if (isModified) {
-                try ContentPathT.update("ModifiedTime,LastSeenTime", "FileName = ?", .{ currentModifiedTime, time, name });
+                try ContentPathT.update("ID,ModifiedTime,LastSeenTime", "FileName = ?", .{ sqlDB.getGlobalIncrementID(), currentModifiedTime, time, name });
             } else {
-                try ContentPathT.update("LastSeenTime", "FileName = ?", .{ time, name });
+                try ContentPathT.update("ID,LastSeenTime", "FileName = ?", .{ sqlDB.getGlobalIncrementID(), time, name });
             }
         }
         // 对于已存在的目录，需要获取其ID以进行递归
         var ptrs = [_]*anyopaque{&currentID};
         var types = [_]sqlDB.innerType{.TEXT};
-        try ContentPathT.get("ID", "RelativePath = ?", .{rPZ}, &ptrs, &types);
+        try ContentPathT.get("UUID", null, "RelativePath = ?", .{rPZ}, &ptrs, &types);
     }
 
     // 对子目录进行递归
@@ -460,12 +483,14 @@ pub fn main() !void {
     executeSQL(createTriggerOnUpdateCascadeBetweenContentPathAndTablesOnContentHash, db.?);
     executeSQL(createTriggerOnDeleteContentPathUpdateTablesRelativePathWhereSameContentHash, db.?);
     executeSQL(createTriggerOnUpdateCascadeBetweenContentPathAndTablesOnRelativePath, db.?);
+    executeSQL(createTriggerOnUpdateCascadeBetweenContentPathAndTablesOnID, db.?);
 
     var content = try cwd.openDir("Content", .{ .iterate = true });
     defer content.close();
 
     var buffer = [_]u8{0} ** UUID.len;
     const time: i64 = @truncate(std.time.nanoTimestamp());
+    std.log.debug("time {d}", .{time});
 
     if (exist) {
         const cc = try content.stat();
@@ -476,22 +501,23 @@ pub fn main() !void {
         getValues[1] = @ptrCast(&modifiedTime);
         var types = [_]sqlDB.innerType{ .TEXT, .INTEGER };
 
-        try ContentPathT.get("ID,ModifiedTime", "RelativePath = ?", .{"Content"}, &getValues, &types);
+        try ContentPathT.get("UUID,ModifiedTime", null, "RelativePath = ?", .{"Content"}, &getValues, &types);
         // std.log.info("{s}", .{buffer});
 
         if (cc.mtime != @as(i128, @intCast(modifiedTime))) {
-            try ContentPathT.update("ModifiedTime,LastSeenTime", "ID = ?", .{ modifiedTime, time, buffer });
+            try ContentPathT.update("ID,ModifiedTime,LastSeenTime", "UUID = ?", .{ sqlDB.getGlobalIncrementID(), modifiedTime, time, buffer });
             std.log.info("update", .{});
         } else {
-            try ContentPathT.update("LastSeenTime", "ID = ?", .{ time, buffer });
+            try ContentPathT.update("ID,LastSeenTime", "UUID = ?", .{ sqlDB.getGlobalIncrementID(), time, buffer });
         }
     } else {
         const cc = try content.stat();
         try UUID.createNewUUID(&buffer);
 
         try ContentPathT.insert(.{
-            .ID = &buffer,
-            .ParentID = null,
+            .ID = @intCast(sqlDB.getGlobalIncrementID()),
+            .UUID = &buffer,
+            .ParentUUID = null,
             .RelativePath = @constCast("Content"),
             .FileName = @constCast("Content"),
             .TYPE = @intFromEnum(cc.kind),
