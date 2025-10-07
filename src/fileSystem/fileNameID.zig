@@ -68,11 +68,15 @@ const list = [_]KV{
 .{ "bottom.png", 11 },
 };
 
-break: map std.StaticStringMap(i64).initComptime(list);
+break: map std.StaticStringMap(i32).initComptime(list);
 };
  
 
 
-pub fn comptimeGetID(comptime fileName: []const u8) i64 {return comptime FileNameIdHashMap.get(fileName) orelse std.debug.panic("ilegal name", .{{}});}
+pub fn comptimeGetID(comptime fileName: []const u8) i32 {
+comptime {
+return FileNameIdHashMap.get(fileName) orelse @compileError("not found");
+}
+}
 
-pub fn getID(fileName: []const u8) i64 {    return FileNameIdHashMap.get(fileName) orelse std.debug.panic("ilegal name", .{{}}); }
+pub fn getID(fileName: []const u8) i32 {    return FileNameIdHashMap.get(fileName) orelse std.debug.panic("ilegal name", .{{}}); }

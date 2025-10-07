@@ -24,7 +24,7 @@ var ContentPathT: ContentPath = undefined;
 
 const kv = struct {
     fileName: [128]u8,
-    ID: i64,
+    ID: i32,
 };
 
 var gpa: std.mem.Allocator = undefined;
@@ -68,7 +68,7 @@ pub fn main() !void {
 
     ContentPathT = ContentPath.init(db.?);
 
-    var types = [_]sqlDB.innerType{ .INTEGER, .TEXT };
+    var types = [_]sqlDB.innerType{ .INTEGER32, .TEXT };
     var kvs: [1000]kv = undefined;
     @memset(kvs[0..kvs.len], kv{ .ID = -1, .fileName = std.mem.zeroes([128]u8) });
     var ptrs: [1000][]*anyopaque = undefined;
@@ -106,10 +106,10 @@ pub fn main() !void {
 
         _ = try writer.write(cc);
     }
-    const end = "};\n\nbreak: map std.StaticStringMap(i64).initComptime(list);\n};\n";
+    const end = "};\n\nbreak: map std.StaticStringMap(i32).initComptime(list);\n};\n";
     _ = try writer.write(end);
 
-    const func = " \n\n\npub fn comptimeGetID(comptime fileName: []const u8) i64 {" ++ "return comptime FileNameIdHashMap.get(fileName) orelse std.debug.panic(\"ilegal name\", .{{}});}\n\n" ++ "pub fn getID(fileName: []const u8) i64 {" ++ "    return FileNameIdHashMap.get(fileName) orelse std.debug.panic(\"ilegal name\", .{{}}); }";
+    const func = " \n\n\npub fn comptimeGetID(comptime fileName: []const u8) i32 {\ncomptime {\n" ++ "return FileNameIdHashMap.get(fileName) orelse @compileError(\"not found\");\n}\n}\n\n" ++ "pub fn getID(fileName: []const u8) i32 {" ++ "    return FileNameIdHashMap.get(fileName) orelse std.debug.panic(\"ilegal name\", .{{}}); }";
     _ = try writer.write(func);
 
     const cPtr = @as([*c]u8, &buffer);

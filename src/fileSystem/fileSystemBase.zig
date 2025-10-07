@@ -76,45 +76,87 @@ pub const FileType = enum {
     UNKNOWN,
 };
 
-pub fn getFileType(name: []const u8) sqlDB.sqliteError!FileType {
+pub fn getFileType(id: i32) sqlDB.sqliteError!FileType {
     var res: i64 = 0;
     var ptrs: [1]*anyopaque = undefined;
     ptrs[0] = @ptrCast(&res);
 
     var types = [_]sqlDB.innerType{.INTEGER};
 
-    try ContentPathT.get("FileType", null, "FileName = ?", .{name}, &ptrs, &types);
+    try ContentPathT.get("FileType", null, "ID = ?", .{id}, &ptrs, &types);
 
     return @enumFromInt(res);
 }
 
 const vk = @cImport(@cInclude("vulkan/vulkan.h"));
 
-pub const PipelineShaderInfo = struct {
-    const Self = @This();
+// pub const PipelineShaderInfo = struct {
+//     const Self = @This();
 
-    const binding = struct {
-        set: u32,
-        binding: u32,
-        descriptorCount: u32,
-        descriptorType: vk.VkDescriptorType,
-    };
+//     const binding = struct {
+//         set: u32,
+//         binding: u32,
+//         descriptorCount: u32,
+//         descriptorType: vk.VkDescriptorType,
+//     };
 
-    file: std.fs.File,
-    fileSize: u64,
-    entryName: [64:0]u8,
-    stage: vk.VkShaderStageFlags,
-    setCount: u32,
-    bindingCount: u32,
-    bindings: ?[]binding,
-    pushConstantSize: u64,
+//     file: std.fs.File,
+//     fileSize: u64,
+//     entryName: [64:0]u8,
+//     stage: vk.VkShaderStageFlags,
+//     setCount: u32,
+//     bindingCount: u32,
+//     bindings: ?[]binding,
+//     pushConstantSize: u64,
 
-    pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
-        if (self.bindings) |mem| {
-            allocator.free(mem);
-        }
-    }
+//     pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
+//         if (self.bindings) |mem| {
+//             allocator.free(mem);
+//         }
+//     }
+// };
+
+const imageLoad = struct {
+    relativePath: [256]u8,
+    format: vk.VkFormat,
+    tiling: vk.VkImageTiling,
+    usage: vk.VkImageUsageFlags,
+    properties: vk.VkMemoryPropertyFlags,
 };
+
+pub fn getImageLoadParam(id: i32) !imageLoad {
+    const fType = try getFileType(id);
+    switch (fType) {
+        .PNG => {
+            var ptrs: [5]*anyopaque = undefined;
+            var buffer = [_]u8{0} ** 256;
+            var format = vk.VkFormat{0};
+            var tiling = vk.VkImageTiling{0};
+            var usage = vk.VkImageUsageFlags{0};
+            var properties = vk.VkMemoryPropertyFlags{0};
+            ptrs[0] = @ptrCast(&buffer);
+            ptrs[0] = @ptrCast(&format);
+            ptrs[0] = @ptrCast(&tiling);
+            ptrs[0] = @ptrCast(&usage);
+            ptrs[0] = @ptrCast(&properties);
+
+            var types = [_]sqlDB.innerType{ .TEXT, .INTEGER32, .INTEGER32, .INTEGER32, .INTEGER32 };
+
+            ImageLoadParameterT.get("RelativePath,Format,Tiling,Usage,Properties", null, "ID = ?", .{id}, &ptrs, &types);
+
+            return imageLoad{
+                .format = format,
+                .tiling = tiling,
+                .usage = usage,
+                .properties = properties,
+                .relativePath = buffer,
+            };
+        },
+        else => {
+            return error.fileTypeError;
+        },
+    }
+}
 
 pub fn deinit(databaseName: []const u8) void {
     var disk_db: ?*sqlite.sqlite3 = null;

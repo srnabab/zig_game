@@ -67,6 +67,7 @@
         //    // actually used.
         //    .lazy = false,
         //},
+        .tracy = .{ .path = "dependencies/tracy" },
     },
 
     // Specifies the set of files and directories that are included in this package.

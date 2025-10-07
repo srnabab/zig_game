@@ -5,13 +5,35 @@ const global = @import("global");
 const assert = std.debug.assert;
 const tables = @import("tables");
 const base = @import("fileSystemBase.zig");
+const vk = @cImport(@cInclude("vulkan/vulkan.h"));
 
 pub fn init() void {
     base.init(global.databaseName);
 }
 
-pub fn getFile(id: i64) !std.fs.File {
+pub fn getFile(id: i32) !std.fs.File {
     return base.getFile(id, global.cwd);
+}
+
+pub const imageLoad = struct {
+    file: std.fs.File,
+    format: vk.VkFormat,
+    tiling: vk.VkImageTiling,
+    usage: vk.VkImageUsageFlags,
+    properties: vk.VkMemoryPropertyFlags,
+};
+
+pub fn getImageLoadParam(id: i32) !imageLoad {
+    const res = try base.getImageLoadParam(id);
+    const ptr = @as([*c]u8, res.relativePath[0..256]);
+    const len = std.mem.len(ptr);
+    return imageLoad{
+        .file = try global.cwd.openFile(res.relativePath[0..len], .{}),
+        .format = res.format,
+        .tiling = res.tiling,
+        .usage = res.usage,
+        .properties = res.properties,
+    };
 }
 
 pub const comptimeGetID = base.comptimeGetID;
@@ -21,14 +43,6 @@ const FileType = base.FileType;
 
 pub fn getFileType(name: []const u8) sqlDB.sqliteError!FileType {
     return base.getFileType(name);
-}
-
-const vk = @cImport(@cInclude("vulkan/vulkan.h"));
-
-pub const PipelineShaderInfo = base.PipelineShaderInfo;
-
-pub fn getShaderLoadParameter(name: []const u8) !PipelineShaderInfo {
-    return base.getShaderLoadParameter(name, global.gpa, global.cwd);
 }
 
 pub fn deinit() void {

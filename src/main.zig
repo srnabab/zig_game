@@ -9,13 +9,14 @@ const builtin = @import("builtin");
 const output = @import("output");
 const log = std.log;
 const ECS = @import("ECS");
-const steam = @import("steam_C//SteamC.zig");
+const steam = @import("steam");
 const steamInner = steam.steamInner;
-const textureSet = @import("video/textureSet.zig");
+const textureSet = @import("textureSet");
 
 const update = @import("update.zig");
 const render = @import("render.zig");
-const video = @import("video");
+const VkStruct = @import("video");
+const OneTimeCommand = @import("processRender").oneTimeCommand;
 
 const file = @import("fileSystem");
 const translate = @import("translate");
@@ -63,14 +64,16 @@ pub fn main() !void {
     file.init();
     defer file.deinit();
 
-    var vulkan = video.VkStruct.init(gpa);
+    var vulkan = VkStruct.init(gpa);
     try vulkan.initVulkan();
     defer vulkan.deinit();
 
     global.vulkan = vulkan;
 
+    global.graphic = OneTimeCommand.init(gpa);
+
     const start1 = std.time.nanoTimestamp();
-    var pFile = try file.getFile(file.comptimeGetID("model3d.pipeb"));
+    var pFile = try file.getFile(comptime file.comptimeGetID("model3d.pipeb"));
     defer pFile.close();
     const fileSize = (try pFile.stat()).size;
     var fileContent = try gpa.alloc(u8, fileSize);
@@ -160,4 +163,14 @@ pub fn main() !void {
 
     std.time.sleep(std.time.ns_per_s * 2);
     global.down = true;
+}
+
+fn emptyEnqueue(task: OneTimeCommand.TaskCallback, taskCtx: *anyopaque, userCtx: *anyopaque) *anyopaque {
+    _ = task;
+    _ = taskCtx;
+    return userCtx;
+}
+fn emptyFinish(taskCtx: *anyopaque, userCtx: *anyopaque) void {
+    _ = taskCtx;
+    _ = userCtx;
 }

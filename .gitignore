@@ -6,3 +6,4 @@ include/
 .VSCodeCounter/
 test*.zig
 testFeature/
+dependencies/tracy/
