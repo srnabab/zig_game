@@ -47,7 +47,7 @@ pub const Texture = struct {
 
 // const memType = std.heap.MemoryPoolExtra(Node, .{ .alignment = @alignOf(Node) });
 // var mem: memType = undefined;
-var AutoIncrecemetnID = Atomic.Value(u32).init(0);
+// var AutoIncrecemetnID = Atomic.Value(u32).init(0);
 var mutex: Mutex = .{};
 
 memory: std.heap.MemoryPoolExtra(Texture, .{}),
@@ -92,15 +92,19 @@ pub fn createImageTexture(self: *Self, fileID: u32) !*Texture {
 
     var texture: *Texture = undefined;
     var stagingBuffer: VkStruct.Buffer = undefined;
+
+    const ID = fileID;
+
+    if (self.map.get(ID)) |value| {
+        return value;
+    }
+
+    var imgWidth: u32 = 0;
+    var imgHeight: u32 = 0;
+    var channel: u32 = 0;
     {
         mutex.lock();
         defer mutex.unlock();
-
-        const ID = AutoIncrecemetnID.fetchAdd(1, .seq_cst);
-
-        var imgWidth: u32 = 0;
-        var imgHeight: u32 = 0;
-        var channel: u32 = 0;
 
         const img = try file.getImageLoadParam(@intCast(fileID));
         errdefer img.file.close();
@@ -153,6 +157,4 @@ pub fn createImageTexture(self: *Self, fileID: u32) !*Texture {
     );
 
     return texture;
-
-    // global.vulkan.destroyBuffer(stagingBuffer);
 }

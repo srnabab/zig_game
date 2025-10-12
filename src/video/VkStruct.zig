@@ -151,7 +151,7 @@ computeQueue: VkTheadQueue = .{},
 transferQueueFamily: VkQueueFamily = .{},
 transferQueue: VkTheadQueue = .{},
 
-shaderModules: std.StringHashMap(*vk.VkShaderModule),
+shaderModules: std.StringHashMap(vk.VkShaderModule),
 entryNames: std.StringHashMap(void),
 
 pipelineCache: vk.VkPipelineCache = null,
@@ -310,8 +310,7 @@ pub fn deinit(self: *Self) void {
     var shaderCodes = self.shaderModules.iterator();
     while (shaderCodes.next()) |code| {
         // std.log.debug("module ptr {*}", .{code.value_ptr});
-        vk.vkDestroyShaderModule(self.device, code.value_ptr.*.*, self.pAllocCallBacks);
-        self.allocator.destroy(code.value_ptr.*);
+        vk.vkDestroyShaderModule(self.device, code.value_ptr.*, self.pAllocCallBacks);
     }
     self.shaderModules.deinit();
 
@@ -866,19 +865,16 @@ pub fn createShaderModule(self: *Self, shaderCode: []const u8, shaderName: []con
             .codeSize = shaderCode.len,
             .pCode = @ptrCast(@alignCast(shaderCode.ptr)),
         };
-        const module = try self.allocator.create(vk.VkShaderModule);
-        // std.log.debug("module ptr {*}", .{module});
 
         try checkVkResult(vk.vkCreateShaderModule(
             self.device,
             @ptrCast(&info),
             self.pAllocCallBacks,
-            @ptrCast(module),
+            @ptrCast(res.value_ptr),
         ));
-        res.value_ptr.* = module;
     }
 
-    return res.value_ptr.*.*;
+    return res.value_ptr.*;
 }
 
 pub fn clearAllShaderModule(self: *Self) void {
