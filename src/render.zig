@@ -26,5 +26,4 @@ pub fn render_thread_func(thread_count: usize) !void {
     }
 
     _ = thread_count;
-    std.log.info("render end", .{});
 }

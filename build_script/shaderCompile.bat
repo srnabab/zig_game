@@ -45,6 +45,6 @@ for %%f in ("%INPUT_DIR%\*.frag" "%INPUT_DIR%\*.vert" "%INPUT_DIR%\*.comp") do (
 )
 
 echo.
-echo [done] %SHADER_COUNT%  shader files
+echo done: %SHADER_COUNT% shader files
 
 endlocal

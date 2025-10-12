@@ -56,7 +56,10 @@ layoutMemory: MemoryPool(vk.VkImageLayout),
 // pub var textureSet: HashMapType = undefined;
 
 pub fn init(allocator: std.mem.Allocator) Self {
-    std.log.debug("texture set init", .{});
+    const zone = tracy.initZone(@src(), .{ .name = "init texture set" });
+    defer zone.deinit();
+
+    // std.log.debug("texture set init", .{});
     return .{
         .map = .init(allocator),
         .memory = .init(allocator),
@@ -72,7 +75,7 @@ pub fn deinit(self: *Self) void {
         std.log.err("wait device error {s}\n", .{@errorName(err)});
     };
 
-    std.log.debug("texture deinit", .{});
+    // std.log.debug("texture deinit", .{});
     var itt = self.map.valueIterator();
     while (itt.next()) |texture| {
         global.vulkan.destroyImage(texture.*.image);

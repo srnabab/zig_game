@@ -30,6 +30,8 @@ const kv = struct {
 var gpa: std.mem.Allocator = undefined;
 var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
 pub fn main() !void {
+    const start = std.time.nanoTimestamp();
+
     gpa, const is_debug = gpa: {
         break :gpa switch (builtin.mode) {
             .Debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
@@ -43,9 +45,6 @@ pub fn main() !void {
     var it = try std.process.argsWithAllocator(gpa);
     defer it.deinit();
 
-    const rootExe = it.next().?;
-    std.log.info("exe: {s}", .{rootExe});
-
     var root: [256:0]u8 = undefined;
 
     const realPath = it.next().?;
@@ -56,8 +55,6 @@ pub fn main() !void {
 
     const index = std.mem.lastIndexOf(u8, &root, slash) orelse 0;
     @memset(root[index..root.len], 0);
-
-    std.log.info("path: {s}", .{root});
 
     var cwd = try std.fs.openDirAbsolute(&root, .{});
     try cwd.setAsCwd();
@@ -83,11 +80,6 @@ pub fn main() !void {
     defer arena.deinit();
 
     try ContentPathT.gets("ID,FileName", null, null, .{}, ptrs[0..kvs.len], &types);
-
-    // for (kvs) |value| {
-    //     if (value.ID == -1) break;
-    //     std.log.debug("{s} {d}", .{ value.fileName, value.ID });
-    // }
 
     const file = try std.fs.createFileAbsolute(outputPath, .{});
     defer file.close();
@@ -116,4 +108,8 @@ pub fn main() !void {
     const nameLen = std.mem.len(cPtr);
 
     _ = try file.write(buffer[0..nameLen]);
+
+    const endTime = std.time.nanoTimestamp();
+
+    std.log.info("create file name to id map time: {d}ms", .{@as(f128, @floatFromInt(endTime - start)) / @as(f128, @floatFromInt(std.time.ns_per_ms))});
 }

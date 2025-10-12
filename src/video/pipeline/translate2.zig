@@ -54,7 +54,7 @@ fn getPipelineShaderInfos(shaders: [5][]const u8, count: u32, shaderFolder: []co
             defer file.close();
 
             const cc = try file.stat();
-            std.log.debug("file size {d}", .{cc.size});
+            // std.log.debug("file size {d}", .{cc.size});
             const content = try allocator.alloc(u8, cc.size);
             errdefer allocator.free(content);
             _ = try file.readAll(content);

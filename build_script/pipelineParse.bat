@@ -56,6 +56,6 @@ for %%f in ("%INPUT_DIR%\*.pipe") do (
 )
 
 echo.
-echo [done] %SHADER_COUNT%  pipeline files
+echo done: %SHADER_COUNT% pipeline files
 
 endlocal

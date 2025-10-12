@@ -34,7 +34,7 @@ var thread_count: usize = 0;
 var update_thread: usize = 0;
 var render_thread: usize = 0;
 
-var debug_allocator: std.heap.DebugAllocator(.{ .stack_trace_frames = 6 }) = .init;
+var debug_allocator: std.heap.DebugAllocator(.{ .stack_trace_frames = 10 }) = .init;
 pub fn main() !void {
     const gpa, const is_debug = gpa: {
         break :gpa switch (builtin.mode) {
@@ -70,7 +70,7 @@ pub fn main() !void {
 
     for (args) |arg| {
         // try output.out.print("arg: {s}\n", .{arg});
-        std.log.debug("arg: {s}", .{arg});
+        std.log.info("arg: {s}", .{arg});
     }
 
     {
@@ -78,7 +78,6 @@ pub fn main() !void {
         defer zone.deinit();
 
         const index = std.mem.lastIndexOf(u8, args[0], "\\").?;
-        // std.log.info("{s}", .{args[0][0..index]});
         global.cwd = try std.fs.openDirAbsolute(args[0][0..index], .{});
         try global.cwd.setAsCwd();
     }
@@ -157,6 +156,5 @@ pub fn main() !void {
     var render_t = try Thread.spawn(.{}, render.render_thread_func, .{render_thread});
     defer render_t.join();
 
-    // std.Thread.sleep(std.time.ns_per_s * 9);
     global.down = true;
 }

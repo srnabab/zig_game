@@ -11,7 +11,7 @@ pub fn build(b: *std.Build) void {
     // {
 
     const tracy_enable = b.option(bool, "tracy_enable", "Enable profiling") orelse false;
-    const tracy_callstack = b.option(u8, "tracy_callstack", "Callstack depth") orelse 6;
+    const tracy_callstack = b.option(u8, "tracy_callstack", "Callstack depth") orelse 10;
     const tracy = b.dependency("tracy", .{
         .target = target,
         .optimize = optimize,
@@ -354,6 +354,7 @@ pub fn build(b: *std.Build) void {
 
     const pre_run_message_cmd = b.addSystemCommand(if (builtin.target.os.tag == .windows) &.{ "cmd", "/c", "echo" } else &.{"echo"});
     pre_run_message_cmd.addArg(b.fmt("tracy-enable: {}", .{tracy_enable}));
+    pre_run_message_cmd.addArg(b.fmt("tracy-callstack: {d}", .{tracy_callstack}));
 
     const run_cmd = b.addRunArtifact(exe);
     if (b.args) |args| {
@@ -371,6 +372,8 @@ pub fn build(b: *std.Build) void {
     // run task dependency
     shader_compile.dependOn(&script_cmd.step);
 
+    pipeline_script_cmd.step.dependOn(shader_compile);
+    pipeline_script_cmd.step.dependOn(&pipelineJsonParse_exe.step);
     pipeline_compile.dependOn(&pipeline_script_cmd.step);
 
     contenManager.step.dependOn(shader_compile);

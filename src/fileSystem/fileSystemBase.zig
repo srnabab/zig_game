@@ -56,7 +56,7 @@ pub fn getFile(id: i64, cwd: std.fs.Dir) !std.fs.File {
     const ptr = @as([*c]u8, buffer[0..256]);
     const len = std.mem.len(ptr);
 
-    std.log.debug("{s}", .{buffer[0..len]});
+    std.log.debug("open file {s}", .{buffer[0..len]});
 
     return cwd.openFile(buffer[0..len], .{});
 }

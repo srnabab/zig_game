@@ -50,6 +50,4 @@ pub fn update_thread_func(thread_count: usize) !void {
     // std.log.info("process add end", .{});
 
     _ = thread_count;
-    // std.Thread.sleep(std.time.ns_per_s * 3);
-    std.log.info("update end", .{});
 }

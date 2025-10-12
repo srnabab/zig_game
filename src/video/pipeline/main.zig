@@ -5,6 +5,8 @@ const trans = @import("translate2.zig");
 
 var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
 pub fn main() !void {
+    const start = std.time.nanoTimestamp();
+
     const gpa, const is_debug = gpa: {
         break :gpa switch (builtin.mode) {
             .Debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
@@ -66,10 +68,10 @@ pub fn main() !void {
     const slice = std.mem.asBytes(res.info);
     var totalLen: u64 = 0;
     totalLen += @sizeOf(trans.VulkanPipelineInfo);
-    std.log.debug("total len {d}", .{totalLen});
+    // std.log.debug("total len {d}", .{totalLen});
     for (0..res.shaderCodes.len) |i| {
         totalLen += res.shaderCodes[i].len + @sizeOf(usize);
-        std.log.debug("total len {d}", .{totalLen});
+        // std.log.debug("total len {d}", .{totalLen});
     }
 
     var buffer = [_]u8{0} ** 102400;
@@ -81,4 +83,8 @@ pub fn main() !void {
         _ = try writer.interface.write(res.shaderCodes[i]);
     }
     try writer.end();
+
+    const endTime = std.time.nanoTimestamp();
+
+    std.log.info("create pipeline file {s} time: {d}ms", .{ args[3], @as(f128, @floatFromInt(endTime - start)) / @as(f128, @floatFromInt(std.time.ns_per_ms)) });
 }

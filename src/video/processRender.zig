@@ -1215,7 +1215,7 @@ pub const oneTimeCommand = struct {
             }
         }
 
-        std.log.debug("iterateCount: {d}", .{iterateCount});
+        // std.log.debug("iterateCount: {d}", .{iterateCount});
 
         self.nodeDag.undoneAllNodes();
 

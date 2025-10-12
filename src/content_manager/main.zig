@@ -527,7 +527,7 @@ pub fn main() !void {
 
         if (cc.mtime != @as(i128, @intCast(modifiedTime))) {
             try ContentPathT.update("ID,ModifiedTime,LastSeenTime", "UUID = ?", .{ sqlDB.getGlobalIncrementID(), modifiedTime, time, buffer });
-            std.log.info("update", .{});
+            // std.log.info("update", .{});
         } else {
             try ContentPathT.update("ID,LastSeenTime", "UUID = ?", .{ sqlDB.getGlobalIncrementID(), time, buffer });
         }
@@ -556,5 +556,5 @@ pub fn main() !void {
 
     const end = std.time.nanoTimestamp();
 
-    std.log.info("time: {d}", .{@as(f128, @floatFromInt(@divTrunc((end - start), std.time.ns_per_ms)))});
+    std.log.info("update content database time: {d}ms", .{@as(f128, @floatFromInt(end - start)) / @as(f128, @floatFromInt(std.time.ns_per_ms))});
 }

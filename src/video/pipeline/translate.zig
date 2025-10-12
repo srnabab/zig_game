@@ -21,7 +21,7 @@ pub fn toVulkan(partialFillInfo: *VulkanPipelineInfo, shaderCodes: [5][]u8) !voi
 
     for (0..partialFillInfo.shaderStageCount) |i| {
         const pEntryName = try global.vulkan.collectEntryName(&partialFillInfo.entryNames[i]);
-        std.log.debug("entry name {s} outer", .{pEntryName.*});
+        // std.log.debug("entry name {s} outer", .{pEntryName.*});
         partialFillInfo.shaderStageCreateInfo[i].pName = @ptrCast(pEntryName.ptr);
         partialFillInfo.shaderStageCreateInfo[i].module = try global.vulkan.createShaderModule(shaderCodes[i], &partialFillInfo.shaderName[i]);
     }

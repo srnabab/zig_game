@@ -98,6 +98,27 @@ const InitLayout = enum {
     VK_IMAGE_LAYOUT_PREINITIALIZED,
 };
 
+const AllocationCount = struct {
+    const Count = @This();
+
+    const mode = if (builtin.mode == .Debug or builtin.mode == .ReleaseSafe) true else false;
+    const returnType = if (mode) u64 else void;
+
+    count: if (mode) std.atomic.Value(u64) else void =
+        if (mode) .init(0) else void{},
+
+    pub fn fetchAdd(self: *Count, operand: u64, comptime order: std.builtin.AtomicOrder) returnType {
+        if (mode) return self.count.fetchAdd(operand, order);
+    }
+
+    pub fn fetchSub(self: *Count, operand: u64, comptime order: std.builtin.AtomicOrder) returnType {
+        if (mode) return self.count.fetchSub(operand, order);
+    }
+
+    pub fn load(sefl: *Count, comptime order: std.builtin.AtomicOrder) returnType {
+        if (mode) return sefl.count.load(order);
+    }
+};
 const Self = @This();
 
 currentFrame: std.atomic.Value(u32) = .init(0),
@@ -149,6 +170,9 @@ globalTimelineSemaphore: vk.VkSemaphore = null,
 globalTimelineValue: std.atomic.Value(u64) = .init(0),
 
 textureSets: textureSet,
+
+vmaBufferAllocations: AllocationCount = .{},
+vmaImageAllocations: AllocationCount = .{},
 
 fn comptime_print(comptime format: []const u8, comptime args: anytype) void {
     @compileLog(std.fmt.comptimePrint(format, args));
@@ -285,7 +309,7 @@ pub fn deinit(self: *Self) void {
 
     var shaderCodes = self.shaderModules.iterator();
     while (shaderCodes.next()) |code| {
-        std.log.debug("module ptr {*}", .{code.value_ptr});
+        // std.log.debug("module ptr {*}", .{code.value_ptr});
         vk.vkDestroyShaderModule(self.device, code.value_ptr.*.*, self.pAllocCallBacks);
         self.allocator.destroy(code.value_ptr.*);
     }
@@ -301,6 +325,8 @@ pub fn deinit(self: *Self) void {
     }
     self.destroySemaphore(self.globalTimelineSemaphore);
 
+    std.log.debug("vma buffer allocation residue count: {d}", .{self.vmaBufferAllocations.load(.seq_cst)});
+    std.log.debug("vma image allocation residue count: {d}", .{self.vmaImageAllocations.load(.seq_cst)});
     vma.vmaDestroyAllocator(self.vmaAllocator);
 
     vk.vkDestroyDevice(self.device, self.pAllocCallBacks);
@@ -362,7 +388,7 @@ fn printVersion(apiVersion: u32) void {
     const minor = vk.VK_VERSION_MINOR(apiVersion);
     const patch = vk.VK_VERSION_PATCH(apiVersion);
 
-    std.debug.print("Vulkan API Version: {d}.{d}.{d}\n", .{ major, minor, patch });
+    std.log.debug("Vulkan API Version: {d}.{d}.{d}", .{ major, minor, patch });
 }
 
 fn createInstance(self: *Self) VkError!void {
@@ -481,7 +507,7 @@ fn pickPhysicalDevice(self: *Self) !void {
         return VkError.VK_ERROR_OUT_OF_HOST_MEMORY;
     };
     defer self.*.allocator.free(physicalDevices);
-    std.debug.print("device count: {d}\n", .{deviceCount});
+    std.log.debug("device count: {d}", .{deviceCount});
     try checkVkResult(vk.vkEnumeratePhysicalDevices(self.*.instance, @ptrCast(&deviceCount), @ptrCast(physicalDevices.ptr)));
 
     var biggestMemory: u64 = 0;
@@ -548,7 +574,7 @@ fn pickPhysicalDevice(self: *Self) !void {
                 }
             } else {}
 
-            std.debug.print("device: choosed {s}\n", .{@tagName(@as(VkPhysicalType, @enumFromInt(deviceProperty.deviceType)))});
+            std.log.debug("device: choosed {s}", .{@tagName(@as(VkPhysicalType, @enumFromInt(deviceProperty.deviceType)))});
         } else {}
     }
 }
@@ -713,7 +739,7 @@ fn createVmaAllocator(self: *Self) !void {
 }
 
 fn _createBuffer(
-    vmaAllocator: vma.VmaAllocator,
+    self: *Self,
     flags: u32,
     pNext: ?*anyopaque,
     sharingMode: vk.VkSharingMode,
@@ -722,7 +748,6 @@ fn _createBuffer(
     vmaFlags: u32,
     vmaUsage: vma.VmaMemoryUsage,
 ) VkError!Buffer {
-    std.log.debug("vma alloc buffer", .{});
     var bufferCreateInfo = vk.VkBufferCreateInfo{
         .sType = vk.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .flags = flags,
@@ -741,7 +766,9 @@ fn _createBuffer(
     var pAllocation: vma.VmaAllocation = null;
     var allocationInfo = vma.VmaAllocationInfo{};
 
-    try checkVkResult(vma.vmaCreateBuffer(vmaAllocator, @ptrCast(&bufferCreateInfo), @ptrCast(&allocationCreateInfo), @ptrCast(&pBuffer), @ptrCast(&pAllocation), @ptrCast(&allocationInfo)));
+    try checkVkResult(vma.vmaCreateBuffer(self.vmaAllocator, @ptrCast(&bufferCreateInfo), @ptrCast(&allocationCreateInfo), @ptrCast(&pBuffer), @ptrCast(&pAllocation), @ptrCast(&allocationInfo)));
+
+    _ = self.vmaBufferAllocations.fetchAdd(1, .seq_cst);
 
     return Buffer{
         .vkBuffer = pBuffer,
@@ -752,7 +779,11 @@ fn _createBuffer(
 }
 
 pub fn destroyBuffer(self: *Self, buffer: Buffer) void {
-    std.log.debug("vma free buffer", .{});
+    const zone = tracy.initZone(@src(), .{ .name = "init vulkan resources" });
+    defer zone.deinit();
+
+    _ = self.vmaBufferAllocations.fetchSub(1, .seq_cst);
+
     vma.vmaDestroyBuffer(self.vmaAllocator, @ptrCast(buffer.vkBuffer), buffer.allocation);
 }
 
@@ -760,8 +791,7 @@ pub fn createStagingBuffer(self: *Self, bufferSize: vk.VkDeviceSize) VkError!Buf
     const zone = tracy.initZone(@src(), .{ .name = "create staging buffer" });
     defer zone.deinit();
 
-    return _createBuffer(
-        self.vmaAllocator,
+    return self._createBuffer(
         0,
         null,
         vk.VK_SHARING_MODE_EXCLUSIVE,
@@ -820,7 +850,7 @@ pub fn collectEntryName(self: *Self, entryName: []const u8) !*[]const u8 {
     const name = try self.allocator.alloc(u8, len);
     @memcpy(name, entryName[0..len]);
     const res = try self.entryNames.getOrPutValue(name, void{});
-    std.log.debug("entry name {s}", .{res.key_ptr.*});
+    // std.log.debug("entry name {s}", .{res.key_ptr.*});
     // @breakpoint();
     return res.key_ptr;
 }
@@ -837,7 +867,7 @@ pub fn createShaderModule(self: *Self, shaderCode: []const u8, shaderName: []con
             .pCode = @ptrCast(@alignCast(shaderCode.ptr)),
         };
         const module = try self.allocator.create(vk.VkShaderModule);
-        std.log.debug("module ptr {*}", .{module});
+        // std.log.debug("module ptr {*}", .{module});
 
         try checkVkResult(vk.vkCreateShaderModule(
             self.device,
@@ -995,7 +1025,7 @@ fn findMemoryType(self: *Self, typeFilter: u32, properties: vk.VkMemoryPropertyF
     return -1;
 }
 fn _createVkImage(
-    vmaAllocator: vma.VmaAllocator,
+    self: *Self,
     pNext: ?*anyopaque,
     flags: vk.VkImageCreateFlags,
     imageType: vk.VkImageType,
@@ -1014,7 +1044,7 @@ fn _createVkImage(
     const zone = tracy.initZone(@src(), .{ .name = "create Vkimage from vma" });
     defer zone.deinit();
 
-    std.log.debug("vma alloc", .{});
+    // std.log.debug("vma alloc", .{});
     var imageInfo = vk.VkImageCreateInfo{
         .sType = vk.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .pNext = pNext,
@@ -1042,7 +1072,9 @@ fn _createVkImage(
 
     var img: vk.VkImage = null;
     var allocation: vma.VmaAllocation = null;
-    try checkVkResult(vma.vmaCreateImage(vmaAllocator, @ptrCast(&imageInfo), @ptrCast(&allocationInfo), @ptrCast(&img), @ptrCast(&allocation), null));
+    try checkVkResult(vma.vmaCreateImage(self.vmaAllocator, @ptrCast(&imageInfo), @ptrCast(&allocationInfo), @ptrCast(&img), @ptrCast(&allocation), null));
+
+    _ = self.vmaImageAllocations.fetchAdd(1, .seq_cst);
 
     return Image{
         .vkImage = img,
@@ -1059,8 +1091,7 @@ pub fn createImage2D(
     tiling: vk.VkImageTiling,
     usage: vk.VkImageUsageFlags,
 ) VkError!Image {
-    return Self._createVkImage(
-        self.vmaAllocator,
+    return self._createVkImage(
         null,
         0,
         vk.VK_IMAGE_TYPE_2D,
@@ -1364,6 +1395,8 @@ pub fn destroyImage(self: *Self, image: Image) void {
     defer zone.deinit();
 
     vma.vmaDestroyImage(self.vmaAllocator, @ptrCast(image.vkImage), image.allocation);
+
+    _ = self.vmaImageAllocations.fetchSub(1, .seq_cst);
 }
 
 pub fn readPipelineFileAndAdd(self: *Self, fileID: i32) !void {
