@@ -49,6 +49,7 @@ pub fn main() !void {
 
     const realPath = it.next().?;
     const outputPath = it.next().?;
+    // std.log.info("outputPath: {s}", .{outputPath});
     @memset(root[0..root.len], 0);
 
     std.mem.copyForwards(u8, &root, realPath);
@@ -81,7 +82,7 @@ pub fn main() !void {
 
     try ContentPathT.gets("ID,FileName", null, null, .{}, ptrs[0..kvs.len], &types);
 
-    const file = try std.fs.createFileAbsolute(outputPath, .{});
+    const file = try std.fs.createFileAbsolute(outputPath, .{ .read = true });
     defer file.close();
 
     var buffer = [_]u8{0} ** 102400;
@@ -90,6 +91,7 @@ pub fn main() !void {
     var writer = stream.writer();
     _ = try writer.write(content);
     for (kvs) |value| {
+        // std.log.info("name: {s}, ID: {d}", .{ value.fileName, value.ID });
         var sBuffer = [_]u8{0} ** 256;
         if (value.ID == -1) break;
         const cPtr = @as([*c]u8, @constCast(&value.fileName));

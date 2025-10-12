@@ -343,7 +343,6 @@ pub fn build(b: *std.Build) void {
 
     const runGenFileNameIdExe = b.step("create hash map", "create filename id static string hash map");
     const runGenFileNameIdExe_cmd = b.addRunArtifact(genFileNameIDexe);
-    runGenFileNameIdExe_cmd.addArg(b.getInstallPath(.bin, "genFileNameIdHashMap"));
     runGenFileNameIdExe_cmd.addArg(b.fmt("{s}/{s}", .{ root_path, "src/fileSystem/fileNameID.zig" }));
 
     const run_gen_exe = b.addRunArtifact(gen_exe);
@@ -376,10 +375,8 @@ pub fn build(b: *std.Build) void {
     pipeline_script_cmd.step.dependOn(&pipelineJsonParse_exe.step);
     pipeline_compile.dependOn(&pipeline_script_cmd.step);
 
-    contenManager.step.dependOn(shader_compile);
-    contenManager.step.dependOn(pipeline_compile);
-
     runContenManager.dependOn(&runContenManager_cmd.step);
+    runContenManager_cmd.step.dependOn(pipeline_compile);
 
     runGenFileNameIdExe.dependOn(&runGenFileNameIdExe_cmd.step);
     runGenFileNameIdExe_cmd.step.dependOn(runContenManager);
@@ -387,8 +384,8 @@ pub fn build(b: *std.Build) void {
     run_gen_exe.step.dependOn(&gen_exe.step);
 
     exe.step.dependOn(&run_gen_exe.step);
-    exe.step.dependOn(runContenManager);
     exe.step.dependOn(runGenFileNameIdExe);
+    exe.step.dependOn(runContenManager);
 
     waf.step.dependOn(&exe.step);
     b.getInstallStep().dependOn(&waf.step);

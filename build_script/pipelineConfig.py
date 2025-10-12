@@ -71,7 +71,7 @@ def generate_pipeline_config(pipeline_name):
       "MultisampleState": {
         "MultisampleStatepNext": None,
         "flag": 0,
-        "rasterizationSamples": "1",
+        "rasterizationSamples": "1_BIT",
         "sampleShadingEnable": False,
         "minSampleShading": 1.0,
         "alphaToCoverageEnable": False,
@@ -86,9 +86,9 @@ def generate_pipeline_config(pipeline_name):
         "depthBoundsTestEnable": False,
         "stencilTestEnable": False,
         "front": {
-            "failOp": "NEVER",
-            "passOp": "NEVER",
-            "depthFailOp": "NEVER",
+            "failOp": "KEEP",
+            "passOp": "KEEP",
+            "depthFailOp": "KEEP",
             "compareOp": "NEVER",
             "compareMask": 0,
             "writeMask": 0,
@@ -126,7 +126,7 @@ def generate_pipeline_config(pipeline_name):
       ]
       },
       "PipelineRendering": {
-          "color": ["B8G8R8A8_SRGB "],
+          "color": ["R8G8B8A8_SRGB"],
           "depth": "D32_SFLOAT",
           "stencil": "UNDEFINED"
       }
