@@ -15,6 +15,9 @@ const VkResultToError = @import("resultToError.zig");
 const VulkanPipelineInfo = @import("translate").VulkanPipelineInfo;
 const textureSet = @import("textureSet");
 const vma = @import("vma").vma;
+const tracy = @import("tracy");
+const file = @import("fileSystem");
+const translate = @import("translate");
 
 const layerNeeded = layer: {
     break :layer switch (builtin.mode) {
@@ -127,7 +130,7 @@ computeQueue: VkTheadQueue = .{},
 transferQueueFamily: VkQueueFamily = .{},
 transferQueue: VkTheadQueue = .{},
 
-shaderModules: std.StringHashMap(vk.VkShaderModule),
+shaderModules: std.StringHashMap(*vk.VkShaderModule),
 entryNames: std.StringHashMap(void),
 
 pipelineCache: vk.VkPipelineCache = null,
@@ -215,14 +218,17 @@ fn featureNeededCheck(comptime featureType: type, featurePack: anytype) bool {
 pub fn init(allocator: Allocator) Self {
     return Self{
         .allocator = allocator,
-        .shaderModules = std.StringHashMap(vk.VkShaderModule).init(allocator),
-        .entryNames = std.StringHashMap(void).init(allocator),
-        .pipelines = std.StringHashMap(Pipeline).init(allocator),
+        .shaderModules = .init(allocator),
+        .entryNames = .init(allocator),
+        .pipelines = .init(allocator),
         .textureSets = .init(allocator),
     };
 }
 
 pub fn initVulkan(self: *Self) !void {
+    const zone = tracy.initZone(@src(), .{ .name = "init vulkan resources" });
+    defer zone.deinit();
+
     try self.*.createWindow();
     const version = try getVulkanVersion();
     printVersion(version);
@@ -235,12 +241,14 @@ pub fn initVulkan(self: *Self) !void {
     try self.createVmaAllocator();
 
     var semaphores: [4]vk.VkSemaphore = undefined;
-    try self.createBinarySemaphore(0, &semaphores, semaphores.len);
+    try self.createBinarySemaphore(0, &semaphores);
     self.imageAvailableSemaphore[0] = semaphores[0];
     self.imageAvailableSemaphore[1] = semaphores[1];
     self.renderFinishSemaphore[0] = semaphores[2];
     self.renderFinishSemaphore[1] = semaphores[3];
-    try self.createTimelineSemaphore(0, &self.globalTimelineSemaphore, 0);
+    var semaphores2: [1]vk.VkSemaphore = undefined;
+    try self.createTimelineSemaphore(0, &semaphores2, 0);
+    self.globalTimelineSemaphore = semaphores2[0];
 
     self.surfaceFormat = try self.getSurfaceFormat();
     self.presentMode = try self.getPresentMode();
@@ -248,6 +256,13 @@ pub fn initVulkan(self: *Self) !void {
 }
 
 pub fn deinit(self: *Self) void {
+    self.waitDevice() catch |err| {
+        std.log.err("wait device error {s}\n", .{@errorName(err)});
+    };
+
+    const zone = tracy.initZone(@src(), .{ .name = "deinit vulkan resources" });
+    defer zone.deinit();
+
     var pipelines = self.pipelines.valueIterator();
     while (pipelines.next()) |val| {
         vk.vkDestroyPipeline(self.device, val.pipeline, self.pAllocCallBacks);
@@ -260,16 +275,31 @@ pub fn deinit(self: *Self) void {
             );
         }
     }
+    self.pipelines.deinit();
 
-    var entryNames = self.entryNames.keyIterator();
+    var entryNames = self.entryNames.iterator();
     while (entryNames.next()) |name| {
-        self.allocator.free(name.*);
+        self.allocator.free(name.key_ptr.*);
     }
+    self.entryNames.deinit();
 
-    var shaderCodes = self.shaderModules.valueIterator();
+    var shaderCodes = self.shaderModules.iterator();
     while (shaderCodes.next()) |code| {
-        vk.vkDestroyShaderModule(self.device, code.*, self.pAllocCallBacks);
+        std.log.debug("module ptr {*}", .{code.value_ptr});
+        vk.vkDestroyShaderModule(self.device, code.value_ptr.*.*, self.pAllocCallBacks);
+        self.allocator.destroy(code.value_ptr.*);
     }
+    self.shaderModules.deinit();
+
+    self.destroySwapchain(self.swapchain);
+
+    for (self.renderFinishSemaphore) |value| {
+        self.destroySemaphore(value);
+    }
+    for (self.imageAvailableSemaphore) |value| {
+        self.destroySemaphore(value);
+    }
+    self.destroySemaphore(self.globalTimelineSemaphore);
 
     vma.vmaDestroyAllocator(self.vmaAllocator);
 
@@ -280,6 +310,9 @@ pub fn deinit(self: *Self) void {
 }
 
 fn createWindow(self: *Self) !void {
+    const zone = tracy.initZone(@src(), .{ .name = "create window" });
+    defer zone.deinit();
+
     const width = w: {
         if (self.windowWidth == 0) self.windowWidth = DefaultWindowWidth;
         break :w self.windowWidth;
@@ -315,6 +348,9 @@ fn checkVkResult(result: vk.VkResult) VkError!void {
 }
 
 fn getVulkanVersion() VkError!u32 {
+    const zone = tracy.initZone(@src(), .{ .name = "get vulkan version" });
+    defer zone.deinit();
+
     var apiVersion: c_uint = 0;
     try checkVkResult(vk.vkEnumerateInstanceVersion(&apiVersion));
 
@@ -330,6 +366,9 @@ fn printVersion(apiVersion: u32) void {
 }
 
 fn createInstance(self: *Self) VkError!void {
+    const zone = tracy.initZone(@src(), .{ .name = "create instance" });
+    defer zone.deinit();
+
     var appInfo = vk.VkApplicationInfo{
         .sType = vk.VK_STRUCTURE_TYPE_APPLICATION_INFO,
         .pNext = null,
@@ -420,10 +459,16 @@ fn chooseEnabledLayers(self: *Self, comptime fields: type, comptime field_name: 
 }
 
 fn createSurface(self: *Self) !void {
+    const zone = tracy.initZone(@src(), .{ .name = "create surface" });
+    defer zone.deinit();
+
     try SDL_CheckResult(sdl.SDL_Vulkan_CreateSurface(self.*.window, @ptrCast(self.*.instance), @ptrCast(self.*.pAllocCallBacks), @ptrCast(&self.*.surface)));
 }
 
 fn pickPhysicalDevice(self: *Self) !void {
+    const zone = tracy.initZone(@src(), .{ .name = "pick physical device" });
+    defer zone.deinit();
+
     var deviceCount: u32 = 0;
     try checkVkResult(vk.vkEnumeratePhysicalDevices(self.*.instance, @ptrCast(&deviceCount), null));
     if (deviceCount == 0) {
@@ -509,6 +554,9 @@ fn pickPhysicalDevice(self: *Self) !void {
 }
 
 fn setQueueFamilies(self: *Self) !void {
+    const zone = tracy.initZone(@src(), .{ .name = "set queue families" });
+    defer zone.deinit();
+
     var queueFamilyCount: u32 = 0;
     vk.vkGetPhysicalDeviceQueueFamilyProperties(self.*.physicalDevice, &queueFamilyCount, null);
 
@@ -581,6 +629,9 @@ fn setQueueFamilies(self: *Self) !void {
     }
 }
 fn createDevice(self: *Self) !void {
+    const zone = tracy.initZone(@src(), .{ .name = "create logical device" });
+    defer zone.deinit();
+
     var dynamicRenderingFeature = vk.VkPhysicalDeviceDynamicRenderingFeatures{
         .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
         .pNext = null,
@@ -646,6 +697,9 @@ fn createDevice(self: *Self) !void {
 }
 
 fn createVmaAllocator(self: *Self) !void {
+    const zone = tracy.initZone(@src(), .{ .name = "create vma allocator" });
+    defer zone.deinit();
+
     var allocatorCreateInfo = vma.VmaAllocatorCreateInfo{
         .flags = 0,
         .physicalDevice = @ptrCast(self.physicalDevice),
@@ -668,6 +722,7 @@ fn _createBuffer(
     vmaFlags: u32,
     vmaUsage: vma.VmaMemoryUsage,
 ) VkError!Buffer {
+    std.log.debug("vma alloc buffer", .{});
     var bufferCreateInfo = vk.VkBufferCreateInfo{
         .sType = vk.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .flags = flags,
@@ -697,10 +752,14 @@ fn _createBuffer(
 }
 
 pub fn destroyBuffer(self: *Self, buffer: Buffer) void {
-    vma.vmaDestroyBuffer(self.vmaAllocator, buffer.vkBuffer, buffer.allocation);
+    std.log.debug("vma free buffer", .{});
+    vma.vmaDestroyBuffer(self.vmaAllocator, @ptrCast(buffer.vkBuffer), buffer.allocation);
 }
 
 pub fn createStagingBuffer(self: *Self, bufferSize: vk.VkDeviceSize) VkError!Buffer {
+    const zone = tracy.initZone(@src(), .{ .name = "create staging buffer" });
+    defer zone.deinit();
+
     return _createBuffer(
         self.vmaAllocator,
         0,
@@ -714,6 +773,9 @@ pub fn createStagingBuffer(self: *Self, bufferSize: vk.VkDeviceSize) VkError!Buf
 }
 
 fn createQueue(self: *Self) void {
+    const zone = tracy.initZone(@src(), .{ .name = "create queues" });
+    defer zone.deinit();
+
     const families = [3]*VkQueueFamily{ &self.graphicQueueFamily, &self.computeQueueFamily, &self.transferQueueFamily };
     const queuess = [3]*VkTheadQueue{ &self.graphicQueue, &self.computeQueue, &self.transferQueue };
     for (families, queuess) |family, queues| {
@@ -764,7 +826,7 @@ pub fn collectEntryName(self: *Self, entryName: []const u8) !*[]const u8 {
 }
 
 pub fn createShaderModule(self: *Self, shaderCode: []const u8, shaderName: []const u8) !vk.VkShaderModule {
-    var res = try self.shaderModules.getOrPut(shaderName);
+    const res = try self.shaderModules.getOrPut(shaderName);
 
     if (!res.found_existing) {
         var info = vk.VkShaderModuleCreateInfo{
@@ -775,6 +837,7 @@ pub fn createShaderModule(self: *Self, shaderCode: []const u8, shaderName: []con
             .pCode = @ptrCast(@alignCast(shaderCode.ptr)),
         };
         const module = try self.allocator.create(vk.VkShaderModule);
+        std.log.debug("module ptr {*}", .{module});
 
         try checkVkResult(vk.vkCreateShaderModule(
             self.device,
@@ -782,10 +845,10 @@ pub fn createShaderModule(self: *Self, shaderCode: []const u8, shaderName: []con
             self.pAllocCallBacks,
             @ptrCast(module),
         ));
-        res.value_ptr = module;
+        res.value_ptr.* = module;
     }
 
-    return res.value_ptr.*;
+    return res.value_ptr.*.*;
 }
 
 pub fn clearAllShaderModule(self: *Self) void {
@@ -818,6 +881,9 @@ pub fn destroyPipelineLayout(self: *Self, pipelineLayout: vk.VkPipelineLayout) v
 }
 
 pub fn addPipelineCreateInfo(self: *Self, info: *VulkanPipelineInfo) !void {
+    const zone = tracy.initZone(@src(), .{ .name = "add pipeline create info" });
+    defer zone.deinit();
+
     if (self.graphicInfoCount > self.graphicPipelineCreateInfo.len) {
         return error.OutOfCapacity;
     }
@@ -876,6 +942,9 @@ pub fn addPipelineCreateInfo(self: *Self, info: *VulkanPipelineInfo) !void {
 }
 
 pub fn createAllPipelinesAdded(self: *Self) !void {
+    const zone = tracy.initZone(@src(), .{ .name = "create pipelines" });
+    defer zone.deinit();
+
     var temp = [_]vk.VkPipeline{null} ** 10;
 
     try checkVkResult(vk.vkCreateGraphicsPipelines(
@@ -942,6 +1011,10 @@ fn _createVkImage(
     pQueueFamilyIndices: [*c]u32,
     initialLayout: InitLayout,
 ) VkError!Image {
+    const zone = tracy.initZone(@src(), .{ .name = "create Vkimage from vma" });
+    defer zone.deinit();
+
+    std.log.debug("vma alloc", .{});
     var imageInfo = vk.VkImageCreateInfo{
         .sType = vk.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .pNext = pNext,
@@ -986,7 +1059,7 @@ pub fn createImage2D(
     tiling: vk.VkImageTiling,
     usage: vk.VkImageUsageFlags,
 ) VkError!Image {
-    try checkVkResult(Self._createVkImage(
+    return Self._createVkImage(
         self.vmaAllocator,
         null,
         0,
@@ -1002,7 +1075,7 @@ pub fn createImage2D(
         0,
         null,
         .VK_IMAGE_LAYOUT_UNDEFINED,
-    ));
+    );
 }
 
 pub fn _createCommandBuffers(
@@ -1013,6 +1086,9 @@ pub fn _createCommandBuffers(
     commandBufferCount: u32,
     pCommandBuffers: [*c]vk.VkCommandBuffer,
 ) !void {
+    const zone = tracy.initZone(@src(), .{ .name = "create command buffer" });
+    defer zone.deinit();
+
     var allocateInfo = vk.VkCommandBufferAllocateInfo{
         .sType = vk.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .pNext = pNext,
@@ -1024,13 +1100,10 @@ pub fn _createCommandBuffers(
     try checkVkResult(vk.vkAllocateCommandBuffers(self.device, @ptrCast(&allocateInfo), @ptrCast(pCommandBuffers)));
 }
 
-const commandBufferType = enum {
-    graphic,
-    transfer,
-    compute,
-};
-
 pub fn _beginCommandBuffer(commandBuffer: vk.VkCommandBuffer, pNext: ?*anyopaque, flags: vk.VkCommandBufferUsageFlags, pInheritanceInfo: ?*vk.VkCommandBufferInheritanceInfo) !void {
+    const zone = tracy.initZone(@src(), .{ .name = "begin command buffer" });
+    defer zone.deinit();
+
     var beginInfo = vk.VkCommandBufferBeginInfo{
         .sType = vk.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .pNext = pNext,
@@ -1042,14 +1115,23 @@ pub fn _beginCommandBuffer(commandBuffer: vk.VkCommandBuffer, pNext: ?*anyopaque
 }
 
 pub fn endCommandBuffer(commandBuffer: vk.VkCommandBuffer) !void {
+    const zone = tracy.initZone(@src(), .{ .name = "end command buffer" });
+    defer zone.deinit();
+
     try checkVkResult(vk.vkEndCommandBuffer(commandBuffer));
 }
 
 pub fn createBinarySemaphore(self: *Self, flags: vk.VkSemaphoreCreateFlags, pSemaphore: []vk.VkSemaphore) !void {
+    const zone = tracy.initZone(@src(), .{ .name = "create semaphores" });
+    defer zone.deinit();
+
     try self._createSemaphore(null, flags, pSemaphore);
 }
 
 pub fn createTimelineSemaphore(self: *Self, flags: vk.VkSemaphoreCreateFlags, pSemaphore: []vk.VkSemaphore, initialValue: u64) !void {
+    const zone = tracy.initZone(@src(), .{ .name = "create semaphores" });
+    defer zone.deinit();
+
     var createInfo = vk.VkSemaphoreTypeCreateInfo{
         .sType = vk.VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
         .pNext = null,
@@ -1072,6 +1154,9 @@ pub fn _createSemaphore(self: *Self, pNext: ?*anyopaque, flags: vk.VkSamplerCrea
 }
 
 pub fn acquireNextImage(self: *Self, pIndex: *u32) !void {
+    const zone = tracy.initZone(@src(), .{ .name = "acquire next image" });
+    defer zone.deinit();
+
     try checkVkResult(vk.vkAcquireNextImageKHR(self.device, self.swapchain, std.math.maxInt(u64), self.imageAvailableSemaphore[self.currentFrame.load(.seq_cst)], null, @ptrCast(pIndex)));
 }
 
@@ -1082,6 +1167,9 @@ pub fn nextFrame(self: *Self) void {
 }
 
 pub fn getSurfaceFormat(self: *Self) !vk.VkSurfaceFormatKHR {
+    const zone = tracy.initZone(@src(), .{ .name = "get surface format" });
+    defer zone.deinit();
+
     if (self.surfaceFormat.colorSpace != 0 and self.surfaceFormat.format != 0) {
         return self.surfaceFormat;
     }
@@ -1104,6 +1192,9 @@ pub fn getSurfaceFormat(self: *Self) !vk.VkSurfaceFormatKHR {
 }
 
 pub fn getPresentMode(self: *Self) !vk.VkPresentModeKHR {
+    const zone = tracy.initZone(@src(), .{ .name = "get present mode" });
+    defer zone.deinit();
+
     if (self.presentMode != 0) {
         return self.presentMode;
     }
@@ -1138,6 +1229,9 @@ pub fn getPresentMode(self: *Self) !vk.VkPresentModeKHR {
 }
 
 pub fn createSwapchain(self: *Self) !vk.VkSwapchainKHR {
+    const zone = tracy.initZone(@src(), .{ .name = "create swapchain" });
+    defer zone.deinit();
+
     var surfaceCapabilities: vk.VkSurfaceCapabilitiesKHR = .{};
     try checkVkResult(vk.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(self.physicalDevice, self.surface, @ptrCast(&surfaceCapabilities)));
 
@@ -1170,7 +1264,7 @@ pub fn createSwapchain(self: *Self) !vk.VkSwapchainKHR {
 
     try checkVkResult(vk.vkCreateSwapchainKHR(self.device, @ptrCast(&createInfo), self.pAllocCallBacks, @ptrCast(&swapchain)));
 
-    return self.swapchain;
+    return swapchain;
 }
 
 pub fn createSwapchainImages(self: *Self) !void {
@@ -1178,8 +1272,11 @@ pub fn createSwapchainImages(self: *Self) !void {
     try checkVkResult(vk.vkGetSwapchainImagesKHR(self.device, self.swapchain, @ptrCast(&count), null));
 }
 
-pub fn queueSubmit(self: *Self, kind: commandBufferType, submitCount: u32, pSubmits: [*c]vk.VkSubmitInfo, fence: vk.VkFence) VkError!void {
-    const queue =
+pub fn queueSubmit(self: *Self, kind: CommandPoolType, submitCount: u32, pSubmits: *vk.VkSubmitInfo, fence: vk.VkFence) VkError!void {
+    const zone = tracy.initZone(@src(), .{ .name = "queue submit" });
+    defer zone.deinit();
+
+    var queue =
         switch (kind) {
             .graphic => self.graphicQueue,
             .compute => self.computeQueue,
@@ -1189,10 +1286,13 @@ pub fn queueSubmit(self: *Self, kind: commandBufferType, submitCount: u32, pSubm
     queue.mutex.lock();
     defer queue.mutex.unlock();
 
-    try checkVkResult(vk.vkQueueSubmit(queue.queue, submitCount, pSubmits, fence));
+    try checkVkResult(vk.vkQueueSubmit(queue.queue, submitCount, @ptrCast(pSubmits), fence));
 }
 
 pub fn presentSubmit(self: *Self, pPresentInfo: [*c]vk.VkPresentInfoKHR) !void {
+    const zone = tracy.initZone(@src(), .{ .name = "present" });
+    defer zone.deinit();
+
     self.graphicQueue.mutex.lock();
     defer self.graphicQueue.mutex.unlock();
 
@@ -1210,25 +1310,28 @@ pub fn _createFence(self: *Self, pNext: ?*anyopaque, flags: vk.VkFenceCreateFlag
         try checkVkResult(vk.vkCreateFence(self.device, @ptrCast(&createInfo), self.pAllocCallBacks, @ptrCast(&pFence[i])));
 }
 
-pub fn waitForFence(self: *Self, fences: []vk.VkFence, waitAll: vk.VKBool32) !void {
-    try checkVkResult(vk.vkWaitForFences(self.device, fences.len, @ptrCast(fences.ptr), waitAll, std.math.maxInt(u64)));
+pub fn waitForFence(self: *Self, fenceCount: u32, fences: *vk.VkFence, waitAll: vk.VKBool32) !void {
+    try checkVkResult(vk.vkWaitForFences(self.device, fenceCount, @ptrCast(fences), waitAll, std.math.maxInt(u64)));
 }
 
-pub fn resetFence(self: *Self, fences: []vk.VkFence) !void {
-    try checkVkResult(vk.vkResetFences(self.device, fences.len, @ptrCast(fences.ptr)));
+pub fn resetFence(self: *Self, fenceCount: u32, fences: *vk.VkFence) !void {
+    try checkVkResult(vk.vkResetFences(self.device, fenceCount, @ptrCast(fences)));
 }
 
 pub fn resetCommandBuffer(commandBuffer: vk.VkCommandBuffer) !void {
     try checkVkResult(vk.vkResetCommandBuffer(commandBuffer, 0));
 }
 
-pub fn waitSemaphore(self: *Self, pSemaphores: []vk.VkSemaphore, pValues: [*]u64) !void {
+pub fn waitSemaphore(self: *Self, semaphoreCount: u32, pSemaphores: *vk.VkSemaphore, pValues: *u64) !void {
+    const zone = tracy.initZone(@src(), .{ .name = " wait semaphore" });
+    defer zone.deinit();
+
     var semaphoreWaitInfo = vk.VkSemaphoreWaitInfo{
         .sType = vk.VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
         .pNext = null,
         .flags = 0,
-        .semaphoreCount = @intCast(pSemaphores.len),
-        .pSemaphores = @ptrCast(pSemaphores.ptr),
+        .semaphoreCount = semaphoreCount,
+        .pSemaphores = @ptrCast(pSemaphores),
         .pValues = @ptrCast(pValues),
     };
 
@@ -1236,7 +1339,66 @@ pub fn waitSemaphore(self: *Self, pSemaphores: []vk.VkSemaphore, pValues: [*]u64
 }
 
 pub fn getSemaphoreCounterValue(self: *Self, semaphore: vk.VkSemaphore) !u64 {
+    const zone = tracy.initZone(@src(), .{ .name = "get semaphore value" });
+    defer zone.deinit();
+
     var value: u64 = 0;
     try checkVkResult(vk.vkGetSemaphoreCounterValue(self.device, semaphore, @ptrCast(&value)));
     return value;
+}
+
+pub fn destroySemaphore(self: *Self, semaphore: vk.VkSemaphore) void {
+    vk.vkDestroySemaphore(self.device, semaphore, self.pAllocCallBacks);
+}
+
+pub fn destroySwapchain(self: *Self, swapchain: vk.VkSwapchainKHR) void {
+    vk.vkDestroySwapchainKHR(self.device, swapchain, self.pAllocCallBacks);
+}
+
+pub fn waitDevice(self: *Self) !void {
+    try checkVkResult(vk.vkDeviceWaitIdle(self.device));
+}
+
+pub fn destroyImage(self: *Self, image: Image) void {
+    const zone = tracy.initZone(@src(), .{ .name = "destroy image" });
+    defer zone.deinit();
+
+    vma.vmaDestroyImage(self.vmaAllocator, @ptrCast(image.vkImage), image.allocation);
+}
+
+pub fn readPipelineFileAndAdd(self: *Self, fileID: i32) !void {
+    const zone = tracy.initZone(@src(), .{ .name = "read pipeline file and add" });
+    defer zone.deinit();
+
+    const zone2 = tracy.initZone(@src(), .{ .name = "read file in read pipeline file and add" });
+    var pFile = try file.getFile(fileID);
+    defer pFile.close();
+    const fileSize = (try pFile.stat()).size;
+    var fileContent = try self.allocator.alloc(u8, fileSize);
+    defer self.allocator.free(fileContent);
+    _ = try pFile.readAll(fileContent);
+    zone2.deinit();
+
+    var shaderCodes: [5][]u8 = undefined;
+    var pos: u64 = 0;
+
+    const zone3 = tracy.initZone(@src(), .{ .name = "split file content" });
+    const pipelineInfo: *translate.VulkanPipelineInfo = @alignCast(std.mem.bytesAsValue(
+        translate.VulkanPipelineInfo,
+        fileContent[0..@sizeOf(translate.VulkanPipelineInfo)],
+    ));
+    pos += @sizeOf(translate.VulkanPipelineInfo);
+    for (0..5) |i| {
+        if (pos >= fileSize) break;
+
+        const len = std.mem.bytesToValue(usize, fileContent[pos .. pos + 8]);
+        pos += 8;
+        shaderCodes[i] = fileContent[pos .. pos + len];
+        pos += len;
+    }
+    zone3.deinit();
+
+    try translate.toVulkan(pipelineInfo, shaderCodes);
+
+    try self.addPipelineCreateInfo(pipelineInfo);
 }

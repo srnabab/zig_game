@@ -4,6 +4,8 @@ const Allocator = std.mem.Allocator;
 const Mutex = std.Thread.Mutex;
 const MemoryPoolExtra = std.heap.MemoryPoolExtra;
 
+const tracy = @import("tracy");
+
 pub fn Queue(T: type) type {
     return struct {
         const Self = @This();
@@ -89,13 +91,22 @@ pub fn Queue(T: type) type {
         pub fn init(self: *Self, allocator: Allocator) void {
             self.threadSafeAllocator = std.heap.ThreadSafeAllocator{ .child_allocator = allocator };
             self.nodeMemory = .init(self.threadSafeAllocator.allocator());
+            self.list = .{};
+            self.totalSize = 0;
+            self.mutex = .{};
         }
 
         pub fn deinit(self: *Self) void {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
             self.nodeMemory.deinit();
         }
 
         pub fn pushFirst(self: *Self, data: T) !void {
+            const zone = tracy.initZone(@src(), .{ .name = "queue push first" });
+            defer zone.deinit();
+
             self.mutex.lock();
             defer self.mutex.unlock();
 
@@ -108,6 +119,9 @@ pub fn Queue(T: type) type {
         }
 
         pub fn popFirst(self: *Self) ?T {
+            const zone = tracy.initZone(@src(), .{ .name = "queue pop first" });
+            defer zone.deinit();
+
             self.mutex.lock();
             defer self.mutex.unlock();
 
@@ -123,6 +137,9 @@ pub fn Queue(T: type) type {
         }
 
         pub fn pushLast(self: *Self, data: T) !void {
+            const zone = tracy.initZone(@src(), .{ .name = "queue push last" });
+            defer zone.deinit();
+
             self.mutex.lock();
             defer self.mutex.unlock();
 
@@ -135,6 +152,9 @@ pub fn Queue(T: type) type {
         }
 
         pub fn popLast(self: *Self) ?T {
+            const zone = tracy.initZone(@src(), .{ .name = "queue pop last" });
+            defer zone.deinit();
+
             self.mutex.lock();
             defer self.mutex.unlock();
 
@@ -185,20 +205,32 @@ pub fn Queue(T: type) type {
         }
 
         pub fn remove(self: *Self, data: T) void {
-            while (self.list.first) |node| {
+            const zone = tracy.initZone(@src(), .{ .name = "queue remove" });
+            defer zone.deinit();
+
+            var first = self.list.first;
+            while (first) |node| {
                 const parent: *DataNode = @fieldParentPtr("node", node);
-                if (std.mem.eql(T, parent.data, data)) {
+                if (std.meta.eql(&[_]T{parent.data}, &[_]T{data})) {
                     self.list.remove(node);
                 }
+
+                // if (node == node.next) break;
+
+                first = node.next;
             }
         }
 
         pub fn find(self: *Self, data: T) ?*T {
-            while (self.list.first) |node| {
+            var first = self.list.first;
+            while (first) |node| {
                 const parent: *DataNode = @fieldParentPtr("node", node);
-                if (std.mem.eql(T, parent.data, data)) {
+                if (std.meta.eql(&[_]T{parent.data}, &[_]T{data})) {
                     return &parent.data;
                 }
+                // if (node == node.next) break;
+
+                first = node.next;
             }
 
             return null;

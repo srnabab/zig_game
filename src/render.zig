@@ -2,14 +2,22 @@ const std = @import("std");
 const video = @import("video");
 const process = @import("processRender");
 const global = @import("global");
+const tracy = @import("tracy");
+
 // const drawCommandProcess = @import("video/drawCommandProcess.zig");
 
-pub fn render_thread_func(gpa: std.mem.Allocator, thread_count: usize) !void {
-    var vulkan = video.VkStruct.init(gpa);
-    try vulkan.initVulkan();
-    defer vulkan.deinit();
+pub fn render_thread_func(thread_count: usize) !void {
+    tracy.setThreadName("render");
+    defer tracy.message("render exit");
 
-    global.vulkan = vulkan;
+    const zone = tracy.initZone(@src(), .{ .name = "render" });
+    defer zone.deinit();
+
+    // var vulkan = video.VkStruct.init(gpa);
+    // try vulkan.initVulkan();
+    // defer vulkan.deinit();
+
+    // global.vulkan = vulkan;
 
     while (true) {
         if (global.down) {
@@ -19,17 +27,4 @@ pub fn render_thread_func(gpa: std.mem.Allocator, thread_count: usize) !void {
 
     _ = thread_count;
     std.log.info("render end", .{});
-}
-
-pub fn process_thread_func() !void {
-    // drawCommandProcess.init(global.gpa);
-    // defer drawCommandProcess.deinit();
-
-    while (true) {
-        // try process.process();
-        if (global.down) {
-            break;
-        }
-    }
-    std.log.info("render process end", .{});
 }

@@ -1,4 +1,5 @@
 const std = @import("std");
+const tracy = @import("tracy");
 
 pub fn MemoryPoolSlice(comptime Item: type) type {
     return struct {
@@ -7,7 +8,7 @@ pub fn MemoryPoolSlice(comptime Item: type) type {
         const Node = struct {
             ptr: [*]Item,
             size: usize,
-            next: *@This(),
+            next: ?*@This(),
         };
 
         arena: std.heap.ArenaAllocator,
@@ -35,7 +36,10 @@ pub fn MemoryPoolSlice(comptime Item: type) type {
             return reset_successful;
         }
 
-        pub fn create(pool: *Pool, size: usize) ![]Item {
+        pub fn create(pool: *Pool, size: u32) ![]Item {
+            const zone = tracy.initZone(@src(), .{ .name = "create slice" });
+            defer zone.deinit();
+
             std.debug.assert(size != 0);
 
             const pow_of_two: usize = 31 - @clz(size);
@@ -46,7 +50,7 @@ pub fn MemoryPoolSlice(comptime Item: type) type {
 
                 if (item.size > size) {
                     item.size = item.size - size;
-                    item.ptr = &item.ptr[size];
+                    item.ptr = item.ptr + size;
                     const idx: usize = 31 - @clz(item.size);
 
                     item.next = pool.free_lists[idx];

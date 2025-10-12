@@ -15,7 +15,7 @@ pub const CommandType = enum {
     endRecord,
     present,
     graphicTransfer,
-    trasfer,
+    transfer,
     end,
 };
 
@@ -67,7 +67,7 @@ pub const PublicCommandType: type = blk: {
     var count: usize = 0;
     var i: usize = 0;
 
-    a: for (ct.fields, ct.decls) |value, decl| {
+    a: for (ct.fields) |value| {
         if (count < privateEnum.len) {
             for (privateEnum) |ee| {
                 if (@intFromEnum(ee) == value.value) {
@@ -77,7 +77,7 @@ pub const PublicCommandType: type = blk: {
             }
         }
 
-        pe[i].name = decl.name;
+        pe[i].name = value.name;
         pe[i].value = value.value;
         i += 1;
     }
@@ -95,11 +95,26 @@ pub fn PublicCommandTypeToCommandType(a: PublicCommandType) CommandType {
         .graphic => .graphic,
         .copyBufferToImage => .copyBufferToImage,
         .present => .present,
+        .graphicTransfer => .graphicTransfer,
+        .transfer => .transfer,
+    };
+}
+
+pub fn PrivateCommandTypeToCommandType(a: PrivateCommandType) CommandType {
+    return switch (a) {
+        .start => .start,
+        .transLayout => .transLayout,
+        .beginPrimaryRecord => .beginPrimaryRecord,
+        .beginRendering => .beginRendering,
+        .beginSecondaryRecord => .beginSecondaryRecord,
+        .endRecord => .endRecord,
+        .endRendering => .endRendering,
+        .end => .end,
     };
 }
 
 const TransLayout = struct {
-    pTexture: *texture,
+    pTexture: *texture.Texture,
 
     oldLayout: vk.VkImageLayout,
     newLayout: vk.VkImageLayout,
@@ -113,11 +128,11 @@ const TransLayout = struct {
     destinationStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_NONE,
 
     baseMipLevel: u32 = 0,
-    levelCount: u32 = 0,
+    levelCount: u32 = 1,
 };
 
 pub const CopyBufferToImage = struct {
-    pTexture: *texture,
+    pTexture: *texture.Texture,
 
     width: u32,
     height: u32,

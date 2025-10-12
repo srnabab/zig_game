@@ -640,12 +640,12 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                             //     ptr = @as(i32, sqlite.sqlite3_column_int(stmt, i));
                             // },
                             // => {
-                            const ptr = @as(*i64, @ptrCast(@alignCast(getValues[i])));
-                            ptr.* = @as(i64, sqlite.sqlite3_column_int64(stmt, ii));
+                            const ptr = @as(*c_longlong, @ptrCast(@alignCast(getValues[i])));
+                            ptr.* = sqlite.sqlite3_column_int64(stmt, ii);
                         },
                         .INTEGER32 => {
-                            const ptr = @as(*i32, @ptrCast(@alignCast(getValues[i])));
-                            ptr.* = @as(i32, sqlite.sqlite3_column_int(stmt, ii));
+                            const ptr = @as(*c_int, @ptrCast(@alignCast(getValues[i])));
+                            ptr.* = sqlite.sqlite3_column_int(stmt, ii);
                         },
                         .TEXT => {
                             const ptr = @as([*]u8, @ptrCast(@alignCast(getValues[i])));

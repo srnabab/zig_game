@@ -7,13 +7,13 @@ const vk = @import("vulkan").vulkan;
 const VkStruct = @import("video");
 const global = @import("global");
 const MemoryPool = @import("memoryPool").MemoryPoolSlice;
+const tracy = @import("tracy");
 
 const Self = @This();
 
-const Texture = struct {
+pub const Texture = struct {
     ID: u32 = std.math.maxInt(u32),
 
-    layoutCount: u32,
     layouts: []vk.VkImageLayout,
 
     source_width: u32,
@@ -23,6 +23,17 @@ const Texture = struct {
     image: VkStruct.Image,
     imageView: vk.VkImageView,
 
+    pub fn changeTextureLayout(self: *Texture, baseLayer: u32, layerCount: u32, dstLayout: vk.VkImageLayout) void {
+        const zone = tracy.initZone(@src(), .{ .name = "change texture layout" });
+        defer zone.deinit();
+
+        mutex.lock();
+        defer mutex.unlock();
+
+        for (self.layouts[baseLayer .. baseLayer + layerCount]) |*value| {
+            value.* = dstLayout;
+        }
+    }
     // pDescriptorSet: []vk.VkDescriptorSet,
     // pShadowDescriptorSet: []vk.VkDescriptorSet,
 
@@ -37,14 +48,15 @@ const Texture = struct {
 // const memType = std.heap.MemoryPoolExtra(Node, .{ .alignment = @alignOf(Node) });
 // var mem: memType = undefined;
 var AutoIncrecemetnID = Atomic.Value(u32).init(0);
+var mutex: Mutex = .{};
 
 memory: std.heap.MemoryPoolExtra(Texture, .{}),
-map: std.hash_map.AutoHashMap(u32, Texture),
+map: std.hash_map.AutoHashMap(u32, *Texture),
 layoutMemory: MemoryPool(vk.VkImageLayout),
-// var mutex = Mutex{};
 // pub var textureSet: HashMapType = undefined;
 
 pub fn init(allocator: std.mem.Allocator) Self {
+    std.log.debug("texture set init", .{});
     return .{
         .map = .init(allocator),
         .memory = .init(allocator),
@@ -52,49 +64,79 @@ pub fn init(allocator: std.mem.Allocator) Self {
     };
 }
 
-pub fn createImageTexture(self: *Self, fileID: u32) !*Texture {
-    const ID = AutoIncrecemetnID.fetchAdd(1, .seq_cst);
+pub fn deinit(self: *Self) void {
+    const zone = tracy.initZone(@src(), .{ .name = "texture set deinit" });
+    defer zone.deinit();
 
-    var imgWidth: i32 = 0;
-    var imgHeight: i32 = 0;
-    var channel: i32 = 0;
-
-    const img = try file.getImageLoadParam(fileID);
-    errdefer img.file.close();
-
-    const imgStat = try img.file.stat();
-    const fileMem = try global.gpa.alloc(u8, imgStat.size);
-    errdefer global.gpa.free(fileMem);
-    _ = try img.file.readAll(fileMem);
-    img.file.close();
-
-    const imageMem = stb_image.stbi_load_from_memory(
-        @ptrCast(fileMem.ptr),
-        fileMem.len,
-        @ptrCast(&imgWidth),
-        @ptrCast(&imgHeight),
-        @ptrCast(&channel),
-        stb_image.STBI_rgb_alpha,
-    );
-    global.gpa.free(fileMem);
-
-    const stagingBuffer = try global.vulkan.createStagingBuffer(imgStat.size);
-    @memcpy(stagingBuffer.info.pMappedData, imageMem);
-    const image = try global.vulkan.createImage2D(imgWidth, imgHeight, img.format, img.tiling, img.usage);
-
-    const texture = try self.memory.create();
-    texture.* = .{
-        .image = image,
-        .ID = ID,
-        .source_width = imgWidth,
-        .source_height = imgHeight,
-        .layoutCount = 1,
-        .layouts = try self.layoutMemory.create(1),
-        .imageView = null,
-        .format = img.format,
+    global.vulkan.waitDevice() catch |err| {
+        std.log.err("wait device error {s}\n", .{@errorName(err)});
     };
-    for (0..texture.layouts.len) |i| {
-        texture.layouts[i] = vk.VK_IMAGE_LAYOUT_UNDEFINED;
+
+    std.log.debug("texture deinit", .{});
+    var itt = self.map.valueIterator();
+    while (itt.next()) |texture| {
+        global.vulkan.destroyImage(texture.*.image);
+    }
+
+    self.map.deinit();
+    self.memory.deinit();
+    self.layoutMemory.deinit();
+}
+
+pub fn createImageTexture(self: *Self, fileID: u32) !*Texture {
+    const zone = tracy.initZone(@src(), .{ .name = "create image texutre from file" });
+    defer zone.deinit();
+
+    var texture: *Texture = undefined;
+    var stagingBuffer: VkStruct.Buffer = undefined;
+    {
+        mutex.lock();
+        defer mutex.unlock();
+
+        const ID = AutoIncrecemetnID.fetchAdd(1, .seq_cst);
+
+        var imgWidth: u32 = 0;
+        var imgHeight: u32 = 0;
+        var channel: u32 = 0;
+
+        const img = try file.getImageLoadParam(@intCast(fileID));
+        errdefer img.file.close();
+
+        const imgStat = try img.file.stat();
+        const fileMem = try global.gpa.alloc(u8, imgStat.size);
+        errdefer global.gpa.free(fileMem);
+        _ = try img.file.readAll(fileMem);
+        img.file.close();
+
+        const imageMem = stb_image.stbi_load_from_memory(
+            @ptrCast(fileMem.ptr),
+            @intCast(fileMem.len),
+            @ptrCast(&imgWidth),
+            @ptrCast(&imgHeight),
+            @ptrCast(&channel),
+            stb_image.STBI_rgb_alpha,
+        );
+        global.gpa.free(fileMem);
+        const pixelSize: u64 = @intCast(@sizeOf(u8) * imgWidth * imgHeight * channel);
+
+        stagingBuffer = try global.vulkan.createStagingBuffer(pixelSize);
+        @memcpy(@as([*c]u8, @ptrCast(stagingBuffer.info.pMappedData.?)), imageMem[0..pixelSize]);
+        const image = try global.vulkan.createImage2D(imgWidth, imgHeight, img.format, img.tiling, img.usage);
+
+        texture = try self.memory.create();
+        texture.* = .{
+            .image = image,
+            .ID = ID,
+            .source_width = imgWidth,
+            .source_height = imgHeight,
+            .layouts = try self.layoutMemory.create(1),
+            .imageView = null,
+            .format = img.format,
+        };
+        try self.map.put(ID, texture);
+        for (0..texture.layouts.len) |i| {
+            texture.layouts[i] = vk.VK_IMAGE_LAYOUT_UNDEFINED;
+        }
     }
 
     try global.graphic.addCommand(
@@ -110,9 +152,4 @@ pub fn createImageTexture(self: *Self, fileID: u32) !*Texture {
     return texture;
 
     // global.vulkan.destroyBuffer(stagingBuffer);
-}
-
-pub fn deinit(self: *Self) void {
-    self.map.deinit();
-    self.memory.deinit();
 }

@@ -14,18 +14,16 @@ pub fn compentPool(comptime dataSet: type) type {
     return struct {
         const Self = @This();
 
-        sparse_array: std.ArrayList(usize),
-        dense_array: std.ArrayList(dataSet),
-        dense_entity_array: std.ArrayList(Entity),
+        sparse_array: std.array_list.Managed(usize),
+        dense_array: std.array_list.Managed(dataSet),
+        dense_entity_array: std.array_list.Managed(Entity),
         mutex: Mutex = .{},
 
         pub fn init(allocator: Allocator) Self {
-            var sparse_array = std.ArrayList(usize).initCapacity(allocator, 4) catch |err| {
+            var sparse_array = std.array_list.Managed(usize).initCapacity(allocator, 4) catch |err| {
                 std.log.err("err {s}\n", .{@errorName(err)});
                 unreachable;
             };
-            const dense_array = std.ArrayList(dataSet).init(allocator);
-            const dense_entity_array = std.ArrayList(Entity).init(allocator);
 
             sparse_array.expandToCapacity();
 
@@ -35,8 +33,8 @@ pub fn compentPool(comptime dataSet: type) type {
 
             return Self{
                 .sparse_array = sparse_array,
-                .dense_array = dense_array,
-                .dense_entity_array = dense_entity_array,
+                .dense_array = .init(allocator),
+                .dense_entity_array = .init(allocator),
             };
         }
 

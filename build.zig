@@ -1,6 +1,7 @@
 const std = @import("std");
 const lazyP = @import("std").Build.LazyPath;
 const cpp_compileFlag = [_][]const u8{ "-std=c++17", "-g" };
+const builtin = @import("builtin");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{ .default_target = .{} });
@@ -10,10 +11,14 @@ pub fn build(b: *std.Build) void {
     // {
 
     const tracy_enable = b.option(bool, "tracy_enable", "Enable profiling") orelse false;
+    const tracy_callstack = b.option(u8, "tracy_callstack", "Callstack depth") orelse 6;
     const tracy = b.dependency("tracy", .{
         .target = target,
         .optimize = optimize,
         .tracy_enable = tracy_enable,
+        .tracy_callstack = tracy_callstack,
+        .tracy_delayed_init = true,
+        .tracy_manual_lifetime = true,
     });
 
     const vk_mod = b.createModule(.{
@@ -114,7 +119,9 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/stb_image.zig"),
         .target = target,
         .optimize = optimize,
+        .link_libc = true,
     });
+    stb_image_mod.addCSourceFile(.{ .file = b.path("include/stb/stb_image_impl.h"), .language = .c });
     const textureSet_mod = b.createModule(.{
         .root_source_file = b.path("src/video/textureSet.zig"),
         .target = target,
@@ -163,6 +170,7 @@ pub fn build(b: *std.Build) void {
     // dependency
     vk_mod.addIncludePath(b.path("include"));
 
+    steam_mod.addImport("tracy", tracy.module("tracy"));
     steam_mod.addIncludePath(b.path("include"));
 
     spReflectModule.addImport("EnumC", enum_c_mod);
@@ -215,11 +223,18 @@ pub fn build(b: *std.Build) void {
     translate_mod.addImport("fileSystem", fileSystem_mod);
     translate_mod.addImport("global", global_mod);
     translate_mod.addImport("enumFromC", enum_c_mod);
+    translate_mod.addImport("tracy", tracy.module("tracy"));
 
     textureSet_mod.addImport("stb_image", stb_image_mod);
     textureSet_mod.addImport("vulkan", vk_mod);
     textureSet_mod.addImport("memoryPool", memoryPool_mod);
     textureSet_mod.addImport("video", video_mod);
+    textureSet_mod.addImport("fileSystem", fileSystem_mod);
+    textureSet_mod.addImport("global", global_mod);
+    textureSet_mod.addImport("tracy", tracy.module("tracy"));
+    textureSet_mod.addIncludePath(b.path("include"));
+
+    stb_image_mod.addIncludePath(b.path("include"));
 
     vma_mod.addIncludePath(b.path("include"));
 
@@ -230,18 +245,28 @@ pub fn build(b: *std.Build) void {
     video_mod.addImport("translate", translate_mod);
     video_mod.addImport("enumFromC", enum_c_mod);
     video_mod.addImport("textureSet", textureSet_mod);
+    video_mod.addImport("tracy", tracy.module("tracy"));
+    video_mod.addImport("fileSystem", fileSystem_mod);
+
+    queue_mod.addImport("tracy", tracy.module("tracy"));
+
+    memoryPool_mod.addImport("tracy", tracy.module("tracy"));
 
     processRender_mod.addImport("video", video_mod);
     processRender_mod.addImport("vulkan", vk_mod);
     processRender_mod.addImport("textureSet", textureSet_mod);
     processRender_mod.addImport("queue", queue_mod);
+    processRender_mod.addImport("global", global_mod);
+    processRender_mod.addImport("tracy", tracy.module("tracy"));
 
     global_mod.addImport("video", video_mod);
     global_mod.addImport("processRender", processRender_mod);
+    global_mod.addImport("textureSet", textureSet_mod);
 
     fileSystem_mod.addImport("sqlDb", sqliteModule);
     fileSystem_mod.addImport("global", global_mod);
     fileSystem_mod.addImport("tables", tables_mod);
+    fileSystem_mod.addImport("tracy", tracy.module("tracy"));
     fileSystem_mod.addIncludePath(b.path("include"));
 
     exe_mod.addImport("ECS", ecs_mod);
@@ -327,6 +352,9 @@ pub fn build(b: *std.Build) void {
     const waf = b.addWriteFiles();
     _ = waf.addCopyFile(exe.getEmittedAsm(), "main.asm");
 
+    const pre_run_message_cmd = b.addSystemCommand(if (builtin.target.os.tag == .windows) &.{ "cmd", "/c", "echo" } else &.{"echo"});
+    pre_run_message_cmd.addArg(b.fmt("tracy-enable: {}", .{tracy_enable}));
+
     const run_cmd = b.addRunArtifact(exe);
     if (b.args) |args| {
         run_cmd.addArgs(args);
@@ -363,6 +391,7 @@ pub fn build(b: *std.Build) void {
     b.getInstallStep().dependOn(&waf.step);
 
     run_cmd.step.dependOn(b.getInstallStep());
+    run_cmd.step.dependOn(&pre_run_message_cmd.step);
     run_step.dependOn(&run_cmd.step);
 
     test_step.dependOn(&run_exe_unit_tests.step);

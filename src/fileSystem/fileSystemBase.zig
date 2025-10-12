@@ -130,19 +130,19 @@ pub fn getImageLoadParam(id: i32) !imageLoad {
         .PNG => {
             var ptrs: [5]*anyopaque = undefined;
             var buffer = [_]u8{0} ** 256;
-            var format = vk.VkFormat{0};
-            var tiling = vk.VkImageTiling{0};
-            var usage = vk.VkImageUsageFlags{0};
-            var properties = vk.VkMemoryPropertyFlags{0};
+            var format: vk.VkFormat = vk.VK_FORMAT_UNDEFINED;
+            var tiling: vk.VkImageTiling = vk.VK_IMAGE_TILING_OPTIMAL;
+            var usage: vk.VkImageUsageFlags = undefined;
+            var properties: vk.VkMemoryPropertyFlags = undefined;
             ptrs[0] = @ptrCast(&buffer);
-            ptrs[0] = @ptrCast(&format);
-            ptrs[0] = @ptrCast(&tiling);
-            ptrs[0] = @ptrCast(&usage);
-            ptrs[0] = @ptrCast(&properties);
+            ptrs[1] = @ptrCast(&format);
+            ptrs[2] = @ptrCast(&tiling);
+            ptrs[3] = @ptrCast(&usage);
+            ptrs[4] = @ptrCast(&properties);
 
             var types = [_]sqlDB.innerType{ .TEXT, .INTEGER32, .INTEGER32, .INTEGER32, .INTEGER32 };
 
-            ImageLoadParameterT.get("RelativePath,Format,Tiling,Usage,Properties", null, "ID = ?", .{id}, &ptrs, &types);
+            try ImageLoadParameterT.get("RelativePath,Format,Tiling,Usage,Properties", null, "ID = ?", .{id}, &ptrs, &types);
 
             return imageLoad{
                 .format = format,

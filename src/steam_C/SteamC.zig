@@ -1,5 +1,7 @@
 pub const steamInner = @cImport(@cInclude("steam_C/steamC.h"));
 
+const tracy = @import("tracy");
+
 pub var g_rgAchievements = [_]steamInner.Achievement_t{
     steamInner.Achievement_t{ .m_eAchievementID = steamInner.ACH_WIN_ONE_GAME, .m_pchAchievementID = "ACH_WIN_ONE_GAME", .m_rgchName = "Winner", .m_rgchDescription = "", .m_bAchieved = false, .m_iIconImage = 0 },
     steamInner.Achievement_t{ .m_eAchievementID = steamInner.ACH_WIN_100_GAMES, .m_pchAchievementID = "ACH_WIN_100_GAMES", .m_rgchName = "Champion", .m_rgchDescription = "", .m_bAchieved = false, .m_iIconImage = 0 },
@@ -13,6 +15,9 @@ pub const Achievement = struct {
     StoreStats: bool,
 
     pub fn UnlockAchievement(self: *Self, achievement: *steamInner.Achievement_t) void {
+        const zone = tracy.initZone(@src(), .{ .name = "unlock achievement" });
+        defer zone.deinit();
+
         achievement.m_bAchieved = true;
 
         // the icon may change once it's unlocked

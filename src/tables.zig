@@ -1,12 +1,14 @@
 const sqlDB = @import("sqlDb");
 
 pub const ContentPath = sqlDB.Table(
-    "CREATE TABLE IF NOT EXISTS ContentPath (ID INTEGER KEY, UUID TEXT, ParentUUID TEXT, RelativePath TEXT NOT NULL UNIQUE, FileName TEXT,  TYPE INTEGER, FileSize INTEGER, ContentHash BLOB, ModifiedTime INTEGER, LastSeenTime INTEGER, FileType INTEGER);",
+    "CREATE TABLE IF NOT EXISTS ContentPath (ID INTEGER KEY, UUID TEXT, ParentUUID TEXT, RelativePath TEXT NOT NULL UNIQUE, FileName TEXT,  TYPE INTEGER" ++
+        ", FileSize INTEGER, ContentHash BLOB, ModifiedTime INTEGER, LastSeenTime INTEGER, FileType INTEGER);",
     "ContentPath",
     false,
 );
 pub const ImageLoadParameter = sqlDB.Table(
-    "CREATE TABLE IF NOT EXISTS ImageLoadParameter (ID INTEGER KEY, FileName TEXT, ContentHash BLOB UNIQUE, RelativePath TEXT UNIQUE, FileUUID TEXT, FOREIGN KEY(FileUUID) REFERENCES ContentPath(UUID) ON DELETE SET NULL ON UPDATE CASCADE);",
+    "CREATE TABLE IF NOT EXISTS ImageLoadParameter (ID INTEGER KEY, FileName TEXT, ContentHash BLOB UNIQUE, RelativePath TEXT UNIQUE, Format INTEGER" ++
+        ", Tiling INTEGER, Usage INTEGER, Properties INTEGER, FileUUID TEXT, FOREIGN KEY(FileUUID) REFERENCES ContentPath(UUID) ON DELETE SET NULL ON UPDATE CASCADE);",
     "ImageLoadParameter",
     false,
 );

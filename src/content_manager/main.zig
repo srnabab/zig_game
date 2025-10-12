@@ -6,6 +6,7 @@ const builtin = @import("builtin");
 const UUID = @import("UUID.zig");
 const hash = @import("blake_hash.zig");
 const reflect = @import("reflect");
+const vk = reflect.vk;
 const tables = @import("tables");
 
 const ContentPath = tables.ContentPath;
@@ -214,11 +215,31 @@ fn executeSQL(SQL: []const u8, db: *sqlite.sqlite3) void {
     }
 }
 
+fn judgeImageLoadParameter(fileName: []const u8) !struct {
+    vk.VkFormat,
+    vk.VkImageTiling,
+    vk.VkImageUsageFlags,
+    vk.VkMemoryPropertyFlags,
+} {
+    _ = fileName;
+    // var format: vk.VkFormat = 0;
+    // var tiling: vk.VkImageTiling = 0;
+    // var usage: vk.VkImageUsageFlags = 0;
+    // var properties: vk.VkMemoryPropertyFlags = 0;
+
+    // return .{ format, tiling, usage, properties };
+    return .{ vk.VK_FORMAT_R8G8B8A8_SRGB, vk.VK_IMAGE_TILING_OPTIMAL, vk.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | vk.VK_IMAGE_USAGE_TRANSFER_DST_BIT, vk.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT };
+}
+
 fn updateLoadParameter(tp: FileType, cc: std.fs.File.Stat, content: []const u8, fileName: []const u8) !void {
     _ = cc;
     _ = content;
-    _ = fileName;
     switch (tp) {
+        .PNG => {
+            const format: vk.VkFormat, const tiling: vk.VkImageTiling, const usage: vk.VkImageUsageFlags, const properties: vk.VkMemoryPropertyFlags = try judgeImageLoadParameter(fileName);
+
+            try ImageLoadParameterT.update("Format,Tiling,Usage,Properties", "FileName = ?", .{ format, tiling, usage, properties, fileName });
+        },
         else => {},
     }
 }

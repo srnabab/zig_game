@@ -6,12 +6,19 @@ const assert = std.debug.assert;
 const tables = @import("tables");
 const base = @import("fileSystemBase.zig");
 const vk = @cImport(@cInclude("vulkan/vulkan.h"));
+const tracy = @import("tracy");
 
 pub fn init() void {
+    const zone = tracy.initZone(@src(), .{ .name = "init sqlite database" });
+    defer zone.deinit();
+
     base.init(global.databaseName);
 }
 
 pub fn getFile(id: i32) !std.fs.File {
+    const zone = tracy.initZone(@src(), .{ .name = "open file from database" });
+    defer zone.deinit();
+
     return base.getFile(id, global.cwd);
 }
 
@@ -24,8 +31,11 @@ pub const imageLoad = struct {
 };
 
 pub fn getImageLoadParam(id: i32) !imageLoad {
+    const zone = tracy.initZone(@src(), .{ .name = "get image load parameter" });
+    defer zone.deinit();
+
     const res = try base.getImageLoadParam(id);
-    const ptr = @as([*c]u8, res.relativePath[0..256]);
+    const ptr = @as([*c]u8, @constCast(&res.relativePath));
     const len = std.mem.len(ptr);
     return imageLoad{
         .file = try global.cwd.openFile(res.relativePath[0..len], .{}),
@@ -46,5 +56,8 @@ pub fn getFileType(name: []const u8) sqlDB.sqliteError!FileType {
 }
 
 pub fn deinit() void {
+    const zone = tracy.initZone(@src(), .{ .name = "deinit sqlite database" });
+    defer zone.deinit();
+
     base.deinit(global.databaseName);
 }

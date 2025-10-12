@@ -1,6 +1,6 @@
 const std = @import("std");
 const s = @cImport(@cInclude("spirv_reflect/spirv_reflect.h"));
-const v = @cImport(@cInclude("vulkan/vulkan.h"));
+pub const vk = @cImport(@cInclude("vulkan/vulkan.h"));
 const efc = @import("EnumC");
 const assert = std.debug.assert;
 
@@ -8,19 +8,19 @@ pub const binding = struct {
     set: u32,
     binding: u32,
     descriptorCount: u32,
-    descriptorType: v.VkDescriptorType,
+    descriptorType: vk.VkDescriptorType,
 };
 
 pub const input = struct {
     location: u32,
-    varType: v.VkFormat,
+    varType: vk.VkFormat,
 };
 
 const shaderInfo = struct {
     const Self = @This();
 
     name: [64:0]u8,
-    stage: v.VkShaderStageFlagBits,
+    stage: vk.VkShaderStageFlagBits,
     pushConstantSize: u32,
     setCount: u32,
     bindingCount: u32,

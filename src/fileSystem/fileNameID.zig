@@ -16,6 +16,7 @@ const list = [_]KV{
 .{ "SourceHanSansSC-VF.ttf", 8 },
 .{ "Model", 9 },
 .{ "bottom.obj", 10 },
+.{ "bottom.png", 11 },
 .{ "box.obj", 12 },
 .{ "box.png", 13 },
 .{ "voxel.mtl", 14 },
@@ -65,7 +66,6 @@ const list = [_]KV{
 .{ "Tilemap", 58 },
 .{ "tileMap1.tsdI", 59 },
 .{ "tileSet1.tsd", 60 },
-.{ "bottom.png", 11 },
 };
 
 break: map std.StaticStringMap(i32).initComptime(list);
