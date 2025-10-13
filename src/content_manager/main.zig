@@ -8,6 +8,9 @@ const hash = @import("blake_hash.zig");
 const reflect = @import("reflect");
 const vk = reflect.vk;
 const tables = @import("tables");
+const tracy = @import("tracy");
+
+const assert = std.debug.assert;
 
 const ContentPath = tables.ContentPath;
 const ImageLoadParameter = tables.ImageLoadParameter;
@@ -208,6 +211,9 @@ const FileTypeHashTable = map: {
 };
 
 fn executeSQL(SQL: []const u8, db: *sqlite.sqlite3) void {
+    const zone = tracy.initZone(@src(), .{ .name = "execute sql" });
+    defer zone.deinit();
+
     const res = sqlite.sqlite3_exec(db, @ptrCast(SQL.ptr), null, null, null);
 
     if (res != sqlite.SQLITE_OK) {
@@ -232,6 +238,9 @@ fn judgeImageLoadParameter(fileName: []const u8) !struct {
 }
 
 fn updateLoadParameter(tp: FileType, cc: std.fs.File.Stat, content: []const u8, fileName: []const u8) !void {
+    const zone = tracy.initZone(@src(), .{ .name = "update load parameter" });
+    defer zone.deinit();
+
     _ = cc;
     _ = content;
     switch (tp) {
@@ -245,10 +254,16 @@ fn updateLoadParameter(tp: FileType, cc: std.fs.File.Stat, content: []const u8, 
 }
 
 fn nameToFileType(name: []const u8) FileType {
+    const zone = tracy.initZone(@src(), .{ .name = "name to file type" });
+    defer zone.deinit();
+
     return FileTypeHashTable.get(name) orelse FileType.UNKNOWN;
 }
 
 fn getDbModifiedTime(comptime where_clause: []const u8, params: anytype) !i64 {
+    const zone = tracy.initZone(@src(), .{ .name = "get db modified time" });
+    defer zone.deinit();
+
     var modifiedTime: i64 = -1;
     var getValues: [1]*anyopaque = .{@ptrCast(&modifiedTime)};
     var types = [_]sqlDB.innerType{.INTEGER};
@@ -269,6 +284,9 @@ fn processFile(
     fileModifiedTime: i64,
     pathModifiedTime: i64,
 ) !void {
+    const zone = tracy.initZone(@src(), .{ .name = "process file" });
+    defer zone.deinit();
+
     const time: i64 = @truncate(std.time.nanoTimestamp());
     // std.log.debug("time {d} {s}", .{ time, name });
     var tempFile = try dir.openFile(name, .{});
@@ -356,8 +374,10 @@ fn processFile(
     }
 }
 
-// 辅助函数：计算文件哈希
 fn hashFileContent(file: *std.fs.File, size: u64) !sqlDB.BLOB {
+    const zone = tracy.initZone(@src(), .{ .name = "hash file content" });
+    defer zone.deinit();
+
     const content = try gpa.alloc(u8, size);
     defer gpa.free(content);
     _ = try file.readAll(content);
@@ -373,6 +393,9 @@ fn processDirectory(
     fileModifiedTime: i64,
     pathModifiedTime: i64,
 ) anyerror!void {
+    const zone = tracy.initZone(@src(), .{ .name = "process directory" });
+    defer zone.deinit();
+
     const time: i64 = @truncate(std.time.nanoTimestamp());
     // std.log.debug("time {d} {s}", .{ time, name });
     var tempDir = try dir.openDir(name, .{ .iterate = true });
@@ -426,6 +449,9 @@ fn processDirectory(
 }
 
 fn iterateFolderUpdate(dir: std.fs.Dir, dirName: []const u8, parentID: []const u8) !void {
+    const zone = tracy.initZone(@src(), .{ .name = "iterate folder" });
+    defer zone.deinit();
+
     var contentIt = dir.iterate();
     while (try contentIt.next()) |entry| {
         var relativePathBuffer = [_]u8{0} ** 256;
@@ -452,6 +478,16 @@ var ImageLoadParameterT: ImageLoadParameter = undefined;
 var gpa: std.mem.Allocator = undefined;
 var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
 pub fn main() !void {
+    tracy.startupProfiler();
+    // std.Thread.sleep(std.time.ns_per_ms * 100);
+    defer tracy.shutdownProfiler();
+
+    tracy.setThreadName("main");
+    defer tracy.message("main thread exit");
+
+    const zone = tracy.initZone(@src(), .{ .name = "main" });
+    defer zone.deinit();
+
     const start = std.time.nanoTimestamp();
 
     gpa, const is_debug = gpa: {
@@ -490,8 +526,47 @@ pub fn main() !void {
     try cwd.setAsCwd();
 
     var db: ?*sqlite.sqlite3 = null;
-    if (sqlite.sqlite3_open("Content.db", @ptrCast(&db)) != sqlite.SQLITE_OK) return error.SQLError;
-    defer _ = sqlite.sqlite3_close(db);
+
+    {
+        const zone2 = tracy.initZone(@src(), .{ .name = "init database to memory" });
+        defer zone2.deinit();
+
+        var disk_db: ?*sqlite.sqlite3 = null;
+        var backup: ?*sqlite.sqlite3_backup = null;
+        var res = sqlite.sqlite3_open("Content.db", @ptrCast(&disk_db));
+        defer _ = sqlite.sqlite3_close(disk_db);
+        assert(res == sqlite.SQLITE_OK);
+
+        res = sqlite.sqlite3_open(":memory:", @ptrCast(&db));
+        assert(res == sqlite.SQLITE_OK);
+
+        backup = sqlite.sqlite3_backup_init(db, "main", disk_db, "main");
+        assert(backup != null);
+
+        res = sqlite.sqlite3_backup_step(backup, -1);
+        defer _ = sqlite.sqlite3_backup_finish(backup);
+        assert(res == sqlite.SQLITE_DONE);
+    }
+    defer {
+        const zone2 = tracy.initZone(@src(), .{ .name = "save database to disk" });
+        defer zone2.deinit();
+
+        var disk_db: ?*sqlite.sqlite3 = null;
+        var backup: ?*sqlite.sqlite3_backup = null;
+
+        var res = sqlite.sqlite3_open("Content.db", @ptrCast(&disk_db));
+        defer _ = sqlite.sqlite3_close(disk_db);
+        assert(res == sqlite.SQLITE_OK);
+
+        backup = sqlite.sqlite3_backup_init(disk_db, "main", db, "main");
+        assert(backup != null);
+
+        res = sqlite.sqlite3_backup_step(backup, -1);
+        defer _ = sqlite.sqlite3_backup_finish(backup);
+        assert(res == sqlite.SQLITE_DONE);
+
+        _ = sqlite.sqlite3_close(db.?);
+    }
 
     ContentPathT = ContentPath.init(db.?);
     const exist = ContentPathT.exist();

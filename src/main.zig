@@ -107,14 +107,14 @@ pub fn main() !void {
     defer global.textureSet.deinit();
 
     try global.graphic.startCommand();
-    _ = global.textureSet.createImageTexture(comptime file.comptimeGetID("circle.png")) catch pi: {
-        break :pi try global.textureSet.createImageTexture(comptime file.comptimeGetID("non_exist.png"));
-    };
+    _ = try global.textureSet.createImageTexture(comptime file.comptimeGetID("non_exist.png"));
+    _ = global.textureSet.createImageTextureEnsureWithErrorImage(comptime file.comptimeGetID("circle.png"));
     try global.graphic.addCommandEnd();
+
     try global.graphic.executeCommands();
 
-    try vulkan.readPipelineFileAndAdd(comptime file.comptimeGetID("model3d.pipeb"));
-    try vulkan.readPipelineFileAndAdd(comptime file.comptimeGetID("flat2d.pipeb"));
+    try vulkan.readPipelineFileAndAdd(comptime file.comptimeGetID("model3d.pipeb"), null);
+    try vulkan.readPipelineFileAndAdd(comptime file.comptimeGetID("flat2d.pipeb"), null);
 
     try vulkan.createAllPipelinesAdded();
 

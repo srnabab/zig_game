@@ -9,7 +9,7 @@
     "bindings": [
       {
         "binding": 0,
-        "stride": 32,
+        "stride": 24,
         "inputRate": "VERTEX"
       }
     ],
@@ -46,11 +46,7 @@
     "topology": "TRIANGLE_LIST",
     "primitiveRestartEnable": false
   },
-  "TessellationState": {
-    "TessellationStatepNext": null,
-    "flag": 0,
-    "patchControlPoints": 0
-  },
+  "TessellationState": null,
   "ViewportState": {
     "ViewportStatepNext": null,
     "flag": 0,
@@ -108,15 +104,7 @@
     "depthCompareOp": "LESS",
     "depthBoundsTestEnable": false,
     "stencilTestEnable": false,
-    "front": {
-      "failOp": "KEEP",
-      "passOp": "KEEP",
-      "depthFailOp": "KEEP",
-      "compareOp": "NEVER",
-      "compareMask": 0,
-      "writeMask": 0,
-      "reference": 0
-    },
+    "front": null,
     "back": null,
     "minDepthBounds": 0.0,
     "maxDepthBounds": 1.0
@@ -128,12 +116,12 @@
     "logicOp": "COPY",
     "attachments": [
       {
-        "blendEnable": false,
-        "srcColorBlendFactor": "ONE",
-        "dstColorBlendFactor": "ZERO",
+        "blendEnable":true,
+        "srcColorBlendFactor": "SRC_ALPHA",
+        "dstColorBlendFactor": "ONE_MINUS_SRC_ALPHA",
         "colorBlendOp": "ADD",
-        "srcAlphaBlendFactor": "ONE",
-        "dstAlphaBlendFactor": "ZERO",
+        "srcAlphaBlendFactor":"ONE",
+        "dstAlphaBlendFactor":"ONE_MINUS_SRC_ALPHA",
         "alphaBlendOp": "ADD",
         "colorWriteMask": [
           "R",

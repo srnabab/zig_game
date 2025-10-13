@@ -48,6 +48,8 @@ const featureIndexingNeed = [_][]const u8{
     "shaderUniformBufferArrayNonUniformIndexing",
     "shaderStorageBufferArrayNonUniformIndexing",
     "shaderSampledImageArrayNonUniformIndexing",
+    "descriptorBindingUniformBufferUpdateAfterBind",
+    "descriptorBindingSampledImageUpdateAfterBind",
     "descriptorBindingPartiallyBound",
     "runtimeDescriptorArray",
 };
@@ -62,6 +64,12 @@ const DefaultSurfaceFormat = vk.VkSurfaceFormatKHR{
     .format = vk.VK_FORMAT_R8G8B8A8_SRGB,
 };
 
+const globalDescriptorPoolSizes = [_]vk.VkDescriptorPoolSize{
+    .{ .type = vk.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 100 },
+    .{ .type = vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = 100 },
+};
+const globalDescriptorMaxSets = 10;
+
 const VkQueueFamily = struct {
     familyIndice: i32 = -1,
     queueCount: u32 = 0,
@@ -70,8 +78,9 @@ const VkTheadQueue = struct { queue: vk.VkQueue = null, mutex: Mutex = .{} };
 
 const setLayoutLimit = @import("translate").setLayoutLimit;
 const Pipeline = struct {
-    descriptorSetLayouts: [setLayoutLimit]vk.VkDescriptorSetLayout,
+    // descriptorSetLayouts: [setLayoutLimit]vk.VkDescriptorSetLayout,
     setCount: u32,
+    // descriptorSet: vk.VkDescriptorSet,
     pipelineLayout: vk.VkPipelineLayout,
     pipeline: vk.VkPipeline,
 };
@@ -173,6 +182,8 @@ textureSets: textureSet,
 
 vmaBufferAllocations: AllocationCount = .{},
 vmaImageAllocations: AllocationCount = .{},
+
+globalDescriptorPool: vk.VkDescriptorPool = null,
 
 fn comptime_print(comptime format: []const u8, comptime args: anytype) void {
     @compileLog(std.fmt.comptimePrint(format, args));
@@ -277,6 +288,8 @@ pub fn initVulkan(self: *Self) !void {
     self.surfaceFormat = try self.getSurfaceFormat();
     self.presentMode = try self.getPresentMode();
     self.swapchain = try self.createSwapchain();
+
+    try self.createGlobalDescriptorPool();
 }
 
 pub fn deinit(self: *Self) void {
@@ -291,13 +304,13 @@ pub fn deinit(self: *Self) void {
     while (pipelines.next()) |val| {
         vk.vkDestroyPipeline(self.device, val.pipeline, self.pAllocCallBacks);
         vk.vkDestroyPipelineLayout(self.device, val.pipelineLayout, self.pAllocCallBacks);
-        for (0..val.setCount) |i| {
-            vk.vkDestroyDescriptorSetLayout(
-                self.device,
-                val.descriptorSetLayouts[i],
-                self.pAllocCallBacks,
-            );
-        }
+        // for (0..val.setCount) |i| {
+        //     vk.vkDestroyDescriptorSetLayout(
+        //         self.device,
+        //         val.descriptorSetLayouts[i],
+        //         self.pAllocCallBacks,
+        //     );
+        // }
     }
     self.pipelines.deinit();
 
@@ -801,6 +814,21 @@ pub fn createStagingBuffer(self: *Self, bufferSize: vk.VkDeviceSize) VkError!Buf
     );
 }
 
+pub fn createVertexBuffer(self: *Self, bufferSize: vk.VkDeviceSize) VkError!Buffer {
+    const zone = tracy.initZone(@src(), .{ .name = "create vertex buffer" });
+    defer zone.deinit();
+
+    self.vertexBuffer = try self._createBuffer(
+        0,
+        null,
+        vk.VK_SHARING_MODE_EXCLUSIVE,
+        bufferSize,
+        vk.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT,
+        vma.VMA_MEMORY_USAGE_GPU_ONLY,
+    );
+}
+
 fn createQueue(self: *Self) void {
     const zone = tracy.initZone(@src(), .{ .name = "create queues" });
     defer zone.deinit();
@@ -985,8 +1013,8 @@ pub fn createAllPipelinesAdded(self: *Self) !void {
     var pp: Pipeline = undefined;
     for (0..self.graphicInfoCount) |i| {
         pp = Pipeline{
-            .descriptorSetLayouts = self.preGraphicInfoPtrs[i].descriptorSetLayouts.setLayouts,
-            .setCount = self.preGraphicInfoPtrs[i].descriptorSetLayouts.setLayoutCount,
+            // .descriptorSetLayouts = self.preGraphicInfoPtrs[i].descriptorSetLayouts.setLayouts,
+            .setCount = self.preGraphicInfoPtrs[i].pipelineCreateInfoInfo.setLayoutCount,
             .pipelineLayout = self.preGraphicInfoPtrs[i].pipelineLayout.layout,
             .pipeline = temp[i],
         };
@@ -1395,7 +1423,7 @@ pub fn destroyImage(self: *Self, image: Image) void {
     _ = self.vmaImageAllocations.fetchSub(1, .seq_cst);
 }
 
-pub fn readPipelineFileAndAdd(self: *Self, fileID: i32) !void {
+pub fn readPipelineFileAndAdd(self: *Self, fileID: i32, setLayout: ?[]vk.VkDescriptorSetLayout) !void {
     const zone = tracy.initZone(@src(), .{ .name = "read pipeline file and add" });
     defer zone.deinit();
 
@@ -1427,7 +1455,27 @@ pub fn readPipelineFileAndAdd(self: *Self, fileID: i32) !void {
     }
     zone3.deinit();
 
-    try translate.toVulkan(pipelineInfo, shaderCodes);
+    try translate.toVulkan(pipelineInfo, shaderCodes, setLayout.?);
 
     try self.addPipelineCreateInfo(pipelineInfo);
+}
+
+pub fn _createDescriptorPool(self: *Self, flag: vk.VkDescriptorPoolCreateFlags, poolSizes: []vk.VkDescriptorPoolSize, maxSets: u32) VkError!vk.VkDescriptorPool {
+    var createInfo = vk.VkDescriptorPoolCreateInfo{
+        .sType = vk.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .pNext = null,
+        .flags = flag,
+        .pPoolSizes = @ptrCast(poolSizes.ptr),
+        .poolSizeCount = @intCast(poolSizes.len),
+        .maxSets = maxSets,
+    };
+    var pool: vk.VkDescriptorPool = null;
+
+    try checkVkResult(vk.vkCreateDescriptorPool(self.device, &createInfo, self.pAllocCallBacks, &pool));
+
+    return pool;
+}
+
+fn createGlobalDescriptorPool(self: *Self) VkError!void {
+    self.globalDescriptorPool = try self._createDescriptorPool(vk.VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT, @constCast(&globalDescriptorPoolSizes), globalDescriptorMaxSets);
 }

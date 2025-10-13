@@ -23,6 +23,7 @@ const list = [_]KV{
 .{ "voxel.obj", 15 },
 .{ "voxel.png", 16 },
 .{ "Pipeline", 17 },
+.{ "flat2d.pipeb", 18 },
 .{ "model3d.pipeb", 19 },
 .{ "Shaders", 20 },
 .{ "2d.vert.spv", 21 },
@@ -30,6 +31,8 @@ const list = [_]KV{
 .{ "combine.vert.spv", 23 },
 .{ "combine2d.frag.spv", 24 },
 .{ "empty.frag.spv", 25 },
+.{ "flat2d.frag.spv", 26 },
+.{ "flat2d.vert.spv", 27 },
 .{ "model3d.frag.spv", 28 },
 .{ "model3d.vert.spv", 29 },
 .{ "modelBottom.frag.spv", 30 },
@@ -66,9 +69,6 @@ const list = [_]KV{
 .{ "Tilemap", 61 },
 .{ "tileMap1.tsdI", 62 },
 .{ "tileSet1.tsd", 63 },
-.{ "flat2d.frag.spv", 26 },
-.{ "flat2d.vert.spv", 27 },
-.{ "flat2d.pipeb", 18 },
 };
 
 break: map std.StaticStringMap(i32).initComptime(list);

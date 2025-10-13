@@ -21,6 +21,12 @@ pub fn build(b: *std.Build) void {
         .tracy_manual_lifetime = true,
     });
 
+    // const disabledTracy = b.dependency("tracy", .{
+    //     .target = target,
+    //     .optimize = optimize,
+    //     .tracy_enable = false,
+    // });
+
     const vk_mod = b.createModule(.{
         .root_source_file = b.path("src/vulkan.zig"),
         .target = target,
@@ -181,6 +187,7 @@ pub fn build(b: *std.Build) void {
     pipelineJsonParse_mod.addImport("reflect", spReflectModule);
     pipelineJsonParse_mod.addImport("enumFromC", enum_c_mod);
 
+    sqliteModule.addImport("tracy", tracy.module("tracy"));
     sqliteModule.addIncludePath(b.path("include"));
 
     tables_mod.addImport("sqlDb", sqliteModule);
@@ -188,6 +195,7 @@ pub fn build(b: *std.Build) void {
     contentManagerModule.addImport("reflect", spReflectModule);
     contentManagerModule.addImport("sqlDb", sqliteModule);
     contentManagerModule.addImport("tables", tables_mod);
+    contentManagerModule.addImport("tracy", tracy.module("tracy"));
     contentManagerModule.addIncludePath(b.path("include"));
     contentManagerModule.addIncludePath(b.path("../../../../msys64/mingw64/include/"));
     contentManagerModule.addLibraryPath(b.path("lib/"));
@@ -202,6 +210,7 @@ pub fn build(b: *std.Build) void {
     contentManagerModule.linkSystemLibrary("OleAut32", .{ .preferred_link_mode = .static });
     contentManagerModule.linkSystemLibrary("Rpcrt4", .{ .preferred_link_mode = .static });
     contentManagerModule.linkSystemLibrary("vulkan-1", .{});
+    contentManagerModule.linkLibrary(tracy.artifact("tracy"));
 
     gen_fileName_ID_mod.addImport("sqlDb", sqliteModule);
     gen_fileName_ID_mod.addImport("tables", tables_mod);

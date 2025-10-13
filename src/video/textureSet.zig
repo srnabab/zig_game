@@ -90,15 +90,14 @@ pub fn createImageTexture(self: *Self, fileID: u32) !*Texture {
     const zone = tracy.initZone(@src(), .{ .name = "create image texutre from file" });
     defer zone.deinit();
 
-    var texture: *Texture = undefined;
-    var stagingBuffer: VkStruct.Buffer = undefined;
-
     const ID = fileID;
 
     if (self.map.get(ID)) |value| {
         return value;
     }
 
+    var texture: *Texture = undefined;
+    var stagingBuffer: VkStruct.Buffer = undefined;
     var imgWidth: u32 = 0;
     var imgHeight: u32 = 0;
     var channel: u32 = 0;
@@ -157,4 +156,11 @@ pub fn createImageTexture(self: *Self, fileID: u32) !*Texture {
     );
 
     return texture;
+}
+
+pub fn createImageTextureEnsureWithErrorImage(self: *Self, fileID: u32) *Texture {
+    return self.createImageTexture(fileID) catch |err| {
+        std.log.err("create image {d} texture error {s}", .{ fileID, @errorName(err) });
+        return self.createImageTexture(comptime file.comptimeGetID("non_exist.png")) catch unreachable;
+    };
 }

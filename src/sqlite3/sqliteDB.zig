@@ -1,5 +1,6 @@
 pub const sqlite = @cImport(@cInclude("sqlite3/sqlite3.h"));
 const std = @import("std");
+const tracy = @import("tracy");
 
 var ID: u64 = 0;
 
@@ -221,6 +222,9 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
         }
 
         pub fn createTable(self: *Self) sqliteError!void {
+            const zone = tracy.initZone(@src(), .{ .name = "create table" });
+            defer zone.deinit();
+
             if (sqlite.sqlite3_exec(self.db, @ptrCast(SQL.ptr), null, null, null) != sqlite.SQLITE_OK) {
                 std.log.err("create table {s} failed", .{self.tableName});
                 return sqliteError.SQLError;
@@ -228,6 +232,9 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
         }
 
         pub fn exist(self: *Self) bool {
+            const zone = tracy.initZone(@src(), .{ .name = "exist" });
+            defer zone.deinit();
+
             const expr = std.fmt.comptimePrint("SELECT name FROM sqlite_master WHERE TYPE='table' AND name='{s}';", .{tableName});
             var stmt: ?*sqlite.sqlite3_stmt = null;
 
@@ -242,6 +249,9 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
         }
 
         pub fn insert(self: *Self, T: insertStruct) !void {
+            const zone = tracy.initZone(@src(), .{ .name = "insert" });
+            defer zone.deinit();
+
             const ssql = comptime blk: {
                 var buffer = [_]u8{0} ** 256;
                 var bufferq = [_]u8{0} ** 64;
@@ -305,6 +315,9 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
         }
 
         pub fn update(self: *Self, comptime targets: []const u8, comptime constraint: []const u8, values: anytype) !void {
+            const zone = tracy.initZone(@src(), .{ .name = "update" });
+            defer zone.deinit();
+
             const ArgsType = @TypeOf(values);
             const args_type_info = @typeInfo(ArgsType);
             if (args_type_info != .@"struct") {
@@ -435,6 +448,9 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
         }
 
         pub fn delete(self: *Self, comptime constraint: []const u8, values: anytype) !void {
+            const zone = tracy.initZone(@src(), .{ .name = "delete" });
+            defer zone.deinit();
+
             const ArgsType = @TypeOf(values);
             const args_type_info = @typeInfo(ArgsType);
             if (args_type_info != .@"struct") {
@@ -515,6 +531,9 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
 
         /// SELECT [targets] FROM [Table] [others] WHERE [constraint]
         pub fn get(self: *Self, comptime targets: []const u8, comptime others: ?[]const u8, comptime constraint: []const u8, values: anytype, getValues: []*anyopaque, types: []innerType) sqliteError!void {
+            const zone = tracy.initZone(@src(), .{ .name = "get" });
+            defer zone.deinit();
+
             if (getValues.len != types.len) {
                 return sqliteError.SQLError;
             }

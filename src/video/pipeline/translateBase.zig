@@ -127,11 +127,11 @@ pub const pipelineLayoutCreateInfo = extern struct {
     pushConstantCount: u32,
     pushConstants: [pushConstantRangeLimit]vk.VkPushConstantRange,
     setLayoutCount: u32,
-    setLayoutBinding: [setLayoutLimit][bindingLimit]vk.VkDescriptorSetLayoutBinding,
-    bindingFlags: [setLayoutLimit][bindingLimit]vk.VkDescriptorBindingFlags,
-    bindingFlagInfo: [setLayoutLimit]vk.VkDescriptorSetLayoutBindingFlagsCreateInfo,
-    setLayoutCreateInfos: [setLayoutLimit]vk.VkDescriptorSetLayoutCreateInfo,
-    setLayouts: [setLayoutLimit]vk.VkDescriptorSetLayout,
+    // setLayoutBinding: [setLayoutLimit][bindingLimit]vk.VkDescriptorSetLayoutBinding,
+    // bindingFlags: [setLayoutLimit][bindingLimit]vk.VkDescriptorBindingFlags,
+    // bindingFlagInfo: [setLayoutLimit]vk.VkDescriptorSetLayoutBindingFlagsCreateInfo,
+    // setLayoutCreateInfos: [setLayoutLimit]vk.VkDescriptorSetLayoutCreateInfo,
+    // setLayouts: [setLayoutLimit]vk.VkDescriptorSetLayout,
 };
 
 const renderingColorAttachmentCount = 16;
@@ -169,7 +169,7 @@ pub const VulkanPipelineInfo = extern struct {
     shaderStageCreateInfo: [5]vk.VkPipelineShaderStageCreateInfo,
     entryNames: [5][64]u8,
     /// need create runtime resources
-    descriptorSetLayouts: pipelineLayoutCreateInfo,
+    pipelineCreateInfoInfo: pipelineLayoutCreateInfo,
     /// need create runtime resources
     pipelineLayout: pipelineLayout,
 };
