@@ -113,8 +113,8 @@ pub fn main() !void {
 
     try global.graphic.executeCommands();
 
-    try vulkan.readPipelineFileAndAdd(comptime file.comptimeGetID("model3d.pipeb"), null);
-    try vulkan.readPipelineFileAndAdd(comptime file.comptimeGetID("flat2d.pipeb"), null);
+    try vulkan.readPipelineFileAndAdd(comptime file.comptimeGetID("flat2d.pipeb"));
+    // try vulkan.readPipelineFileAndAdd(comptime file.comptimeGetID("model3d.pipeb"));
 
     try vulkan.createAllPipelinesAdded();
 

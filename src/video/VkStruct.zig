@@ -65,10 +65,63 @@ const DefaultSurfaceFormat = vk.VkSurfaceFormatKHR{
 };
 
 const globalDescriptorPoolSizes = [_]vk.VkDescriptorPoolSize{
-    .{ .type = vk.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 100 },
+    .{ .type = vk.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 2048 },
     .{ .type = vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = 100 },
 };
 const globalDescriptorMaxSets = 10;
+
+const descriptorSetLayoutCreateInfo = struct {
+    flag: vk.VkDescriptorSetLayoutCreateFlags,
+    bindingCount: u32,
+    bindings: [5]vk.VkDescriptorSetLayoutBinding,
+    bindingFlags: [5]vk.VkDescriptorBindingFlags,
+};
+const set0SetLayoutCreateInfos = descriptorSetLayoutCreateInfo{
+    .flag = 0,
+    .bindingCount = 1,
+    .bindings = [5]vk.VkDescriptorSetLayoutBinding{
+        .{
+            .binding = 0,
+            .stageFlags = vk.VK_SHADER_STAGE_VERTEX_BIT,
+            .descriptorType = vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .descriptorCount = 1,
+        },
+        .{},
+        .{},
+        .{},
+        .{},
+    },
+    .bindingFlags = [5]vk.VkDescriptorBindingFlags{
+        0,
+        0,
+        0,
+        0,
+        0,
+    },
+};
+const set1SetLayoutCreateInfos = descriptorSetLayoutCreateInfo{
+    .flag = vk.VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
+    .bindingCount = 1,
+    .bindings = [5]vk.VkDescriptorSetLayoutBinding{
+        .{
+            .binding = 0,
+            .stageFlags = vk.VK_SHADER_STAGE_FRAGMENT_BIT,
+            .descriptorType = vk.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .descriptorCount = 1024,
+        },
+        .{},
+        .{},
+        .{},
+        .{},
+    },
+    .bindingFlags = [5]vk.VkDescriptorBindingFlags{
+        vk.VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | vk.VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT,
+        0,
+        0,
+        0,
+        0,
+    },
+};
 
 const VkQueueFamily = struct {
     familyIndice: i32 = -1,
@@ -185,6 +238,8 @@ vmaImageAllocations: AllocationCount = .{},
 
 globalDescriptorPool: vk.VkDescriptorPool = null,
 
+descriptorSetLayout: [2]vk.VkDescriptorSetLayout = undefined,
+
 fn comptime_print(comptime format: []const u8, comptime args: anytype) void {
     @compileLog(std.fmt.comptimePrint(format, args));
 }
@@ -289,7 +344,16 @@ pub fn initVulkan(self: *Self) !void {
     self.presentMode = try self.getPresentMode();
     self.swapchain = try self.createSwapchain();
 
-    try self.createGlobalDescriptorPool();
+    self.globalDescriptorPool = try self._createDescriptorPool(vk.VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT, @constCast(&globalDescriptorPoolSizes), globalDescriptorMaxSets);
+
+    self.descriptorSetLayout[0] = try self.createDescriptorSetLayout(null, set0SetLayoutCreateInfos.flag, set0SetLayoutCreateInfos.bindingCount, @constCast(&set0SetLayoutCreateInfos.bindings));
+    var bindingFlagsInfo = vk.VkDescriptorSetLayoutBindingFlagsCreateInfo{
+        .sType = vk.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+        .pNext = null,
+        .bindingCount = set1SetLayoutCreateInfos.bindingCount,
+        .pBindingFlags = &set1SetLayoutCreateInfos.bindingFlags,
+    };
+    self.descriptorSetLayout[1] = try self.createDescriptorSetLayout(&bindingFlagsInfo, set1SetLayoutCreateInfos.flag, set1SetLayoutCreateInfos.bindingCount, @constCast(&set1SetLayoutCreateInfos.bindings));
 }
 
 pub fn deinit(self: *Self) void {
@@ -914,9 +978,16 @@ pub fn clearAllShaderModule(self: *Self) void {
     self.shaderModules.clearAndFree();
 }
 
-pub fn createDescriptorSetLayout(self: *Self, createInfo: vk.VkDescriptorSetLayoutCreateInfo) !vk.VkDescriptorSetLayout {
+pub fn createDescriptorSetLayout(self: *Self, pNext: ?*anyopaque, flags: vk.VkDescriptorSetLayoutCreateFlags, bindingCount: u32, pBindings: [*]vk.VkDescriptorSetLayoutBinding) !vk.VkDescriptorSetLayout {
+    var setLayoutCreateInfo = vk.VkDescriptorSetLayoutCreateInfo{
+        .sType = vk.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .pNext = pNext,
+        .flags = flags,
+        .bindingCount = bindingCount,
+        .pBindings = @ptrCast(pBindings),
+    };
     var res: vk.VkDescriptorSetLayout = undefined;
-    try checkVkResult(vk.vkCreateDescriptorSetLayout(self.device, @ptrCast(&createInfo), self.pAllocCallBacks, @ptrCast(&res)));
+    try checkVkResult(vk.vkCreateDescriptorSetLayout(self.device, @ptrCast(&setLayoutCreateInfo), self.pAllocCallBacks, @ptrCast(&res)));
     return res;
 }
 
@@ -1423,7 +1494,7 @@ pub fn destroyImage(self: *Self, image: Image) void {
     _ = self.vmaImageAllocations.fetchSub(1, .seq_cst);
 }
 
-pub fn readPipelineFileAndAdd(self: *Self, fileID: i32, setLayout: ?[]vk.VkDescriptorSetLayout) !void {
+pub fn readPipelineFileAndAdd(self: *Self, fileID: i32) !void {
     const zone = tracy.initZone(@src(), .{ .name = "read pipeline file and add" });
     defer zone.deinit();
 
@@ -1455,7 +1526,7 @@ pub fn readPipelineFileAndAdd(self: *Self, fileID: i32, setLayout: ?[]vk.VkDescr
     }
     zone3.deinit();
 
-    try translate.toVulkan(pipelineInfo, shaderCodes, setLayout.?);
+    try translate.toVulkan(pipelineInfo, shaderCodes, @constCast(&self.descriptorSetLayout));
 
     try self.addPipelineCreateInfo(pipelineInfo);
 }
@@ -1474,8 +1545,4 @@ pub fn _createDescriptorPool(self: *Self, flag: vk.VkDescriptorPoolCreateFlags, 
     try checkVkResult(vk.vkCreateDescriptorPool(self.device, &createInfo, self.pAllocCallBacks, &pool));
 
     return pool;
-}
-
-fn createGlobalDescriptorPool(self: *Self) VkError!void {
-    self.globalDescriptorPool = try self._createDescriptorPool(vk.VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT, @constCast(&globalDescriptorPoolSizes), globalDescriptorMaxSets);
 }

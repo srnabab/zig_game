@@ -21,6 +21,10 @@ pub fn build(b: *std.Build) void {
         .tracy_manual_lifetime = true,
     });
 
+    const contentManagerModule = b.dependency("contentManager", .{});
+    const contenManager = contentManagerModule.artifact("ContentManager");
+    _ = b.addInstallArtifact(contenManager, .{ .dest_dir = .{ .override = .{ .custom = b.install_path } } });
+
     // const disabledTracy = b.dependency("tracy", .{
     //     .target = target,
     //     .optimize = optimize,
@@ -73,13 +77,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    const contentManagerModule = b.createModule(.{
-        .root_source_file = b.path("src/content_manager/main.zig"),
-        .target = target,
-        .optimize = optimize,
-        .link_libc = true,
-    });
-    contentManagerModule.addCSourceFile(.{ .file = b.path("src/content_manager/UUID.c"), .language = .c });
     const gen_fileName_ID_mod = b.createModule(.{
         .root_source_file = b.path("src/fileSystem/fileName_ID/main.zig"),
         .target = target,
@@ -192,26 +189,6 @@ pub fn build(b: *std.Build) void {
 
     tables_mod.addImport("sqlDb", sqliteModule);
 
-    contentManagerModule.addImport("reflect", spReflectModule);
-    contentManagerModule.addImport("sqlDb", sqliteModule);
-    contentManagerModule.addImport("tables", tables_mod);
-    contentManagerModule.addImport("tracy", tracy.module("tracy"));
-    contentManagerModule.addIncludePath(b.path("include"));
-    contentManagerModule.addIncludePath(b.path("../../../../msys64/mingw64/include/"));
-    contentManagerModule.addLibraryPath(b.path("lib/"));
-    contentManagerModule.linkSystemLibrary("blake3", .{ .preferred_link_mode = .static });
-    contentManagerModule.linkSystemLibrary("sdl3", .{ .preferred_link_mode = .static });
-    contentManagerModule.linkSystemLibrary("setupapi", .{ .preferred_link_mode = .static });
-    contentManagerModule.linkSystemLibrary("imm32", .{ .preferred_link_mode = .static });
-    contentManagerModule.linkSystemLibrary("version", .{ .preferred_link_mode = .static });
-    contentManagerModule.linkSystemLibrary("winmm", .{ .preferred_link_mode = .static });
-    contentManagerModule.linkSystemLibrary("ole32", .{ .preferred_link_mode = .static });
-    contentManagerModule.linkSystemLibrary("gdi32", .{ .preferred_link_mode = .static });
-    contentManagerModule.linkSystemLibrary("OleAut32", .{ .preferred_link_mode = .static });
-    contentManagerModule.linkSystemLibrary("Rpcrt4", .{ .preferred_link_mode = .static });
-    contentManagerModule.linkSystemLibrary("vulkan-1", .{});
-    contentManagerModule.linkLibrary(tracy.artifact("tracy"));
-
     gen_fileName_ID_mod.addImport("sqlDb", sqliteModule);
     gen_fileName_ID_mod.addImport("tables", tables_mod);
 
@@ -311,12 +288,6 @@ pub fn build(b: *std.Build) void {
         .root_module = pipelineJsonParse_mod,
     });
     b.installArtifact(pipelineJsonParse_exe);
-
-    const contenManager = b.addExecutable(.{
-        .name = "ContentManager",
-        .root_module = contentManagerModule,
-    });
-    b.installArtifact(contenManager);
 
     const genFileNameIDexe = b.addExecutable(.{
         .root_module = gen_fileName_ID_mod,

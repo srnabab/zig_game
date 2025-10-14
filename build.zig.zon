@@ -68,6 +68,7 @@
         //    .lazy = false,
         //},
         .tracy = .{ .path = "dependencies/tracy" },
+        .contentManager = .{ .path = "src/content_manager" },
     },
 
     // Specifies the set of files and directories that are included in this package.

@@ -382,43 +382,43 @@ fn Graph(T: type) type {
             self.childrenDone = 0;
         }
 
-        pub fn insertPrev(self: *Self, prev: *Self) void {
-            const parents = self.parents;
-            prev.parents = parents;
-            prev.parentsLen = self.parentsLen;
-            self.clearParents();
-            self.parentsAppend(&prev.node);
-            prev.childrenAppend(&self.node);
+        // pub fn insertPrev(self: *Self, prev: *Self) void {
+        //     const parents = self.parents;
+        //     prev.parents = parents;
+        //     prev.parentsLen = self.parentsLen;
+        //     self.clearParents();
+        //     self.parentsAppend(&prev.node);
+        //     prev.childrenAppend(&self.node);
 
-            var first = parents.first;
-            while (first) |nn| {
-                var ll: *Self = @fieldParentPtr("node", nn);
+        //     var first = parents.first;
+        //     while (first) |nn| {
+        //         var ll: *Self = @fieldParentPtr("node", nn);
 
-                ll.children.remove(&self.node);
-                ll.children.append(&prev.node);
+        //         ll.children.remove(&self.node);
+        //         ll.children.append(&prev.node);
 
-                first = nn.next;
-            }
-        }
+        //         first = nn.next;
+        //     }
+        // }
 
-        pub fn insertNext(self: *Self, next: *Self) void {
-            const children = self.children;
-            next.children = children;
-            next.childrenLen = self.parentsLen;
-            self.clearChildren();
-            self.childrenAppend(&next.node);
-            next.parentsAppend(&self.node);
+        // pub fn insertNext(self: *Self, next: *Self) void {
+        //     const children = self.children;
+        //     next.children = children;
+        //     next.childrenLen = self.parentsLen;
+        //     self.clearChildren();
+        //     self.childrenAppend(&next.node);
+        //     next.parentsAppend(&self.node);
 
-            var first = children.first;
-            while (first) |nn| {
-                var ll: *Self = @fieldParentPtr("node", nn);
+        //     var first = children.first;
+        //     while (first) |nn| {
+        //         var ll: *Self = @fieldParentPtr("node", nn);
 
-                ll.parents.remove(&self.node);
-                ll.parents.append(&next.node);
+        //         ll.parents.remove(&self.node);
+        //         ll.parents.append(&next.node);
 
-                first = nn.next;
-            }
-        }
+        //         first = nn.next;
+        //     }
+        // }
 
         pub fn nodeDone(self: *Self) void {
             const zone = tracy.initZone(@src(), .{ .name = "node done" });
@@ -433,6 +433,8 @@ fn Graph(T: type) type {
                 ll.parentsDone += 1;
 
                 first = nn.next;
+
+                // std.log.debug("child node {}\n", .{ll.*});
             }
 
             first = self.parents.first;
@@ -442,6 +444,8 @@ fn Graph(T: type) type {
                 ll.childrenDone += 1;
 
                 first = nn.next;
+
+                // std.log.debug("parent node {}\n", .{ll.*});
             }
         }
 
@@ -456,6 +460,7 @@ fn Graph(T: type) type {
                 const ll: *Self = @fieldParentPtr("node", nn);
 
                 if (ll.done) {
+                    first = nn.next;
                     continue;
                 } else {
                     return ll;
@@ -545,7 +550,50 @@ fn DAG(T: type) type {
                 entry.value_ptr.*.done = false;
                 entry.value_ptr.*.parentsDone = 0;
                 entry.value_ptr.*.childrenDone = 0;
+
+                // std.log.debug("node {}\n", .{entry.value_ptr.*});
             }
+        }
+
+        pub fn print(self: *Self) void {
+            const zone = tracy.initZone(@src(), .{ .name = "dag print" });
+            defer zone.deinit();
+
+            var buffer = [_]u8{0} ** 1024;
+            var buffer2 = [_]u8{0} ** 1024;
+            var stream = std.io.fixedBufferStream(&buffer);
+            var writer = stream.writer();
+            var stream2 = std.io.fixedBufferStream(&buffer2);
+            var writer2 = stream2.writer();
+
+            for (0..self.innerID) |i| {
+                if (self.map.get(@intCast(i))) |n| {
+                    var firstParent = n.parents.first;
+                    while (firstParent) |nn| {
+                        const ll: *Inner = @fieldParentPtr("node", nn);
+
+                        writer.print("{d} ", .{ll.ID}) catch |err| {
+                            std.log.err("write err: {s}", .{@errorName(err)});
+                        };
+                        firstParent = nn.next;
+                    }
+
+                    var firstChild = n.children.first;
+                    while (firstChild) |nn| {
+                        const ll: *Inner = @fieldParentPtr("node", nn);
+
+                        writer2.print("{d} ", .{ll.ID}) catch |err| {
+                            std.log.err("write err: {s}", .{@errorName(err)});
+                        };
+                        firstChild = nn.next;
+                    }
+
+                    std.log.debug("[{s}] => ID: {d} => [{s}]", .{ buffer[0..if (stream.pos > 1) stream.pos - 1 else 0], n.ID, buffer2[0..if (stream2.pos > 1) stream2.pos - 1 else 0] });
+                    stream.reset();
+                    stream2.reset();
+                }
+            }
+            std.log.debug("\n", .{});
         }
     };
 }
@@ -775,7 +823,7 @@ pub const oneTimeCommand = struct {
         };
     }
 
-    fn addCommand2(self: *Self, commandType: drawC.PrivateCommandType, command: drawC.comm, prev: ?*QueueNode, next: ?*QueueNode) !void {
+    fn addCommand2(self: *Self, commandType: drawC.PrivateCommandType, command: drawC.comm, prev: ?*QueueNode, next: ?*QueueNode) !*QueueNode {
         const zone = tracy.initZone(@src(), .{ .name = "add command 2" });
         defer zone.deinit();
 
@@ -793,10 +841,14 @@ pub const oneTimeCommand = struct {
         };
 
         if (prev) |p| {
-            p.insertPrev(node);
+            // p.insertPrev(node);
+            node.childrenAppend(&p.node);
+            p.parentsAppend(&node.node);
         }
         if (next) |n| {
-            n.insertNext(node);
+            // n.insertNext(node);
+            node.parentsAppend(&n.node);
+            n.childrenAppend(&node.node);
         }
 
         switch (commandType) {
@@ -805,6 +857,8 @@ pub const oneTimeCommand = struct {
             },
             else => {},
         }
+
+        return node;
     }
 
     pub fn addCommand(self: *Self, commandType: drawC.PublicCommandType, command: drawC.comm) !void {
@@ -819,6 +873,7 @@ pub const oneTimeCommand = struct {
         const node = try self.nodeDag.create();
         const ID = node.ID;
 
+        var currentNode = node;
         const ptr = try self.queue.getOrPut(ID);
         ptr.value_ptr.* = drawC{
             .command = command,
@@ -827,17 +882,19 @@ pub const oneTimeCommand = struct {
             .output = getOuput(allCommandType, command),
         };
 
-        // first command directly add to queue
-        if (ID == 1) {
-            const root = self.nodeDag.get(0).?;
-            root.childrenAppend(&node.node);
-            node.parentsAppend(&root.node);
-        }
+        // // first command directly add to queue
+        // if (ID == 1) {
+        //     const root = self.nodeDag.get(0).?;
+        //     root.childrenAppend(&node.node);
+        //     node.parentsAppend(&root.node);
+        // }
 
         // dependcy infer
         // combine memory barrier operation with same src stage mask
         // combine same image draw call
         // combine buffer copy to image with same src buffer and dst image
+        const zone2 = tracy.initZone(@src(), .{ .name = "infer dependency 1" });
+        errdefer zone2.deinit();
         switch (commandType) {
             .graphic => {},
             .copyBufferToImage => {
@@ -865,7 +922,7 @@ pub const oneTimeCommand = struct {
                     if (layout == currentLayout) {
                         count += 1;
                     } else {
-                        try self.addCommand2(.transLayout, .{ .transLayout = .{
+                        currentNode = try self.addCommand2(.transLayout, .{ .transLayout = .{
                             .pTexture = copyBufferToImage.pTexture,
                             .oldLayout = currentLayout,
                             .newLayout = vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -880,7 +937,7 @@ pub const oneTimeCommand = struct {
                     }
                 }
                 if (count > 0) {
-                    try self.addCommand2(.transLayout, .{ .transLayout = .{
+                    currentNode = try self.addCommand2(.transLayout, .{ .transLayout = .{
                         .pTexture = copyBufferToImage.pTexture,
                         .oldLayout = currentLayout,
                         .newLayout = vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -894,6 +951,38 @@ pub const oneTimeCommand = struct {
             .graphicTransfer => {},
             .transfer => {},
         }
+        zone2.deinit();
+
+        self.nodeDag.print();
+
+        const zone3 = tracy.initZone(@src(), .{ .name = "infer dependency 2" });
+        errdefer zone3.deinit();
+        const comm = self.queue.get(currentNode.ID).?;
+        switch (comm.commandType) {
+            .transLayout => {
+                const trasLayout = comm.command.transLayout;
+                if (trasLayout.oldLayout == vk.VK_IMAGE_LAYOUT_UNDEFINED) {
+                    const root = self.nodeDag.get(0).?;
+                    root.childrenAppend(&currentNode.node);
+                    if (currentNode.ID == 4) {
+                        var testNode = try self.nodeDag.create();
+                        self.nodeDag.print();
+                        root.childrenAppend(&testNode.node);
+                        self.nodeDag.print();
+                    }
+                    currentNode.parentsAppend(&root.node);
+                    std.log.debug("a", .{});
+                } else {
+                    std.debug.panic("not supported", .{});
+                }
+            },
+            else => {
+                std.debug.panic("not supported", .{});
+            },
+        }
+        zone3.deinit();
+
+        self.nodeDag.print();
     }
 
     /// complete dependency
@@ -1100,6 +1189,8 @@ pub const oneTimeCommand = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
 
+        self.nodeDag.print();
+
         try self.cleanGarbage();
 
         defer {
@@ -1141,15 +1232,23 @@ pub const oneTimeCommand = struct {
 
         var iterateCount: u64 = 0;
         while (true) {
+            // std.log.debug("0", .{});
             iterateCount += 1;
             const pTotalSize = prepareToExecuteQueue.totalSize;
+            std.log.debug("pTotalSize: {d}", .{pTotalSize});
             if (pTotalSize == 0) break;
 
             var pNode = prepareToExecuteQueue.popFirst();
 
             var executeCount: u32 = 0;
             while (pNode) |nn| {
-                if (executeCount >= pTotalSize) break;
+                const zone2 = tracy.initZone(@src(), .{ .name = "execute a" });
+                errdefer zone2.deinit();
+                // std.log.debug("1", .{});
+                if (executeCount >= pTotalSize) {
+                    zone2.deinit();
+                    break;
+                }
 
                 // judge dependencies first
                 if (nn.queueNode.parentsDone < nn.queueNode.parentsLen) {
@@ -1187,13 +1286,24 @@ pub const oneTimeCommand = struct {
 
                 executeCount += 1;
                 try inferNodeNextTaskQueue.pushLast(pNode.?);
+                pNode = prepareToExecuteQueue.popFirst();
+                zone2.deinit();
             }
 
             var iNode = inferNodeNextTaskQueue.popFirst();
             while (iNode) |nn| {
+                const zone2 = tracy.initZone(@src(), .{ .name = "execute b" });
+                errdefer zone2.deinit();
+                // std.log.debug("2", .{});
+
                 const node = nn.queueNode;
+                // std.log.debug("parent {*}", .{node});
                 var nodeFirst = node.children.first;
                 while (nodeFirst) |cc| {
+                    const zone3 = tracy.initZone(@src(), .{ .name = "execute c" });
+                    errdefer zone3.deinit();
+                    // std.log.debug("3", .{});
+
                     var first = prepareToExecuteQueue.list.first;
                     const ccc: *QueueNode = @fieldParentPtr("node", cc);
                     while (first) |jjj| {
@@ -1209,13 +1319,17 @@ pub const oneTimeCommand = struct {
                         .queueNode = ccc,
                         .threadCtx = if (ccc.data.isSecondary) nn.threadCtx else null,
                     });
+                    // std.log.debug("child {*}", .{ccc});
                     nodeFirst = cc.next;
+                    zone3.deinit();
                 }
                 iNode = inferNodeNextTaskQueue.popFirst();
+                zone2.deinit();
             }
+            // std.log.debug("", .{});
         }
 
-        // std.log.debug("iterateCount: {d}", .{iterateCount});
+        std.log.debug("iterateCount: {d}", .{iterateCount});
 
         self.nodeDag.undoneAllNodes();
 
@@ -1233,6 +1347,7 @@ pub const oneTimeCommand = struct {
         var cbs = std.array_list.Managed(vk.VkCommandBuffer).init(self.allocator);
         defer cbs.deinit();
 
+        // std.log.debug("2\n\n\n\n", .{});
         {
             mutex.lock();
             defer mutex.unlock();
@@ -1283,6 +1398,12 @@ pub const oneTimeCommand = struct {
 
             var timelinewaitValue: u64 = currentSemaphoreValue;
             while (firstNode) |nn| {
+                // var it = self.nodeDag.map.valueIterator();
+                // while (it.next()) |value| {
+                //     std.log.debug("ID: {d} {*}, childrenLen: {d}, childrenDone: {d}, parentLen: {d}, parentDone: {d}, done: {}", .{ value.*.ID, &value.*.node, value.*.childrenLen, value.*.childrenDone, value.*.parentsLen, value.*.parentsDone, value.*.done });
+                // }
+                // std.log.debug("\n\n", .{});
+
                 if (nn.childrenLen > 1) {
                     try nextNodeQueue.pushLast(.{
                         .node = nn,
@@ -1374,7 +1495,13 @@ pub const oneTimeCommand = struct {
                 }
 
                 if (nn.parentsDone >= nn.parentsLen) {
+                    // std.log.debug("1", .{});
                     nn.nodeDone();
+                    // var it2 = self.nodeDag.map.valueIterator();
+                    // while (it2.next()) |value| {
+                    //     std.log.debug("ID: {d} {*}, childrenLen: {d}, childrenDone: {d}, parentLen: {d}, parentDone: {d}, done: {}", .{ value.*.ID, &value.*.node, value.*.childrenLen, value.*.childrenDone, value.*.parentsLen, value.*.parentsDone, value.*.done });
+                    // }
+                    // std.log.debug("\n\n", .{});
 
                     const command = self.queue.getPtr(nn.ID).?;
                     try self.collectGarbage(command);
@@ -1411,6 +1538,21 @@ pub const oneTimeCommand = struct {
                         record(self.queue.getPtr(nn.ID).?, currentCommandBuffer);
                     }
                     firstNode = nn.getFirstUndoneChild();
+                    if (firstNode == null) {
+                        var node = nextNodeQueue.peekLast();
+                        while (node) |value| {
+                            firstNode = value.node.getFirstUndoneChild();
+                            if (firstNode == null) {
+                                _ = nextNodeQueue.popLast();
+                                node = nextNodeQueue.peekLast();
+                            } else {
+                                timelinewaitValue = value.semaphoreValue;
+                                break;
+                            }
+                        } else {
+                            firstNode = null;
+                        }
+                    }
                 } else {
                     var node = nextNodeQueue.peekLast();
                     while (node) |value| {
@@ -1427,6 +1569,11 @@ pub const oneTimeCommand = struct {
                     }
                 }
             }
+            // var it = self.nodeDag.map.valueIterator();
+            // while (it.next()) |value| {
+            //     std.log.debug("ID: {d} {*}, childrenLen: {d}, childrenDone: {d}, parentLen: {d}, parentDone: {d}, done: {}", .{ value.*.ID, &value.*.node, value.*.childrenLen, value.*.childrenDone, value.*.parentsLen, value.*.parentsDone, value.*.done });
+            // }
+            // std.log.debug("\n\n", .{});
 
             if (begin) {
                 try VkStruct.endCommandBuffer(currentCommandBuffer);

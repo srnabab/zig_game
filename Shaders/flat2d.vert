@@ -2,6 +2,7 @@
 #extension GL_ARB_separate_shader_objects : enable
 
 layout(set = 0, binding = 0) uniform UniformBufferObject {
+    mat4 model;
     mat4 view;
     mat4 proj;
 } ubo;
