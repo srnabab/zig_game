@@ -295,7 +295,10 @@ fn SpecialThreadPool(maxThreads: u32) type {
                     .command = .{ .empty = void{} },
                     .output = .{ .empty = void{} },
                 };
-                var emptyQueueNode: QueueNode = .{};
+                var emptyQueueNode: QueueNode = .{
+                    .children = undefined,
+                    .parents = undefined,
+                };
 
                 if (self.info[i] != null) {
                     self.info[i].?.mutex.lock();
@@ -327,11 +330,11 @@ fn Graph(T: type) type {
 
         ID: u32 = 0,
 
-        parents: std.DoublyLinkedList = .{},
+        parents: std.array_list.Managed(*u32),
         parentsLen: u32 = 0,
         parentsDone: u32 = 0,
 
-        children: std.DoublyLinkedList = .{},
+        children: std.array_list.Managed(*u32),
         childrenLen: u32 = 0,
         childrenDone: u32 = 0,
 
@@ -339,45 +342,26 @@ fn Graph(T: type) type {
 
         data: T = undefined,
 
-        node: std.DoublyLinkedList.Node = .{},
-
-        pub fn parentsAppend(self: *Self, node: *std.DoublyLinkedList.Node) void {
-            self.parents.append(node);
+        pub fn parentsAppend(self: *Self, ID: *u32) !void {
+            try self.parents.append(ID);
             self.parentsLen += 1;
         }
 
-        pub fn parentsPopFirst(self: *Self) ?*std.DoublyLinkedList.Node {
-            self.parentsLen -= 1;
-            return self.parents.popFirst();
-        }
-
-        pub fn childrenAppend(self: *Self, node: *std.DoublyLinkedList.Node) void {
-            self.children.append(node);
+        pub fn childrenAppend(self: *Self, ID: *u32) !void {
+            try self.children.append(ID);
             self.childrenLen += 1;
         }
 
-        pub fn childrenPopFirst(self: *Self) ?*std.DoublyLinkedList.Node {
-            self.childrenLen -= 1;
-            return self.children.popFirst();
-        }
-
-        pub fn childrenParentsLensMinusOne(self: *Self) void {
-            var node = self.children.first;
-            while (node) |nn| {
-                var ll: *Self = @fieldParentPtr("node", nn);
-                ll.parentsLen -= 1;
-                node = nn.next;
-            }
-        }
-
         pub fn clearParents(self: *Self) void {
-            self.parents = .{};
+            self.parents.deinit();
+            self.parents = undefined;
             self.parentsLen = 0;
             self.parentsDone = 0;
         }
 
         pub fn clearChildren(self: *Self) void {
-            self.children = .{};
+            self.children.deinit();
+            self.children = undefined;
             self.childrenLen = 0;
             self.childrenDone = 0;
         }
@@ -426,24 +410,18 @@ fn Graph(T: type) type {
 
             self.done = true;
 
-            var first = self.children.first;
-            while (first) |nn| {
-                var ll: *Self = @fieldParentPtr("node", nn);
+            for (self.children.items) |ID| {
+                var ll: *Self = @alignCast(@fieldParentPtr("ID", ID));
 
                 ll.parentsDone += 1;
-
-                first = nn.next;
 
                 // std.log.debug("child node {}\n", .{ll.*});
             }
 
-            first = self.parents.first;
-            while (first) |nn| {
-                var ll: *Self = @fieldParentPtr("node", nn);
+            for (self.parents.items) |ID| {
+                var ll: *Self = @alignCast(@fieldParentPtr("ID", ID));
 
                 ll.childrenDone += 1;
-
-                first = nn.next;
 
                 // std.log.debug("parent node {}\n", .{ll.*});
             }
@@ -455,18 +433,14 @@ fn Graph(T: type) type {
 
             if (self.childrenLen == self.childrenDone) return null;
 
-            var first = self.children.first;
-            while (first) |nn| {
-                const ll: *Self = @fieldParentPtr("node", nn);
+            for (self.children.items) |ID| {
+                const ll: *Self = @alignCast(@fieldParentPtr("ID", ID));
 
                 if (ll.done) {
-                    first = nn.next;
                     continue;
                 } else {
                     return ll;
                 }
-
-                first = nn.next;
             }
 
             return null;
@@ -496,15 +470,18 @@ fn DAG(T: type) type {
         innerID: u32 = 0,
         mem: std.heap.MemoryPoolExtra(Inner, .{}),
         map: std.hash_map.AutoHashMap(u32, *Inner),
+        allocator: std.heap.ArenaAllocator,
 
         pub fn init(allocator: std.mem.Allocator) Self {
             return .{
                 .mem = .init(allocator),
                 .map = .init(allocator),
+                .allocator = .init(allocator),
             };
         }
 
         pub fn deinit(self: *Self) void {
+            self.allocator.deinit();
             self.mem.deinit();
             self.map.deinit();
         }
@@ -518,7 +495,11 @@ fn DAG(T: type) type {
 
         pub fn create(self: *Self) !*Inner {
             const node = try self.mem.create();
-            node.* = .{ .ID = self.innerID };
+            node.* = .{
+                .ID = self.innerID,
+                .children = .init(self.allocator.allocator()),
+                .parents = .init(self.allocator.allocator()),
+            };
 
             self.innerID += 1;
 
@@ -568,24 +549,20 @@ fn DAG(T: type) type {
 
             for (0..self.innerID) |i| {
                 if (self.map.get(@intCast(i))) |n| {
-                    var firstParent = n.parents.first;
-                    while (firstParent) |nn| {
-                        const ll: *Inner = @fieldParentPtr("node", nn);
+                    for (n.parents.items) |ID| {
+                        const ll: *Inner = @alignCast(@fieldParentPtr("ID", ID));
 
                         writer.print("{d} ", .{ll.ID}) catch |err| {
                             std.log.err("write err: {s}", .{@errorName(err)});
                         };
-                        firstParent = nn.next;
                     }
 
-                    var firstChild = n.children.first;
-                    while (firstChild) |nn| {
-                        const ll: *Inner = @fieldParentPtr("node", nn);
+                    for (n.children.items) |ID| {
+                        const ll: *Inner = @alignCast(@fieldParentPtr("ID", ID));
 
                         writer2.print("{d} ", .{ll.ID}) catch |err| {
                             std.log.err("write err: {s}", .{@errorName(err)});
                         };
-                        firstChild = nn.next;
                     }
 
                     std.log.debug("[{s}] => ID: {d} => [{s}]", .{ buffer[0..if (stream.pos > 1) stream.pos - 1 else 0], n.ID, buffer2[0..if (stream2.pos > 1) stream2.pos - 1 else 0] });
@@ -842,13 +819,13 @@ pub const oneTimeCommand = struct {
 
         if (prev) |p| {
             // p.insertPrev(node);
-            node.childrenAppend(&p.node);
-            p.parentsAppend(&node.node);
+            try node.childrenAppend(&p.ID);
+            try p.parentsAppend(&node.ID);
         }
         if (next) |n| {
             // n.insertNext(node);
-            node.parentsAppend(&n.node);
-            n.childrenAppend(&node.node);
+            try node.parentsAppend(&n.ID);
+            try n.childrenAppend(&node.ID);
         }
 
         switch (commandType) {
@@ -953,7 +930,7 @@ pub const oneTimeCommand = struct {
         }
         zone2.deinit();
 
-        self.nodeDag.print();
+        // self.nodeDag.print();
 
         const zone3 = tracy.initZone(@src(), .{ .name = "infer dependency 2" });
         errdefer zone3.deinit();
@@ -963,15 +940,15 @@ pub const oneTimeCommand = struct {
                 const trasLayout = comm.command.transLayout;
                 if (trasLayout.oldLayout == vk.VK_IMAGE_LAYOUT_UNDEFINED) {
                     const root = self.nodeDag.get(0).?;
-                    root.childrenAppend(&currentNode.node);
-                    if (currentNode.ID == 4) {
-                        var testNode = try self.nodeDag.create();
-                        self.nodeDag.print();
-                        root.childrenAppend(&testNode.node);
-                        self.nodeDag.print();
-                    }
-                    currentNode.parentsAppend(&root.node);
-                    std.log.debug("a", .{});
+                    try root.childrenAppend(&currentNode.ID);
+                    // if (currentNode.ID == 4) {
+                    //     var testNode = try self.nodeDag.create();
+                    //     self.nodeDag.print();
+                    //     try root.childrenAppend(&testNode.ID);
+                    //     self.nodeDag.print();
+                    // }
+                    try currentNode.parentsAppend(&root.ID);
+                    // std.log.debug("a", .{});
                 } else {
                     std.debug.panic("not supported", .{});
                 }
@@ -982,11 +959,13 @@ pub const oneTimeCommand = struct {
         }
         zone3.deinit();
 
-        self.nodeDag.print();
+        // self.nodeDag.print();
     }
 
     /// complete dependency
     pub fn addCommandEnd(self: *Self) !void {
+        self.nodeDag.print();
+
         const zone = tracy.initZone(@src(), .{ .name = "add command end" });
         defer zone.deinit();
 
@@ -1002,9 +981,10 @@ pub const oneTimeCommand = struct {
                 const innerZone = tracy.initZone(@src(), .{ .name = "copy buffer to image" });
                 defer innerZone.deinit();
                 const copyBufferToImage = command.command.copyBufferToImage;
+                // std.log.debug("offset {d}", .{copyBufferToImage.buffer.info.offset});
                 var region = vk.VkBufferImageCopy{
                     .bufferImageHeight = copyBufferToImage.bufferImageHegiht,
-                    .bufferOffset = copyBufferToImage.buffer.info.offset,
+                    .bufferOffset = 0,
                     .bufferRowLength = copyBufferToImage.bufferRowLength,
                     .imageExtent = .{
                         .width = copyBufferToImage.pTexture.source_width,
@@ -1189,7 +1169,7 @@ pub const oneTimeCommand = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        self.nodeDag.print();
+        // self.nodeDag.print();
 
         try self.cleanGarbage();
 
@@ -1235,7 +1215,7 @@ pub const oneTimeCommand = struct {
             // std.log.debug("0", .{});
             iterateCount += 1;
             const pTotalSize = prepareToExecuteQueue.totalSize;
-            std.log.debug("pTotalSize: {d}", .{pTotalSize});
+            // std.log.debug("pTotalSize: {d}", .{pTotalSize});
             if (pTotalSize == 0) break;
 
             var pNode = prepareToExecuteQueue.popFirst();
@@ -1298,14 +1278,13 @@ pub const oneTimeCommand = struct {
 
                 const node = nn.queueNode;
                 // std.log.debug("parent {*}", .{node});
-                var nodeFirst = node.children.first;
-                while (nodeFirst) |cc| {
+                for (node.children.items) |ID| {
                     const zone3 = tracy.initZone(@src(), .{ .name = "execute c" });
                     errdefer zone3.deinit();
                     // std.log.debug("3", .{});
 
                     var first = prepareToExecuteQueue.list.first;
-                    const ccc: *QueueNode = @fieldParentPtr("node", cc);
+                    const ccc: *QueueNode = @alignCast(@fieldParentPtr("ID", ID));
                     while (first) |jjj| {
                         const aaa: *Queue(taskQueueStruct).DataNode = @fieldParentPtr("node", jjj);
                         if (aaa.data.queueNode == ccc) {
@@ -1320,7 +1299,6 @@ pub const oneTimeCommand = struct {
                         .threadCtx = if (ccc.data.isSecondary) nn.threadCtx else null,
                     });
                     // std.log.debug("child {*}", .{ccc});
-                    nodeFirst = cc.next;
                     zone3.deinit();
                 }
                 iNode = inferNodeNextTaskQueue.popFirst();

@@ -364,6 +364,12 @@ pub fn deinit(self: *Self) void {
     const zone = tracy.initZone(@src(), .{ .name = "deinit vulkan resources" });
     defer zone.deinit();
 
+    for (self.descriptorSetLayout) |value| {
+        self.destroyDescriptorSetLayout(value);
+    }
+
+    self.destroyDescriptorPool(self.globalDescriptorPool);
+
     var pipelines = self.pipelines.valueIterator();
     while (pipelines.next()) |val| {
         vk.vkDestroyPipeline(self.device, val.pipeline, self.pAllocCallBacks);
@@ -1545,4 +1551,8 @@ pub fn _createDescriptorPool(self: *Self, flag: vk.VkDescriptorPoolCreateFlags, 
     try checkVkResult(vk.vkCreateDescriptorPool(self.device, &createInfo, self.pAllocCallBacks, &pool));
 
     return pool;
+}
+
+pub fn destroyDescriptorPool(self: *Self, pool: vk.VkDescriptorPool) void {
+    vk.vkDestroyDescriptorPool(self.device, pool, self.pAllocCallBacks);
 }
