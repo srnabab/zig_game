@@ -169,9 +169,21 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const math_mod = b.createModule(.{
+        .root_source_file = b.path("src/math.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const uniqueArrayList_mod = b.createModule(.{
+        .root_source_file = b.path("src/uniqueArrayList.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     // dependency
     vk_mod.addIncludePath(b.path("include"));
+
+    math_mod.addImport("tracy", tracy.module("tracy"));
 
     steam_mod.addImport("tracy", tracy.module("tracy"));
     steam_mod.addIncludePath(b.path("include"));
@@ -244,6 +256,10 @@ pub fn build(b: *std.Build) void {
     processRender_mod.addImport("queue", queue_mod);
     processRender_mod.addImport("global", global_mod);
     processRender_mod.addImport("tracy", tracy.module("tracy"));
+    processRender_mod.addImport("math", math_mod);
+    processRender_mod.addImport("uniqueArrayList", uniqueArrayList_mod);
+
+    uniqueArrayList_mod.addImport("tracy", tracy.module("tracy"));
 
     global_mod.addImport("video", video_mod);
     global_mod.addImport("processRender", processRender_mod);

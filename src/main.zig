@@ -28,8 +28,6 @@ const Allocator = std.mem.Allocator;
 const global = @import("global");
 const assert = std.debug.assert;
 
-const StackMemorySize = 512 * 1024;
-
 var thread_count: usize = 0;
 var update_thread: usize = 0;
 var render_thread: usize = 0;
@@ -59,7 +57,7 @@ pub fn main() !void {
     const mainZone = tracy.initZone(@src(), .{ .name = "main" });
     defer mainZone.deinit();
 
-    var stackMemory = [_]u8{0} ** StackMemorySize;
+    var stackMemory = [_]u8{0} ** global.StackMemorySize;
     var stackAllocator = std.heap.FixedBufferAllocator.init(stackMemory[0..]);
     const sma = stackAllocator.allocator();
 

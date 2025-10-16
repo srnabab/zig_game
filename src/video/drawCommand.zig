@@ -7,6 +7,7 @@ pub const CommandType = enum {
     start,
     graphic,
     transLayout,
+    pipelineBarrier,
     copyBufferToImage,
     beginPrimaryRecord,
     beginRendering,
@@ -28,6 +29,7 @@ const privateEnum = [_]CommandType{
     .endRecord,
     .endRendering,
     .end,
+    .pipelineBarrier,
 };
 
 pub const PrivateCommandType: type = blk: {
@@ -185,12 +187,54 @@ pub const Start = struct {
     present: bool = false,
 };
 
+const MemoryBarrier = struct {
+    srcAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE,
+    dstAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE,
+};
+const BufferMemoryBarrier = struct {
+    srcAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE,
+    dstAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE,
+
+    srcQueueFamilyIndex: u32,
+    dstQueueFamilyIndex: u32,
+
+    buffer: vk.VkBuffer,
+    offset: vk.VkDeviceSize,
+    size: vk.VkDeviceSize,
+};
+const ImageMemoryBarrier = struct {
+    srcAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE,
+    dstAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE,
+
+    oldLayout: vk.VkImageLayout,
+    newLayout: vk.VkImageLayout,
+
+    srcQueueFamilyIndex: u32,
+    dstQueueFamilyIndex: u32,
+
+    image: vk.VkImage,
+    subresourceRange: vk.VkImageSubresourceRange,
+};
+
+const BarrierType = enum { memory, bufferMemory, imageMemory };
+pub const Barrier = union(BarrierType) {
+    memory: MemoryBarrier,
+    bufferMemory: BufferMemoryBarrier,
+    imageMemory: ImageMemoryBarrier,
+};
+const PipelineBarrier = struct {
+    sourceStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_NONE,
+    destinationStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_NONE,
+    barriers: []Barrier,
+};
+
 pub const comm = union {
     start: Start,
     transLayout: TransLayout,
     copyBufferToImage: CopyBufferToImage,
     beginRecoed: BeginSecondaryRecord,
     beginRendering: BeginRendering,
+    pipelineBarrier: PipelineBarrier,
     empty: void,
 };
 
@@ -200,7 +244,7 @@ pub const Output = union {
 };
 
 commandType: CommandType,
-timestamp: i128 = 0,
+timestamp: i128,
 ID: u32,
 
 command: comm,

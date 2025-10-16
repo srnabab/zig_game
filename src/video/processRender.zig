@@ -9,6 +9,8 @@ const VkStruct = @import("video");
 const Queue = @import("queue").Queue;
 const global = @import("global");
 const tracy = @import("tracy");
+const math = @import("math");
+const uniqueArrayList = @import("uniqueArrayList").UniqueArrayList;
 
 var mutex = Thread.Mutex{};
 
@@ -290,8 +292,9 @@ fn SpecialThreadPool(maxThreads: u32) type {
         pub fn waitThread(self: *Self) void {
             for (0..self.threads.len) |i| {
                 var end = drawC{
-                    .commandType = .end,
                     .ID = 1234124142,
+                    .timestamp = std.time.nanoTimestamp(),
+                    .commandType = .end,
                     .command = .{ .empty = void{} },
                     .output = .{ .empty = void{} },
                 };
@@ -330,11 +333,11 @@ fn Graph(T: type) type {
 
         ID: u32 = 0,
 
-        parents: std.array_list.Managed(*u32),
+        parents: uniqueArrayList(*u32),
         parentsLen: u32 = 0,
         parentsDone: u32 = 0,
 
-        children: std.array_list.Managed(*u32),
+        children: uniqueArrayList(*u32),
         childrenLen: u32 = 0,
         childrenDone: u32 = 0,
 
@@ -343,13 +346,13 @@ fn Graph(T: type) type {
         data: T = undefined,
 
         pub fn parentsAppend(self: *Self, ID: *u32) !void {
-            try self.parents.append(ID);
-            self.parentsLen += 1;
+            if (!(try self.parents.append(ID)))
+                self.parentsLen += 1;
         }
 
         pub fn childrenAppend(self: *Self, ID: *u32) !void {
-            try self.children.append(ID);
-            self.childrenLen += 1;
+            if (!(try self.children.append(ID)))
+                self.childrenLen += 1;
         }
 
         pub fn clearParents(self: *Self) void {
@@ -410,7 +413,7 @@ fn Graph(T: type) type {
 
             self.done = true;
 
-            for (self.children.items) |ID| {
+            for (self.children.list.items) |ID| {
                 var ll: *Self = @alignCast(@fieldParentPtr("ID", ID));
 
                 ll.parentsDone += 1;
@@ -418,7 +421,7 @@ fn Graph(T: type) type {
                 // std.log.debug("child node {}\n", .{ll.*});
             }
 
-            for (self.parents.items) |ID| {
+            for (self.parents.list.items) |ID| {
                 var ll: *Self = @alignCast(@fieldParentPtr("ID", ID));
 
                 ll.childrenDone += 1;
@@ -433,7 +436,7 @@ fn Graph(T: type) type {
 
             if (self.childrenLen == self.childrenDone) return null;
 
-            for (self.children.items) |ID| {
+            for (self.children.list.items) |ID| {
                 const ll: *Self = @alignCast(@fieldParentPtr("ID", ID));
 
                 if (ll.done) {
@@ -549,7 +552,7 @@ fn DAG(T: type) type {
 
             for (0..self.innerID) |i| {
                 if (self.map.get(@intCast(i))) |n| {
-                    for (n.parents.items) |ID| {
+                    for (n.parents.list.items) |ID| {
                         const ll: *Inner = @alignCast(@fieldParentPtr("ID", ID));
 
                         writer.print("{d} ", .{ll.ID}) catch |err| {
@@ -557,7 +560,7 @@ fn DAG(T: type) type {
                         };
                     }
 
-                    for (n.children.items) |ID| {
+                    for (n.children.list.items) |ID| {
                         const ll: *Inner = @alignCast(@fieldParentPtr("ID", ID));
 
                         writer2.print("{d} ", .{ll.ID}) catch |err| {
@@ -619,9 +622,11 @@ const commandBufferDAG = DAG(CommandBufferBelong);
 
 const garbageDataTag = enum {
     buffer,
+    barriers,
 };
 const garbageData = union(garbageDataTag) {
     buffer: VkStruct.Buffer,
+    barriers: []drawC.Barrier,
 };
 
 pub const oneTimeCommand = struct {
@@ -635,6 +640,7 @@ pub const oneTimeCommand = struct {
     innerCommandBufferID: u32 = 0,
     queue: std.hash_map.AutoHashMap(u32, drawC),
     nodeDag: QueueNodes,
+    combineMap: std.AutoHashMap(u64, *QueueNode),
 
     primaryCommandPool: CommandPools,
 
@@ -658,6 +664,7 @@ pub const oneTimeCommand = struct {
             .primaryCommandPool = .init(allocator, 0, 0, 0),
             .garbageData = .init(allocator),
             .stackAllocator = stackAllocator,
+            .combineMap = .init(allocator),
         };
     }
 
@@ -680,6 +687,7 @@ pub const oneTimeCommand = struct {
         self.cleanGarbage() catch |err| {
             std.log.err("clean garbage error {s}\n", .{@errorName(err)});
         };
+        self.combineMap.deinit();
         self.garbageData.deinit();
     }
 
@@ -688,7 +696,7 @@ pub const oneTimeCommand = struct {
         defer zone.deinit();
 
         return rs: switch (commandType) {
-            .start, .beginPrimaryRecord, .beginRendering, .beginSecondaryRecord, .endRendering, .endRecord, .present, .graphic, .copyBufferToImage, .graphicTransfer, .transfer, .end => {
+            .start, .beginPrimaryRecord, .beginRendering, .beginSecondaryRecord, .endRendering, .endRecord, .present, .graphic, .copyBufferToImage, .graphicTransfer, .transfer, .end, .pipelineBarrier => {
                 break :rs drawC.Output{ .empty = void{} };
             },
             .transLayout => {
@@ -708,37 +716,35 @@ pub const oneTimeCommand = struct {
         };
     }
 
-    fn inferTransLayoutFlagsByOldLayoutAndNewLayout(command: *drawC) void {
+    fn inferTransLayoutFlagsByOldLayoutAndNewLayout(command: *drawC.comm) void {
         const zone = tracy.initZone(@src(), .{ .name = "infer trans layout" });
         defer zone.deinit();
 
-        if (command.commandType != .transLayout) return;
-
-        switch (command.command.transLayout.oldLayout) {
+        switch (command.transLayout.oldLayout) {
             vk.VK_IMAGE_LAYOUT_UNDEFINED => {
-                command.command.transLayout.srcAccessMask = vk.VK_ACCESS_NONE;
-                command.command.transLayout.sourceStage = vk.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-                command.command.transLayout.aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
+                command.transLayout.srcAccessMask = vk.VK_ACCESS_NONE;
+                command.transLayout.sourceStage = vk.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+                command.transLayout.aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
             },
 
             vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL => {
-                command.command.transLayout.srcAccessMask = vk.VK_ACCESS_TRANSFER_WRITE_BIT;
-                command.command.transLayout.sourceStage = vk.VK_PIPELINE_STAGE_TRANSFER_BIT;
-                command.command.transLayout.aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
+                command.transLayout.srcAccessMask = vk.VK_ACCESS_TRANSFER_WRITE_BIT;
+                command.transLayout.sourceStage = vk.VK_PIPELINE_STAGE_TRANSFER_BIT;
+                command.transLayout.aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
             },
 
             vk.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL => {
-                command.command.transLayout.srcAccessMask = vk.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-                command.command.transLayout.sourceStage = vk.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-                command.command.transLayout.aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
+                command.transLayout.srcAccessMask = vk.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+                command.transLayout.sourceStage = vk.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+                command.transLayout.aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
             },
 
             vk.VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
             vk.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
             => {
-                command.command.transLayout.srcAccessMask = vk.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-                command.command.transLayout.sourceStage = vk.VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-                command.command.transLayout.aspectMask = vk.VK_IMAGE_ASPECT_DEPTH_BIT;
+                command.transLayout.srcAccessMask = vk.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+                command.transLayout.sourceStage = vk.VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+                command.transLayout.aspectMask = vk.VK_IMAGE_ASPECT_DEPTH_BIT;
             },
 
             // vk.VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL,
@@ -750,37 +756,37 @@ pub const oneTimeCommand = struct {
             // },
 
             else => {
-                std.debug.panic("unsupported layout {s}", .{@typeName(@TypeOf(command.command.transLayout.newLayout))});
+                std.debug.panic("unsupported layout {s}", .{@typeName(@TypeOf(command.transLayout.newLayout))});
             },
         }
 
-        switch (command.command.transLayout.newLayout) {
+        switch (command.transLayout.newLayout) {
             vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL => {
-                command.command.transLayout.dstAccessMask = vk.VK_ACCESS_TRANSFER_WRITE_BIT;
-                command.command.transLayout.destinationStage = vk.VK_PIPELINE_STAGE_TRANSFER_BIT;
-                command.command.transLayout.aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
+                command.transLayout.dstAccessMask = vk.VK_ACCESS_TRANSFER_WRITE_BIT;
+                command.transLayout.destinationStage = vk.VK_PIPELINE_STAGE_TRANSFER_BIT;
+                command.transLayout.aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
             },
 
             vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL => {
-                command.command.transLayout.dstAccessMask = vk.VK_ACCESS_SHADER_READ_BIT;
-                command.command.transLayout.destinationStage = vk.VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT;
-                command.command.transLayout.aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
+                command.transLayout.dstAccessMask = vk.VK_ACCESS_SHADER_READ_BIT;
+                command.transLayout.destinationStage = vk.VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT;
+                command.transLayout.aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
             },
 
             vk.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL => {
-                command.command.transLayout.dstAccessMask = vk.VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | vk.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-                command.command.transLayout.destinationStage = vk.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-                command.command.transLayout.aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
+                command.transLayout.dstAccessMask = vk.VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | vk.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+                command.transLayout.destinationStage = vk.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+                command.transLayout.aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
             },
 
             vk.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR => {
-                command.command.transLayout.dstAccessMask = vk.VK_ACCESS_NONE;
-                command.command.transLayout.destinationStage = vk.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-                command.command.transLayout.aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
+                command.transLayout.dstAccessMask = vk.VK_ACCESS_NONE;
+                command.transLayout.destinationStage = vk.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+                command.transLayout.aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
             },
 
             else => {
-                std.debug.panic("unsupported layout {s}", .{@typeName(@TypeOf(command.command.transLayout.newLayout))});
+                std.debug.panic("unsupported layout {s}", .{@typeName(@TypeOf(command.transLayout.newLayout))});
             },
         }
     }
@@ -794,6 +800,7 @@ pub const oneTimeCommand = struct {
         const ptr = try self.queue.getOrPut(node.ID);
         ptr.value_ptr.* = drawC{
             .ID = node.ID,
+            .timestamp = std.time.nanoTimestamp(),
             .commandType = .start,
             .command = .{ .start = .{} },
             .output = .{ .empty = void{} },
@@ -804,38 +811,137 @@ pub const oneTimeCommand = struct {
         const zone = tracy.initZone(@src(), .{ .name = "add command 2" });
         defer zone.deinit();
 
-        const allCommandType = drawC.PrivateCommandTypeToCommandType(commandType);
+        // const allCommandType = drawC.PrivateCommandTypeToCommandType(commandType);
+        var commandCopy = command;
 
-        const node = try self.nodeDag.create();
-        const ID = node.ID;
-
-        const ptr = try self.queue.getOrPut(ID);
-        ptr.value_ptr.* = drawC{
-            .command = command,
-            .commandType = allCommandType,
-            .ID = ID,
-            .output = getOuput(allCommandType, command),
-        };
-
-        if (prev) |p| {
-            // p.insertPrev(node);
-            try node.childrenAppend(&p.ID);
-            try p.parentsAppend(&node.ID);
-        }
-        if (next) |n| {
-            // n.insertNext(node);
-            try node.parentsAppend(&n.ID);
-            try n.childrenAppend(&node.ID);
-        }
+        var resNode: *QueueNode = undefined;
 
         switch (commandType) {
             .transLayout => {
-                inferTransLayoutFlagsByOldLayoutAndNewLayout(ptr.value_ptr);
+                inferTransLayoutFlagsByOldLayoutAndNewLayout(&commandCopy);
+
+                const transLayout = commandCopy.transLayout;
+                const hash = math.szudzikPairing(transLayout.sourceStage, transLayout.destinationStage);
+
+                const res = try self.combineMap.getOrPut(hash);
+                if (res.found_existing) {
+                    const rootNode = res.value_ptr.*;
+                    var root = self.queue.getPtr(rootNode.ID).?;
+                    switch (root.commandType) {
+                        .pipelineBarrier => {
+                            var pipelineBarrier = &root.command.pipelineBarrier;
+                            const index = pipelineBarrier.barriers.len;
+                            pipelineBarrier.barriers = try self.allocator.realloc(pipelineBarrier.barriers, pipelineBarrier.barriers.len + 1);
+                            pipelineBarrier.barriers[index] = .{ .imageMemory = .{
+                                .srcAccessMask = transLayout.srcAccessMask,
+                                .dstAccessMask = transLayout.dstAccessMask,
+                                .oldLayout = transLayout.oldLayout,
+                                .newLayout = transLayout.newLayout,
+                                .srcQueueFamilyIndex = vk.VK_QUEUE_FAMILY_IGNORED,
+                                .dstQueueFamilyIndex = vk.VK_QUEUE_FAMILY_IGNORED,
+                                .image = transLayout.pTexture.image.vkImage,
+
+                                .subresourceRange = .{
+                                    .aspectMask = transLayout.aspectMask,
+                                    .baseMipLevel = transLayout.baseMipLevel,
+                                    .levelCount = transLayout.levelCount,
+                                    .baseArrayLayer = transLayout.baseLayer,
+                                    .layerCount = transLayout.layerCount,
+                                },
+                            } };
+                        },
+                        else => {
+                            std.debug.panic("not supported commandType {s}", .{@tagName(root.commandType)});
+                        },
+                    }
+
+                    if (prev) |p| {
+                        // p.insertPrev(node);
+                        try rootNode.childrenAppend(&p.ID);
+                        try p.parentsAppend(&rootNode.ID);
+                    }
+                    if (next) |n| {
+                        // n.insertNext(node);
+                        try rootNode.parentsAppend(&n.ID);
+                        try n.childrenAppend(&rootNode.ID);
+                    }
+
+                    resNode = rootNode;
+                } else {
+                    const node = try self.nodeDag.create();
+                    const ID = node.ID;
+
+                    const ptr = try self.queue.getOrPut(ID);
+                    ptr.value_ptr.* = drawC{
+                        .ID = ID,
+                        .timestamp = std.time.nanoTimestamp(),
+                        .command = .{ .pipelineBarrier = .{
+                            .sourceStage = transLayout.sourceStage,
+                            .destinationStage = transLayout.destinationStage,
+                            .barriers = try self.allocator.alloc(drawC.Barrier, 1),
+                        } },
+                        .commandType = .pipelineBarrier,
+                        .output = .{ .empty = void{} },
+                    };
+                    ptr.value_ptr.command.pipelineBarrier.barriers[0] = .{ .imageMemory = .{
+                        .srcAccessMask = transLayout.srcAccessMask,
+                        .dstAccessMask = transLayout.dstAccessMask,
+                        .oldLayout = transLayout.oldLayout,
+                        .newLayout = transLayout.newLayout,
+                        .srcQueueFamilyIndex = vk.VK_QUEUE_FAMILY_IGNORED,
+                        .dstQueueFamilyIndex = vk.VK_QUEUE_FAMILY_IGNORED,
+                        .image = transLayout.pTexture.image.vkImage,
+                        .subresourceRange = .{
+                            .aspectMask = transLayout.aspectMask,
+                            .baseMipLevel = transLayout.baseMipLevel,
+                            .levelCount = transLayout.levelCount,
+                            .baseArrayLayer = transLayout.baseLayer,
+                            .layerCount = transLayout.layerCount,
+                        },
+                    } };
+
+                    res.value_ptr.* = node;
+
+                    if (prev) |p| {
+                        // p.insertPrev(node);
+                        try node.childrenAppend(&p.ID);
+                        try p.parentsAppend(&node.ID);
+                    }
+                    if (next) |n| {
+                        // n.insertNext(node);
+                        try node.parentsAppend(&n.ID);
+                        try n.childrenAppend(&node.ID);
+                    }
+                    resNode = node;
+                }
             },
-            else => {},
+            else => {
+                std.debug.panic("not supported commandType {s}", .{@tagName(commandType)});
+            },
         }
 
-        return node;
+        // const hash: u64 = hs: {
+        //     switch (ptr.value_ptr.commandType) {
+        //         .transLayout => {
+        //             const transLayout = ptr.value_ptr.command.transLayout;
+        //             break :hs math.szudzikPairing(transLayout.sourceStage, transLayout.destinationStage);
+        //         },
+        //         .copyBufferToImage => {
+        //             var wyHash = std.hash.Wyhash.init(0);
+        //             const copyBufferToImage = ptr.value_ptr.command.copyBufferToImage;
+        //             const a = @intFromPtr(copyBufferToImage.buffer.vkBuffer);
+        //             const b = @intFromPtr(copyBufferToImage.pTexture.image.vkImage);
+        //             wyHash.update(std.mem.asBytes(&a));
+        //             wyHash.update(std.mem.asBytes(&b));
+        //             break :hs wyHash.final();
+        //         },
+        //         else => {
+        //             std.debug.panic("not supported commandType {s}", .{@tagName(command.commandType)});
+        //         },
+        //     }
+        // };
+
+        return resNode;
     }
 
     pub fn addCommand(self: *Self, commandType: drawC.PublicCommandType, command: drawC.comm) !void {
@@ -853,9 +959,10 @@ pub const oneTimeCommand = struct {
         var currentNode = node;
         const ptr = try self.queue.getOrPut(ID);
         ptr.value_ptr.* = drawC{
+            .ID = ID,
+            .timestamp = std.time.nanoTimestamp(),
             .command = command,
             .commandType = allCommandType,
-            .ID = ID,
             .output = getOuput(allCommandType, command),
         };
 
@@ -924,9 +1031,9 @@ pub const oneTimeCommand = struct {
                 }
                 copyBufferToImage.pTexture.changeTextureLayout(copyBufferToImage.baseArrayLayer, copyBufferToImage.layerCount, vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
             },
-            .present => {},
-            .graphicTransfer => {},
-            .transfer => {},
+            else => {
+                std.debug.panic("not supported commandType {s}", .{@tagName(commandType)});
+            },
         }
         zone2.deinit();
 
@@ -936,19 +1043,13 @@ pub const oneTimeCommand = struct {
         errdefer zone3.deinit();
         const comm = self.queue.get(currentNode.ID).?;
         switch (comm.commandType) {
-            .transLayout => {
-                const trasLayout = comm.command.transLayout;
-                if (trasLayout.oldLayout == vk.VK_IMAGE_LAYOUT_UNDEFINED) {
+            .pipelineBarrier => {
+                const pipelineBarrier = comm.command.pipelineBarrier;
+
+                if (pipelineBarrier.sourceStage == vk.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT) {
                     const root = self.nodeDag.get(0).?;
                     try root.childrenAppend(&currentNode.ID);
-                    // if (currentNode.ID == 4) {
-                    //     var testNode = try self.nodeDag.create();
-                    //     self.nodeDag.print();
-                    //     try root.childrenAppend(&testNode.ID);
-                    //     self.nodeDag.print();
-                    // }
                     try currentNode.parentsAppend(&root.ID);
-                    // std.log.debug("a", .{});
                 } else {
                     std.debug.panic("not supported", .{});
                 }
@@ -969,10 +1070,159 @@ pub const oneTimeCommand = struct {
         const zone = tracy.initZone(@src(), .{ .name = "add command end" });
         defer zone.deinit();
 
+        // {
+        // var combineMap: std.AutoHashMap(u64, std.array_list.Managed(*QueueNode)) = .init(self.allocator);
+        // defer combineMap.deinit();
+        // var wyHash = std.hash.Wyhash.init(std.crypto.random.int(u64));
+
+        // var firstNode = self.nodeDag.get(0);
+        // var nextNodeQueue: Queue(*QueueNode) = undefined;
+        // nextNodeQueue.init(self.allocator);
+        // defer nextNodeQueue.deinit();
+
+        // while (firstNode) |nn| {
+        //     if (nn.childrenLen > 1) {
+        //         try nextNodeQueue.pushLast(nn);
+        //     }
+
+        //     if (nn.parentsDone >= nn.parentsLen) {
+        //         nn.nodeDone();
+
+        //         const command = self.queue.getPtr(nn.ID).?;
+        //         const hash: u64 = hs: {
+        //             switch (command.commandType) {
+        //                 .transLayout => {
+        //                     const transLayout = command.command.transLayout;
+        //                     break :hs math.szudzikPairing(transLayout.sourceStage, transLayout.destinationStage);
+        //                 },
+        //                 .copyBufferToImage => {
+        //                     const copyBufferToImage = command.command.copyBufferToImage;
+        //                     const a = @intFromPtr(copyBufferToImage.buffer.vkBuffer);
+        //                     const b = @intFromPtr(copyBufferToImage.pTexture.image.vkImage);
+        //                     wyHash.update(std.mem.asBytes(&a));
+        //                     wyHash.update(std.mem.asBytes(&b));
+        //                     break :hs wyHash.final();
+        //                 },
+        //                 else => {
+        //                     std.debug.panic("not supported commandType {s}", .{@tagName(command.commandType)});
+        //                 },
+        //             }
+        //         };
+        //         const list = try combineMap.getOrPut(hash);
+        //         if (!list.found_existing) {
+        //             list.value_ptr.* = .init(self.allocator);
+        //         }
+        //         try list.value_ptr.append(self.allocator, nn);
+
+        //         firstNode = nn.getFirstUndoneChild();
+        //         if (firstNode == null) {
+        //             var node = nextNodeQueue.peekLast();
+        //             while (node) |value| {
+        //                 firstNode = value.getFirstUndoneChild();
+        //                 if (firstNode == null) {
+        //                     _ = nextNodeQueue.popLast();
+        //                     node = nextNodeQueue.peekLast();
+        //                 } else {
+        //                     break;
+        //                 }
+        //             } else {
+        //                 firstNode = null;
+        //             }
+        //         }
+        //     } else {
+        //         var node = nextNodeQueue.peekLast();
+        //         while (node) |value| {
+        //             firstNode = value.getFirstUndoneChild();
+        //             if (firstNode == null) {
+        //                 _ = nextNodeQueue.popLast();
+        //                 node = nextNodeQueue.peekLast();
+        //             } else {
+        //                 break;
+        //             }
+        //         } else {
+        //             firstNode = null;
+        //         }
+        //     }
+        // }
+
+        // var it = combineMap.valueIterator();
+        // while (it.next()) |value| {
+        //     if (value.items.len < 2) {
+        //         value.deinit();
+        //         continue;
+        //     } else {
+        //         const root = value.items[0];
+        //         const command = self.queue.get(root.ID).?;
+
+        //         switch (command.commandType) {
+        //             .transLayout => {
+        //                 const commandPtr = self.queue.getPtr(root.ID).?;
+        //                 commandPtr.command = .{ .pipelineBarrier = .{
+        //                     .sourceStage = command.command.transLayout.sourceStage,
+        //                     .destinationStage = command.command.transLayout.destinationStage,
+        //                     .barriers = try self.arenaAllocator.allocator().alloc(drawC.Barrier, value.items.len),
+        //                 } };
+        //                 commandPtr.command.pipelineBarrier.barriers[0] = .{ .imageMemory = .{
+        //                     .srcAccessMask = command.command.transLayout.srcAccessMask,
+        //                     .dstAccessMask = command.command.transLayout.dstAccessMask,
+        //                     .oldLayout = command.command.transLayout.oldLayout,
+        //                     .newLayout = command.command.transLayout.newLayout,
+        //                     .srcQueueFamilyIndex = command.command.transLayout.srcQueueFamilyIndex,
+        //                     .dstQueueFamilyIndex = command.command.transLayout.dstQueueFamilyIndex,
+        //                     .image = command.command.transLayout.pTexture.image.vkImage,
+        //                     .subresourceRange = .{
+        //                         .aspectMask = command.command.transLayout.aspectMask,
+        //                         .baseMipLevel = command.command.transLayout.baseMipLevel,
+        //                         .levelCount = command.command.transLayout.levelCount,
+        //                         .baseArrayLayer = command.command.transLayout.baseLayer,
+        //                         .layerCount = command.command.transLayout.layerCount,
+        //                     },
+        //                 } };
+
+        //                 for (value.*.items[1..], 1..) |node, i| {
+        //                     const currentCommand = self.queue.getPtr(node.ID).?;
+        //                     switch (currentCommand.commandType) {
+        //                         .transLayout => {
+        //                             commandPtr.command.pipelineBarrier.barriers[i] = .{ .imageMemory = .{
+        //                                 .srcAccessMask = currentCommand.command.transLayout.srcAccessMask,
+        //                                 .dstAccessMask = currentCommand.command.transLayout.dstAccessMask,
+        //                                 .oldLayout = currentCommand.command.transLayout.oldLayout,
+        //                                 .newLayout = currentCommand.command.transLayout.newLayout,
+        //                                 .srcQueueFamilyIndex = currentCommand.command.transLayout.srcQueueFamilyIndex,
+        //                                 .dstQueueFamilyIndex = currentCommand.command.transLayout.dstQueueFamilyIndex,
+        //                                 .image = currentCommand.command.transLayout.pTexture.image.vkImage,
+        //                                 .subresourceRange = .{
+        //                                     .aspectMask = currentCommand.command.transLayout.aspectMask,
+        //                                     .baseMipLevel = currentCommand.command.transLayout.baseMipLevel,
+        //                                     .levelCount = currentCommand.command.transLayout.levelCount,
+        //                                     .baseArrayLayer = currentCommand.command.transLayout.baseLayer,
+        //                                     .layerCount = currentCommand.command.transLayout.layerCount,
+        //                                 },
+        //                             } };
+        //                             // add current node children to root without repeat
+        //                             // add current node parents to root without repeat
+        //                         },
+        //                         else => {
+        //                             std.debug.panic("not supported commandType {s}", .{@tagName(currentCommand.commandType)});
+        //                         },
+        //                     }
+        //                 }
+        //             },
+        //             .copyBufferToImage => {},
+        //             else => {
+        //                 std.debug.panic("not supported commandType {s}", .{@tagName(command.commandType)});
+        //             },
+        //         }
+        //     }
+        // }
+
+        // self.nodeDag.undoneAllNodes();
+        // }
+
         self.executeSemaphore.post();
     }
 
-    fn record(command: *drawC, commandBuffer: vk.VkCommandBuffer) void {
+    fn record(command: *drawC, commandBuffer: vk.VkCommandBuffer, stackAllocator: std.mem.Allocator) void {
         const zone = tracy.initZone(@src(), .{ .name = "record vulkan command" });
         defer zone.deinit();
 
@@ -1034,6 +1284,100 @@ pub const oneTimeCommand = struct {
                 };
                 vk.vkCmdPipelineBarrier(commandBuffer, transLayout.sourceStage, transLayout.destinationStage, 0, 0, null, 0, null, 1, &imageMemoryBarrier);
             },
+            .pipelineBarrier => {
+                const innerZone = tracy.initZone(@src(), .{ .name = "pipeline barrier" });
+                defer innerZone.deinit();
+
+                const pipelineBarrier = command.command.pipelineBarrier;
+                var imageMemoryBarrierCount: u32 = 0;
+                var bufferMemoryBarrierCount: u32 = 0;
+                var memoryBarrierCount: u32 = 0;
+
+                for (pipelineBarrier.barriers) |barrier| {
+                    switch (barrier) {
+                        .imageMemory => {
+                            imageMemoryBarrierCount += 1;
+                        },
+                        .bufferMemory => {
+                            bufferMemoryBarrierCount += 1;
+                        },
+                        .memory => {
+                            memoryBarrierCount += 1;
+                        },
+                    }
+                }
+
+                var imageMemoryBarriers = std.ArrayList(vk.VkImageMemoryBarrier).initCapacity(stackAllocator, imageMemoryBarrierCount) catch |err| {
+                    std.log.err("stack alloc error {s}\n", .{@errorName(err)});
+                    std.debug.panic("stack alloc error", .{});
+                };
+                defer imageMemoryBarriers.deinit(stackAllocator);
+                var bufferMemoryBarriers = std.ArrayList(vk.VkBufferMemoryBarrier).initCapacity(stackAllocator, bufferMemoryBarrierCount) catch |err| {
+                    std.log.err("stack alloc error {s}\n", .{@errorName(err)});
+                    std.debug.panic("stack alloc error", .{});
+                };
+                defer bufferMemoryBarriers.deinit(stackAllocator);
+                var memoryBarriers = std.ArrayList(vk.VkMemoryBarrier).initCapacity(stackAllocator, memoryBarrierCount) catch |err| {
+                    std.log.err("stack alloc error {s}\n", .{@errorName(err)});
+                    std.debug.panic("stack alloc error", .{});
+                };
+                defer memoryBarriers.deinit(stackAllocator);
+
+                for (pipelineBarrier.barriers) |barrier| {
+                    switch (barrier) {
+                        .imageMemory => {
+                            const ptr = imageMemoryBarriers.addOneAssumeCapacity();
+                            ptr.* = vk.VkImageMemoryBarrier{
+                                .sType = vk.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                                .pNext = null,
+                                .srcAccessMask = barrier.imageMemory.srcAccessMask,
+                                .dstAccessMask = barrier.imageMemory.dstAccessMask,
+                                .oldLayout = barrier.imageMemory.oldLayout,
+                                .newLayout = barrier.imageMemory.newLayout,
+                                .srcQueueFamilyIndex = barrier.imageMemory.srcQueueFamilyIndex,
+                                .dstQueueFamilyIndex = barrier.imageMemory.dstQueueFamilyIndex,
+                                .image = barrier.imageMemory.image,
+                                .subresourceRange = barrier.imageMemory.subresourceRange,
+                            };
+                        },
+                        .bufferMemory => {
+                            const ptr = bufferMemoryBarriers.addOneAssumeCapacity();
+                            ptr.* = vk.VkBufferMemoryBarrier{
+                                .sType = vk.VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+                                .pNext = null,
+                                .srcAccessMask = barrier.bufferMemory.srcAccessMask,
+                                .dstAccessMask = barrier.bufferMemory.dstAccessMask,
+                                .srcQueueFamilyIndex = barrier.bufferMemory.srcQueueFamilyIndex,
+                                .dstQueueFamilyIndex = barrier.bufferMemory.dstQueueFamilyIndex,
+                                .buffer = barrier.bufferMemory.buffer,
+                                .offset = barrier.bufferMemory.offset,
+                                .size = barrier.bufferMemory.size,
+                            };
+                        },
+                        .memory => {
+                            const ptr = memoryBarriers.addOneAssumeCapacity();
+                            ptr.* = vk.VkMemoryBarrier{
+                                .sType = vk.VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+                                .pNext = null,
+                                .srcAccessMask = barrier.memory.srcAccessMask,
+                                .dstAccessMask = barrier.memory.dstAccessMask,
+                            };
+                        },
+                    }
+                }
+                vk.vkCmdPipelineBarrier(
+                    commandBuffer,
+                    pipelineBarrier.sourceStage,
+                    pipelineBarrier.destinationStage,
+                    0,
+                    memoryBarrierCount,
+                    memoryBarriers.items.ptr,
+                    bufferMemoryBarrierCount,
+                    bufferMemoryBarriers.items.ptr,
+                    imageMemoryBarrierCount,
+                    imageMemoryBarriers.items.ptr,
+                );
+            },
             else => {
                 std.debug.panic("unsupported command type {s}", .{@tagName(command.commandType)});
             },
@@ -1051,6 +1395,10 @@ pub const oneTimeCommand = struct {
     pub fn recordCommand(ctx: *ThreadContext) !void {
         tracy.setThreadName("record command");
         defer tracy.message("record command exit");
+
+        var stackMemory = [_]u8{0} ** global.StackMemorySize;
+        var stackAllocator = std.heap.FixedBufferAllocator.init(stackMemory[0..]);
+        const sma = stackAllocator.allocator();
 
         var commandBuffer: vk.VkCommandBuffer = null;
         var cbb: *CommandBufferBelong = undefined;
@@ -1115,7 +1463,7 @@ pub const oneTimeCommand = struct {
                 } else if (com.commandType == .end) {
                     break;
                 } else {
-                    record(com, cbb.commandBufer);
+                    record(com, cbb.commandBufer, sma);
                 }
             } else {
                 break;
@@ -1129,7 +1477,11 @@ pub const oneTimeCommand = struct {
 
         return switch (command.commandType) {
             .copyBufferToImage => garbageData{ .buffer = command.command.copyBufferToImage.buffer },
-            else => null,
+            .pipelineBarrier => garbageData{ .barriers = command.command.pipelineBarrier.barriers },
+            .start => null,
+            else => {
+                std.debug.panic("not support {s}", .{@tagName(command.commandType)});
+            },
         };
     }
 
@@ -1151,6 +1503,9 @@ pub const oneTimeCommand = struct {
             switch (g) {
                 .buffer => {
                     global.vulkan.destroyBuffer(g.buffer);
+                },
+                .barriers => {
+                    self.allocator.free(g.barriers);
                 },
             }
         }
@@ -1278,7 +1633,7 @@ pub const oneTimeCommand = struct {
 
                 const node = nn.queueNode;
                 // std.log.debug("parent {*}", .{node});
-                for (node.children.items) |ID| {
+                for (node.children.list.items) |ID| {
                     const zone3 = tracy.initZone(@src(), .{ .name = "execute c" });
                     errdefer zone3.deinit();
                     // std.log.debug("3", .{});
@@ -1513,7 +1868,7 @@ pub const oneTimeCommand = struct {
                         if (cbs.items.len > 0)
                             vk.vkCmdExecuteCommands(currentCommandBuffer, @intCast(cbs.items.len), @ptrCast(cbs.items.ptr));
 
-                        record(self.queue.getPtr(nn.ID).?, currentCommandBuffer);
+                        record(self.queue.getPtr(nn.ID).?, currentCommandBuffer, self.stackAllocator);
                     }
                     firstNode = nn.getFirstUndoneChild();
                     if (firstNode == null) {
