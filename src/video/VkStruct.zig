@@ -861,7 +861,7 @@ fn _createBuffer(
 }
 
 pub fn destroyBuffer(self: *Self, buffer: Buffer) void {
-    const zone = tracy.initZone(@src(), .{ .name = "init vulkan resources" });
+    const zone = tracy.initZone(@src(), .{ .name = "destroy buffer" });
     defer zone.deinit();
 
     _ = self.vmaBufferAllocations.fetchSub(1, .seq_cst);

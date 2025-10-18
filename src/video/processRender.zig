@@ -149,7 +149,7 @@ const CommandPools = struct {
             return p.primaryCommandBuffer[index];
         } else {
             var commandPool: vk.VkCommandPool = null;
-            try global.vulkan._createCommandPool(null, kind, vk.VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, @ptrCast(&commandPool));
+            try global.vulkan._createCommandPool(null, kind, vk.VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | vk.VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, @ptrCast(&commandPool));
             self.commandPools[idx] = if (self.secondarySizes[idx] > 0)
                 try .initWithSecondary(self.allocator, commandPool, self.secondarySizes[idx])
             else
@@ -623,10 +623,16 @@ const commandBufferDAG = DAG(CommandBufferBelong);
 const garbageDataTag = enum {
     buffer,
     barriers,
+    empty,
 };
 const garbageData = union(garbageDataTag) {
     buffer: VkStruct.Buffer,
     barriers: []drawC.Barrier,
+    empty: void,
+};
+const GarbageData = struct {
+    data: garbageData,
+    semaphoreValue: u64,
 };
 
 pub const oneTimeCommand = struct {
@@ -651,7 +657,7 @@ pub const oneTimeCommand = struct {
     mutex: Thread.Mutex = .{},
     executeSemaphore: Thread.Semaphore = .{},
 
-    garbageData: std.array_list.Managed(garbageData),
+    garbageData: std.array_list.Managed(GarbageData),
 
     // commandPools: std.array_list.Managed(vk.VkCommandPool),
 
@@ -1485,13 +1491,13 @@ pub const oneTimeCommand = struct {
         };
     }
 
-    fn collectGarbage(self: *Self, command: *drawC) !void {
+    fn collectGarbage(self: *Self, command: *drawC, currentSemaphoreValue: u64) !void {
         const zone = tracy.initZone(@src(), .{ .name = "collect garbage" });
         defer zone.deinit();
 
         if (getGarbage(command)) |g| {
             const temp = try self.garbageData.addOne();
-            temp.* = g;
+            temp.* = .{ .data = g, .semaphoreValue = currentSemaphoreValue + 1 };
         }
     }
 
@@ -1499,18 +1505,35 @@ pub const oneTimeCommand = struct {
         const zone = tracy.initZone(@src(), .{ .name = "clean garbage" });
         defer zone.deinit();
 
-        for (self.garbageData.items) |g| {
-            switch (g) {
+        const currentSemaphoreValue = try global.vulkan.getSemaphoreCounterValue(global.vulkan.globalTimelineSemaphore);
+
+        for (self.garbageData.items, 0..) |g, i| {
+            switch (g.data) {
                 .buffer => {
-                    global.vulkan.destroyBuffer(g.buffer);
+                    if (currentSemaphoreValue < g.semaphoreValue) continue;
+                    global.vulkan.destroyBuffer(g.data.buffer);
+                    self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
                 },
                 .barriers => {
-                    self.allocator.free(g.barriers);
+                    self.allocator.free(g.data.barriers);
+                    self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
                 },
+                .empty => {},
             }
         }
 
-        self.garbageData.clearRetainingCapacity();
+        var saveLen: usize = 0;
+        for (self.garbageData.items, 0..) |g, i| {
+            if (g.data != .empty) {
+                if (saveLen != i) {
+                    self.garbageData.items[saveLen] = g;
+                }
+                saveLen += 1;
+            }
+        }
+
+        // self.garbageData.clearRetainingCapacity();
+        self.garbageData.items.len = saveLen;
     }
 
     // a thread pool specialy for render
@@ -1828,16 +1851,10 @@ pub const oneTimeCommand = struct {
                 }
 
                 if (nn.parentsDone >= nn.parentsLen) {
-                    // std.log.debug("1", .{});
                     nn.nodeDone();
-                    // var it2 = self.nodeDag.map.valueIterator();
-                    // while (it2.next()) |value| {
-                    //     std.log.debug("ID: {d} {*}, childrenLen: {d}, childrenDone: {d}, parentLen: {d}, parentDone: {d}, done: {}", .{ value.*.ID, &value.*.node, value.*.childrenLen, value.*.childrenDone, value.*.parentsLen, value.*.parentsDone, value.*.done });
-                    // }
-                    // std.log.debug("\n\n", .{});
 
                     const command = self.queue.getPtr(nn.ID).?;
-                    try self.collectGarbage(command);
+                    try self.collectGarbage(command, currentSemaphoreValue);
                     lastStage = judgeStage(command);
                     if (first) {
                         firstStage = lastStage;
@@ -1925,13 +1942,16 @@ pub const oneTimeCommand = struct {
 
                 const temp4 = try signalSemaphores.addOne();
                 temp4.* = global.vulkan.globalTimelineSemaphore;
-                const temp5 = try signalSemaphores.addOne();
-                temp5.* = global.vulkan.renderFinishSemaphore[currentFrames];
                 const temp6 = try signalValues.addOne();
                 currentSemaphoreValue += 1;
                 temp6.* = currentSemaphoreValue;
-                const temp7 = try signalValues.addOne();
-                temp7.* = 0;
+
+                if (present) {
+                    const temp5 = try signalSemaphores.addOne();
+                    temp5.* = global.vulkan.renderFinishSemaphore[currentFrames];
+                    const temp7 = try signalValues.addOne();
+                    temp7.* = 0;
+                }
 
                 timelineSemaphoreSubmitInfo.waitSemaphoreValueCount = @intCast(waitValues.items.len);
                 timelineSemaphoreSubmitInfo.pWaitSemaphoreValues = @ptrCast(waitValues.items.ptr);

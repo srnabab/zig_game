@@ -110,15 +110,18 @@ pub fn main() !void {
     try global.graphic.addCommandEnd();
 
     try global.graphic.executeCommands();
+    global.vulkan.nextFrame();
 
     try vulkan.readPipelineFileAndAdd(comptime file.comptimeGetID("flat2d.pipeb"));
-    // try vulkan.readPipelineFileAndAdd(comptime file.comptimeGetID("model3d.pipeb"));
 
     try vulkan.createAllPipelinesAdded();
 
     const renderStart = std.time.milliTimestamp();
     while (true) {
-        if (std.time.milliTimestamp() - renderStart > 2000) {
+        try global.graphic.startCommand();
+        try global.graphic.addCommandEnd();
+        try global.graphic.executeCommands();
+        if (std.time.milliTimestamp() - renderStart > 2) {
             break;
         }
     }
