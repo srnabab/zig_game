@@ -240,6 +240,11 @@ globalDescriptorPool: vk.VkDescriptorPool = null,
 
 descriptorSetLayout: [2]vk.VkDescriptorSetLayout = undefined,
 
+globalFixed2dMVPMatrixDescriptorSet: vk.VkDescriptorSet = null,
+global2dMVPMatrixDescriptorSet: vk.VkDescriptorSet = null,
+global3dMVPMatrixDescriptorSet: vk.VkDescriptorSet = null,
+globalTextureDescriptorSet: vk.VkDescriptorSet = null,
+
 fn comptime_print(comptime format: []const u8, comptime args: anytype) void {
     @compileLog(std.fmt.comptimePrint(format, args));
 }
@@ -354,6 +359,14 @@ pub fn initVulkan(self: *Self) !void {
         .pBindingFlags = &set1SetLayoutCreateInfos.bindingFlags,
     };
     self.descriptorSetLayout[1] = try self.createDescriptorSetLayout(&bindingFlagsInfo, set1SetLayoutCreateInfos.flag, set1SetLayoutCreateInfos.bindingCount, @constCast(&set1SetLayoutCreateInfos.bindings));
+
+    var set0Sets = [_]vk.VkDescriptorSet{ self.globalFixed2dMVPMatrixDescriptorSet, self.global2dMVPMatrixDescriptorSet, self.global3dMVPMatrixDescriptorSet };
+    var set0Setlayout = [_]vk.VkDescriptorSetLayout{ self.descriptorSetLayout[0], self.descriptorSetLayout[0], self.descriptorSetLayout[0] };
+    try self.allocateDescriptorSets(self.globalDescriptorPool, &set0Setlayout, &set0Sets);
+
+    var set1Sets = [_]vk.VkDescriptorSet{self.globalTextureDescriptorSet};
+    var set1Setlayout = [_]vk.VkDescriptorSetLayout{self.descriptorSetLayout[1]};
+    try self.allocateDescriptorSets(self.globalDescriptorPool, &set1Setlayout, &set1Sets);
 }
 
 pub fn deinit(self: *Self) void {
@@ -1555,4 +1568,16 @@ pub fn _createDescriptorPool(self: *Self, flag: vk.VkDescriptorPoolCreateFlags, 
 
 pub fn destroyDescriptorPool(self: *Self, pool: vk.VkDescriptorPool) void {
     vk.vkDestroyDescriptorPool(self.device, pool, self.pAllocCallBacks);
+}
+
+pub fn allocateDescriptorSets(self: *Self, pool: vk.VkDescriptorPool, setLayouts: []vk.VkDescriptorSetLayout, descriptorSets: [*]vk.VkDescriptorSet) !void {
+    var allocaInfo = vk.VkDescriptorSetAllocateInfo{
+        .sType = vk.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .pNext = null,
+        .descriptorPool = pool,
+        .descriptorSetCount = @intCast(setLayouts.len),
+        .pSetLayouts = @ptrCast(setLayouts.ptr),
+    };
+
+    try checkVkResult(vk.vkAllocateDescriptorSets(self.device, @ptrCast(&allocaInfo), @ptrCast(descriptorSets)));
 }
