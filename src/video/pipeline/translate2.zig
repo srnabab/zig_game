@@ -137,11 +137,6 @@ fn createPipelineLayoutCreateInfo(shaderInfos: []PipelineShaderInfo, pipeRes: *V
         }
         break :sc max;
     };
-    // const setLayouts = &pipeRes.pipelineCreateInfoInfo.setLayoutBinding;
-    // var bindingCount = [_]u32{0} ** bindingLimit;
-    // const bindingFlags = &pipeRes.pipelineCreateInfoInfo.bindingFlags;
-    // var bindless = [_]bool{false} ** bindingLimit;
-    // const descriptorSetLayouts = &pipeRes.pipelineCreateInfoInfo.setLayouts;
     for (shaderInfos) |sInfo| {
         if (sInfo.pushConstantSize > 0) {
             pushConstants.*[pushConstantCount.*].stageFlags = sInfo.stage;
@@ -150,42 +145,7 @@ fn createPipelineLayoutCreateInfo(shaderInfos: []PipelineShaderInfo, pipeRes: *V
             pushConstantOffset += pushConstants.*[pushConstantCount.*].size;
             pushConstantCount.* += 1;
         }
-        // if (sInfo.bindings) |bindings| {
-        //     for (bindings) |binding| {
-        // setLayouts.*[binding.set][binding.binding] = vk.VkDescriptorSetLayoutBinding{
-        // .binding = binding.binding,
-        // .stageFlags = sInfo.stage,
-        // .descriptorType = binding.descriptorType,
-        // .descriptorCount = if (binding.descriptorCount == 0)
-        // descriptorCountByDescriptorType(@enumFromInt(binding.descriptorType))
-        // else
-        // binding.descriptorCount,
-        // };
-        // if (binding.descriptorCount == 0) {
-        //     bindless[binding.set] = true;
-        //     bindingFlags.*[binding.set][binding.binding] = vk.VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT |
-        //         vk.VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT_EXT;
-        // } else {
-        //     bindingFlags.*[binding.set][binding.binding] = 0;
-        // }
-        //         bindingCount[binding.set] += 1;
-        //     }
-        // }
     }
-    // for (0..setCount) |i| {
-    //     pipeRes.pipelineCreateInfoInfo.setLayoutCreateInfos[i] = vk.VkDescriptorSetLayoutCreateInfo{
-    //         .sType = vk.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-    //         .flags = if (bindless[i])
-    //             vk.VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT
-    //         else
-    //             0,
-    //         .pNext = null,
-    //         .bindingCount = bindingCount[i],
-    //         .pBindings = null,
-    //     };
-
-    //     descriptorSetLayouts.*[i] = null;
-    // }
     pipeRes.pipelineCreateInfoInfo.setLayoutCount = setCount;
 }
 
