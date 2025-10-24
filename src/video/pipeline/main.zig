@@ -56,7 +56,7 @@ pub fn main() !void {
         };
         defer configFile.close();
 
-        var smallBuffer = [_]u8{0} ** 2;
+        var smallBuffer = [_]u8{0} ** (1024 * 512);
         const fileState = try configFile.stat();
         var json: std.json.Parsed(trans.PipelinePushConstatsJson) = undefined;
         var jsonValue: trans.PipelinePushConstatsJson = undefined;
@@ -65,7 +65,7 @@ pub fn main() !void {
             defer gpa.free(fileBuffer);
 
             var reader = configFile.reader(&smallBuffer);
-            _ = try reader.read(fileBuffer);
+            _ = try reader.interface.readAlloc(gpa, fileState.size);
 
             json = try std.json.parseFromSlice(trans.PipelinePushConstatsJson, gpa, fileBuffer, .{});
 
