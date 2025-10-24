@@ -87,8 +87,7 @@ pub fn main() !void {
 
     var buffer = [_]u8{0} ** 102400;
     const content = "const std = @import(\"std\");\n\nconst FileNameIdHashMap = map: {\nconst KV = struct {\n[]const u8,i64,\n};\nconst list = [_]KV{\n";
-    var stream = std.io.fixedBufferStream(&buffer);
-    var writer = stream.writer();
+    var writer = std.Io.Writer.fixed(&buffer);
     _ = try writer.write(content);
     for (kvs) |value| {
         // std.log.info("name: {s}, ID: {d}", .{ value.fileName, value.ID });

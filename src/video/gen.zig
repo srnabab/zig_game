@@ -10,8 +10,7 @@ fn comptime_print(comptime format: []const u8, comptime args: anytype) void {
 
 const funcs: struct { ctx: [20000]u8, len: u64 } = str: {
     var func_content: [20000]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&func_content);
-    const stream_writer = stream.writer();
+    var stream_writer = std.Io.Writer.fixed(&func_content);
 
     for (@typeInfo(VkResult).@"enum".fields) |field| {
         if (field.value < 0)
@@ -20,11 +19,8 @@ const funcs: struct { ctx: [20000]u8, len: u64 } = str: {
             };
         // try writer.print(".{s} => VkError.{s},\n", .{ field.name, field.name });
     }
-    const pos = stream.getPos() catch |err| {
-        comptime_print("error: {s}\n", .{@errorName(err)});
-    };
 
-    break :str .{ .ctx = func_content, .len = pos };
+    break :str .{ .ctx = func_content, .len = @intCast(stream_writer.end) };
 };
 
 var debug_allocator: std.heap.DebugAllocator(.{}) = .init;

@@ -545,10 +545,8 @@ fn DAG(T: type) type {
 
             var buffer = [_]u8{0} ** 1024;
             var buffer2 = [_]u8{0} ** 1024;
-            var stream = std.io.fixedBufferStream(&buffer);
-            var writer = stream.writer();
-            var stream2 = std.io.fixedBufferStream(&buffer2);
-            var writer2 = stream2.writer();
+            var writer = std.Io.Writer.fixed(&buffer);
+            var writer2 = std.Io.Writer.fixed(&buffer2);
 
             for (0..self.innerID) |i| {
                 if (self.map.get(@intCast(i))) |n| {
@@ -568,9 +566,9 @@ fn DAG(T: type) type {
                         };
                     }
 
-                    std.log.debug("[{s}] => ID: {d} => [{s}]", .{ buffer[0..if (stream.pos > 1) stream.pos - 1 else 0], n.ID, buffer2[0..if (stream2.pos > 1) stream2.pos - 1 else 0] });
-                    stream.reset();
-                    stream2.reset();
+                    std.log.debug("[{s}] => ID: {d} => [{s}]", .{ buffer[0..if (writer.end > 1) writer.end - 1 else 0], n.ID, buffer2[0..if (writer2.end > 1) writer2.end - 1 else 0] });
+                    _ = writer.consumeAll();
+                    _ = writer2.consumeAll();
                 }
             }
             std.log.debug("\n", .{});

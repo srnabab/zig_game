@@ -16,12 +16,33 @@ pub const input = struct {
     varType: vk.VkFormat,
 };
 
+pub const pushConstantMemberType = enum {
+    float,
+    vec2,
+    vec3,
+    vec4,
+    mat2,
+    mat3,
+    mat4,
+    ivec2,
+    ivec3,
+    ivec4,
+};
+
+pub const pushConstantMember = struct {
+    name: [64:0]u8,
+    varType: pushConstantMemberType,
+};
+
 const shaderInfo = struct {
     const Self = @This();
 
     name: [64:0]u8,
     stage: vk.VkShaderStageFlagBits,
     pushConstantSize: u32,
+    pushConstantName: [64:0]u8,
+    pushConstantMemberCount: u32,
+    pushConstantMembers: ?[]pushConstantMember,
     setCount: u32,
     bindingCount: u32,
     inputCount: u32,
@@ -33,6 +54,11 @@ const shaderInfo = struct {
             allocator.free(ss);
         }
         if (self.inputs) |ss| {
+            allocator.free(ss);
+        }
+        if (self.pushConstantMembers) |ss| {
+            // std.log.debug("count: {d}", .{self.pushConstantMemberCount});
+            // std.log.debug("pushConstantMembers len{d}", .{ss.len});
             allocator.free(ss);
         }
     }
@@ -84,14 +110,58 @@ pub fn reflect(allocator: std.mem.Allocator, cc: std.fs.File.Stat, content: []co
     spv_result = s.spvReflectEnumeratePushConstantBlocks(@ptrCast(&module), @ptrCast(&var_count), null);
     assert(spv_result == s.SPV_REFLECT_RESULT_SUCCESS);
 
+    // std.log.debug("var_count: {d}", .{var_count});
     if (var_count != 0) {
         const pushconstants: [][*c]s.SpvReflectBlockVariable = try allocator.alloc([*c]s.SpvReflectBlockVariable, var_count);
         defer allocator.free(pushconstants);
         spv_result = s.spvReflectEnumeratePushConstantBlocks(@ptrCast(&module), @ptrCast(&var_count), @ptrCast(pushconstants.ptr));
         assert(spv_result == s.SPV_REFLECT_RESULT_SUCCESS);
         res.pushConstantSize = pushconstants[0].*.size;
+
+        const nameLen = std.mem.len(pushconstants[0].*.type_description.*.type_name);
+        @memcpy(res.pushConstantName[0..nameLen], pushconstants[0].*.type_description.*.type_name[0..nameLen]);
+        res.pushConstantMemberCount = pushconstants[0].*.type_description.*.member_count;
+
+        res.pushConstantMembers = try allocator.alloc(pushConstantMember, res.pushConstantMemberCount);
+        for (0..res.pushConstantMemberCount) |j| {
+            const nameLen2 = std.mem.len(pushconstants[0].*.type_description.*.members[j].struct_member_name);
+            @memcpy(res.pushConstantMembers.?[j].name[0..nameLen2], pushconstants[0].*.type_description.*.members[j].struct_member_name[0..nameLen2]);
+            if (pushconstants[0].*.type_description.*.members[j].type_flags == s.SPV_REFLECT_TYPE_FLAG_VECTOR | s.SPV_REFLECT_TYPE_FLAG_FLOAT) {
+                res.pushConstantMembers.?[j].varType = switch (pushconstants[0].*.type_description.*.members[j].traits.numeric.vector.component_count) {
+                    2 => pushConstantMemberType.vec2,
+                    3 => pushConstantMemberType.vec3,
+                    4 => pushConstantMemberType.vec4,
+                    else => unreachable,
+                };
+            } else if (pushconstants[0].*.type_description.*.members[j].type_flags == s.SPV_REFLECT_TYPE_FLAG_VECTOR | s.SPV_REFLECT_TYPE_FLAG_INT) {
+                res.pushConstantMembers.?[j].varType = switch (pushconstants[0].*.type_description.*.members[j].traits.numeric.vector.component_count) {
+                    2 => pushConstantMemberType.ivec2,
+                    3 => pushConstantMemberType.ivec3,
+                    4 => pushConstantMemberType.ivec4,
+                    else => unreachable,
+                };
+            } else if (pushconstants[0].*.type_description.*.members[j].type_flags == s.SPV_REFLECT_TYPE_FLAG_MATRIX | s.SPV_REFLECT_TYPE_FLAG_VECTOR | s.SPV_REFLECT_TYPE_FLAG_FLOAT) {
+                res.pushConstantMembers.?[j].varType = switch (pushconstants[0].*.type_description.*.members[j].traits.numeric.vector.component_count) {
+                    2 => pushConstantMemberType.mat2,
+                    3 => pushConstantMemberType.mat3,
+                    4 => pushConstantMemberType.mat4,
+                    else => unreachable,
+                };
+            } else if (pushconstants[0].*.type_description.*.members[j].type_flags == s.SPV_REFLECT_TYPE_FLAG_FLOAT) {
+                res.pushConstantMembers.?[j].varType = pushConstantMemberType.float;
+            } else {
+                std.debug.panic("not supported type", .{});
+            }
+        }
+
+        // std.log.info("{}\n", .{pushconstants[0].*.type_description.*});
+        // std.log.info("{s}\n", .{pushconstants[0].*.type_description.*.type_name});
+        // std.log.info("{}\n", .{pushconstants[0].*.type_description.*.members.*});
+        // std.log.info("{s}\n", .{pushconstants[0].*.type_description.*.members.*.struct_member_name});
+        // std.log.info("{}\n", .{pushconstants[0].*.type_description.*.members.*.traits});
     } else {
         res.pushConstantSize = 0;
+        res.pushConstantMembers = null;
     }
 
     var_count = 0;

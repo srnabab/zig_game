@@ -19,8 +19,8 @@ const tableNames = [_][]const u8{"ImageLoadParameter"};
 
 const CreateTriggerContentPathOnInsertInsertIntoSubTable = tt: {
     var buffer = [_]u8{0} ** 10240;
-    var st = std.io.fixedBufferStream(&buffer);
-    var writer = st.writer();
+    var writer = std.Io.Writer.fixed(&buffer);
+
     var count: usize = 0;
 
     for (@typeInfo(FileType).@"enum".fields) |field| {
@@ -58,8 +58,7 @@ const CreateTriggerContentPathOnInsertInsertIntoSubTable = tt: {
 
 const createTriggerOnUpdateCascadeBetweenContentPathAndTablesOnContentHash = ct: {
     var buffer = [_]u8{0} ** 10240;
-    var st = std.io.fixedBufferStream(&buffer);
-    var writer = st.writer();
+    var writer = std.Io.Writer.fixed(&buffer);
     var count: usize = 0;
 
     for (tableNames) |name| {
@@ -74,8 +73,7 @@ const createTriggerOnUpdateCascadeBetweenContentPathAndTablesOnContentHash = ct:
 
 const createTriggerOnUpdateCascadeBetweenContentPathAndTablesOnRelativePath = ct: {
     var buffer = [_]u8{0} ** 10240;
-    var st = std.io.fixedBufferStream(&buffer);
-    var writer = st.writer();
+    var writer = std.Io.Writer.fixed(&buffer);
     var count: usize = 0;
 
     for (tableNames) |name| {
@@ -93,8 +91,7 @@ const createTriggerOnUpdateCascadeBetweenContentPathAndTablesOnRelativePath = ct
 
 const createTriggerOnUpdateCascadeBetweenContentPathAndTablesOnID = ct: {
     var buffer = [_]u8{0} ** 10240;
-    var st = std.io.fixedBufferStream(&buffer);
-    var writer = st.writer();
+    var writer = std.Io.Writer.fixed(&buffer);
     var count: usize = 0;
 
     for (tableNames) |name| {
@@ -112,8 +109,7 @@ const createTriggerOnUpdateCascadeBetweenContentPathAndTablesOnID = ct: {
 
 const createUniqueIndexFileNameAndContentHash = cu: {
     var buffer = [_]u8{0} ** 10240;
-    var st = std.io.fixedBufferStream(&buffer);
-    var writer = st.writer();
+    var writer = std.Io.Writer.fixed(&buffer);
     var count: usize = 0;
 
     for (tableNames) |name| {
@@ -129,8 +125,7 @@ const createUniqueIndexFileNameAndContentHash = cu: {
 
 const createTriggerOnDeleteContentPathUpdateTablesRelativePathWhereSameContentHash = cto: {
     var buffer = [_]u8{0} ** 10240;
-    var st = std.io.fixedBufferStream(&buffer);
-    var writer = st.writer();
+    var writer = std.Io.Writer.fixed(&buffer);
     var count: usize = 0;
 
     for (tableNames) |name| {
@@ -186,9 +181,6 @@ const slash = sl: {
 
 const FileTypeHashTable = map: {
     const maptype = std.StaticStringMap(FileType);
-    // var buffer = [_]u8{0} ** 10240;
-    // var all: std.heap.FixedBufferAllocator = .init(buffer);
-    // var allocator = all.allocator();
     const KV = struct {
         []const u8,
         FileType,

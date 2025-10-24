@@ -44,6 +44,33 @@ pub fn main() !void {
             gpa.free(value);
         }
         gpa.free(res.shaderCodes);
+        gpa.free(res.pushConstantInfo);
+    }
+
+    {
+        var configFile = std.fs.cwd().openFile("config/pipelinePushConstants.json", .{
+            .mode = .read_write,
+        }) catch |err| rs: switch (err) {
+            error.FileNotFound => break :rs try std.fs.cwd().createFile("config/pipelinePushConstants.json", .{ .truncate = false }),
+            else => return err,
+        };
+        defer configFile.close();
+
+        var smallBuffer = [_]u8{0} ** 2;
+        const fileState = try configFile.stat();
+        var json: std.json.Parsed(trans.PipelinePushConstatsJson) = undefined;
+        var jsonValue: trans.PipelinePushConstatsJson = undefined;
+        if (fileState.size != 0) {
+            const fileBuffer = try gpa.alloc(u8, fileState.size);
+            defer gpa.free(fileBuffer);
+
+            var reader = configFile.reader(&smallBuffer);
+            _ = try reader.read(fileBuffer);
+
+            json = try std.json.parseFromSlice(trans.PipelinePushConstatsJson, gpa, fileBuffer, .{});
+
+            jsonValue = json.value;
+        }
     }
 
     var outputFile = ps: {

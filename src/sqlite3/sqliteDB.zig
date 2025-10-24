@@ -255,10 +255,9 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
             const ssql = comptime blk: {
                 var buffer = [_]u8{0} ** 256;
                 var bufferq = [_]u8{0} ** 64;
-                var p1 = std.io.fixedBufferStream(buffer[0..buffer.len]);
-                var pq = std.io.fixedBufferStream(bufferq[0..bufferq.len]);
-                var writer = p1.writer();
-                var writerq = pq.writer();
+                var writer = std.Io.Writer.fixed(buffer[0..buffer.len]);
+                var writerq = std.Io.Writer.fixed(bufferq[0..bufferq.len]);
+
                 var writeCount: usize = 0;
                 var writeqCount: usize = 0;
 
@@ -332,8 +331,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
 
             const ssql = comptime ss: {
                 var buffer = [_]u8{0} ** 4096;
-                var bu = std.io.fixedBufferStream(buffer[0..buffer.len]);
-                var writer = bu.writer();
+                var writer = std.Io.Writer.fixed(buffer[0..buffer.len]);
                 var count: usize = 0;
 
                 var li = std.mem.splitSequence(u8, targets, ",");
