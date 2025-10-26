@@ -44,14 +44,16 @@ pub fn main() !void {
             gpa.free(value);
         }
         gpa.free(res.shaderCodes);
-        for (res.pushConstantInfo) |value| {
-            gpa.free(value.pushConstantMembers);
+        if (res.pushConstantInfo) |_| {
+            for (res.pushConstantInfo.?) |value| {
+                gpa.free(value.pushConstantMembers);
+            }
+            gpa.free(res.pushConstantInfo.?);
         }
-        gpa.free(res.pushConstantInfo);
     }
     // errdefer
 
-    {
+    if (res.pushConstantInfo) |_| {
         var configFile = std.fs.cwd().openFile("config/pipelinePushConstants.json", .{
             .mode = .read_write,
         }) catch |err| rs: switch (err) {
@@ -88,14 +90,14 @@ pub fn main() !void {
             json.value.@"0".? = try arenaAllocator.realloc(json.value.@"0".?, json.value.@"0".?.len + 1);
             // .log.debug("a: {d}, b: {d}", .{ index, json.value.@"0".?.len });
 
-            std.log.debug("5", .{});
+            // std.log.debug("5", .{});
             json.value.@"0".?[index] = trans.PipelineNameAndPushConstantsByStage{
                 .name = jsonP.name,
-                .stagePushConstants = try arenaAllocator.alloc(trans.PushConstantAndStage, res.pushConstantInfo.len),
+                .stagePushConstants = try arenaAllocator.alloc(trans.PushConstantAndStage, res.pushConstantInfo.?.len),
             };
 
-            std.log.debug("6", .{});
-            for (res.pushConstantInfo, 0..) |value, i| {
+            // std.log.debug("6", .{});
+            for (res.pushConstantInfo.?, 0..) |value, i| {
                 json.value.@"0".?[index].stagePushConstants[i] = trans.PushConstantAndStage{
                     .stage = value.stage,
                     .members = try arenaAllocator.alloc(trans.PushConstantMember, value.pushConstantMembers.len),
@@ -124,9 +126,9 @@ pub fn main() !void {
             jsonValue.@"0" = try arenaAllocator.alloc(trans.PipelineNameAndPushConstantsByStage, 1);
             jsonValue.@"0".?[0] = trans.PipelineNameAndPushConstantsByStage{
                 .name = jsonP.name,
-                .stagePushConstants = try arenaAllocator.alloc(trans.PushConstantAndStage, res.pushConstantInfo.len),
+                .stagePushConstants = try arenaAllocator.alloc(trans.PushConstantAndStage, res.pushConstantInfo.?.len),
             };
-            for (res.pushConstantInfo, 0..) |value, i| {
+            for (res.pushConstantInfo.?, 0..) |value, i| {
                 jsonValue.@"0".?[0].stagePushConstants[i] = trans.PushConstantAndStage{
                     .stage = value.stage,
                     .members = try arenaAllocator.alloc(trans.PushConstantMember, value.pushConstantMembers.len),

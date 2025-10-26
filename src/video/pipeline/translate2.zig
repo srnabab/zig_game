@@ -199,7 +199,7 @@ fn createPipelineLayout(pipeRes: *VulkanPipelineInfo) !void {
 pub fn toVulkan2(info: *pipeline.pipelineInfo, shaderFolder: []const u8, allocator: std.mem.Allocator) !struct {
     info: *VulkanPipelineInfo,
     shaderCodes: [][]u8,
-    pushConstantInfo: []PushConstants,
+    pushConstantInfo: ?[]PushConstants,
 } {
     var res = try allocator.create(VulkanPipelineInfo);
     errdefer allocator.destroy(res);
@@ -228,12 +228,17 @@ pub fn toVulkan2(info: *pipeline.pipelineInfo, shaderFolder: []const u8, allocat
         }
         break :sc count;
     };
-    var pushConstantInfos = try allocator.alloc(PushConstants, pushconstantCount);
-    var pushConstantInfoCount: u32 = 0;
-    for (shaderInfos) |value| {
-        if (value.pushConstants) |pushConstant| {
-            pushConstantInfos[pushConstantInfoCount] = pushConstant;
-            pushConstantInfoCount += 1;
+    var pushConstantInfos: ?[]PushConstants = null;
+
+    if (pushconstantCount > 0) {
+        pushConstantInfos = try allocator.alloc(PushConstants, pushconstantCount);
+        var pushConstantInfoCount: u32 = 0;
+
+        for (shaderInfos) |value| {
+            if (value.pushConstants) |pushConstant| {
+                pushConstantInfos.?[pushConstantInfoCount] = pushConstant;
+                pushConstantInfoCount += 1;
+            }
         }
     }
 
