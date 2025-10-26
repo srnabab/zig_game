@@ -90,6 +90,7 @@ pub fn main() !void {
         try SDL_CheckResult(sdl.SDL_Init(sdl.SDL_INIT_EVENTS | sdl.SDL_INIT_VIDEO | sdl.SDL_INIT_AUDIO | sdl.SDL_INIT_GAMEPAD));
     }
     defer sdl.SDL_Quit();
+    std.log.debug("SDL Version: {d}.{d}.{d}", .{ sdl.SDL_MAJOR_VERSION, sdl.SDL_MINOR_VERSION, sdl.SDL_MICRO_VERSION });
 
     var vulkan = VkStruct.init(global.gpa.*);
     try vulkan.initVulkan();
