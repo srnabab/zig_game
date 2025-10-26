@@ -1,8 +1,6 @@
 .zig-cache/
-zig-out/
-*.rdi
-*.pdb
-vendor/*/include/
+# zig-out/
+zig-out/bin/Content/Fonts/
 include/
 .vscode/
 .VSCodeCounter/
@@ -11,3 +9,7 @@ testFeature/
 dependencies/tracy/
 trace/
 windbg/
+*.rdi
+*.pdb
+*.exe
+*.dll
