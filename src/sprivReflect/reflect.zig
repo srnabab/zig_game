@@ -56,11 +56,6 @@ const shaderInfo = struct {
         if (self.inputs) |ss| {
             allocator.free(ss);
         }
-        if (self.pushConstantMembers) |ss| {
-            // std.log.debug("count: {d}", .{self.pushConstantMemberCount});
-            // std.log.debug("pushConstantMembers len{d}", .{ss.len});
-            allocator.free(ss);
-        }
     }
 };
 
@@ -124,6 +119,7 @@ pub fn reflect(allocator: std.mem.Allocator, cc: std.fs.File.Stat, content: []co
 
         res.pushConstantMembers = try allocator.alloc(pushConstantMember, res.pushConstantMemberCount);
         for (0..res.pushConstantMemberCount) |j| {
+            @memset(&res.pushConstantMembers.?[j].name, 0);
             const nameLen2 = std.mem.len(pushconstants[0].*.type_description.*.members[j].struct_member_name);
             @memcpy(res.pushConstantMembers.?[j].name[0..nameLen2], pushconstants[0].*.type_description.*.members[j].struct_member_name[0..nameLen2]);
             if (pushconstants[0].*.type_description.*.members[j].type_flags == s.SPV_REFLECT_TYPE_FLAG_VECTOR | s.SPV_REFLECT_TYPE_FLAG_FLOAT) {
@@ -152,6 +148,7 @@ pub fn reflect(allocator: std.mem.Allocator, cc: std.fs.File.Stat, content: []co
             } else {
                 std.debug.panic("not supported type", .{});
             }
+            // std.log.debug("var type {}", .{res.pushConstantMembers.?[j].varType});
         }
 
         // std.log.info("{}\n", .{pushconstants[0].*.type_description.*});

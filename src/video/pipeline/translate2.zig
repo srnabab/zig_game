@@ -39,19 +39,18 @@ pub const PipelineShaderInfo = struct {
 const PushConstants = struct {
     stage: vk.VkShaderStageFlags,
     pushConstantName: [64:0]u8,
-    pushConstantMemberCount: u32,
-    pushConstantMembers: ?[]reflect.pushConstantMember,
+    pushConstantMembers: []reflect.pushConstantMember,
 };
 
-const PushConstantMember = struct {
+pub const PushConstantMember = struct {
     name: []const u8,
     memberType: reflect.pushConstantMemberType,
 };
-const PushConstantAndStage = struct {
+pub const PushConstantAndStage = struct {
     stage: vk.VkShaderStageFlags,
     members: []PushConstantMember,
 };
-const PipelineNameAndPushConstantsByStage = struct {
+pub const PipelineNameAndPushConstantsByStage = struct {
     name: []const u8,
     stagePushConstants: []PushConstantAndStage,
 };
@@ -113,8 +112,7 @@ fn getPipelineShaderInfos(shaders: [5][]const u8, count: u32, shaderFolder: []co
                     break :blk PushConstants{
                         .stage = res.stage,
                         .pushConstantName = undefined,
-                        .pushConstantMemberCount = res.bindingCount,
-                        .pushConstantMembers = res.pushConstantMembers,
+                        .pushConstantMembers = res.pushConstantMembers.?,
                     };
                 } else null,
             };
@@ -225,6 +223,7 @@ pub fn toVulkan2(info: *pipeline.pipelineInfo, shaderFolder: []const u8, allocat
         for (shaderInfos) |value| {
             if (value.pushConstants) |_| {
                 count += 1;
+                // std.log.debug("var type {}", .{value.pushConstants.?.pushConstantMembers[0].varType});
             }
         }
         break :sc count;

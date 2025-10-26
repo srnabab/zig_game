@@ -1,5 +1,7 @@
 .zig-cache/
 zig-out/
+*.rdi
+*.pdb
 vendor/*/include/
 include/
 .vscode/

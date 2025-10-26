@@ -44,32 +44,109 @@ pub fn main() !void {
             gpa.free(value);
         }
         gpa.free(res.shaderCodes);
+        for (res.pushConstantInfo) |value| {
+            gpa.free(value.pushConstantMembers);
+        }
         gpa.free(res.pushConstantInfo);
     }
+    // errdefer
 
     {
         var configFile = std.fs.cwd().openFile("config/pipelinePushConstants.json", .{
             .mode = .read_write,
         }) catch |err| rs: switch (err) {
-            error.FileNotFound => break :rs try std.fs.cwd().createFile("config/pipelinePushConstants.json", .{ .truncate = false }),
+            error.FileNotFound => break :rs try std.fs.cwd().createFile("config/pipelinePushConstants.json", .{ .truncate = false, .read = true }),
             else => return err,
         };
         defer configFile.close();
 
-        var smallBuffer = [_]u8{0} ** (1024 * 512);
+        var smallBuffer = [_]u8{0} ** (1);
+        var smallBuffer2 = [_]u8{0} ** (1);
         const fileState = try configFile.stat();
         var json: std.json.Parsed(trans.PipelinePushConstatsJson) = undefined;
         var jsonValue: trans.PipelinePushConstatsJson = undefined;
         if (fileState.size != 0) {
+            // std.log.debug("1", .{});
             const fileBuffer = try gpa.alloc(u8, fileState.size);
             defer gpa.free(fileBuffer);
 
+            // std.log.debug("2", .{});
             var reader = configFile.reader(&smallBuffer);
-            _ = try reader.interface.readAlloc(gpa, fileState.size);
+            const content = try reader.interface.readAlloc(gpa, fileState.size);
+            defer gpa.free(content);
 
-            json = try std.json.parseFromSlice(trans.PipelinePushConstatsJson, gpa, fileBuffer, .{});
+            // std.log.debug("3", .{});
+            json = try std.json.parseFromSlice(trans.PipelinePushConstatsJson, gpa, content, .{});
+            defer json.deinit();
 
             jsonValue = json.value;
+            // std.log.debug("name: {s}", .{jsonValue.@"0".?[0].name});
+
+            // std.log.debug("4", .{});
+            var arenaAllocator = json.arena.allocator();
+            const index = json.value.@"0".?.len;
+            json.value.@"0".? = try arenaAllocator.realloc(json.value.@"0".?, json.value.@"0".?.len + 1);
+            // .log.debug("a: {d}, b: {d}", .{ index, json.value.@"0".?.len });
+
+            std.log.debug("5", .{});
+            json.value.@"0".?[index] = trans.PipelineNameAndPushConstantsByStage{
+                .name = jsonP.name,
+                .stagePushConstants = try arenaAllocator.alloc(trans.PushConstantAndStage, res.pushConstantInfo.len),
+            };
+
+            std.log.debug("6", .{});
+            for (res.pushConstantInfo, 0..) |value, i| {
+                json.value.@"0".?[index].stagePushConstants[i] = trans.PushConstantAndStage{
+                    .stage = value.stage,
+                    .members = try arenaAllocator.alloc(trans.PushConstantMember, value.pushConstantMembers.len),
+                };
+                for (value.pushConstantMembers, 0..) |member, j| {
+                    json.value.@"0".?[index].stagePushConstants[i].members[j] = trans.PushConstantMember{
+                        .name = undefined,
+                        .memberType = member.varType,
+                    };
+                    // std.log.debug("enum value {}", .{member.varType});
+                    const strPtr: [*c]const u8 = @ptrCast(&member.name);
+                    const len = std.mem.len(strPtr);
+                    json.value.@"0".?[index].stagePushConstants[i].members[j].name = try arenaAllocator.dupe(u8, member.name[0..len]);
+                }
+            }
+
+            var fileWriter = configFile.writer(&smallBuffer2);
+            var stringify = std.json.Stringify{ .writer = &fileWriter.interface, .options = .{ .whitespace = .indent_tab } };
+            try stringify.write(json.value);
+            try fileWriter.interface.flush();
+        } else {
+            var arena = std.heap.ArenaAllocator.init(gpa);
+            var arenaAllocator = arena.allocator();
+            defer arena.deinit();
+
+            jsonValue.@"0" = try arenaAllocator.alloc(trans.PipelineNameAndPushConstantsByStage, 1);
+            jsonValue.@"0".?[0] = trans.PipelineNameAndPushConstantsByStage{
+                .name = jsonP.name,
+                .stagePushConstants = try arenaAllocator.alloc(trans.PushConstantAndStage, res.pushConstantInfo.len),
+            };
+            for (res.pushConstantInfo, 0..) |value, i| {
+                jsonValue.@"0".?[0].stagePushConstants[i] = trans.PushConstantAndStage{
+                    .stage = value.stage,
+                    .members = try arenaAllocator.alloc(trans.PushConstantMember, value.pushConstantMembers.len),
+                };
+                for (value.pushConstantMembers, 0..) |member, j| {
+                    jsonValue.@"0".?[0].stagePushConstants[i].members[j] = trans.PushConstantMember{
+                        .name = undefined,
+                        .memberType = member.varType,
+                    };
+                    // std.log.debug("enum value {}", .{member.varType});
+                    const strPtr: [*c]const u8 = @ptrCast(&member.name);
+                    const len = std.mem.len(strPtr);
+                    jsonValue.@"0".?[0].stagePushConstants[i].members[j].name = try arenaAllocator.dupe(u8, member.name[0..len]);
+                }
+            }
+
+            var fileWriter = configFile.writer(&smallBuffer2);
+            var stringify = std.json.Stringify{ .writer = &fileWriter.interface, .options = .{ .whitespace = .indent_tab } };
+            try stringify.write(jsonValue);
+            try fileWriter.interface.flush();
         }
     }
 
