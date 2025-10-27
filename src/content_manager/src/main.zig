@@ -1,6 +1,5 @@
 const sqlDB = @import("sqlDb");
 const sqlite = sqlDB.sqlite;
-const sdl = @cImport(@cInclude("SDL3/SDL.h"));
 const std = @import("std");
 const builtin = @import("builtin");
 const UUID = @import("UUID.zig");

@@ -17,6 +17,11 @@ include/vulkan/
 test*.zig
 testFeature/
 dependencies/tracy/
+dependencies/SDL3/build
+dependencies/SDL3/install/include
+dependencies/SDL3/install/share
+cmake/
+pkgconfig/
 trace/
 windbg/
 *.rdi

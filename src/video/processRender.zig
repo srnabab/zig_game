@@ -1069,7 +1069,7 @@ pub const oneTimeCommand = struct {
 
     /// complete dependency
     pub fn addCommandEnd(self: *Self) !void {
-        self.nodeDag.print();
+        // self.nodeDag.print();
 
         const zone = tracy.initZone(@src(), .{ .name = "add command end" });
         defer zone.deinit();
@@ -1683,7 +1683,7 @@ pub const oneTimeCommand = struct {
             // std.log.debug("", .{});
         }
 
-        std.log.debug("iterateCount: {d}", .{iterateCount});
+        // std.log.debug("iterateCount: {d}", .{iterateCount});
 
         self.nodeDag.undoneAllNodes();
 

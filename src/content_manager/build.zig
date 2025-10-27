@@ -53,7 +53,6 @@ pub fn build(b: *std.Build) void {
     contentManagerModule.addIncludePath(b.path("../../../../../../msys64/mingw64/include/"));
     contentManagerModule.addLibraryPath(b.path("../../lib"));
     contentManagerModule.linkSystemLibrary("blake3", .{ .preferred_link_mode = .static });
-    contentManagerModule.linkSystemLibrary("sdl3", .{ .preferred_link_mode = .static });
     contentManagerModule.linkSystemLibrary("setupapi", .{ .preferred_link_mode = .static });
     contentManagerModule.linkSystemLibrary("imm32", .{ .preferred_link_mode = .static });
     contentManagerModule.linkSystemLibrary("version", .{ .preferred_link_mode = .static });

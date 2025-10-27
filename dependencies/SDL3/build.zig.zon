@@ -1,0 +1,19 @@
+.{
+    .name = .sdl3_lib,
+    .fingerprint = 0x6493d1b1504f7943,
+    .version = "3.2.24",
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "example",
+        "README.md",
+        "LICENSE",
+    },
+    .dependencies = .{
+        .sdl3 = .{
+            .url = "https://github.com/libsdl-org/SDL/archive/refs/tags/release-3.2.24.tar.gz",
+            .hash = "N-V-__8AAIBfjAMynWwoadl2SIwSsfVfJKbqzrpN21cmhmpR",
+        },
+    },
+}

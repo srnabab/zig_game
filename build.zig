@@ -25,11 +25,8 @@ pub fn build(b: *std.Build) void {
     const contenManager = contentManagerModule.artifact("ContentManager");
     _ = b.addInstallArtifact(contenManager, .{ .dest_dir = .{ .override = .{ .custom = b.install_path } } });
 
-    // const disabledTracy = b.dependency("tracy", .{
-    //     .target = target,
-    //     .optimize = optimize,
-    //     .tracy_enable = false,
-    // });
+    const sdl3Module = b.dependency("sdl3", .{});
+    const sdl3_lib_install_step = sdl3Module.builder.getInstallStep();
 
     const vk_mod = b.createModule(.{
         .root_source_file = b.path("src/vulkan.zig"),
@@ -285,7 +282,9 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("processRender", processRender_mod);
     exe_mod.addImport("tracy", tracy.module("tracy"));
     exe_mod.addIncludePath(b.path("include/"));
+
     exe_mod.addLibraryPath(b.path("lib/"));
+    exe_mod.addLibraryPath(sdl3Module.path("install/lib"));
     exe_mod.linkSystemLibrary("sdl3", .{ .preferred_link_mode = .static });
     exe_mod.linkSystemLibrary("steam_api64", .{});
     exe_mod.linkSystemLibrary("setupapi", .{ .preferred_link_mode = .static });
@@ -344,10 +343,22 @@ pub fn build(b: *std.Build) void {
     const run_gen_exe = b.addRunArtifact(gen_exe);
     run_gen_exe.addArg(b.fmt("{s}/{s}", .{ root_path, "src/video/resultToError.zig" }));
 
+    // const sdl3_header_install_path = b.addInstallDirectory(.{.install_dir = .header});
+    // const copy_sdl3_header = b.addInstallDirectory(.{
+    //     .source_dir = sdl3Module.path("install/include"),
+    //     .install_dir = .{ .custom = b.path("include").getPath(b) },
+    //     .install_subdir = "",
+    // });
+    const copy_sdl3_header = b.addSystemCommand(
+        if (target.result.os.tag == .windows) &.{
+            "cmd", "/c", "xcopy", sdl3Module.path("install/include").getPath(sdl3Module.builder), b.path("include").getPath(b), "/s", "/y",
+        } else unreachable,
+    );
+
     const waf = b.addWriteFiles();
     _ = waf.addCopyFile(exe.getEmittedAsm(), "main.asm");
 
-    const pre_run_message_cmd = b.addSystemCommand(if (builtin.target.os.tag == .windows) &.{ "cmd", "/c", "echo" } else &.{"echo"});
+    const pre_run_message_cmd = b.addSystemCommand(if (builtin.target.os.tag == .windows) &.{ "cmd", "/c", "echo" } else unreachable);
     pre_run_message_cmd.addArg(b.fmt("tracy-enable: {}", .{tracy_enable}));
     pre_run_message_cmd.addArg(b.fmt("tracy-callstack: {d}", .{tracy_callstack}));
 
@@ -379,6 +390,9 @@ pub fn build(b: *std.Build) void {
 
     run_gen_exe.step.dependOn(&gen_exe.step);
 
+    copy_sdl3_header.step.dependOn(sdl3_lib_install_step);
+
+    exe.step.dependOn(&copy_sdl3_header.step);
     exe.step.dependOn(&run_gen_exe.step);
     exe.step.dependOn(runGenFileNameIdExe);
     exe.step.dependOn(runContenManager);
