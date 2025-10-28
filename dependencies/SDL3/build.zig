@@ -42,21 +42,6 @@ pub fn build(b: *std.Build) void {
         return;
     }
 
-    // std.log.debug("build root {s}", .{b.build_root.path.?});
-    // std.log.debug("{s}", .{sdl_dep.path("").getPath(sdl_dep.builder)});
-    // std.log.debug("{s}", .{sdl3_install_path});
-
-    // const env_set_cmd1 = b.addSystemCommand(&.{
-    //     "cmd",
-    //     "/c",
-    //     b.fmt("set CC=\"zig cc --target={s}\"", .{zig_triple}),
-    // });
-    // const env_set_cmd2 = b.addSystemCommand(&.{
-    //     "cmd",
-    //     "/c",
-    //     b.fmt("set CXX='zig c++ --target={s}'", .{zig_triple}),
-    // });
-
     const cmake_configure_cmd = b.addSystemCommand(&.{
         "cmake",
         "-S",
@@ -69,9 +54,6 @@ pub fn build(b: *std.Build) void {
         "-G",
         "MinGW Makefiles",
     });
-    // for (cmake_configure_cmd.argv.items) |value| {
-    //     std.log.info("{s}", .{value.bytes});
-    // }
     cmake_configure_cmd.setEnvironmentVariable(
         "CC",
         b.fmt("zig cc --target={s}", .{zig_triple}),

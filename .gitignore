@@ -9,6 +9,8 @@ dependencies/SDL3/build
 dependencies/SDL3/install/include
 dependencies/SDL3/install/share
 dependencies/blake3/c/
+dependencies/libgit2/build
+dependencies/libgit2/install/include
 cmake/
 pkgconfig/
 trace/

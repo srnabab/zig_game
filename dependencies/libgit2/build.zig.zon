@@ -1,0 +1,15 @@
+.{
+    .name = .libgit2_lib,
+    .fingerprint = 0x245cca04c98cd596,
+    .version = "1.9.1",
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+    },
+    .dependencies = .{
+        .libgit2 = .{
+            .url = "https://github.com/libgit2/libgit2/archive/refs/tags/v1.9.1.tar.gz",
+            .hash = "N-V-__8AAPAkMAHF73yNJSpdsQlf-mNs4jTb0NHpLoiNRzOw",
+        },
+    },
+}

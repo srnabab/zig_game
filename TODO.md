@@ -4,3 +4,4 @@
 4. do statistics for memory pool allocate times and init with capacity
 5. use libgit to reduce useless compile
 6. encapsulate steam api
+7. add feature: pipeline pushconstant json generator exclude duplicated pipeline name
