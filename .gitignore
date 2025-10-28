@@ -4,7 +4,7 @@ zig-out/bin/Content/Fonts/
 # include/spirv/
 # include/spirv_reflect/
 # include/sqlite3/
-include/stb/
+# include/stb/
 include/steam/
 include/steam_C/
 include/UUID/
