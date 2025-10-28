@@ -4,7 +4,6 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     // const optimize = b.standardOptimizeOption(.{});
 
-    //  .zigTriple(b.allocator)
     const zig_triple = target.result.linuxTriple(b.allocator) catch |err| {
         std.log.err("Failed to get Zig triple: {s}", .{@errorName(err)});
         return;
@@ -16,6 +15,32 @@ pub fn build(b: *std.Build) void {
     const sdl3_build_path_full = b.path(sdl3_build_path).getPath(b);
     const sdl3_install_path = "install";
     const sdl3_install_path_full = b.path(sdl3_install_path).getPath(b);
+
+    var haveLib = true;
+    std.fs.accessAbsolute(b.fmt("{s}/lib/libSDL3.a", .{sdl3_install_path_full}), .{}) catch |err| {
+        if (err == error.FileNotFound) {
+            haveLib = false;
+            std.log.info("libSDL3.a not found, will build...", .{});
+        } else {
+            std.log.err("Failed to access libSDL3.a: {s}", .{@errorName(err)});
+            return;
+        }
+    };
+
+    const clear_cmake_build = b.addSystemCommand(&.{
+        "powershell", "rm", "-r", "-fo", sdl3_build_path_full,
+    });
+    const clear_cmake_build_step = b.step("clear_cmake_build", "Clear cmake build");
+    if (!std.mem.eql(u8, sdl_dep.builder.pkg_hash, "N-V-__8AAIBfjAMynWwoadl2SIwSsfVfJKbqzrpN21cmhmpR")) {
+        haveLib = false;
+        std.log.info("pkg hash updated, will build...", .{});
+        clear_cmake_build_step.dependOn(&clear_cmake_build.step);
+    }
+
+    if (haveLib) {
+        std.log.info("have libSDL3.a, skipped", .{});
+        return;
+    }
 
     // std.log.debug("build root {s}", .{b.build_root.path.?});
     // std.log.debug("{s}", .{sdl_dep.path("").getPath(sdl_dep.builder)});
@@ -69,6 +94,8 @@ pub fn build(b: *std.Build) void {
     const install_step = b.getInstallStep();
 
     sdl3_build_step.dependOn(install_step);
+
     install_step.dependOn(&cmake_build_cmd.step);
     cmake_build_cmd.step.dependOn(&cmake_configure_cmd.step);
+    cmake_configure_cmd.step.dependOn(clear_cmake_build_step);
 }

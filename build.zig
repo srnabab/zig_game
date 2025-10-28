@@ -351,7 +351,7 @@ pub fn build(b: *std.Build) void {
     // });
     const copy_sdl3_header = b.addSystemCommand(
         if (target.result.os.tag == .windows) &.{
-            "cmd", "/c", "xcopy", sdl3Module.path("install/include").getPath(sdl3Module.builder), b.path("include").getPath(b), "/s", "/y",
+            "cmd", "/c", "xcopy", sdl3Module.path("install/include").getPath(sdl3Module.builder), b.path("include").getPath(b), "/s", "/y", "/q",
         } else unreachable,
     );
 
