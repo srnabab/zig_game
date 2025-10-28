@@ -1,8 +1,8 @@
 .zig-cache/
 # zig-out/
 zig-out/bin/Content/Fonts/
-include/spirv/
-include/spirv_reflect/
+# include/spirv/
+# include/spirv_reflect/
 include/sqlite3/
 include/stb/
 include/steam/
