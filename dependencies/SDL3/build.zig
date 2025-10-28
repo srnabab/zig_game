@@ -75,9 +75,14 @@ pub fn build(b: *std.Build) void {
 
     const install_step = b.getInstallStep();
 
+    const copy_header = b.addSystemCommand(
+        if (target.result.os.tag == .windows) &.{ "cmd", "/c", "xcopy", b.path("install/include").getPath(b), b.path("../../include").getPath(b), "/s", "/y", "/q" } else unreachable,
+    );
+
     sdl3_build_step.dependOn(install_step);
 
-    install_step.dependOn(&cmake_build_cmd.step);
+    install_step.dependOn(&copy_header.step);
+    copy_header.step.dependOn(&cmake_build_cmd.step);
     cmake_build_cmd.step.dependOn(&cmake_configure_cmd.step);
     cmake_configure_cmd.step.dependOn(clear_cmake_build_step);
 }

@@ -349,17 +349,17 @@ pub fn build(b: *std.Build) void {
     //     .install_dir = .{ .custom = b.path("include").getPath(b) },
     //     .install_subdir = "",
     // });
-    const copy_sdl3_header = b.addSystemCommand(
-        if (target.result.os.tag == .windows) &.{
-            "cmd", "/c", "xcopy", sdl3Module.path("install/include").getPath(sdl3Module.builder), b.path("include").getPath(b), "/s", "/y", "/q",
-        } else unreachable,
-    );
+    // const copy_sdl3_header = b.addSystemCommand(
+    //     if (target.result.os.tag == .windows) &.{
+    //         "cmd", "/c", "xcopy", sdl3Module.path("install/include").getPath(sdl3Module.builder), b.path("include").getPath(b), "/s", "/y", "/q",
+    //     } else unreachable,
+    // );
 
-    const copy_blake3_header = b.addSystemCommand(
-        if (target.result.os.tag == .windows) &.{
-            "cmd", "/c", "copy", b.path("dependencies/blake3/c/blake3.h").getPath(b), b.path("include/blake3.h").getPath(b),
-        } else unreachable,
-    );
+    // const copy_blake3_header = b.addSystemCommand(
+    //     if (target.result.os.tag == .windows) &.{
+    //         "cmd", "/c", "copy", b.path("dependencies/blake3/c/blake3.h").getPath(b), b.path("include/blake3.h").getPath(b),
+    //     } else unreachable,
+    // );
 
     const waf = b.addWriteFiles();
     _ = waf.addCopyFile(exe.getEmittedAsm(), "main.asm");
@@ -388,7 +388,7 @@ pub fn build(b: *std.Build) void {
     pipeline_script_cmd.step.dependOn(&pipelineJsonParse_exe.step);
     pipeline_compile.dependOn(&pipeline_script_cmd.step);
 
-    contenManager.step.dependOn(&copy_blake3_header.step);
+    // contenManager.step.dependOn(&copy_blake3_header.step);
     runContenManager.dependOn(&runContenManager_cmd.step);
     runContenManager_cmd.step.dependOn(pipeline_compile);
 
@@ -397,9 +397,10 @@ pub fn build(b: *std.Build) void {
 
     run_gen_exe.step.dependOn(&gen_exe.step);
 
-    copy_sdl3_header.step.dependOn(sdl3_lib_install_step);
+    // copy_sdl3_header.step.dependOn(sdl3_lib_install_step);
 
-    exe.step.dependOn(&copy_sdl3_header.step);
+    // exe.step.dependOn(&copy_sdl3_header.step);
+    exe.step.dependOn(sdl3_lib_install_step);
     exe.step.dependOn(&run_gen_exe.step);
     exe.step.dependOn(runGenFileNameIdExe);
     exe.step.dependOn(runContenManager);

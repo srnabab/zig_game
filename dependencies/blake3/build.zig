@@ -93,6 +93,14 @@ pub fn build(b: *std.Build) void {
         .name = "blake3",
     });
 
-    lib.step.dependOn(&copy_src.step);
+    const copy_header = b.addSystemCommand(if (target.result.os.tag == .windows) &.{
+        "cmd", "/c", "copy", b.path("dependencies/blake3/c/blake3.h").getPath(b), b.path("../../include/blake3.h").getPath(b),
+    } else unreachable);
+
     b.installArtifact(lib);
+    const install_step = b.getInstallStep();
+
+    install_step.dependOn(&copy_header.step);
+    copy_header.step.dependOn(&lib.step);
+    lib.step.dependOn(&copy_src.step);
 }
