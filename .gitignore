@@ -1,16 +1,5 @@
 .zig-cache/
-# zig-out/
 zig-out/bin/Content/Fonts/
-# include/spirv/
-# include/spirv_reflect/
-# include/sqlite3/
-# include/stb/
-# include/steam/
-# include/steam_C/
-# include/UUID/
-# include/vk_video/
-# include/vma/
-# include/vulkan/
 .vscode/
 .VSCodeCounter/
 test*.zig
