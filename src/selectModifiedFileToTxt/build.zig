@@ -11,11 +11,18 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
+        .link_libc = true,
     });
 
+    exe_mod.addIncludePath(b.path("../../../../../../msys64/mingw64/include/"));
     exe_mod.addIncludePath(b.path("../../include"));
     exe_mod.addLibraryPath(libgit2_dep.path("install/lib"));
-    exe_mod.linkSystemLibrary("libgit2", .{});
+    exe_mod.linkSystemLibrary("Ws2_32", .{});
+    exe_mod.linkSystemLibrary("Winhttp", .{});
+    exe_mod.linkSystemLibrary("Crypt32", .{});
+    exe_mod.linkSystemLibrary("Ole32", .{});
+    exe_mod.linkSystemLibrary("Rpcrt4", .{});
+    exe_mod.linkSystemLibrary("git2", .{ .preferred_link_mode = .static });
 
     const exe = b.addExecutable(.{
         .name = "selectModifiedFileToTxt",
@@ -25,4 +32,6 @@ pub fn build(b: *std.Build) void {
     const install = b.addInstallArtifact(exe, .{});
 
     install.step.dependOn(libgit2_step);
+
+    b.getInstallStep().dependOn(&install.step);
 }

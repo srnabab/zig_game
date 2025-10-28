@@ -39,7 +39,7 @@ pub fn build(b: *std.Build) void {
 
     if (haveLib) {
         std.log.info("have libgit2.a, skipped", .{});
-        // return;
+        return;
     }
 
     const cmake_configure_cmd = b.addSystemCommand(&.{
