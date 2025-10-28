@@ -9,7 +9,7 @@ zig-out/bin/Content/Fonts/
 # include/steam_C/
 # include/UUID/
 # include/vk_video/
-include/vma/
+# include/vma/
 # include/vulkan/
 .vscode/
 .VSCodeCounter/
