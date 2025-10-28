@@ -1,0 +1,13 @@
+.{
+    .name = .selectModifiedFileToTxt,
+    .fingerprint = 0x245cca04c9cd596,
+    .version = "0.0.1",
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+    .dependencies = .{
+        .libgit2 = .{ .path = "../../dependencies/libgit2" },
+    },
+}
