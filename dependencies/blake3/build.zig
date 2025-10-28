@@ -2,6 +2,8 @@ const std = @import("std");
 
 // pub fn build 是 Zig 构建脚本的入口点
 pub fn build(b: *std.Build) void {
+    std.log.info("build libblake3.a", .{});
+
     const target = b.standardTargetOptions(.{ .default_target = .{} });
     const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .ReleaseFast });
 
