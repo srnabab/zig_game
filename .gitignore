@@ -8,9 +8,9 @@ zig-out/bin/Content/Fonts/
 # include/steam/
 # include/steam_C/
 # include/UUID/
-include/vk_video/
+# include/vk_video/
 include/vma/
-include/vulkan/
+# include/vulkan/
 .vscode/
 .VSCodeCounter/
 test*.zig
