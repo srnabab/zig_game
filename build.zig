@@ -355,6 +355,12 @@ pub fn build(b: *std.Build) void {
         } else unreachable,
     );
 
+    const copy_blake3_header = b.addSystemCommand(
+        if (target.result.os.tag == .windows) &.{
+            "cmd", "/c", "copy", b.path("dependencies/blake3/c/blake3.h").getPath(b), b.path("include/blake3.h").getPath(b),
+        } else unreachable,
+    );
+
     const waf = b.addWriteFiles();
     _ = waf.addCopyFile(exe.getEmittedAsm(), "main.asm");
 
@@ -382,6 +388,7 @@ pub fn build(b: *std.Build) void {
     pipeline_script_cmd.step.dependOn(&pipelineJsonParse_exe.step);
     pipeline_compile.dependOn(&pipeline_script_cmd.step);
 
+    contenManager.step.dependOn(&copy_blake3_header.step);
     runContenManager.dependOn(&runContenManager_cmd.step);
     runContenManager_cmd.step.dependOn(pipeline_compile);
 

@@ -1,0 +1,15 @@
+.{
+    .name = .blake3_lib,
+    .fingerprint = 0x62a7d724311f6320,
+    .version = "1.8.2",
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+    },
+    .dependencies = .{
+        .blake3 = .{
+            .url = "https://github.com/BLAKE3-team/BLAKE3/archive/refs/tags/1.8.2.zip",
+            .hash = "N-V-__8AALiLGwDY0wVL7m8qIA5L6wegbp_k8VY6TsBx5LhV",
+        },
+    },
+}

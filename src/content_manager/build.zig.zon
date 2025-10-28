@@ -9,6 +9,7 @@
 
     .dependencies = .{
         .tracy = .{ .path = "../../dependencies/tracy" },
+        .blake3 = .{ .path = "../../dependencies/blake3" },
     },
 
     .paths = .{

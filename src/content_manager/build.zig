@@ -45,6 +45,9 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const blake3_dep = b.dependency("blake3", .{});
+    const blake3_lib = blake3_dep.artifact("blake3");
+
     contentManagerModule.addImport("reflect", spReflectModule);
     contentManagerModule.addImport("sqlDb", sqliteModule);
     contentManagerModule.addImport("tables", tables_mod);
@@ -52,7 +55,8 @@ pub fn build(b: *std.Build) void {
     contentManagerModule.addIncludePath(b.path("../../include"));
     contentManagerModule.addIncludePath(b.path("../../../../../../msys64/mingw64/include/"));
     contentManagerModule.addLibraryPath(b.path("../../lib"));
-    contentManagerModule.linkSystemLibrary("blake3", .{ .preferred_link_mode = .static });
+    contentManagerModule.linkLibrary(blake3_lib);
+    // contentManagerModule.linkSystemLibrary("blake3", .{ .preferred_link_mode = .static });
     contentManagerModule.linkSystemLibrary("setupapi", .{ .preferred_link_mode = .static });
     contentManagerModule.linkSystemLibrary("imm32", .{ .preferred_link_mode = .static });
     contentManagerModule.linkSystemLibrary("version", .{ .preferred_link_mode = .static });

@@ -11,7 +11,6 @@ include/UUID/
 include/vk_video/
 include/vma/
 include/vulkan/
-# include/SDL3/
 .vscode/
 .VSCodeCounter/
 test*.zig
@@ -20,10 +19,12 @@ dependencies/tracy/
 dependencies/SDL3/build
 dependencies/SDL3/install/include
 dependencies/SDL3/install/share
+dependencies/blake3/c/
 cmake/
 pkgconfig/
 trace/
 windbg/
+build/
 *.rdi
 *.pdb
 *.exe
