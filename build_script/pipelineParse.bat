@@ -41,11 +41,6 @@ if "%~4"=="" (
 
 set "File_List=%~4"
 
-echo.
-echo %File_List%
-@echo off
-
-
 where glslc >nul 2>nul
 if %errorlevel% neq 0 (
     goto :eof

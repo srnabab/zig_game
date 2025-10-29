@@ -20,3 +20,5 @@ build/
 *.pdb
 *.exe
 *.dll
+pipeline.txt
+shaders.txt
