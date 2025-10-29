@@ -8,6 +8,6 @@
         "src",
     },
     .dependencies = .{
-        .libgit2 = .{ .path = "../../dependencies/libgit2" },
+        // .libgit2 = .{ .path = "../../dependencies/libgit2" },
     },
 }

@@ -4,20 +4,25 @@ const json = std.json;
 
 const builtin = @import("builtin");
 
-const git2 = @cImport(@cInclude("git2.h"));
+// const git2 = @cImport(@cInclude("git2.h"));
 
-const folderPath_GitHash_Pair = struct {
-    path: []u8,
-    hash: [40]u8,
+const folderPath_Hash_Pair = struct {
+    path: []const u8,
+    hash: []const u8,
 };
 
 const default_output_file = "a.txt";
 const cachePath = "cache.json";
 
-var cacheMap: std.StringHashMap([40]u8) = undefined;
+var cacheMap: std.StringHashMap([]u8) = undefined;
 
 var debug_allocator: std.heap.DebugAllocator(.{ .stack_trace_frames = 10 }) = .init;
 pub fn main() !void {
+    var buffer1 = [_]u8{0} ** 1024;
+    var buffer2 = [_]u8{0} ** 1024;
+    var buffer3 = [_]u8{0} ** 1024;
+    var buffer4 = [_]u8{0} ** 1024;
+
     const gpa, const is_debug = gpa: {
         break :gpa switch (builtin.mode) {
             .Debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
@@ -39,27 +44,31 @@ pub fn main() !void {
     defer process.argsFree(gpa, args);
 
     if (args.len < 3) {
-        std.log.info(".exe [repo dir] [dest folder] (output file path)", .{});
+        std.log.info(".exe [root dir] [relative to root folder] (output file path)", .{});
+        return;
     }
 
-    const repo_dir = args[1];
-    const dest_folder = args[2];
+    const root_dir = args[1];
+    const dest_folder_path = args[2];
 
     var ouput_file: [:0]u8 = undefined;
     if (args.len > 3) {
         ouput_file = args[3];
     } else {
-        ouput_file = default_output_file.*;
+        ouput_file = @constCast(&default_output_file.*);
     }
 
     for (args) |arg| {
         std.log.info("arg: {s}", .{arg});
     }
 
-    var cwd = try std.fs.cwd().openDir(repo_dir, .{});
+    var cwd = try std.fs.cwd().openDir(root_dir, .{});
     defer cwd.close();
 
     try cwd.setAsCwd();
+
+    var dest_dir = try cwd.openDir(dest_folder_path, .{ .iterate = true });
+    defer dest_dir.close();
 
     var cacheFile = std.fs.cwd().openFile(cachePath, .{
         .mode = .read_write,
@@ -72,78 +81,94 @@ pub fn main() !void {
     };
     defer cacheFile.close();
 
-    var cacheFileReader = cacheFile.reader();
+    var initCacheCount: u32 = 0;
+    var cacheFileReader = cacheFile.reader(&buffer1);
     const cacheFileStat = try cacheFile.stat();
-    // if (cacheFileStat.size == 0) {} else
-    {
+    if (cacheFileStat.size != 0) {
         const cacheContent = try cacheFileReader.interface.readAlloc(gpa, cacheFileStat.size);
         defer gpa.free(cacheContent);
 
-        var cacheJson: json.Parsed([]folderPath_GitHash_Pair) = json.parseFromSlice([]folderPath_GitHash_Pair, gpa, cacheContent, .{});
+        var cacheJson: json.Parsed([]folderPath_Hash_Pair) = try json.parseFromSlice([]folderPath_Hash_Pair, gpa, cacheContent, .{});
         defer cacheJson.deinit();
 
         for (cacheJson.value) |value| {
             const tempStr = try arenaAllocator.dupe(u8, value.path);
-            try cacheMap.put(tempStr, value.hash);
+            const tempHash = try arenaAllocator.dupe(u8, value.hash);
+            try cacheMap.put(tempStr, tempHash);
+            initCacheCount += 1;
         }
     }
 
-    const initTimes = git2.git_libgit2_init();
-    defer for (0..@intCast(initTimes)) |_| {
-        _ = git2.git_libgit2_shutdown();
-    };
+    var outputFile = try std.fs.cwd().createFile(ouput_file, .{ .truncate = true });
+    defer outputFile.close();
 
-    const dest_folder_path = try std.fmt.allocPrint(gpa, "HEAD:{s}", .{dest_folder});
-    var repo: ?*git2.git_repository = null;
-    var obj: ?*git2.git_object = null;
+    var outputFileWriter = outputFile.writer(&buffer2);
 
-    check_lg2(git2.git_repository_open_ext(@ptrCast(&repo), args[1], 0, null), "unable open repository", args[1]);
-    defer git2.git_repository_free(repo);
+    var hasher = std.hash.Wyhash.init(987461);
 
-    check_lg2(
-        git2.git_revparse_single(@ptrCast(&obj), repo, @ptrCast(dest_folder_path.ptr)),
-        "Error resolving path",
-        @ptrCast(dest_folder_path.ptr),
-    );
-    defer git2.git_object_free(obj);
+    var folderIt = dest_dir.iterate();
+    while (try folderIt.next()) |entry| {
+        switch (entry.kind) {
+            .file => {
+                const path = try std.fs.path.join(arenaAllocator, &.{ dest_folder_path, entry.name });
 
-    if (git2.git_object_type(obj) != git2.GIT_OBJECT_BLOB) {
-        std.log.err("object is not a blob", .{});
-        return;
+                const file = try cwd.openFile(path, .{});
+                defer file.close();
+
+                var fileReader = file.reader(&buffer4);
+                defer @memset(&buffer4, 0);
+
+                const fileStat = try file.stat();
+                const content = try fileReader.interface.readAlloc(gpa, fileStat.size);
+                defer gpa.free(content);
+
+                hasher.update(content);
+                const hash = hasher.final();
+                hasher = std.hash.Wyhash.init(987461);
+
+                const hashHex = std.fmt.hex(hash);
+
+                const tempHashBytes = try arenaAllocator.dupe(u8, &hashHex);
+
+                // const tempHashBytes = try arenaAllocator.alloc(u8, hashBytes.len + 1);
+                // @memcpy(tempHashBytes[0..hashBytes.len], &hashBytes);
+                // tempHashBytes[hashBytes.len] = 0;
+
+                const hashMapRes = try cacheMap.getOrPut(path);
+                if (hashMapRes.found_existing) {
+                    if (std.mem.eql(u8, hashMapRes.value_ptr.*, tempHashBytes)) {
+                        continue;
+                    } else {
+                        hashMapRes.value_ptr.* = tempHashBytes;
+                        _ = try outputFileWriter.interface.write(entry.name);
+                        _ = try outputFileWriter.interface.write("\n");
+                    }
+                } else {
+                    hashMapRes.value_ptr.* = tempHashBytes;
+                    _ = try outputFileWriter.interface.write(entry.name);
+                    _ = try outputFileWriter.interface.write("\n");
+                    initCacheCount += 1;
+                }
+            },
+            else => {},
+        }
     }
-    const tree: *git2.git_tree = @ptrCast(obj);
-}
+    try outputFileWriter.interface.flush();
 
-fn check_lg2(git2_error: c_int, message: [*c]const u8, extra: [*c]const u8) void {
-    var lg2err: [*c]git2.git_error = null;
-    var lg2msg: [*c]const u8 = "";
-    var lg2spacer: [*c]const u8 = "";
+    var cacheMapIt = cacheMap.iterator();
+    var jsonValue = try gpa.alloc(folderPath_Hash_Pair, initCacheCount);
+    defer gpa.free(jsonValue);
 
-    if (git2_error == 0)
-        return;
-
-    lg2err = git2.git_error_last();
-    if (lg2err != null and lg2err.message != null) {
-        lg2msg = lg2err.message;
-        lg2spacer = " - ";
+    while (cacheMapIt.next()) |kv| {
+        jsonValue[initCacheCount - 1] = folderPath_Hash_Pair{
+            .path = kv.key_ptr.*,
+            .hash = kv.value_ptr.*,
+        };
+        initCacheCount -= 1;
     }
 
-    if (extra != null) {
-        std.log.err("{s} '{s}' [{d}]{s}{s}", .{
-            message,
-            extra,
-            git2_error,
-            lg2spacer,
-            lg2msg,
-        });
-    } else {
-        std.log.err("{s} [{d}]{s}{s}", .{
-            message,
-            git2_error,
-            lg2spacer,
-            lg2msg,
-        });
-    }
-
-    process.exit(git2.EXIT_FAILURE);
+    var cacheFileWriter = cacheFile.writer(&buffer3);
+    var stringify = std.json.Stringify{ .writer = &cacheFileWriter.interface, .options = .{ .whitespace = .indent_tab } };
+    try stringify.write(jsonValue);
+    try cacheFileWriter.interface.flush();
 }
