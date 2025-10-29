@@ -8,8 +8,6 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .Debug });
 
     // modules
-    // {
-
     const tracy_enable = b.option(bool, "tracy_enable", "Enable profiling") orelse false;
     const tracy_callstack = b.option(u8, "tracy_callstack", "Callstack depth") orelse 10;
     const tracy = b.dependency("tracy", .{
@@ -27,6 +25,9 @@ pub fn build(b: *std.Build) void {
 
     const sdl3Module = b.dependency("sdl3", .{});
     const sdl3_lib_install_step = sdl3Module.builder.getInstallStep();
+
+    const selectModifiedFileToTxtModule = b.dependency("selectModifiedFileToTxt", .{});
+    const selectModifiedFileToTxt = selectModifiedFileToTxtModule.artifact("selectModifiedFileToTxt");
 
     const vk_mod = b.createModule(.{
         .root_source_file = b.path("src/vulkan.zig"),
@@ -321,8 +322,27 @@ pub fn build(b: *std.Build) void {
     // run task
     const root_path = b.build_root.path orelse "";
 
+    // const compile_txt_generate = b.step("generate compile txt", "produce txt");
+
+    const shader_need_compile_txt = "shaders.txt";
+    const compile_txt_shaders_cmd = b.addRunArtifact(selectModifiedFileToTxt);
+    compile_txt_shaders_cmd.addArg(b.build_root.path.?);
+    compile_txt_shaders_cmd.addArg("Shaders");
+    compile_txt_shaders_cmd.addArg(b.fmt("build_script/{s}", .{shader_need_compile_txt}));
+
+    const pipeline_need_compile_txt = "pipeline.txt";
+    const compile_txt_pipeline_cmd = b.addRunArtifact(selectModifiedFileToTxt);
+    compile_txt_pipeline_cmd.addArg(b.build_root.path.?);
+    compile_txt_pipeline_cmd.addArg("Pipeline");
+    compile_txt_pipeline_cmd.addArg(b.fmt("build_script/{s}", .{pipeline_need_compile_txt}));
+
     const shader_compile = b.step("shader compile", "compile shader");
-    const script_cmd = b.addSystemCommand(&[_][]const u8{ "build_script/shaderCompile.bat", "Shaders", "zig-out/bin/Content/Shaders" });
+    const script_cmd = b.addSystemCommand(&[_][]const u8{
+        "build_script/shaderCompile.bat",
+        "Shaders",
+        "zig-out/bin/Content/Shaders",
+        b.fmt("build_script/{s}", .{shader_need_compile_txt}),
+    });
 
     const pipeline_compile = b.step("pipeline parse", "parse pipeline json");
     const pipeline_script_cmd = b.addSystemCommand(&[_][]const u8{
@@ -330,6 +350,7 @@ pub fn build(b: *std.Build) void {
         "Pipeline",
         "zig-out/bin/Content/Shaders",
         "zig-out/bin/Content/Pipeline",
+        b.fmt("build_script/{s}", .{pipeline_need_compile_txt}),
     });
 
     const runContenManager = b.step("run content manager", "collect resources");
@@ -342,24 +363,6 @@ pub fn build(b: *std.Build) void {
 
     const run_gen_exe = b.addRunArtifact(gen_exe);
     run_gen_exe.addArg(b.fmt("{s}/{s}", .{ root_path, "src/video/resultToError.zig" }));
-
-    // const sdl3_header_install_path = b.addInstallDirectory(.{.install_dir = .header});
-    // const copy_sdl3_header = b.addInstallDirectory(.{
-    //     .source_dir = sdl3Module.path("install/include"),
-    //     .install_dir = .{ .custom = b.path("include").getPath(b) },
-    //     .install_subdir = "",
-    // });
-    // const copy_sdl3_header = b.addSystemCommand(
-    //     if (target.result.os.tag == .windows) &.{
-    //         "cmd", "/c", "xcopy", sdl3Module.path("install/include").getPath(sdl3Module.builder), b.path("include").getPath(b), "/s", "/y", "/q",
-    //     } else unreachable,
-    // );
-
-    // const copy_blake3_header = b.addSystemCommand(
-    //     if (target.result.os.tag == .windows) &.{
-    //         "cmd", "/c", "copy", b.path("dependencies/blake3/c/blake3.h").getPath(b), b.path("include/blake3.h").getPath(b),
-    //     } else unreachable,
-    // );
 
     const waf = b.addWriteFiles();
     _ = waf.addCopyFile(exe.getEmittedAsm(), "main.asm");
@@ -383,10 +386,12 @@ pub fn build(b: *std.Build) void {
 
     // run task dependency
     shader_compile.dependOn(&script_cmd.step);
+    script_cmd.step.dependOn(&compile_txt_shaders_cmd.step);
 
     pipeline_script_cmd.step.dependOn(shader_compile);
     pipeline_script_cmd.step.dependOn(&pipelineJsonParse_exe.step);
     pipeline_compile.dependOn(&pipeline_script_cmd.step);
+    pipeline_script_cmd.step.dependOn(&compile_txt_pipeline_cmd.step);
 
     // contenManager.step.dependOn(&copy_blake3_header.step);
     runContenManager.dependOn(&runContenManager_cmd.step);

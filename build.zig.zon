@@ -70,6 +70,7 @@
         .tracy = .{ .path = "dependencies/tracy" },
         .contentManager = .{ .path = "src/content_manager" },
         .sdl3 = .{ .path = "dependencies/sdl3" },
+        .selectModifiedFileToTxt = .{ .path = "src/selectModifiedFileToTxt" },
     },
 
     // Specifies the set of files and directories that are included in this package.
