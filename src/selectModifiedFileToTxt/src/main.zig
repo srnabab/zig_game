@@ -58,9 +58,9 @@ pub fn main() !void {
         ouput_file = @constCast(&default_output_file.*);
     }
 
-    for (args) |arg| {
-        std.log.info("arg: {s}", .{arg});
-    }
+    // for (args) |arg| {
+    //     std.log.info("arg: {s}", .{arg});
+    // }
 
     var cwd = try std.fs.cwd().openDir(root_dir, .{});
     defer cwd.close();
