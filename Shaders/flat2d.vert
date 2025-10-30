@@ -16,7 +16,7 @@ layout(location = 1) flat out uint fragTexIndex;
 
 void main() 
 {
-    gl_Position = ubo.proj * ubo.view * vec4(inPosition,1.0);
+    gl_Position = ubo.proj * ubo.view * vec4(inPosition ,1.0);
     fragTexCoord = inTexCoord;
     fragTexIndex = intTexIndex;
 }
