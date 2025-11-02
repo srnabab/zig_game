@@ -5,6 +5,7 @@
     "flat2d.vert.spv",
     "flat2d.frag.spv"
   ],
+  "VersionCount": 0,
   "VertexInput": {
     "bindings": [
       {

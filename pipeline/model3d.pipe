@@ -5,6 +5,7 @@
     "model3d.vert.spv",
     "model3d.frag.spv"
   ],
+  "VersionCount": 0,
   "VertexInput": {
     "bindings": [
       {
