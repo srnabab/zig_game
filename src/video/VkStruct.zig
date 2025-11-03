@@ -261,6 +261,147 @@ descriptorImageInfos: std.array_list.Managed(vk.VkDescriptorImageInfo) = undefin
 descriptorBufferInfos: std.array_list.Managed(vk.VkDescriptorBufferInfo) = undefined,
 descriptorBufferViewInfos: std.array_list.Managed(vk.VkBufferView) = undefined,
 
+testSampler: vk.VkSampler = null,
+
+pub fn init(allocator: Allocator) Self {
+    return Self{
+        .allocator = allocator,
+        .shaderModules = .init(allocator),
+        .entryNames = .init(allocator),
+        .pipelines = .init(allocator),
+        .textureSets = .init(allocator),
+        .writeDescriptorSets = .init(allocator),
+        .descriptorImageInfos = .init(allocator),
+        .descriptorBufferInfos = .init(allocator),
+        .descriptorBufferViewInfos = .init(allocator),
+    };
+}
+
+pub fn initVulkan(self: *Self) !void {
+    const zone = tracy.initZone(@src(), .{ .name = "init vulkan resources" });
+    defer zone.deinit();
+
+    try self.*.createWindow();
+    const version = try getVulkanVersion();
+    printVersion(version);
+    try self.createInstance();
+    try self.createSurface();
+    try self.pickPhysicalDevice();
+    try self.setQueueFamilies();
+    try self.createDevice();
+    self.createQueue();
+    try self.createVmaAllocator();
+
+    var semaphores: [4]vk.VkSemaphore = undefined;
+    try self.createBinarySemaphore(0, &semaphores);
+    self.imageAvailableSemaphore[0] = semaphores[0];
+    self.imageAvailableSemaphore[1] = semaphores[1];
+    self.renderFinishSemaphore[0] = semaphores[2];
+    self.renderFinishSemaphore[1] = semaphores[3];
+    var semaphores2: [1]vk.VkSemaphore = undefined;
+    try self.createTimelineSemaphore(0, &semaphores2, 0);
+    self.globalTimelineSemaphore = semaphores2[0];
+
+    self.surfaceFormat = try self.getSurfaceFormat();
+    self.presentMode = try self.getPresentMode();
+    self.swapchain = try self.createSwapchain();
+
+    self.globalDescriptorPool = try self._createDescriptorPool(vk.VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT, @constCast(&globalDescriptorPoolSizes), globalDescriptorMaxSets);
+
+    self.descriptorSetLayout[0] = try self.createDescriptorSetLayout(null, set0SetLayoutCreateInfos.flag, set0SetLayoutCreateInfos.bindingCount, @constCast(&set0SetLayoutCreateInfos.bindings));
+    var bindingFlagsInfo = vk.VkDescriptorSetLayoutBindingFlagsCreateInfo{
+        .sType = vk.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+        .pNext = null,
+        .bindingCount = set1SetLayoutCreateInfos.bindingCount,
+        .pBindingFlags = &set1SetLayoutCreateInfos.bindingFlags,
+    };
+    self.descriptorSetLayout[1] = try self.createDescriptorSetLayout(&bindingFlagsInfo, set1SetLayoutCreateInfos.flag, set1SetLayoutCreateInfos.bindingCount, @constCast(&set1SetLayoutCreateInfos.bindings));
+
+    var set0Sets: [3]vk.VkDescriptorSet = undefined;
+    var set0Setlayout = [_]vk.VkDescriptorSetLayout{ self.descriptorSetLayout[0], self.descriptorSetLayout[0], self.descriptorSetLayout[0] };
+    try self.allocateDescriptorSets(self.globalDescriptorPool, &set0Setlayout, &set0Sets);
+
+    self.globalFixed2dMVPMatrixDescriptorSet = set0Sets[0];
+    self.global2dMVPMatrixDescriptorSet = set0Sets[1];
+    self.global3dMVPMatrixDescriptorSet = set0Sets[2];
+
+    var set1Sets: [1]vk.VkDescriptorSet = undefined;
+    var set1Setlayout = [_]vk.VkDescriptorSetLayout{self.descriptorSetLayout[1]};
+    try self.allocateDescriptorSets(self.globalDescriptorPool, &set1Setlayout, &set1Sets);
+
+    self.globalTextureDescriptorSet = set1Sets[0];
+
+    self.testSampler = try self._createSampler(comptime file.comptimeGetID("pixel2dSampler.sampler"), 1.0);
+}
+
+pub fn deinit(self: *Self) void {
+    self.waitDevice() catch |err| {
+        std.log.err("wait device error {s}\n", .{@errorName(err)});
+    };
+
+    // self.vmaStatistics();
+
+    const zone = tracy.initZone(@src(), .{ .name = "deinit vulkan resources" });
+    defer zone.deinit();
+
+    self.writeDescriptorSets.deinit();
+    self.descriptorImageInfos.deinit();
+    self.descriptorBufferInfos.deinit();
+    self.descriptorBufferViewInfos.deinit();
+
+    for (self.descriptorSetLayout) |value| {
+        self.destroyDescriptorSetLayout(value);
+    }
+
+    self.destroyDescriptorPool(self.globalDescriptorPool);
+
+    var pipelines = self.pipelines.valueIterator();
+    while (pipelines.next()) |val| {
+        vk.vkDestroyPipeline(self.device, val.pipeline, self.pAllocCallBacks);
+        vk.vkDestroyPipelineLayout(self.device, val.pipelineLayout, self.pAllocCallBacks);
+        // for (0..val.setCount) |i| {
+        //     vk.vkDestroyDescriptorSetLayout(
+        //         self.device,
+        //         val.descriptorSetLayouts[i],
+        //         self.pAllocCallBacks,
+        //     );
+        // }
+    }
+    self.pipelines.deinit();
+
+    var entryNames = self.entryNames.iterator();
+    while (entryNames.next()) |name| {
+        self.allocator.free(name.key_ptr.*);
+    }
+    self.entryNames.deinit();
+
+    var shaderCodes = self.shaderModules.iterator();
+    while (shaderCodes.next()) |code| {
+        // std.log.debug("module ptr {*}", .{code.value_ptr});
+        vk.vkDestroyShaderModule(self.device, code.value_ptr.*, self.pAllocCallBacks);
+    }
+    self.shaderModules.deinit();
+
+    self.destroySwapchain(self.swapchain);
+
+    for (self.renderFinishSemaphore) |value| {
+        self.destroySemaphore(value);
+    }
+    for (self.imageAvailableSemaphore) |value| {
+        self.destroySemaphore(value);
+    }
+    self.destroySemaphore(self.globalTimelineSemaphore);
+
+    std.log.debug("vma buffer allocation residue count: {d}", .{self.vmaBufferAllocations.load(.seq_cst)});
+    std.log.debug("vma image allocation residue count: {d}", .{self.vmaImageAllocations.load(.seq_cst)});
+    vma.vmaDestroyAllocator(self.vmaAllocator);
+
+    vk.vkDestroyDevice(self.device, self.pAllocCallBacks);
+    sdl.SDL_Vulkan_DestroySurface(@ptrCast(self.*.instance), @ptrCast(self.*.surface), @ptrCast(self.*.pAllocCallBacks));
+    vk.vkDestroyInstance(self.*.instance, self.*.pAllocCallBacks);
+    sdl.SDL_DestroyWindow(self.*.window);
+}
+
 fn comptime_print(comptime format: []const u8, comptime args: anytype) void {
     @compileLog(std.fmt.comptimePrint(format, args));
 }
@@ -324,132 +465,6 @@ fn featureNeededCheck(comptime featureType: type, featurePack: anytype) bool {
         },
     }
     return count == len;
-}
-
-pub fn init(allocator: Allocator) Self {
-    return Self{
-        .allocator = allocator,
-        .shaderModules = .init(allocator),
-        .entryNames = .init(allocator),
-        .pipelines = .init(allocator),
-        .textureSets = .init(allocator),
-        .writeDescriptorSets = .init(allocator),
-        .descriptorImageInfos = .init(allocator),
-        .descriptorBufferInfos = .init(allocator),
-        .descriptorBufferViewInfos = .init(allocator),
-    };
-}
-
-pub fn initVulkan(self: *Self) !void {
-    const zone = tracy.initZone(@src(), .{ .name = "init vulkan resources" });
-    defer zone.deinit();
-
-    try self.*.createWindow();
-    const version = try getVulkanVersion();
-    printVersion(version);
-    try self.createInstance();
-    try self.createSurface();
-    try self.pickPhysicalDevice();
-    try self.setQueueFamilies();
-    try self.createDevice();
-    self.createQueue();
-    try self.createVmaAllocator();
-
-    var semaphores: [4]vk.VkSemaphore = undefined;
-    try self.createBinarySemaphore(0, &semaphores);
-    self.imageAvailableSemaphore[0] = semaphores[0];
-    self.imageAvailableSemaphore[1] = semaphores[1];
-    self.renderFinishSemaphore[0] = semaphores[2];
-    self.renderFinishSemaphore[1] = semaphores[3];
-    var semaphores2: [1]vk.VkSemaphore = undefined;
-    try self.createTimelineSemaphore(0, &semaphores2, 0);
-    self.globalTimelineSemaphore = semaphores2[0];
-
-    self.surfaceFormat = try self.getSurfaceFormat();
-    self.presentMode = try self.getPresentMode();
-    self.swapchain = try self.createSwapchain();
-
-    self.globalDescriptorPool = try self._createDescriptorPool(vk.VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT, @constCast(&globalDescriptorPoolSizes), globalDescriptorMaxSets);
-
-    self.descriptorSetLayout[0] = try self.createDescriptorSetLayout(null, set0SetLayoutCreateInfos.flag, set0SetLayoutCreateInfos.bindingCount, @constCast(&set0SetLayoutCreateInfos.bindings));
-    var bindingFlagsInfo = vk.VkDescriptorSetLayoutBindingFlagsCreateInfo{
-        .sType = vk.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
-        .pNext = null,
-        .bindingCount = set1SetLayoutCreateInfos.bindingCount,
-        .pBindingFlags = &set1SetLayoutCreateInfos.bindingFlags,
-    };
-    self.descriptorSetLayout[1] = try self.createDescriptorSetLayout(&bindingFlagsInfo, set1SetLayoutCreateInfos.flag, set1SetLayoutCreateInfos.bindingCount, @constCast(&set1SetLayoutCreateInfos.bindings));
-
-    var set0Sets = [_]vk.VkDescriptorSet{ self.globalFixed2dMVPMatrixDescriptorSet, self.global2dMVPMatrixDescriptorSet, self.global3dMVPMatrixDescriptorSet };
-    var set0Setlayout = [_]vk.VkDescriptorSetLayout{ self.descriptorSetLayout[0], self.descriptorSetLayout[0], self.descriptorSetLayout[0] };
-    try self.allocateDescriptorSets(self.globalDescriptorPool, &set0Setlayout, &set0Sets);
-
-    var set1Sets = [_]vk.VkDescriptorSet{self.globalTextureDescriptorSet};
-    var set1Setlayout = [_]vk.VkDescriptorSetLayout{self.descriptorSetLayout[1]};
-    try self.allocateDescriptorSets(self.globalDescriptorPool, &set1Setlayout, &set1Sets);
-}
-
-pub fn deinit(self: *Self) void {
-    self.waitDevice() catch |err| {
-        std.log.err("wait device error {s}\n", .{@errorName(err)});
-    };
-
-    // self.vmaStatistics();
-
-    const zone = tracy.initZone(@src(), .{ .name = "deinit vulkan resources" });
-    defer zone.deinit();
-
-    for (self.descriptorSetLayout) |value| {
-        self.destroyDescriptorSetLayout(value);
-    }
-
-    self.destroyDescriptorPool(self.globalDescriptorPool);
-
-    var pipelines = self.pipelines.valueIterator();
-    while (pipelines.next()) |val| {
-        vk.vkDestroyPipeline(self.device, val.pipeline, self.pAllocCallBacks);
-        vk.vkDestroyPipelineLayout(self.device, val.pipelineLayout, self.pAllocCallBacks);
-        // for (0..val.setCount) |i| {
-        //     vk.vkDestroyDescriptorSetLayout(
-        //         self.device,
-        //         val.descriptorSetLayouts[i],
-        //         self.pAllocCallBacks,
-        //     );
-        // }
-    }
-    self.pipelines.deinit();
-
-    var entryNames = self.entryNames.iterator();
-    while (entryNames.next()) |name| {
-        self.allocator.free(name.key_ptr.*);
-    }
-    self.entryNames.deinit();
-
-    var shaderCodes = self.shaderModules.iterator();
-    while (shaderCodes.next()) |code| {
-        // std.log.debug("module ptr {*}", .{code.value_ptr});
-        vk.vkDestroyShaderModule(self.device, code.value_ptr.*, self.pAllocCallBacks);
-    }
-    self.shaderModules.deinit();
-
-    self.destroySwapchain(self.swapchain);
-
-    for (self.renderFinishSemaphore) |value| {
-        self.destroySemaphore(value);
-    }
-    for (self.imageAvailableSemaphore) |value| {
-        self.destroySemaphore(value);
-    }
-    self.destroySemaphore(self.globalTimelineSemaphore);
-
-    std.log.debug("vma buffer allocation residue count: {d}", .{self.vmaBufferAllocations.load(.seq_cst)});
-    std.log.debug("vma image allocation residue count: {d}", .{self.vmaImageAllocations.load(.seq_cst)});
-    vma.vmaDestroyAllocator(self.vmaAllocator);
-
-    vk.vkDestroyDevice(self.device, self.pAllocCallBacks);
-    sdl.SDL_Vulkan_DestroySurface(@ptrCast(self.*.instance), @ptrCast(self.*.surface), @ptrCast(self.*.pAllocCallBacks));
-    vk.vkDestroyInstance(self.*.instance, self.*.pAllocCallBacks);
-    sdl.SDL_DestroyWindow(self.*.window);
 }
 
 fn createWindow(self: *Self) !void {
@@ -1663,7 +1678,7 @@ pub fn writeCachedDescriptorSetResources(self: *Self) void {
 
     vk.vkUpdateDescriptorSets(
         self.device,
-        self.writeDescriptorSets.items.len,
+        @intCast(self.writeDescriptorSets.items.len),
         @ptrCast(self.writeDescriptorSets.items.ptr),
         0,
         null,

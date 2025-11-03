@@ -110,6 +110,8 @@ pub fn main() !void {
     _ = global.textureSet.createImageTextureEnsureWithErrorImage(comptime file.comptimeGetID("circle.png"));
     try global.graphic.addCommandEnd();
 
+    global.vulkan.writeCachedDescriptorSetResources();
+
     try global.graphic.executeCommands();
     global.vulkan.nextFrame();
 
@@ -122,6 +124,7 @@ pub fn main() !void {
         try global.graphic.startCommand();
         try global.graphic.addCommandEnd();
         try global.graphic.executeCommands();
+        global.vulkan.nextFrame();
         if (std.time.milliTimestamp() - renderStart > 2) {
             break;
         }

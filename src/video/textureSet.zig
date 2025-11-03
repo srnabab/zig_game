@@ -117,6 +117,7 @@ pub fn deinit(self: *Self) void {
     self.map.deinit();
     self.memory.deinit();
     self.layoutMemory.deinit();
+    self.descriptorSetIndices.deinit();
 }
 
 pub fn createImageTexture(self: *Self, fileID: u32) !*Texture {
@@ -190,7 +191,18 @@ pub fn createImageTexture(self: *Self, fileID: u32) !*Texture {
 
     texture.imageView = try global.vulkan.createImageView2D(texture.image.vkImage, texture.format);
 
+    const dstArrayElement = try self.getDescriptorSetIndex(ID);
+    try global.vulkan.addWriteDescriptorSetImage(dstArrayElement, texture.imageView, global.vulkan.testSampler);
+
     return texture;
+}
+
+fn getDescriptorSetIndex(self: *Self, ID: u32) !u32 {
+    const index = self.descriptorSetIndices.items.len;
+
+    try self.descriptorSetIndices.append(ID);
+
+    return @intCast(index);
 }
 
 pub fn createImageTextureEnsureWithErrorImage(self: *Self, fileID: u32) *Texture {
