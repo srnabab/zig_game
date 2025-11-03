@@ -225,7 +225,7 @@ fn judgeImageLoadParameter(fileName: []const u8) !struct {
     // var properties: vk.VkMemoryPropertyFlags = 0;
 
     // return .{ format, tiling, usage, properties };
-    return .{ vk.VK_FORMAT_R8G8B8A8_SRGB, vk.VK_IMAGE_TILING_OPTIMAL, vk.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | vk.VK_IMAGE_USAGE_TRANSFER_DST_BIT, vk.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT };
+    return .{ vk.VK_FORMAT_R8G8B8A8_SRGB, vk.VK_IMAGE_TILING_OPTIMAL, vk.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | vk.VK_IMAGE_USAGE_TRANSFER_DST_BIT | vk.VK_IMAGE_USAGE_SAMPLED_BIT, vk.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT };
 }
 
 fn updateLoadParameter(tp: FileType, cc: std.fs.File.Stat, content: []const u8, fileName: []const u8) !void {
@@ -316,7 +316,7 @@ fn processFile(
 
         try updateLoadParameter(fType, metadata, content, name);
     } else {
-        const isModified = (currentModifiedTime != fileModifiedTime);
+        const isModified = (currentModifiedTime != fileModifiedTime) or forceUpdate;
         if (pathModifiedTime == -1) {
             // 文件被移动：更新路径和父ID
             if (isModified) {
@@ -466,6 +466,8 @@ fn iterateFolderUpdate(dir: std.fs.Dir, dirName: []const u8, parentID: []const u
 var ContentPathT: ContentPath = undefined;
 var ImageLoadParameterT: ImageLoadParameter = undefined;
 
+var forceUpdate = false;
+
 var gpa: std.mem.Allocator = undefined;
 var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
 pub fn main() !void {
@@ -499,22 +501,20 @@ pub fn main() !void {
 
     var root: [256:0]u8 = undefined;
 
-    const realPath = it.next();
     @memset(root[0..root.len], 0);
-
-    if (realPath) |rootPath| {
-        std.mem.copyForwards(u8, &root, rootPath);
-    } else {
-        std.mem.copyForwards(u8, &root, rootExe);
-    }
+    std.mem.copyForwards(u8, &root, rootExe);
 
     const index = std.mem.lastIndexOf(u8, &root, slash) orelse 0;
     @memset(root[index..root.len], 0);
 
-    // std.log.info("path: {s}", .{root});
-
     var cwd = try std.fs.openDirAbsolute(&root, .{});
     try cwd.setAsCwd();
+
+    while (it.next()) |arg| {
+        if (std.mem.eql(u8, arg, "-f")) {
+            forceUpdate = true;
+        }
+    }
 
     var db: ?*sqlite.sqlite3 = null;
 

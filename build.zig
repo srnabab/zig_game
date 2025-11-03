@@ -21,7 +21,7 @@ pub fn build(b: *std.Build) void {
 
     const contentManagerModule = b.dependency("contentManager", .{});
     const contenManager = contentManagerModule.artifact("ContentManager");
-    _ = b.addInstallArtifact(contenManager, .{ .dest_dir = .{ .override = .{ .custom = b.install_path } } });
+    const contenManager_install = b.addInstallArtifact(contenManager, .{ .dest_dir = .default });
 
     const sdl3Module = b.dependency("sdl3", .{});
     const sdl3_lib_install_step = sdl3Module.builder.getInstallStep();
@@ -392,7 +392,7 @@ pub fn build(b: *std.Build) void {
 
     const runContenManager = b.step("run content manager", "collect resources");
     const runContenManager_cmd = b.addRunArtifact(contenManager);
-    runContenManager_cmd.addArg(b.getInstallPath(.bin, "ContentManager"));
+    // runContenManager_cmd.addArg(b.getInstallPath(.bin, "ContentManager"));
 
     const runGenFileNameIdExe = b.step("create hash map", "create filename id static string hash map");
     const runGenFileNameIdExe_cmd = b.addRunArtifact(genFileNameIDexe);
@@ -438,6 +438,7 @@ pub fn build(b: *std.Build) void {
     runContenManager.dependOn(&runContenManager_cmd.step);
     runContenManager_cmd.step.dependOn(pipeline_compile);
     runContenManager_cmd.step.dependOn(sampler_compile);
+    runContenManager_cmd.step.dependOn(&contenManager_install.step);
 
     runGenFileNameIdExe.dependOn(&runGenFileNameIdExe_cmd.step);
     runGenFileNameIdExe_cmd.step.dependOn(runContenManager);
