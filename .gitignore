@@ -22,3 +22,4 @@ build/
 *.dll
 pipeline.txt
 shaders.txt
+sampler.txt

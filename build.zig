@@ -359,6 +359,12 @@ pub fn build(b: *std.Build) void {
     compile_txt_pipeline_cmd.addArg("Pipeline");
     compile_txt_pipeline_cmd.addArg(b.fmt("build_script/{s}", .{pipeline_need_compile_txt}));
 
+    const sampler_need_compile_txt = "sampler.txt";
+    const compile_txt_sampler_cmd = b.addRunArtifact(selectModifiedFileToTxt);
+    compile_txt_sampler_cmd.addArg(b.build_root.path.?);
+    compile_txt_sampler_cmd.addArg("Pipeline");
+    compile_txt_sampler_cmd.addArg(b.fmt("build_script/{s}", .{sampler_need_compile_txt}));
+
     const shader_compile = b.step("shader compile", "compile shader");
     const script_cmd = b.addSystemCommand(&[_][]const u8{
         "build_script/shaderCompile.bat",
@@ -374,6 +380,14 @@ pub fn build(b: *std.Build) void {
         "zig-out/bin/Content/Shaders",
         "zig-out/bin/Content/Pipeline",
         b.fmt("build_script/{s}", .{pipeline_need_compile_txt}),
+    });
+
+    const sampler_compile = b.step("sampler compile", "compile sampler");
+    const sampler_script_cmd = b.addSystemCommand(&[_][]const u8{
+        "build_script/samplerParse.bat",
+        "Sampler",
+        "zig-out/bin/Content/Sampler",
+        b.fmt("build_script/{s}", .{sampler_need_compile_txt}),
     });
 
     const runContenManager = b.step("run content manager", "collect resources");
@@ -413,12 +427,17 @@ pub fn build(b: *std.Build) void {
 
     pipeline_script_cmd.step.dependOn(shader_compile);
     pipeline_script_cmd.step.dependOn(&pipelineJsonParse_exe.step);
-    pipeline_compile.dependOn(&pipeline_script_cmd.step);
     pipeline_script_cmd.step.dependOn(&compile_txt_pipeline_cmd.step);
+    pipeline_compile.dependOn(&pipeline_script_cmd.step);
+
+    sampler_script_cmd.step.dependOn(&compile_txt_sampler_cmd.step);
+    sampler_script_cmd.step.dependOn(&samplerJsonPrase_exe.step);
+    sampler_compile.dependOn(&sampler_script_cmd.step);
 
     // contenManager.step.dependOn(&copy_blake3_header.step);
     runContenManager.dependOn(&runContenManager_cmd.step);
     runContenManager_cmd.step.dependOn(pipeline_compile);
+    runContenManager_cmd.step.dependOn(sampler_compile);
 
     runGenFileNameIdExe.dependOn(&runGenFileNameIdExe_cmd.step);
     runGenFileNameIdExe_cmd.step.dependOn(runContenManager);

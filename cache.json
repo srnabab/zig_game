@@ -9,7 +9,7 @@
 	},
 	{
 		"path": "Pipeline\\flat2d.pipe",
-		"hash": "66c7d448e229259d"
+		"hash": "f400c7997628e154"
 	},
 	{
 		"path": "Shaders\\particle.comp",
@@ -52,6 +52,10 @@
 		"hash": "e98cfd7c1e104899"
 	},
 	{
+		"path": ".\\Sampler\\pixel2dSampler.json",
+		"hash": "f367baaa1822b4b1"
+	},
+	{
 		"path": "Shaders\\shape.frag",
 		"hash": "d566d14d53f7aa42"
 	},
@@ -61,7 +65,7 @@
 	},
 	{
 		"path": "Shaders\\flat2d.vert",
-		"hash": "fa4c135db1d11e18"
+		"hash": "2ec30fe4b7e7f926"
 	},
 	{
 		"path": "Shaders\\model3d.vert",
@@ -69,6 +73,6 @@
 	},
 	{
 		"path": "Pipeline\\model3d.pipe",
-		"hash": "21bfb1badd51749f"
+		"hash": "cf5c67a6fb96e13e"
 	}
 ]
