@@ -216,6 +216,5 @@ pub fn main() !void {
     try writer.end();
 
     const endTime = std.time.nanoTimestamp();
-
     std.log.info("create pipeline file {s} time: {d}ms", .{ args[3], @as(f128, @floatFromInt(endTime - start)) / @as(f128, @floatFromInt(std.time.ns_per_ms)) });
 }

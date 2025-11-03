@@ -177,8 +177,24 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const sampler_mod = b.createModule(.{
+        .root_source_file = b.path("src/sampler/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const sampler_read_mod = b.createModule(.{
+        .root_source_file = b.path("src/sampler/read.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     // dependency
+    sampler_read_mod.addImport("vulkan", vk_mod);
+    sampler_read_mod.addImport("fileSystem", fileSystem_mod);
+    sampler_read_mod.addImport("tracy", tracy.module("tracy"));
+
+    sampler_mod.addImport("vulkan", vk_mod);
+
     vk_mod.addIncludePath(b.path("include"));
 
     math_mod.addImport("tracy", tracy.module("tracy"));
@@ -225,8 +241,8 @@ pub fn build(b: *std.Build) void {
     textureSet_mod.addImport("vulkan", vk_mod);
     textureSet_mod.addImport("memoryPool", memoryPool_mod);
     textureSet_mod.addImport("video", video_mod);
-    textureSet_mod.addImport("fileSystem", fileSystem_mod);
     textureSet_mod.addImport("global", global_mod);
+    textureSet_mod.addImport("fileSystem", fileSystem_mod);
     textureSet_mod.addImport("tracy", tracy.module("tracy"));
     textureSet_mod.addIncludePath(b.path("include"));
 
@@ -243,6 +259,7 @@ pub fn build(b: *std.Build) void {
     video_mod.addImport("textureSet", textureSet_mod);
     video_mod.addImport("tracy", tracy.module("tracy"));
     video_mod.addImport("fileSystem", fileSystem_mod);
+    video_mod.addImport("sampler", sampler_read_mod);
 
     queue_mod.addImport("tracy", tracy.module("tracy"));
 
@@ -299,6 +316,12 @@ pub fn build(b: *std.Build) void {
     exe_mod.linkLibrary(tracy.artifact("tracy"));
 
     // exe
+    const samplerJsonPrase_exe = b.addExecutable(.{
+        .name = "samplerJsonPrase",
+        .root_module = sampler_mod,
+    });
+    b.installArtifact(samplerJsonPrase_exe);
+
     const pipelineJsonParse_exe = b.addExecutable(.{
         .name = "pipelineJsonParse",
         .root_module = pipelineJsonParse_mod,
