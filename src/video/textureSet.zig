@@ -12,6 +12,11 @@ const tracy = @import("tracy");
 const Self = @This();
 
 pub const Texture = struct {
+    const Offsets = struct {
+        offset: u32,
+        count: u32,
+    };
+
     ID: u32 = std.math.maxInt(u32),
 
     layouts: []vk.VkImageLayout,
@@ -22,6 +27,8 @@ pub const Texture = struct {
 
     image: VkStruct.Image,
     imageView: vk.VkImageView,
+
+    offsets: []Offsets = &.{},
 
     pub fn changeTextureLayout(self: *Texture, baseLayer: u32, layerCount: u32, dstLayout: vk.VkImageLayout) void {
         const zone = tracy.initZone(@src(), .{ .name = "change texture layout" });
@@ -34,26 +41,50 @@ pub const Texture = struct {
             value.* = dstLayout;
         }
     }
-    // pDescriptorSet: []vk.VkDescriptorSet,
-    // pShadowDescriptorSet: []vk.VkDescriptorSet,
 
-    // offsetSize: u32,
-    // refCount: u32,
-    // offsets: []struct {
-    //     offset: u32,
-    //     count: u32,
-    // },
+    pub fn changeTextureQueue(self: *Texture, queueType: VkStruct.CommandPoolType) void {
+        const zone = tracy.initZone(@src(), .{ .name = "change texture queue type" });
+        defer zone.deinit();
+
+        const queueIndex = switch (queueType) {
+            .graphic => global.vulkan.graphicQueueFamily.familyIndice,
+            .transfer => global.vulkan.transferQueueFamily.familyIndice,
+            .compute => global.vulkan.computeQueueFamily.familyIndice,
+        };
+
+        mutex.lock();
+        defer mutex.unlock();
+
+        self.image.queueIndex = queueIndex;
+    }
+
+    pub fn offsetsAdd(self: *Texture, offset: u32) !void {
+        const zone = tracy.initZone(@src(), .{ .name = "texture offsets add" });
+        defer zone.deinit();
+
+        if (self.offsets.len > 0 and self.offsets[self.offsets.len - 1].offset + self.offsets[self.offsets.len - 1].count * global.vertexCount == offset) {
+            self.offsets[self.offsets.len - 1].count += 1;
+        } else {
+            if (self.offsets.len == 0) {
+                self.offsets = try std.heap.page_allocator.alloc(Offsets, 1);
+            } else {
+                self.offsets = try std.heap.page_allocator.realloc(self.offsets, self.offsets.len * 2);
+            }
+
+            self.offsets[self.offsets.len - 1] = .{
+                .offset = offset,
+                .count = 1,
+            };
+        }
+    }
 };
 
-// const memType = std.heap.MemoryPoolExtra(Node, .{ .alignment = @alignOf(Node) });
-// var mem: memType = undefined;
-// var AutoIncrecemetnID = Atomic.Value(u32).init(0);
 var mutex: Mutex = .{};
 
 memory: std.heap.MemoryPoolExtra(Texture, .{}),
 map: std.hash_map.AutoHashMap(u32, *Texture),
 layoutMemory: MemoryPool(vk.VkImageLayout),
-// pub var textureSet: HashMapType = undefined;
+descriptorSetIndices: std.array_list.Managed(u32),
 
 pub fn init(allocator: std.mem.Allocator) Self {
     const zone = tracy.initZone(@src(), .{ .name = "init texture set" });
@@ -64,6 +95,7 @@ pub fn init(allocator: std.mem.Allocator) Self {
         .map = .init(allocator),
         .memory = .init(allocator),
         .layoutMemory = .init(allocator),
+        .descriptorSetIndices = .init(allocator),
     };
 }
 
@@ -79,6 +111,7 @@ pub fn deinit(self: *Self) void {
     var itt = self.map.valueIterator();
     while (itt.next()) |texture| {
         global.vulkan.destroyImage(texture.*.image);
+        global.vulkan.destroyImageView(texture.*.imageView);
     }
 
     self.map.deinit();
@@ -154,6 +187,8 @@ pub fn createImageTexture(self: *Self, fileID: u32) !*Texture {
             .buffer = stagingBuffer,
         } },
     );
+
+    texture.imageView = try global.vulkan.createImageView2D(texture.image.vkImage, texture.format);
 
     return texture;
 }

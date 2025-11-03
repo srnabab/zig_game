@@ -18,6 +18,7 @@ const vma = @import("vma").vma;
 const tracy = @import("tracy");
 const file = @import("fileSystem");
 const translate = @import("translate");
+const samplerRead = @import("sampler");
 
 const layerNeeded = layer: {
     break :layer switch (builtin.mode) {
@@ -122,6 +123,7 @@ const set1SetLayoutCreateInfos = descriptorSetLayoutCreateInfo{
         0,
     },
 };
+const globalTextureBinding = 0;
 
 const VkQueueFamily = struct {
     familyIndice: i32 = -1,
@@ -130,10 +132,10 @@ const VkQueueFamily = struct {
 const VkTheadQueue = struct { queue: vk.VkQueue = null, mutex: Mutex = .{} };
 
 const setLayoutLimit = @import("translate").setLayoutLimit;
-const Pipeline = struct {
+pub const Pipeline = struct {
     // descriptorSetLayouts: [setLayoutLimit]vk.VkDescriptorSetLayout,
     setCount: u32,
-    // descriptorSet: vk.VkDescriptorSet,
+    vertexBindingCount: u32,
     pipelineLayout: vk.VkPipelineLayout,
     pipeline: vk.VkPipeline,
 };
@@ -142,12 +144,12 @@ pub const Buffer = struct {
     vkBuffer: vk.VkBuffer,
     allocation: vma.VmaAllocation,
     info: vma.VmaAllocationInfo,
-    queueIndex: i32,
+    queueIndex: i32 = -1,
 };
 pub const Image = struct {
     vkImage: vk.VkImage,
     allocation: vma.VmaAllocation,
-    queueIndex: i32,
+    queueIndex: i32 = -1,
 };
 
 const CommandPool = struct {
@@ -183,6 +185,8 @@ const AllocationCount = struct {
 };
 const Self = @This();
 
+const bufferRatio: f32 = 0.5 / 11;
+
 currentFrame: std.atomic.Value(u32) = .init(0),
 
 allocator: Allocator,
@@ -199,6 +203,7 @@ surface: vk.VkSurfaceKHR = null,
 surfaceFormat: vk.VkSurfaceFormatKHR = .{},
 presentMode: vk.VkPresentModeKHR = 0,
 
+physicalDeviceMemoryCount: u64 = 0,
 physicalDevice: vk.VkPhysicalDevice = null,
 device: vk.VkDevice = null,
 
@@ -244,6 +249,17 @@ globalFixed2dMVPMatrixDescriptorSet: vk.VkDescriptorSet = null,
 global2dMVPMatrixDescriptorSet: vk.VkDescriptorSet = null,
 global3dMVPMatrixDescriptorSet: vk.VkDescriptorSet = null,
 globalTextureDescriptorSet: vk.VkDescriptorSet = null,
+
+vertexBuffer2d: Buffer = undefined,
+vertexBuffer3d: Buffer = undefined,
+
+indexBuffer2d: Buffer = undefined,
+indexBuffer3d: Buffer = undefined,
+
+writeDescriptorSets: std.array_list.Managed(vk.VkWriteDescriptorSet) = undefined,
+descriptorImageInfos: std.array_list.Managed(vk.VkDescriptorImageInfo) = undefined,
+descriptorBufferInfos: std.array_list.Managed(vk.VkDescriptorBufferInfo) = undefined,
+descriptorBufferViewInfos: std.array_list.Managed(vk.VkBufferView) = undefined,
 
 fn comptime_print(comptime format: []const u8, comptime args: anytype) void {
     @compileLog(std.fmt.comptimePrint(format, args));
@@ -317,6 +333,10 @@ pub fn init(allocator: Allocator) Self {
         .entryNames = .init(allocator),
         .pipelines = .init(allocator),
         .textureSets = .init(allocator),
+        .writeDescriptorSets = .init(allocator),
+        .descriptorImageInfos = .init(allocator),
+        .descriptorBufferInfos = .init(allocator),
+        .descriptorBufferViewInfos = .init(allocator),
     };
 }
 
@@ -373,6 +393,8 @@ pub fn deinit(self: *Self) void {
     self.waitDevice() catch |err| {
         std.log.err("wait device error {s}\n", .{@errorName(err)});
     };
+
+    // self.vmaStatistics();
 
     const zone = tracy.initZone(@src(), .{ .name = "deinit vulkan resources" });
     defer zone.deinit();
@@ -655,11 +677,15 @@ fn pickPhysicalDevice(self: *Self) !void {
                     vk.VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU => {
                         self.*.physicalDevice = devicee;
                         biggestMemory = @max(biggestMemory, memoryCount);
+
+                        std.log.debug("device: choosed {s}", .{@tagName(@as(VkPhysicalType, @enumFromInt(deviceProperty.deviceType)))});
                     },
                     vk.VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU => {
                         if (self.*.physicalDevice == null) {
                             self.*.physicalDevice = devicee;
                             biggestMemory = @max(biggestMemory, memoryCount);
+
+                            std.log.debug("device: choosed {s}", .{@tagName(@as(VkPhysicalType, @enumFromInt(deviceProperty.deviceType)))});
                         }
                     },
                     else => {
@@ -668,10 +694,11 @@ fn pickPhysicalDevice(self: *Self) !void {
                     },
                 }
             } else {}
-
-            std.log.debug("device: choosed {s}", .{@tagName(@as(VkPhysicalType, @enumFromInt(deviceProperty.deviceType)))});
         } else {}
     }
+
+    self.physicalDeviceMemoryCount = biggestMemory;
+    std.log.debug("gpu memory: {d} GB", .{@as(f64, @floatFromInt(self.physicalDeviceMemoryCount)) / (1024 * 1024 * 1024)});
 }
 
 fn setQueueFamilies(self: *Self) !void {
@@ -1103,7 +1130,7 @@ pub fn createAllPipelinesAdded(self: *Self) !void {
     var pp: Pipeline = undefined;
     for (0..self.graphicInfoCount) |i| {
         pp = Pipeline{
-            // .descriptorSetLayouts = self.preGraphicInfoPtrs[i].descriptorSetLayouts.setLayouts,
+            .vertexBindingCount = self.preGraphicInfoPtrs[i].vertexInputInfo.bindingCount,
             .setCount = self.preGraphicInfoPtrs[i].pipelineCreateInfoInfo.setLayoutCount,
             .pipelineLayout = self.preGraphicInfoPtrs[i].pipelineLayout.layout,
             .pipeline = temp[i],
@@ -1580,4 +1607,143 @@ pub fn allocateDescriptorSets(self: *Self, pool: vk.VkDescriptorPool, setLayouts
     };
 
     try checkVkResult(vk.vkAllocateDescriptorSets(self.device, @ptrCast(&allocaInfo), @ptrCast(descriptorSets)));
+}
+
+pub fn vmaStatistics(self: *Self) void {
+    const zone = tracy.initZone(@src(), .{ .name = "vma statistics" });
+    defer zone.deinit();
+
+    var stat: vma.VmaTotalStatistics = .{};
+
+    vma.vmaCalculateStatistics(self.vmaAllocator, @ptrCast(&stat));
+
+    for (stat.memoryHeap) |value| {
+        if (value.statistics.blockCount == 0) continue;
+
+        std.log.debug("{}", .{value});
+    }
+    for (stat.memoryType) |value| {
+        if (value.statistics.blockCount == 0) continue;
+
+        std.log.debug("{}", .{value});
+    }
+    std.log.debug("{}", .{stat.total});
+}
+
+pub fn addWriteDescriptorSetImage(self: *Self, dstArrayElement: u32, imageView: vk.VkImageView, sampler: vk.VkSampler) !void {
+    const zone = tracy.initZone(@src(), .{ .name = "add descriptor write sets" });
+    defer zone.deinit();
+
+    const imagePtr = try self.descriptorImageInfos.addOne();
+    errdefer _ = self.descriptorImageInfos.pop();
+    imagePtr.* = vk.VkDescriptorImageInfo{
+        .imageView = imageView,
+        .sampler = sampler,
+        .imageLayout = vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    };
+
+    const writePtr = try self.writeDescriptorSets.addOne();
+    writePtr.* = vk.VkWriteDescriptorSet{
+        .sType = vk.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .pNext = null,
+        .dstSet = self.globalTextureDescriptorSet,
+        .dstBinding = globalTextureBinding,
+        .dstArrayElement = dstArrayElement,
+        .descriptorCount = 1,
+        .descriptorType = vk.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .pImageInfo = @ptrCast(imagePtr),
+        .pBufferInfo = null,
+        .pTexelBufferView = null,
+    };
+}
+
+pub fn writeCachedDescriptorSetResources(self: *Self) void {
+    const zone = tracy.initZone(@src(), .{ .name = "update descriptor wrote sets" });
+    defer zone.deinit();
+
+    vk.vkUpdateDescriptorSets(
+        self.device,
+        self.writeDescriptorSets.items.len,
+        @ptrCast(self.writeDescriptorSets.items.ptr),
+        0,
+        null,
+    );
+
+    self.writeDescriptorSets.clearRetainingCapacity();
+    self.descriptorImageInfos.clearRetainingCapacity();
+    self.descriptorBufferInfos.clearRetainingCapacity();
+    self.descriptorBufferViewInfos.clearRetainingCapacity();
+}
+
+pub fn _createImageView(
+    self: *Self,
+    pNext: ?*anyopaque,
+    flags: vk.VkImageViewCreateFlags,
+    image: vk.VkImage,
+    viewType: vk.VkImageViewType,
+    format: vk.VkFormat,
+    components: vk.VkComponentMapping,
+    aspectFlags: vk.VkImageAspectFlags,
+    baseMipLevel: u32,
+    levelCount: u32,
+    baseArrayLayer: u32,
+    layerCount: u32,
+) VkError!vk.VkImageView {
+    var createInfo = vk.VkImageViewCreateInfo{
+        .sType = vk.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .pNext = pNext,
+        .flags = flags,
+        .image = image,
+        .viewType = viewType,
+        .format = format,
+        .components = components,
+        .subresourceRange = vk.VkImageSubresourceRange{
+            .aspectMask = aspectFlags,
+            .baseMipLevel = baseMipLevel,
+            .levelCount = levelCount,
+            .baseArrayLayer = baseArrayLayer,
+            .layerCount = layerCount,
+        },
+    };
+
+    var imageView: vk.VkImageView = null;
+    try checkVkResult(vk.vkCreateImageView(self.device, @ptrCast(&createInfo), self.pAllocCallBacks, @ptrCast(&imageView)));
+
+    return imageView;
+}
+
+pub fn createImageView2D(self: *Self, image: vk.VkImage, format: vk.VkFormat) VkError!vk.VkImageView {
+    return self._createImageView(
+        null,
+        0,
+        image,
+        vk.VK_IMAGE_VIEW_TYPE_2D,
+        format,
+        vk.VkComponentMapping{
+            .r = vk.VK_COMPONENT_SWIZZLE_IDENTITY,
+            .g = vk.VK_COMPONENT_SWIZZLE_IDENTITY,
+            .b = vk.VK_COMPONENT_SWIZZLE_IDENTITY,
+            .a = vk.VK_COMPONENT_SWIZZLE_IDENTITY,
+        },
+        vk.VK_IMAGE_ASPECT_COLOR_BIT,
+        0,
+        1,
+        0,
+        1,
+    );
+}
+
+pub fn _createSampler(self: *Self, ID: u32, anisotropy: f32) !vk.VkSampler {
+    var info = try samplerRead.readSampler(ID, self.allocator);
+    info.maxAnisotropy = anisotropy;
+
+    var sampler: vk.VkSampler = null;
+
+    try checkVkResult(vk.vkCreateSampler(self.device, @ptrCast(&info), self.pAllocCallBacks, @ptrCast(&sampler)));
+
+    return sampler;
+}
+
+pub fn destroyImageView(self: *Self, imageView: vk.VkImageView) void {
+    vk.vkDestroyImageView(self.device, imageView, self.pAllocCallBacks);
 }
