@@ -576,6 +576,41 @@ fn DAG(T: type) type {
     };
 }
 
+fn nodeDagPrint(self: *QueueNodes) void {
+    const zone = tracy.initZone(@src(), .{ .name = "dag print" });
+    defer zone.deinit();
+
+    var buffer = [_]u8{0} ** 1024;
+    var buffer2 = [_]u8{0} ** 1024;
+    var writer = std.Io.Writer.fixed(&buffer);
+    var writer2 = std.Io.Writer.fixed(&buffer2);
+
+    for (0..self.innerID) |i| {
+        if (self.map.get(@intCast(i))) |n| {
+            for (n.parents.list.items) |ID| {
+                const ll: *QueueNode = @alignCast(@fieldParentPtr("ID", ID));
+
+                writer.print("{d} {s} ", .{ ll.ID, @tagName(self.map.get(ID.*).?.data.commandPoolType) }) catch |err| {
+                    std.log.err("write err: {s}", .{@errorName(err)});
+                };
+            }
+
+            for (n.children.list.items) |ID| {
+                const ll: *QueueNode = @alignCast(@fieldParentPtr("ID", ID));
+
+                writer2.print("{d} {s} ", .{ ll.ID, @tagName(self.map.get(ID.*).?.data.commandPoolType) }) catch |err| {
+                    std.log.err("write err: {s}", .{@errorName(err)});
+                };
+            }
+
+            std.log.debug("[{s}] => ID: {d} => [{s}]", .{ buffer[0..if (writer.end > 1) writer.end - 1 else 0], n.ID, buffer2[0..if (writer2.end > 1) writer2.end - 1 else 0] });
+            _ = writer.consumeAll();
+            _ = writer2.consumeAll();
+        }
+    }
+    std.log.debug("\n", .{});
+}
+
 const MaxThreads = 8;
 
 const ThreadContext = struct {
@@ -700,7 +735,7 @@ pub const oneTimeCommand = struct {
         defer zone.deinit();
 
         return rs: switch (commandType) {
-            .start, .beginPrimaryRecord, .beginRendering, .beginSecondaryRecord, .endRendering, .endRecord, .present, .graphic, .copyBufferToImage, .graphicTransfer, .transfer, .end, .pipelineBarrier => {
+            .start, .beginPrimaryRecord, .beginRendering, .beginSecondaryRecord, .endRendering, .endRecord, .present, .draw2D, .copyBufferToImage, .graphicTransfer, .transfer, .end, .pipelineBarrier => {
                 break :rs drawC.Output{ .empty = void{} };
             },
             .transLayout => {
@@ -908,11 +943,13 @@ pub const oneTimeCommand = struct {
 
                     if (prev) |p| {
                         // p.insertPrev(node);
+                        node.data.commandPoolType = p.data.commandPoolType;
                         try node.childrenAppend(&p.ID);
                         try p.parentsAppend(&node.ID);
                     }
                     if (next) |n| {
                         // n.insertNext(node);
+                        node.data.commandPoolType = n.data.commandPoolType;
                         try node.parentsAppend(&n.ID);
                         try n.childrenAppend(&node.ID);
                     }
@@ -970,13 +1007,6 @@ pub const oneTimeCommand = struct {
             .output = getOuput(allCommandType, command),
         };
 
-        // // first command directly add to queue
-        // if (ID == 1) {
-        //     const root = self.nodeDag.get(0).?;
-        //     root.childrenAppend(&node.node);
-        //     node.parentsAppend(&root.node);
-        // }
-
         // dependcy infer
         // combine memory barrier operation with same src stage mask
         // combine same image draw call
@@ -984,8 +1014,14 @@ pub const oneTimeCommand = struct {
         const zone2 = tracy.initZone(@src(), .{ .name = "infer dependency 1" });
         errdefer zone2.deinit();
         switch (commandType) {
-            .graphic => {},
+            // .draw2D => {
+            //     node.data.commandPoolType = .graphic;
+            // },
             .copyBufferToImage => {
+                node.data.commandPoolType = .transfer;
+
+                ptr.value_ptr.command.copyBufferToImage.dstImage = command.copyBufferToImage.pTexture.image.vkImage;
+
                 const copyBufferToImage = command.copyBufferToImage;
                 const oldLayouts = self.stackAllocator.alloc(vk.VkImageLayout, copyBufferToImage.layerCount) catch |err| mm: {
                     std.log.err("stack alloc error {s}\n", .{@errorName(err)});
@@ -1034,6 +1070,8 @@ pub const oneTimeCommand = struct {
                     } }, node, null);
                 }
                 copyBufferToImage.pTexture.changeTextureLayout(copyBufferToImage.baseArrayLayer, copyBufferToImage.layerCount, vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+                copyBufferToImage.pTexture.changeTextureQueue(.transfer);
+                global.textureSet.giveBackTexture(copyBufferToImage.pTexture);
             },
             else => {
                 std.debug.panic("not supported commandType {s}", .{@tagName(commandType)});
@@ -1069,159 +1107,10 @@ pub const oneTimeCommand = struct {
 
     /// complete dependency
     pub fn addCommandEnd(self: *Self) !void {
-        // self.nodeDag.print();
+        nodeDagPrint(&self.nodeDag);
 
         const zone = tracy.initZone(@src(), .{ .name = "add command end" });
         defer zone.deinit();
-
-        // {
-        // var combineMap: std.AutoHashMap(u64, std.array_list.Managed(*QueueNode)) = .init(self.allocator);
-        // defer combineMap.deinit();
-        // var wyHash = std.hash.Wyhash.init(std.crypto.random.int(u64));
-
-        // var firstNode = self.nodeDag.get(0);
-        // var nextNodeQueue: Queue(*QueueNode) = undefined;
-        // nextNodeQueue.init(self.allocator);
-        // defer nextNodeQueue.deinit();
-
-        // while (firstNode) |nn| {
-        //     if (nn.childrenLen > 1) {
-        //         try nextNodeQueue.pushLast(nn);
-        //     }
-
-        //     if (nn.parentsDone >= nn.parentsLen) {
-        //         nn.nodeDone();
-
-        //         const command = self.queue.getPtr(nn.ID).?;
-        //         const hash: u64 = hs: {
-        //             switch (command.commandType) {
-        //                 .transLayout => {
-        //                     const transLayout = command.command.transLayout;
-        //                     break :hs math.szudzikPairing(transLayout.sourceStage, transLayout.destinationStage);
-        //                 },
-        //                 .copyBufferToImage => {
-        //                     const copyBufferToImage = command.command.copyBufferToImage;
-        //                     const a = @intFromPtr(copyBufferToImage.buffer.vkBuffer);
-        //                     const b = @intFromPtr(copyBufferToImage.pTexture.image.vkImage);
-        //                     wyHash.update(std.mem.asBytes(&a));
-        //                     wyHash.update(std.mem.asBytes(&b));
-        //                     break :hs wyHash.final();
-        //                 },
-        //                 else => {
-        //                     std.debug.panic("not supported commandType {s}", .{@tagName(command.commandType)});
-        //                 },
-        //             }
-        //         };
-        //         const list = try combineMap.getOrPut(hash);
-        //         if (!list.found_existing) {
-        //             list.value_ptr.* = .init(self.allocator);
-        //         }
-        //         try list.value_ptr.append(self.allocator, nn);
-
-        //         firstNode = nn.getFirstUndoneChild();
-        //         if (firstNode == null) {
-        //             var node = nextNodeQueue.peekLast();
-        //             while (node) |value| {
-        //                 firstNode = value.getFirstUndoneChild();
-        //                 if (firstNode == null) {
-        //                     _ = nextNodeQueue.popLast();
-        //                     node = nextNodeQueue.peekLast();
-        //                 } else {
-        //                     break;
-        //                 }
-        //             } else {
-        //                 firstNode = null;
-        //             }
-        //         }
-        //     } else {
-        //         var node = nextNodeQueue.peekLast();
-        //         while (node) |value| {
-        //             firstNode = value.getFirstUndoneChild();
-        //             if (firstNode == null) {
-        //                 _ = nextNodeQueue.popLast();
-        //                 node = nextNodeQueue.peekLast();
-        //             } else {
-        //                 break;
-        //             }
-        //         } else {
-        //             firstNode = null;
-        //         }
-        //     }
-        // }
-
-        // var it = combineMap.valueIterator();
-        // while (it.next()) |value| {
-        //     if (value.items.len < 2) {
-        //         value.deinit();
-        //         continue;
-        //     } else {
-        //         const root = value.items[0];
-        //         const command = self.queue.get(root.ID).?;
-
-        //         switch (command.commandType) {
-        //             .transLayout => {
-        //                 const commandPtr = self.queue.getPtr(root.ID).?;
-        //                 commandPtr.command = .{ .pipelineBarrier = .{
-        //                     .sourceStage = command.command.transLayout.sourceStage,
-        //                     .destinationStage = command.command.transLayout.destinationStage,
-        //                     .barriers = try self.arenaAllocator.allocator().alloc(drawC.Barrier, value.items.len),
-        //                 } };
-        //                 commandPtr.command.pipelineBarrier.barriers[0] = .{ .imageMemory = .{
-        //                     .srcAccessMask = command.command.transLayout.srcAccessMask,
-        //                     .dstAccessMask = command.command.transLayout.dstAccessMask,
-        //                     .oldLayout = command.command.transLayout.oldLayout,
-        //                     .newLayout = command.command.transLayout.newLayout,
-        //                     .srcQueueFamilyIndex = command.command.transLayout.srcQueueFamilyIndex,
-        //                     .dstQueueFamilyIndex = command.command.transLayout.dstQueueFamilyIndex,
-        //                     .image = command.command.transLayout.pTexture.image.vkImage,
-        //                     .subresourceRange = .{
-        //                         .aspectMask = command.command.transLayout.aspectMask,
-        //                         .baseMipLevel = command.command.transLayout.baseMipLevel,
-        //                         .levelCount = command.command.transLayout.levelCount,
-        //                         .baseArrayLayer = command.command.transLayout.baseLayer,
-        //                         .layerCount = command.command.transLayout.layerCount,
-        //                     },
-        //                 } };
-
-        //                 for (value.*.items[1..], 1..) |node, i| {
-        //                     const currentCommand = self.queue.getPtr(node.ID).?;
-        //                     switch (currentCommand.commandType) {
-        //                         .transLayout => {
-        //                             commandPtr.command.pipelineBarrier.barriers[i] = .{ .imageMemory = .{
-        //                                 .srcAccessMask = currentCommand.command.transLayout.srcAccessMask,
-        //                                 .dstAccessMask = currentCommand.command.transLayout.dstAccessMask,
-        //                                 .oldLayout = currentCommand.command.transLayout.oldLayout,
-        //                                 .newLayout = currentCommand.command.transLayout.newLayout,
-        //                                 .srcQueueFamilyIndex = currentCommand.command.transLayout.srcQueueFamilyIndex,
-        //                                 .dstQueueFamilyIndex = currentCommand.command.transLayout.dstQueueFamilyIndex,
-        //                                 .image = currentCommand.command.transLayout.pTexture.image.vkImage,
-        //                                 .subresourceRange = .{
-        //                                     .aspectMask = currentCommand.command.transLayout.aspectMask,
-        //                                     .baseMipLevel = currentCommand.command.transLayout.baseMipLevel,
-        //                                     .levelCount = currentCommand.command.transLayout.levelCount,
-        //                                     .baseArrayLayer = currentCommand.command.transLayout.baseLayer,
-        //                                     .layerCount = currentCommand.command.transLayout.layerCount,
-        //                                 },
-        //                             } };
-        //                             // add current node children to root without repeat
-        //                             // add current node parents to root without repeat
-        //                         },
-        //                         else => {
-        //                             std.debug.panic("not supported commandType {s}", .{@tagName(currentCommand.commandType)});
-        //                         },
-        //                     }
-        //                 }
-        //             },
-        //             .copyBufferToImage => {},
-        //             else => {
-        //                 std.debug.panic("not supported commandType {s}", .{@tagName(command.commandType)});
-        //             },
-        //         }
-        //     }
-        // }
-
-        // self.nodeDag.undoneAllNodes();
-        // }
 
         self.executeSemaphore.post();
     }
@@ -1241,8 +1130,8 @@ pub const oneTimeCommand = struct {
                     .bufferOffset = 0,
                     .bufferRowLength = copyBufferToImage.bufferRowLength,
                     .imageExtent = .{
-                        .width = copyBufferToImage.pTexture.source_width,
-                        .height = copyBufferToImage.pTexture.source_height,
+                        .width = copyBufferToImage.width,
+                        .height = copyBufferToImage.height,
                         .depth = copyBufferToImage.depth,
                     },
                     .imageOffset = copyBufferToImage.imageOffset,
@@ -1256,7 +1145,7 @@ pub const oneTimeCommand = struct {
                 vk.vkCmdCopyBufferToImage(
                     commandBuffer,
                     copyBufferToImage.buffer.vkBuffer,
-                    copyBufferToImage.pTexture.image.vkImage,
+                    copyBufferToImage.dstImage,
                     copyBufferToImage.dstImageLayout,
                     1,
                     &region,

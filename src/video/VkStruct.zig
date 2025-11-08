@@ -187,6 +187,12 @@ const Self = @This();
 
 const bufferRatio: f32 = 0.5 / 11;
 
+pub const SamplerType = enum {
+    pixel2d,
+};
+
+pixel2dSampler: vk.VkSampler = null,
+
 currentFrame: std.atomic.Value(u32) = .init(0),
 
 allocator: Allocator,
@@ -261,8 +267,6 @@ descriptorImageInfos: std.array_list.Managed(vk.VkDescriptorImageInfo) = undefin
 descriptorBufferInfos: std.array_list.Managed(vk.VkDescriptorBufferInfo) = undefined,
 descriptorBufferViewInfos: std.array_list.Managed(vk.VkBufferView) = undefined,
 
-testSampler: vk.VkSampler = null,
-
 pub fn init(allocator: Allocator) Self {
     return Self{
         .allocator = allocator,
@@ -331,7 +335,7 @@ pub fn initVulkan(self: *Self) !void {
 
     self.globalTextureDescriptorSet = set1Sets[0];
 
-    self.testSampler = try self._createSampler(comptime file.comptimeGetID("pixel2dSampler.sampler"), 1.0);
+    try self.initSamplers();
 }
 
 pub fn deinit(self: *Self) void {
@@ -344,6 +348,8 @@ pub fn deinit(self: *Self) void {
     const zone = tracy.initZone(@src(), .{ .name = "deinit vulkan resources" });
     defer zone.deinit();
 
+    self.destroySamplers();
+
     self.writeDescriptorSets.deinit();
     self.descriptorImageInfos.deinit();
     self.descriptorBufferInfos.deinit();
@@ -355,10 +361,11 @@ pub fn deinit(self: *Self) void {
 
     self.destroyDescriptorPool(self.globalDescriptorPool);
 
-    var pipelines = self.pipelines.valueIterator();
+    var pipelines = self.pipelines.iterator();
     while (pipelines.next()) |val| {
-        vk.vkDestroyPipeline(self.device, val.pipeline, self.pAllocCallBacks);
-        vk.vkDestroyPipelineLayout(self.device, val.pipelineLayout, self.pAllocCallBacks);
+        vk.vkDestroyPipeline(self.device, val.value_ptr.pipeline, self.pAllocCallBacks);
+        vk.vkDestroyPipelineLayout(self.device, val.value_ptr.pipelineLayout, self.pAllocCallBacks);
+        self.allocator.free(val.key_ptr.*);
         // for (0..val.setCount) |i| {
         //     vk.vkDestroyDescriptorSetLayout(
         //         self.device,
@@ -1150,7 +1157,12 @@ pub fn createAllPipelinesAdded(self: *Self) !void {
             .pipelineLayout = self.preGraphicInfoPtrs[i].pipelineLayout.layout,
             .pipeline = temp[i],
         };
-        try self.pipelines.put(&self.preGraphicInfoPtrs[i].name, pp);
+        const len = std.mem.len(@as([*c]u8, @ptrCast(&self.preGraphicInfoPtrs[i].name)));
+        const name = try self.allocator.alloc(u8, len);
+        @memcpy(name, self.preGraphicInfoPtrs[i].name[0..len]);
+
+        try self.pipelines.put(name, pp);
+        std.log.debug("{s}", .{self.preGraphicInfoPtrs[i].name});
     }
     self.graphicInfoCount = 0;
 }
@@ -1761,4 +1773,22 @@ pub fn _createSampler(self: *Self, ID: u32, anisotropy: f32) !vk.VkSampler {
 
 pub fn destroyImageView(self: *Self, imageView: vk.VkImageView) void {
     vk.vkDestroyImageView(self.device, imageView, self.pAllocCallBacks);
+}
+
+pub fn initSamplers(self: *Self) !void {
+    self.pixel2dSampler = try self._createSampler(comptime file.comptimeGetID("pixel2dSampler.sampler"), 1.0);
+}
+
+pub fn destroySamplers(self: *Self) void {
+    vk.vkDestroySampler(self.device, self.pixel2dSampler, self.pAllocCallBacks);
+}
+
+pub fn getDefaultSampler(self: *Self, samplerType: SamplerType) vk.VkSampler {
+    return switch (samplerType) {
+        .pixel2d => self.pixel2dSampler,
+    };
+}
+
+pub fn getPipeline(self: *Self, pipelineName: []const u8) ?Pipeline {
+    return self.pipelines.get(pipelineName);
 }

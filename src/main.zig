@@ -106,8 +106,8 @@ pub fn main() !void {
     defer global.textureSet.deinit();
 
     try global.graphic.startCommand();
-    _ = try global.textureSet.createImageTexture(comptime file.comptimeGetID("non_exist.png"));
-    _ = global.textureSet.createImageTextureEnsureWithErrorImage(comptime file.comptimeGetID("circle.png"));
+    _ = try global.textureSet.createImageTexture(comptime file.comptimeGetID("non_exist.png"), .pixel2d);
+    _ = global.textureSet.createImageTextureEnsureWithErrorImage(comptime file.comptimeGetID("circle.png"), .pixel2d);
     try global.graphic.addCommandEnd();
 
     global.vulkan.writeCachedDescriptorSetResources();
@@ -122,6 +122,10 @@ pub fn main() !void {
     const renderStart = std.time.milliTimestamp();
     while (true) {
         try global.graphic.startCommand();
+        // try global.graphic.addCommand(.draw2D, .{ .draw2d = .{
+        //     .pipeline = global.vulkan.getPipeline("flat2d").?,
+        //     .pTexture = global.textureSet.getTexture(@intCast(file.getID("circle.png"))).?,
+        // } });
         try global.graphic.addCommandEnd();
         try global.graphic.executeCommands();
         global.vulkan.nextFrame();
@@ -147,6 +151,7 @@ pub fn main() !void {
     log.info("core will be used count: {d}", .{thread_used_count});
     log.info("update thread count {d}", .{update_thread});
     log.info("render thread count {d}", .{render_thread});
+    std.log.info("cache line {d}", .{std.atomic.cache_line});
 
     if (steamInner.SteamAPI_RestartAppIfNecessary_C(@as(u32, steamInner.k_uAppIdInvalid_C))) {
         return error.SteamError;

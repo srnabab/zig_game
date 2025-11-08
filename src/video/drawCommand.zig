@@ -5,7 +5,7 @@ const VkStruct = @import("video");
 
 pub const CommandType = enum {
     start,
-    graphic,
+    draw2D,
     transLayout,
     pipelineBarrier,
     copyBufferToImage,
@@ -94,7 +94,7 @@ pub const PublicCommandType: type = blk: {
 
 pub fn PublicCommandTypeToCommandType(a: PublicCommandType) CommandType {
     return switch (a) {
-        .graphic => .graphic,
+        .draw2D => .draw2D,
         .copyBufferToImage => .copyBufferToImage,
         .present => .present,
         .graphicTransfer => .graphicTransfer,
@@ -140,6 +140,7 @@ pub const CopyBufferToImage = struct {
     height: u32,
     depth: u32 = 1,
 
+    dstImage: vk.VkImage = null,
     dstImageLayout: vk.VkImageLayout = vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
     aspectMask: vk.VkImageAspectFlags = vk.VK_IMAGE_ASPECT_COLOR_BIT,
     mipLevel: u32 = 0,
@@ -228,8 +229,16 @@ const PipelineBarrier = struct {
     barriers: []Barrier,
 };
 
+const Draw2D = struct {
+    pipeline: VkStruct.Pipeline,
+    // vertexBuffer: VkStruct.Buffer,
+    // indexBuffer: VkStruct.Buffer,
+    pTexture: *texture.Texture,
+};
+
 pub const comm = union {
     start: Start,
+    draw2d: Draw2D,
     transLayout: TransLayout,
     copyBufferToImage: CopyBufferToImage,
     beginRecoed: BeginSecondaryRecord,

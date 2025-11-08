@@ -187,8 +187,20 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const stableArray_mod = b.createModule(.{
+        .root_source_file = b.path("src/stableArray/array.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const objectPool_mod = b.createModule(.{
+        .root_source_file = b.path("src/objectPool/pool.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     // dependency
+    objectPool_mod.addImport("tracy", tracy.module("tracy"));
+
     sampler_read_mod.addImport("vulkan", vk_mod);
     sampler_read_mod.addImport("fileSystem", fileSystem_mod);
     sampler_read_mod.addImport("tracy", tracy.module("tracy"));
@@ -244,7 +256,11 @@ pub fn build(b: *std.Build) void {
     textureSet_mod.addImport("global", global_mod);
     textureSet_mod.addImport("fileSystem", fileSystem_mod);
     textureSet_mod.addImport("tracy", tracy.module("tracy"));
+    textureSet_mod.addImport("stableArray", stableArray_mod);
+    textureSet_mod.addImport("objectPool", objectPool_mod);
     textureSet_mod.addIncludePath(b.path("include"));
+
+    stableArray_mod.addImport("tracy", tracy.module("tracy"));
 
     stb_image_mod.addIncludePath(b.path("include"));
 
