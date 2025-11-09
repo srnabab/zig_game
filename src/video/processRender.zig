@@ -11,6 +11,7 @@ const global = @import("global");
 const tracy = @import("tracy");
 const math = @import("math");
 const uniqueArrayList = @import("uniqueArrayList").UniqueArrayList;
+// const objectPool
 
 var mutex = Thread.Mutex{};
 
@@ -655,11 +656,18 @@ const commandBufferDAG = DAG(CommandBufferBelong);
 
 const garbageDataTag = enum {
     buffer,
+    bufferAndRegion,
+    regions,
     barriers,
     empty,
 };
 const garbageData = union(garbageDataTag) {
     buffer: VkStruct.Buffer,
+    bufferAndRegion: struct {
+        buffer: VkStruct.Buffer,
+        region: []vk.VkBufferCopy,
+    },
+    regions: []vk.VkBufferCopy,
     barriers: []drawC.Barrier,
     empty: void,
 };
@@ -690,6 +698,7 @@ pub const oneTimeCommand = struct {
     mutex: Thread.Mutex = .{},
     executeSemaphore: Thread.Semaphore = .{},
 
+    cacheMap: std.AutoHashMap(*anyopaque, u32),
     garbageData: std.array_list.Managed(GarbageData),
 
     // commandPools: std.array_list.Managed(vk.VkCommandPool),
@@ -704,6 +713,7 @@ pub const oneTimeCommand = struct {
             .garbageData = .init(allocator),
             .stackAllocator = stackAllocator,
             .combineMap = .init(allocator),
+            .cacheMap = .init(allocator),
         };
     }
 
@@ -728,6 +738,7 @@ pub const oneTimeCommand = struct {
         };
         self.combineMap.deinit();
         self.garbageData.deinit();
+        self.cacheMap.deinit();
     }
 
     fn getOuput(commandType: drawC.CommandType, command: drawC.comm) drawC.Output {
@@ -735,11 +746,20 @@ pub const oneTimeCommand = struct {
         defer zone.deinit();
 
         return rs: switch (commandType) {
-            .start, .beginPrimaryRecord, .beginRendering, .beginSecondaryRecord, .endRendering, .endRecord, .present, .draw2D, .copyBufferToImage, .graphicTransfer, .transfer, .end, .pipelineBarrier => {
+            .start, .beginPrimaryRecord, .beginRendering, .beginSecondaryRecord, .endRendering, .endRecord, .present, .draw2D, .graphicTransfer, .transfer, .end, .pipelineBarrier => {
                 break :rs drawC.Output{ .empty = void{} };
             },
-            .transLayout => {
-                break :rs drawC.Output{ .image = command.transLayout.pTexture.image.vkImage };
+            .copyBufferToImage => {
+                break :rs drawC.Output{ .image = command.copyBufferToImage.dstImage };
+            },
+            .copyBuffer => {
+                break :rs drawC.Output{ .buffer = command.copyBuffer.dstBuffer.vkBuffer };
+            },
+            // .transLayout => {
+            //     break :rs drawC.Output{ .image = command.transLayout.pTexture.image.vkImage };
+            // },
+            else => {
+                std.debug.panic("not support {s}", .{@tagName(commandType)});
             },
         };
     }
@@ -1017,12 +1037,22 @@ pub const oneTimeCommand = struct {
             // .draw2D => {
             //     node.data.commandPoolType = .graphic;
             // },
+            .copyBuffer => {
+                node.data.commandPoolType = .transfer;
+
+                const copyBuffer = ptr.value_ptr.command.copyBuffer;
+                const tempRegions = copyBuffer.regions;
+
+                ptr.value_ptr.*.command.copyBuffer.regions = try self.allocator.dupe(vk.VkBufferCopy, tempRegions);
+
+                try self.cacheMap.put(@ptrCast(copyBuffer.dstBuffer.vkBuffer), ID);
+            },
             .copyBufferToImage => {
                 node.data.commandPoolType = .transfer;
 
                 ptr.value_ptr.command.copyBufferToImage.dstImage = command.copyBufferToImage.pTexture.image.vkImage;
 
-                const copyBufferToImage = command.copyBufferToImage;
+                const copyBufferToImage = ptr.value_ptr.command.copyBufferToImage;
                 const oldLayouts = self.stackAllocator.alloc(vk.VkImageLayout, copyBufferToImage.layerCount) catch |err| mm: {
                     std.log.err("stack alloc error {s}\n", .{@errorName(err)});
                     break :mm try self.allocator.alloc(vk.VkImageLayout, copyBufferToImage.layerCount);
@@ -1072,6 +1102,8 @@ pub const oneTimeCommand = struct {
                 copyBufferToImage.pTexture.changeTextureLayout(copyBufferToImage.baseArrayLayer, copyBufferToImage.layerCount, vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
                 copyBufferToImage.pTexture.changeTextureQueue(.transfer);
                 global.textureSet.giveBackTexture(copyBufferToImage.pTexture);
+
+                try self.cacheMap.put(@ptrCast(copyBufferToImage.dstImage), ID);
             },
             else => {
                 std.debug.panic("not supported commandType {s}", .{@tagName(commandType)});
@@ -1094,6 +1126,26 @@ pub const oneTimeCommand = struct {
                     try currentNode.parentsAppend(&root.ID);
                 } else {
                     std.debug.panic("not supported", .{});
+                }
+            },
+            .copyBuffer => {
+                const copyBuffer = comm.command.copyBuffer;
+
+                const index_ = self.cacheMap.get(@ptrCast(copyBuffer.srcBuffer.vkBuffer));
+                if (index_) |idnex| {
+                    const prev = self.nodeDag.get(idnex).?;
+                    if (prev == node) {
+                        const root = self.nodeDag.get(0).?;
+                        try root.childrenAppend(&currentNode.ID);
+                        try currentNode.parentsAppend(&root.ID);
+                    } else {
+                        try prev.childrenAppend(&currentNode.ID);
+                        try currentNode.parentsAppend(&prev.ID);
+                    }
+                } else {
+                    const root = self.nodeDag.get(0).?;
+                    try root.childrenAppend(&currentNode.ID);
+                    try currentNode.parentsAppend(&root.ID);
                 }
             },
             else => {
@@ -1152,31 +1204,31 @@ pub const oneTimeCommand = struct {
                 );
             },
             .start => {},
-            .transLayout => {
-                const innerZone = tracy.initZone(@src(), .{ .name = "trans layout" });
-                defer innerZone.deinit();
+            // .transLayout => {
+            // const innerZone = tracy.initZone(@src(), .{ .name = "trans layout" });
+            // defer innerZone.deinit();
 
-                const transLayout = command.command.transLayout;
-                var imageMemoryBarrier = vk.VkImageMemoryBarrier{
-                    .sType = vk.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-                    .pNext = null,
-                    .srcAccessMask = transLayout.srcAccessMask,
-                    .dstAccessMask = transLayout.dstAccessMask,
-                    .oldLayout = transLayout.oldLayout,
-                    .newLayout = transLayout.newLayout,
-                    .srcQueueFamilyIndex = vk.VK_QUEUE_FAMILY_IGNORED,
-                    .dstQueueFamilyIndex = vk.VK_QUEUE_FAMILY_IGNORED,
-                    .image = transLayout.pTexture.image.vkImage,
-                    .subresourceRange = .{
-                        .aspectMask = transLayout.aspectMask,
-                        .baseMipLevel = transLayout.baseMipLevel,
-                        .levelCount = transLayout.levelCount,
-                        .baseArrayLayer = transLayout.baseLayer,
-                        .layerCount = transLayout.layerCount,
-                    },
-                };
-                vk.vkCmdPipelineBarrier(commandBuffer, transLayout.sourceStage, transLayout.destinationStage, 0, 0, null, 0, null, 1, &imageMemoryBarrier);
-            },
+            // const transLayout = command.command.transLayout;
+            // var imageMemoryBarrier = vk.VkImageMemoryBarrier{
+            //     .sType = vk.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            //     .pNext = null,
+            //     .srcAccessMask = transLayout.srcAccessMask,
+            //     .dstAccessMask = transLayout.dstAccessMask,
+            //     .oldLayout = transLayout.oldLayout,
+            //     .newLayout = transLayout.newLayout,
+            //     .srcQueueFamilyIndex = vk.VK_QUEUE_FAMILY_IGNORED,
+            //     .dstQueueFamilyIndex = vk.VK_QUEUE_FAMILY_IGNORED,
+            //     .image = transLayout.pTexture.image.vkImage,
+            //     .subresourceRange = .{
+            //         .aspectMask = transLayout.aspectMask,
+            //         .baseMipLevel = transLayout.baseMipLevel,
+            //         .levelCount = transLayout.levelCount,
+            //         .baseArrayLayer = transLayout.baseLayer,
+            //         .layerCount = transLayout.layerCount,
+            //     },
+            // };
+            // vk.vkCmdPipelineBarrier(commandBuffer, transLayout.sourceStage, transLayout.destinationStage, 0, 0, null, 0, null, 1, &imageMemoryBarrier);
+            // },
             .pipelineBarrier => {
                 const innerZone = tracy.initZone(@src(), .{ .name = "pipeline barrier" });
                 defer innerZone.deinit();
@@ -1269,6 +1321,19 @@ pub const oneTimeCommand = struct {
                     bufferMemoryBarriers.items.ptr,
                     imageMemoryBarrierCount,
                     imageMemoryBarriers.items.ptr,
+                );
+            },
+            .copyBuffer => {
+                const innerZone = tracy.initZone(@src(), .{ .name = "copy buffer" });
+                defer innerZone.deinit();
+
+                const copyBuffer = command.command.copyBuffer;
+                vk.vkCmdCopyBuffer(
+                    commandBuffer,
+                    copyBuffer.srcBuffer.vkBuffer,
+                    copyBuffer.dstBuffer.vkBuffer,
+                    @intCast(copyBuffer.regions.len),
+                    @ptrCast(copyBuffer.regions.ptr),
                 );
             },
             else => {
@@ -1368,9 +1433,25 @@ pub const oneTimeCommand = struct {
         const zone = tracy.initZone(@src(), .{ .name = "get garbage" });
         defer zone.deinit();
 
-        return switch (command.commandType) {
-            .copyBufferToImage => garbageData{ .buffer = command.command.copyBufferToImage.buffer },
-            .pipelineBarrier => garbageData{ .barriers = command.command.pipelineBarrier.barriers },
+        return rs: switch (command.commandType) {
+            .copyBufferToImage => {
+                if (command.command.copyBufferToImage.clean) {
+                    break :rs garbageData{ .buffer = command.command.copyBufferToImage.buffer };
+                } else {
+                    break :rs null;
+                }
+            },
+            .pipelineBarrier => break :rs garbageData{ .barriers = command.command.pipelineBarrier.barriers },
+            .copyBuffer => {
+                if (command.command.copyBuffer.clean) {
+                    break :rs garbageData{ .bufferAndRegion = .{
+                        .buffer = command.command.copyBuffer.srcBuffer,
+                        .region = command.command.copyBuffer.regions,
+                    } };
+                } else {
+                    break :rs garbageData{ .regions = command.command.copyBuffer.regions };
+                }
+            },
             .start => null,
             else => {
                 std.debug.panic("not support {s}", .{@tagName(command.commandType)});
@@ -1403,6 +1484,16 @@ pub const oneTimeCommand = struct {
                 },
                 .barriers => {
                     self.allocator.free(g.data.barriers);
+                    self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
+                },
+                .bufferAndRegion => {
+                    if (currentSemaphoreValue < g.semaphoreValue) continue;
+                    global.vulkan.destroyBuffer(g.data.bufferAndRegion.buffer);
+                    self.allocator.free(g.data.bufferAndRegion.region);
+                    self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
+                },
+                .regions => {
+                    self.allocator.free(g.data.regions);
                     self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
                 },
                 .empty => {},
@@ -1441,6 +1532,7 @@ pub const oneTimeCommand = struct {
         defer {
             self.nodeDag.clearRetainCapacity();
             self.queue.clearRetainingCapacity();
+            self.cacheMap.clearRetainingCapacity();
 
             self.innerCommandBufferID = 0;
             self.innerID = 0;
@@ -1488,13 +1580,7 @@ pub const oneTimeCommand = struct {
             var executeCount: u32 = 0;
             while (pNode) |nn| {
                 const zone2 = tracy.initZone(@src(), .{ .name = "execute a" });
-                errdefer zone2.deinit();
-                // std.log.debug("1", .{});
-                if (executeCount >= pTotalSize) {
-                    zone2.deinit();
-                    break;
-                }
-
+                errdefer zone2.deinit(); // std.log.debug("1", .{}); if (executeCount >= pTotalSize) { zone2.deinit(); break; }
                 // judge dependencies first
                 if (nn.queueNode.parentsDone < nn.queueNode.parentsLen) {
                     try prepareToExecuteQueue.pushLast(nn);

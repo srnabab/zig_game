@@ -17,6 +17,7 @@ const update = @import("update.zig");
 const render = @import("render.zig");
 const VkStruct = @import("video");
 const OneTimeCommand = @import("processRender").oneTimeCommand;
+const vertices = @import("vertices");
 
 const file = @import("fileSystem");
 
@@ -106,8 +107,12 @@ pub fn main() !void {
     defer global.textureSet.deinit();
 
     try global.graphic.startCommand();
+
+    try vertices.init();
+    defer vertices.deinit();
     _ = try global.textureSet.createImageTexture(comptime file.comptimeGetID("non_exist.png"), .pixel2d);
     _ = global.textureSet.createImageTextureEnsureWithErrorImage(comptime file.comptimeGetID("circle.png"), .pixel2d);
+
     try global.graphic.addCommandEnd();
 
     global.vulkan.writeCachedDescriptorSetResources();

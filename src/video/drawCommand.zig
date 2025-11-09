@@ -9,6 +9,7 @@ pub const CommandType = enum {
     transLayout,
     pipelineBarrier,
     copyBufferToImage,
+    copyBuffer,
     beginPrimaryRecord,
     beginRendering,
     beginSecondaryRecord,
@@ -93,31 +94,34 @@ pub const PublicCommandType: type = blk: {
 };
 
 pub fn PublicCommandTypeToCommandType(a: PublicCommandType) CommandType {
-    return switch (a) {
-        .draw2D => .draw2D,
-        .copyBufferToImage => .copyBufferToImage,
-        .present => .present,
-        .graphicTransfer => .graphicTransfer,
-        .transfer => .transfer,
-    };
+    // return switch (a) {
+    //     .draw2D => .draw2D,
+    //     .copyBufferToImage => .copyBufferToImage,
+    //     .present => .present,
+    //     .graphicTransfer => .graphicTransfer,
+    //     .transfer => .transfer,
+    // };
+    return @enumFromInt(@intFromEnum(a));
 }
 
 pub fn PrivateCommandTypeToCommandType(a: PrivateCommandType) CommandType {
-    return switch (a) {
-        .start => .start,
-        .transLayout => .transLayout,
-        .beginPrimaryRecord => .beginPrimaryRecord,
-        .beginRendering => .beginRendering,
-        .beginSecondaryRecord => .beginSecondaryRecord,
-        .endRecord => .endRecord,
-        .endRendering => .endRendering,
-        .end => .end,
-    };
+    // return switch (a) {
+    //     .start => .start,
+    //     .transLayout => .transLayout,
+    //     .beginPrimaryRecord => .beginPrimaryRecord,
+    //     .beginRendering => .beginRendering,
+    //     .beginSecondaryRecord => .beginSecondaryRecord,
+    //     .endRecord => .endRecord,
+    //     .endRendering => .endRendering,
+    //     .end => .end,
+    // };
+    return @enumFromInt(@intFromEnum(a));
 }
 
 const TransLayout = struct {
     pTexture: *texture.Texture,
 
+    // image: vk.VkImage,
     oldLayout: vk.VkImageLayout,
     newLayout: vk.VkImageLayout,
     baseLayer: u32,
@@ -156,6 +160,8 @@ pub const CopyBufferToImage = struct {
         .y = 0,
         .z = 0,
     },
+
+    clean: bool = true,
 };
 
 pub const BeginSecondaryRecord = struct {
@@ -236,9 +242,17 @@ const Draw2D = struct {
     pTexture: *texture.Texture,
 };
 
+const CopyBuffer = struct {
+    srcBuffer: VkStruct.Buffer,
+    dstBuffer: VkStruct.Buffer,
+    regions: []vk.VkBufferCopy,
+    clean: bool = true,
+};
+
 pub const comm = union {
     start: Start,
     draw2d: Draw2D,
+    copyBuffer: CopyBuffer,
     transLayout: TransLayout,
     copyBufferToImage: CopyBufferToImage,
     beginRecoed: BeginSecondaryRecord,
@@ -249,6 +263,7 @@ pub const comm = union {
 
 pub const Output = union {
     image: vk.VkImage,
+    buffer: vk.VkBuffer,
     empty: void,
 };
 
@@ -258,3 +273,7 @@ ID: u32,
 
 command: comm,
 output: Output,
+
+fn empty() void {
+    //
+}

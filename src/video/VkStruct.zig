@@ -950,7 +950,7 @@ pub fn createVertexBuffer(self: *Self, bufferSize: vk.VkDeviceSize) VkError!Buff
     const zone = tracy.initZone(@src(), .{ .name = "create vertex buffer" });
     defer zone.deinit();
 
-    self.vertexBuffer = try self._createBuffer(
+    return self._createBuffer(
         0,
         null,
         vk.VK_SHARING_MODE_EXCLUSIVE,
@@ -1791,4 +1791,16 @@ pub fn getDefaultSampler(self: *Self, samplerType: SamplerType) vk.VkSampler {
 
 pub fn getPipeline(self: *Self, pipelineName: []const u8) ?Pipeline {
     return self.pipelines.get(pipelineName);
+}
+
+pub fn createIndexBuffer(self: *Self, size: vk.VkDeviceSize) VkError!Buffer {
+    return self._createBuffer(
+        0,
+        null,
+        vk.VK_SHARING_MODE_EXCLUSIVE,
+        size,
+        vk.VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+        vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+        vma.VMA_MEMORY_USAGE_GPU_ONLY,
+    );
 }

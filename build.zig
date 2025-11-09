@@ -197,8 +197,26 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const vertices_mod = b.createModule(.{
+        .root_source_file = b.path("src/video/vertices.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const cglm_mod = b.createModule(.{
+        .root_source_file = b.path("src/cglm/cglm.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     // dependency
+    cglm_mod.addIncludePath(b.path("include"));
+
+    vertices_mod.addImport("tracy", tracy.module("tracy"));
+    vertices_mod.addImport("vulkan", vk_mod);
+    vertices_mod.addImport("global", global_mod);
+    vertices_mod.addImport("video", video_mod);
+    vertices_mod.addImport("cglm", cglm_mod);
+
     objectPool_mod.addImport("tracy", tracy.module("tracy"));
 
     sampler_read_mod.addImport("vulkan", vk_mod);
@@ -315,6 +333,7 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("steam", steam_mod);
     exe_mod.addImport("processRender", processRender_mod);
     exe_mod.addImport("tracy", tracy.module("tracy"));
+    exe_mod.addImport("vertices", vertices_mod);
     exe_mod.addIncludePath(b.path("include/"));
 
     exe_mod.addLibraryPath(b.path("lib/"));

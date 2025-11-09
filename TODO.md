@@ -12,9 +12,10 @@
     1. select modified file to txt but do not modify cache.json
     2. do compile, remove successful file name from txt
     3. read txt and modify cache.json
-12. complete addCommand .graphic
-13. change texture set implement from **memory pool + hash map** to **array + extra process + hash map**
+12. complete addCommand .draw2d
+<!-- 13. change texture set implement from **memory pool + hash map** to **array + extra process + hash map** -->
 14. refactor VkStruct.zig
-15. add offsets to texture set 
+<!-- 15. add offsets to texture set  -->
 16. function offsetsAdd can optimize by analyse branch
 17. content manager image load parameter judgement
+18. complete addCommand .copyBuffer
