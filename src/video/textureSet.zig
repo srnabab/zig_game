@@ -52,6 +52,7 @@ pub const Texture = struct {
             .graphic => global.vulkan.graphicQueueFamily.familyIndice,
             .transfer => global.vulkan.transferQueueFamily.familyIndice,
             .compute => global.vulkan.computeQueueFamily.familyIndice,
+            else => unreachable,
         };
 
         mutex.lock();
@@ -154,7 +155,7 @@ pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Sample
         stagingBuffer = try global.vulkan.createStagingBuffer(pixelSize);
         errdefer global.vulkan.destroyBuffer(stagingBuffer);
 
-        @memcpy(@as([*c]u8, @ptrCast(stagingBuffer.info.pMappedData.?)), imageMem[0..pixelSize]);
+        @memcpy(@as([*c]u8, @ptrCast(stagingBuffer.pMappedData.?)), imageMem[0..pixelSize]);
 
         const image = try global.vulkan.createImage2D(imgWidth, imgHeight, img.format, img.tiling, img.usage);
         errdefer global.vulkan.destroyImage(image);

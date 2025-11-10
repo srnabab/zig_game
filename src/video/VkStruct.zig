@@ -19,6 +19,7 @@ const tracy = @import("tracy");
 const file = @import("fileSystem");
 const translate = @import("translate");
 const samplerRead = @import("sampler");
+const math = @import("math");
 
 const layerNeeded = layer: {
     break :layer switch (builtin.mode) {
@@ -59,6 +60,8 @@ const featureDynamicRenderingNeed = [_][]const u8{"dynamicRendering"};
 
 const DefaultWindowWidth = 800;
 const DefaultWindowHeight = 600;
+
+const BufferAlign = 16;
 
 const DefaultSurfaceFormat = vk.VkSurfaceFormatKHR{
     .colorSpace = vk.VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
@@ -143,8 +146,14 @@ pub const Pipeline = struct {
 pub const Buffer = struct {
     vkBuffer: vk.VkBuffer,
     allocation: vma.VmaAllocation,
-    info: vma.VmaAllocationInfo,
-    queueIndex: i32 = -1,
+    // info: vma.VmaAllocationInfo,
+    size: vk.VkDeviceSize,
+    pMappedData: ?*anyopaque = @import("std").mem.zeroes(?*anyopaque),
+    queueIndex: CommandPoolType = .init,
+
+    pub fn changeQueueIndex(self: *Buffer, queueType: CommandPoolType) void {
+        self.queueIndex = queueType;
+    }
 };
 pub const Image = struct {
     vkImage: vk.VkImage,
@@ -917,8 +926,10 @@ fn _createBuffer(
     return Buffer{
         .vkBuffer = pBuffer,
         .allocation = pAllocation,
-        .info = allocationInfo,
-        .queueIndex = -1,
+        // .info = allocationInfo,
+        .size = allocationInfo.size,
+        .pMappedData = allocationInfo.pMappedData,
+        .queueIndex = .init,
     };
 }
 
@@ -939,7 +950,7 @@ pub fn createStagingBuffer(self: *Self, bufferSize: vk.VkDeviceSize) VkError!Buf
         0,
         null,
         vk.VK_SHARING_MODE_EXCLUSIVE,
-        bufferSize,
+        @intCast(math.round(BufferAlign, @intCast(bufferSize))),
         vk.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | vma.VMA_ALLOCATION_CREATE_MAPPED_BIT,
         vma.VMA_MEMORY_USAGE_CPU_TO_GPU,
@@ -954,8 +965,8 @@ pub fn createVertexBuffer(self: *Self, bufferSize: vk.VkDeviceSize) VkError!Buff
         0,
         null,
         vk.VK_SHARING_MODE_EXCLUSIVE,
-        bufferSize,
-        vk.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        @intCast(math.round(BufferAlign, bufferSize)),
+        vk.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | vk.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
         vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT,
         vma.VMA_MEMORY_USAGE_GPU_ONLY,
     );
@@ -976,7 +987,12 @@ fn createQueue(self: *Self) void {
     }
 }
 
-pub const CommandPoolType = enum { graphic, compute, transfer };
+pub const CommandPoolType = enum {
+    graphic,
+    compute,
+    transfer,
+    init,
+};
 pub fn _createCommandPool(self: *Self, pNext: ?*anyopaque, cpType: CommandPoolType, flags: u32, pCommandPool: *vk.VkCommandPool) !void {
     var createInfo = vk.VkCommandPoolCreateInfo{
         .sType = vk.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -987,6 +1003,7 @@ pub fn _createCommandPool(self: *Self, pNext: ?*anyopaque, cpType: CommandPoolTy
                 .graphic => self.graphicQueueFamily.familyIndice,
                 .compute => self.computeQueueFamily.familyIndice,
                 .transfer => self.transferQueueFamily.familyIndice,
+                .init => unreachable,
             },
         ),
     };
@@ -1480,6 +1497,7 @@ pub fn queueSubmit(self: *Self, kind: CommandPoolType, submitCount: u32, pSubmit
             .graphic => self.graphicQueue,
             .compute => self.computeQueue,
             .transfer => self.transferQueue,
+            .init => unreachable,
         };
 
     queue.mutex.lock();
@@ -1798,8 +1816,8 @@ pub fn createIndexBuffer(self: *Self, size: vk.VkDeviceSize) VkError!Buffer {
         0,
         null,
         vk.VK_SHARING_MODE_EXCLUSIVE,
-        size,
-        vk.VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+        @intCast(math.round(BufferAlign, size)),
+        vk.VK_BUFFER_USAGE_INDEX_BUFFER_BIT | vk.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
         vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
         vma.VMA_MEMORY_USAGE_GPU_ONLY,
     );

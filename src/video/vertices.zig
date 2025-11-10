@@ -27,7 +27,7 @@ pub fn init() !void {
     defer zone.deinit();
 
     vertexBuffer2D = try global.vulkan.createVertexBuffer(vertex2DinitCount * @sizeOf(Vertex2D));
-    indexBuffer2D = try global.vulkan.createIndexBuffer(index2DinitCount * @sizeOf(u16));
+    indexBuffer2D = try global.vulkan.createIndexBuffer(index2DinitCount * 6 * @sizeOf(u16));
 
     {
         const indices = comptime is: {
@@ -49,12 +49,14 @@ pub fn init() !void {
         };
 
         const stagingBuffer = try global.vulkan.createStagingBuffer(indices.len * @sizeOf(u16));
-        @memcpy(@as([*c]u16, @ptrCast(@alignCast(stagingBuffer.info.pMappedData.?))), &indices);
+        @memcpy(@as([*c]u16, @ptrCast(@alignCast(stagingBuffer.pMappedData.?))), &indices);
+
+        std.log.debug("s: {d}, i: {d}", .{ stagingBuffer.size, indexBuffer2D.size });
 
         var region = [_]vk.VkBufferCopy{.{
             .srcOffset = 0,
             .dstOffset = 0,
-            .size = indexBuffer2D.info.size,
+            .size = indexBuffer2D.size,
         }};
 
         try global.graphic.addCommand(.copyBuffer, .{ .copyBuffer = .{

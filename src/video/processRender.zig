@@ -145,6 +145,7 @@ const CommandPools = struct {
             .graphic => 0,
             .transfer => 1,
             .compute => 2,
+            .init => unreachable,
         };
         if (self.commandPools[idx]) |p| {
             return p.primaryCommandBuffer[index];
@@ -168,6 +169,7 @@ const CommandPools = struct {
             .graphic => 0,
             .transfer => 1,
             .compute => 2,
+            .init => unreachable,
         };
 
         if (self.commandPools[idx]) |*p| {
@@ -701,9 +703,14 @@ pub const oneTimeCommand = struct {
     cacheMap: std.AutoHashMap(*anyopaque, u32),
     garbageData: std.array_list.Managed(GarbageData),
 
+    init2d: bool = false,
+    init3d: bool = false,
+
     // commandPools: std.array_list.Managed(vk.VkCommandPool),
 
     pub fn init(allocator: std.mem.Allocator, stackAllocator: std.mem.Allocator) Self {
+        std.log.info("command size: {d}", .{@sizeOf(drawC.comm)});
+        std.log.info("vk struct Buffer size: {d}", .{@sizeOf(VkStruct.Buffer)});
         return Self{
             .queue = .init(allocator),
             .allocator = allocator,
@@ -855,7 +862,7 @@ pub const oneTimeCommand = struct {
         defer zone.deinit();
 
         const node = try self.nodeDag.create();
-        // node.ID = 0;
+
         const ptr = try self.queue.getOrPut(node.ID);
         ptr.value_ptr.* = drawC{
             .ID = node.ID,
@@ -864,6 +871,9 @@ pub const oneTimeCommand = struct {
             .command = .{ .start = .{} },
             .output = .{ .empty = void{} },
         };
+
+        self.init2d = false;
+        self.init3d = false;
     }
 
     fn addCommand2(self: *Self, commandType: drawC.PrivateCommandType, command: drawC.comm, prev: ?*QueueNode, next: ?*QueueNode) !*QueueNode {
@@ -1019,6 +1029,9 @@ pub const oneTimeCommand = struct {
 
         var currentNode = node;
         const ptr = try self.queue.getOrPut(ID);
+        // ptr.value_ptr.ID = ID;
+        // ptr.value_ptr.timestamp = std.time.nanoTimestamp();
+
         ptr.value_ptr.* = drawC{
             .ID = ID,
             .timestamp = std.time.nanoTimestamp(),
@@ -1036,6 +1049,8 @@ pub const oneTimeCommand = struct {
         switch (commandType) {
             // .draw2D => {
             //     node.data.commandPoolType = .graphic;
+
+            //     const draw2D = ptr.value_ptr.command.draw2d;
             // },
             .copyBuffer => {
                 node.data.commandPoolType = .transfer;
@@ -1043,7 +1058,11 @@ pub const oneTimeCommand = struct {
                 const copyBuffer = ptr.value_ptr.command.copyBuffer;
                 const tempRegions = copyBuffer.regions;
 
+                if (copyBuffer.srcBuffer.queueIndex != .transfer) {}
+
                 ptr.value_ptr.*.command.copyBuffer.regions = try self.allocator.dupe(vk.VkBufferCopy, tempRegions);
+
+                ptr.value_ptr.command.copyBuffer.srcBuffer.changeQueueIndex(.transfer);
 
                 try self.cacheMap.put(@ptrCast(copyBuffer.dstBuffer.vkBuffer), ID);
             },
@@ -1785,6 +1804,7 @@ pub const oneTimeCommand = struct {
                         .graphic => graphicSemaphoreValue = currentSemaphoreValue,
                         .transfer => transferSemaphoreValue = currentSemaphoreValue,
                         .compute => computeSemaphoreValue = currentSemaphoreValue,
+                        .init => unreachable,
                     }
 
                     begin = false;
@@ -1816,6 +1836,7 @@ pub const oneTimeCommand = struct {
                             currentType = .compute;
                             try global.vulkan.waitSemaphore(1, &global.vulkan.globalTimelineSemaphore, &computeSemaphoreValue);
                         },
+                        .init => unreachable,
                     }
                     // try VkStruct.resetCommandBuffer(currentCommandBuffer);
                     try VkStruct._beginCommandBuffer(currentCommandBuffer, null, vk.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, null);

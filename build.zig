@@ -294,6 +294,7 @@ pub fn build(b: *std.Build) void {
     video_mod.addImport("tracy", tracy.module("tracy"));
     video_mod.addImport("fileSystem", fileSystem_mod);
     video_mod.addImport("sampler", sampler_read_mod);
+    video_mod.addImport("math", math_mod);
 
     queue_mod.addImport("tracy", tracy.module("tracy"));
 
