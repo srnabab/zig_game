@@ -10,6 +10,7 @@ pub const CommandType = enum {
     pipelineBarrier,
     copyBufferToImage,
     copyBuffer,
+    bindVertexBuffer,
     beginPrimaryRecord,
     beginRendering,
     beginSecondaryRecord,
@@ -24,6 +25,7 @@ pub const CommandType = enum {
 const privateEnum = [_]CommandType{
     .start,
     .transLayout,
+    .bindVertexBuffer,
     .beginPrimaryRecord,
     .beginRendering,
     .beginSecondaryRecord,
@@ -127,11 +129,11 @@ const TransLayout = struct {
     baseLayer: u32,
     layerCount: u32,
 
-    srcAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE,
-    dstAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE,
-    aspectMask: vk.VkImageAspectFlags = vk.VK_IMAGE_ASPECT_NONE,
-    sourceStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_NONE,
-    destinationStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_NONE,
+    // srcAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE,
+    // dstAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE,
+    // aspectMask: vk.VkImageAspectFlags = vk.VK_IMAGE_ASPECT_NONE,
+    // sourceStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_NONE,
+    // destinationStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_NONE,
 
     baseMipLevel: u32 = 0,
     levelCount: u32 = 1,
@@ -249,11 +251,23 @@ const CopyBuffer = struct {
     clean: bool = true,
 };
 
+const BindVertexBuffer = struct {
+    firstBinding: u32,
+    buffers: []VkStruct.Buffer,
+};
+
+const ChangeBufferQueue = struct {
+    buffer: VkStruct.Buffer,
+    srcQueueFamilyIndex: u32,
+    dstQueueFamilyIndex: u32,
+};
+
 pub const comm = union {
     start: Start,
     draw2d: Draw2D,
     copyBuffer: CopyBuffer,
     transLayout: TransLayout,
+    bindVertexBuffer: BindVertexBuffer,
     copyBufferToImage: CopyBufferToImage,
     beginRecoed: BeginSecondaryRecord,
     beginRendering: BeginRendering,

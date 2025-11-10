@@ -782,35 +782,47 @@ pub const oneTimeCommand = struct {
         };
     }
 
-    fn inferTransLayoutFlagsByOldLayoutAndNewLayout(command: *drawC.comm) void {
+    fn inferTransLayoutFlagsByOldLayoutAndNewLayout(command: *drawC.comm) struct {
+        srcAccessMask: vk.VkAccessFlags,
+        dstAccessMask: vk.VkAccessFlags,
+        aspectMask: vk.VkImageAspectFlags,
+        sourceStage: vk.VkPipelineStageFlags,
+        destinationStage: vk.VkPipelineStageFlags,
+    } {
         const zone = tracy.initZone(@src(), .{ .name = "infer trans layout" });
         defer zone.deinit();
 
+        var srcAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE;
+        var dstAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE;
+        var aspectMask: vk.VkImageAspectFlags = vk.VK_IMAGE_ASPECT_NONE;
+        var sourceStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_NONE;
+        var destinationStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_NONE;
+
         switch (command.transLayout.oldLayout) {
             vk.VK_IMAGE_LAYOUT_UNDEFINED => {
-                command.transLayout.srcAccessMask = vk.VK_ACCESS_NONE;
-                command.transLayout.sourceStage = vk.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-                command.transLayout.aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
+                srcAccessMask = vk.VK_ACCESS_NONE;
+                sourceStage = vk.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+                aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
             },
 
             vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL => {
-                command.transLayout.srcAccessMask = vk.VK_ACCESS_TRANSFER_WRITE_BIT;
-                command.transLayout.sourceStage = vk.VK_PIPELINE_STAGE_TRANSFER_BIT;
-                command.transLayout.aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
+                srcAccessMask = vk.VK_ACCESS_TRANSFER_WRITE_BIT;
+                sourceStage = vk.VK_PIPELINE_STAGE_TRANSFER_BIT;
+                aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
             },
 
             vk.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL => {
-                command.transLayout.srcAccessMask = vk.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-                command.transLayout.sourceStage = vk.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-                command.transLayout.aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
+                srcAccessMask = vk.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+                sourceStage = vk.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+                aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
             },
 
             vk.VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
             vk.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
             => {
-                command.transLayout.srcAccessMask = vk.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-                command.transLayout.sourceStage = vk.VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-                command.transLayout.aspectMask = vk.VK_IMAGE_ASPECT_DEPTH_BIT;
+                srcAccessMask = vk.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+                sourceStage = vk.VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+                aspectMask = vk.VK_IMAGE_ASPECT_DEPTH_BIT;
             },
 
             // vk.VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL,
@@ -828,33 +840,41 @@ pub const oneTimeCommand = struct {
 
         switch (command.transLayout.newLayout) {
             vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL => {
-                command.transLayout.dstAccessMask = vk.VK_ACCESS_TRANSFER_WRITE_BIT;
-                command.transLayout.destinationStage = vk.VK_PIPELINE_STAGE_TRANSFER_BIT;
-                command.transLayout.aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
+                dstAccessMask = vk.VK_ACCESS_TRANSFER_WRITE_BIT;
+                destinationStage = vk.VK_PIPELINE_STAGE_TRANSFER_BIT;
+                aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
             },
 
             vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL => {
-                command.transLayout.dstAccessMask = vk.VK_ACCESS_SHADER_READ_BIT;
-                command.transLayout.destinationStage = vk.VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT;
-                command.transLayout.aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
+                dstAccessMask = vk.VK_ACCESS_SHADER_READ_BIT;
+                destinationStage = vk.VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT;
+                aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
             },
 
             vk.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL => {
-                command.transLayout.dstAccessMask = vk.VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | vk.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-                command.transLayout.destinationStage = vk.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-                command.transLayout.aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
+                dstAccessMask = vk.VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | vk.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+                destinationStage = vk.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+                aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
             },
 
             vk.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR => {
-                command.transLayout.dstAccessMask = vk.VK_ACCESS_NONE;
-                command.transLayout.destinationStage = vk.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-                command.transLayout.aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
+                dstAccessMask = vk.VK_ACCESS_NONE;
+                destinationStage = vk.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+                aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
             },
 
             else => {
                 std.debug.panic("unsupported layout {s}", .{@typeName(@TypeOf(command.transLayout.newLayout))});
             },
         }
+
+        return .{
+            .srcAccessMask = srcAccessMask,
+            .dstAccessMask = dstAccessMask,
+            .aspectMask = aspectMask,
+            .sourceStage = sourceStage,
+            .destinationStage = destinationStage,
+        };
     }
 
     pub fn startCommand(self: *Self) !void {
@@ -887,10 +907,14 @@ pub const oneTimeCommand = struct {
 
         switch (commandType) {
             .transLayout => {
-                inferTransLayoutFlagsByOldLayoutAndNewLayout(&commandCopy);
+                var flags = inferTransLayoutFlagsByOldLayoutAndNewLayout(&commandCopy);
+
+                if (commandCopy.transLayout.newLayout == vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+                    flags.destinationStage = vk.VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT;
+                }
 
                 const transLayout = commandCopy.transLayout;
-                const hash = math.szudzikPairing(transLayout.sourceStage, transLayout.destinationStage);
+                const hash = math.szudzikPairing(flags.sourceStage, flags.destinationStage);
 
                 const res = try self.combineMap.getOrPut(hash);
                 if (res.found_existing) {
@@ -902,8 +926,8 @@ pub const oneTimeCommand = struct {
                             const index = pipelineBarrier.barriers.len;
                             pipelineBarrier.barriers = try self.allocator.realloc(pipelineBarrier.barriers, pipelineBarrier.barriers.len + 1);
                             pipelineBarrier.barriers[index] = .{ .imageMemory = .{
-                                .srcAccessMask = transLayout.srcAccessMask,
-                                .dstAccessMask = transLayout.dstAccessMask,
+                                .srcAccessMask = flags.srcAccessMask,
+                                .dstAccessMask = flags.dstAccessMask,
                                 .oldLayout = transLayout.oldLayout,
                                 .newLayout = transLayout.newLayout,
                                 .srcQueueFamilyIndex = vk.VK_QUEUE_FAMILY_IGNORED,
@@ -911,7 +935,7 @@ pub const oneTimeCommand = struct {
                                 .image = transLayout.pTexture.image.vkImage,
 
                                 .subresourceRange = .{
-                                    .aspectMask = transLayout.aspectMask,
+                                    .aspectMask = flags.aspectMask,
                                     .baseMipLevel = transLayout.baseMipLevel,
                                     .levelCount = transLayout.levelCount,
                                     .baseArrayLayer = transLayout.baseLayer,
@@ -945,23 +969,23 @@ pub const oneTimeCommand = struct {
                         .ID = ID,
                         .timestamp = std.time.nanoTimestamp(),
                         .command = .{ .pipelineBarrier = .{
-                            .sourceStage = transLayout.sourceStage,
-                            .destinationStage = transLayout.destinationStage,
+                            .sourceStage = flags.sourceStage,
+                            .destinationStage = flags.destinationStage,
                             .barriers = try self.allocator.alloc(drawC.Barrier, 1),
                         } },
                         .commandType = .pipelineBarrier,
                         .output = .{ .empty = void{} },
                     };
                     ptr.value_ptr.command.pipelineBarrier.barriers[0] = .{ .imageMemory = .{
-                        .srcAccessMask = transLayout.srcAccessMask,
-                        .dstAccessMask = transLayout.dstAccessMask,
+                        .srcAccessMask = flags.srcAccessMask,
+                        .dstAccessMask = flags.dstAccessMask,
                         .oldLayout = transLayout.oldLayout,
                         .newLayout = transLayout.newLayout,
                         .srcQueueFamilyIndex = vk.VK_QUEUE_FAMILY_IGNORED,
                         .dstQueueFamilyIndex = vk.VK_QUEUE_FAMILY_IGNORED,
                         .image = transLayout.pTexture.image.vkImage,
                         .subresourceRange = .{
-                            .aspectMask = transLayout.aspectMask,
+                            .aspectMask = flags.aspectMask,
                             .baseMipLevel = transLayout.baseMipLevel,
                             .levelCount = transLayout.levelCount,
                             .baseArrayLayer = transLayout.baseLayer,
