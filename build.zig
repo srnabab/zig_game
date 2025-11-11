@@ -207,6 +207,11 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const handle_mod = b.createModule(.{
+        .root_source_file = b.path("src/handle/handle.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     // dependency
     cglm_mod.addIncludePath(b.path("include"));
@@ -314,6 +319,7 @@ pub fn build(b: *std.Build) void {
     global_mod.addImport("video", video_mod);
     global_mod.addImport("processRender", processRender_mod);
     global_mod.addImport("textureSet", textureSet_mod);
+    global_mod.addImport("handle", handle_mod);
 
     fileSystem_mod.addImport("sqlDb", sqliteModule);
     fileSystem_mod.addImport("global", global_mod);
@@ -335,6 +341,7 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("processRender", processRender_mod);
     exe_mod.addImport("tracy", tracy.module("tracy"));
     exe_mod.addImport("vertices", vertices_mod);
+    exe_mod.addImport("handle", handle_mod);
     exe_mod.addIncludePath(b.path("include/"));
 
     exe_mod.addLibraryPath(b.path("lib/"));

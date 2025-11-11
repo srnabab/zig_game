@@ -23,7 +23,6 @@ const file = @import("fileSystem");
 
 const tracy = @import("tracy");
 
-const gpaType = @TypeOf(std.heap.GeneralPurposeAllocator(.{}).init);
 const Allocator = std.mem.Allocator;
 
 const global = @import("global");
@@ -80,6 +79,9 @@ pub fn main() !void {
         global.cwd = try std.fs.openDirAbsolute(args[0][0..index], .{});
         try global.cwd.setAsCwd();
     }
+
+    global.handles = try .init(gpa);
+    defer global.handles.deinit(gpa);
 
     file.init();
     defer file.deinit();
