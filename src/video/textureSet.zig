@@ -8,8 +8,9 @@ const VkStruct = @import("video");
 const global = @import("global");
 const MemoryPool = @import("memoryPool").MemoryPoolSlice;
 const tracy = @import("tracy");
-const stableArray = @import("stableArray").StableArray;
+// const stableArray = @import("stableArray").StableArray;
 const objectPool = @import("objectPool").ObjectPool;
+const Handle = @import("handle").Handle;
 
 const Self = @This();
 
@@ -17,6 +18,8 @@ const Offsets = struct {
     offset: u32,
     count: u32,
 };
+
+pub const Texture_t = Handle;
 
 pub const Texture = struct {
     ID: u32 = std.math.maxInt(u32),
@@ -36,9 +39,6 @@ pub const Texture = struct {
         const zone = tracy.initZone(@src(), .{ .name = "change texture layout" });
         defer zone.deinit();
 
-        mutex.lock();
-        defer mutex.unlock();
-
         for (self.layouts[baseLayer .. baseLayer + layerCount]) |*value| {
             value.* = dstLayout;
         }
@@ -55,9 +55,6 @@ pub const Texture = struct {
             else => unreachable,
         };
 
-        mutex.lock();
-        defer mutex.unlock();
-
         self.image.queueIndex = queueIndex;
     }
 };
@@ -66,14 +63,16 @@ var mutex: Mutex = .{};
 
 allocator: std.mem.Allocator,
 
-array: stableArray(Texture),
+array: std.array_list.Managed(Texture),
 
 offsetsPool: objectPool(Offsets),
 offsetRange: std.array_list.Managed(Offsets),
 
-map: std.hash_map.AutoHashMap(u32, u32),
+map: std.hash_map.AutoHashMap(u32, Texture_t),
 layoutMemory: MemoryPool(vk.VkImageLayout),
 descriptorSetIndices: std.array_list.Managed(u32),
+
+tempTextureRecord: *Texture = undefined,
 
 pub fn init(allocator: std.mem.Allocator) Self {
     const zone = tracy.initZone(@src(), .{ .name = "init texture set" });
@@ -100,12 +99,12 @@ pub fn deinit(self: *Self) void {
     };
 
     // std.log.debug("texture deinit", .{});
-    for (self.array.array.items) |texture| {
+    for (self.array.items) |texture| {
         global.vulkan.destroyImage(texture.image);
         global.vulkan.destroyImageView(texture.imageView);
     }
 
-    std.log.debug("texture count {d}", .{self.array.array.capacity});
+    std.log.debug("texture count {d}", .{self.array.capacity});
 
     self.map.deinit();
     self.offsetRange.deinit();
@@ -115,16 +114,17 @@ pub fn deinit(self: *Self) void {
     self.descriptorSetIndices.deinit();
 }
 
-pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.SamplerType) !*Texture {
+pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.SamplerType) !Texture_t {
     const zone = tracy.initZone(@src(), .{ .name = "create image texutre from file" });
     defer zone.deinit();
 
     const ID = fileID;
 
     if (self.map.get(ID)) |value| {
-        return self.array.get(value).?;
+        return value;
     }
 
+    var texture_t: Texture_t = undefined;
     var texture: *Texture = undefined;
     var stagingBuffer: VkStruct.Buffer = undefined;
     var imgWidth: u32 = 0;
@@ -162,19 +162,19 @@ pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Sample
 
         // texture = try self.memory.create();
 
-        texture = try self.array.add();
+        texture = try self.array.addOne();
 
-        if (self.offsetRange.capacity < self.array.array.items.len) {
-            try self.offsetRange.ensureTotalCapacity(self.array.array.items.len);
+        if (self.offsetRange.capacity < self.array.items.len) {
+            try self.offsetRange.ensureTotalCapacity(self.array.items.len);
             self.offsetRange.expandToCapacity();
         }
-        self.offsetRange.items[self.array.array.items.len - 1] = .{
+        self.offsetRange.items[self.array.items.len - 1] = .{
             .offset = 0,
             .count = 0,
         };
         // errdefer self.array.giveBack(texture);
 
-        const index: u32 = @intCast(self.array.array.items.len - 1);
+        const index: u32 = @intCast(self.array.items.len - 1);
 
         texture.* = .{
             .image = image,
@@ -185,17 +185,21 @@ pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Sample
             .imageView = null,
             .format = img.format,
         };
-        try self.map.put(ID, index);
         for (0..texture.layouts.len) |i| {
             texture.layouts[i] = vk.VK_IMAGE_LAYOUT_UNDEFINED;
         }
+
+        texture_t = global.handles.createHandle(index);
+
+        try self.map.put(ID, texture_t);
     }
     // errdefer self.array.giveBack(texture);
 
     try global.graphic.addCommand(
         .copyBufferToImage,
         .{ .copyBufferToImage = .{
-            .pTexture = texture,
+            .pTexture = texture_t,
+            .dstImage = texture.image.vkImage,
             .width = texture.source_width,
             .height = texture.source_height,
             .buffer = stagingBuffer,
@@ -225,30 +229,54 @@ fn getDescriptorSetIndex(self: *Self, ID: u32) !u32 {
     return @intCast(index);
 }
 
-pub fn createImageTextureEnsureWithErrorImage(self: *Self, fileID: u32, samplerType: VkStruct.SamplerType) *Texture {
+pub fn createImageTextureEnsureWithErrorImage(self: *Self, fileID: u32, samplerType: VkStruct.SamplerType) Texture_t {
     return self.createImageTexture(fileID, samplerType) catch |err| {
         std.log.err("create image {d} texture error {s} {d}", .{ fileID, @errorName(err), @sizeOf(Texture) });
         return self.createImageTexture(comptime file.comptimeGetID("non_exist.png"), .pixel2d) catch unreachable;
     };
 }
 
-pub fn getTexture(self: *Self, textureID: u32) ?*Texture {
+fn getTexture(self: *Self, textureID: u32) ?Texture_t {
     mutex.lock();
     defer mutex.unlock();
 
     const index = self.map.get(textureID);
     if (index) |_| {
-        return self.array.get(index.?);
+        return index.?;
     }
 
     return null;
 }
 
-pub fn offsetsAdd(self: *Self, texture: *Texture, offset: u32) !void {
+fn getTextureCotent(self: *Self, texture: Texture_t) *Texture {
+    mutex.lock();
+
+    const index: u32 = ix: {
+        const ptr: *u32 = @ptrCast(@alignCast(texture));
+
+        break :ix ptr.*;
+    };
+
+    self.tempTextureRecord = &self.array.items[index];
+
+    return self.tempTextureRecord;
+}
+
+pub fn releaseTextureContent(self: *Self, texture: *Texture) void {
+    if (self.tempTextureRecord == texture) {
+        mutex.unlock();
+    }
+}
+
+pub fn offsetsAdd(self: *Self, texture: Texture_t, offset: u32) !void {
     const zone = tracy.initZone(@src(), .{ .name = "texture offsets add" });
     defer zone.deinit();
 
-    const index = self.array.getIndex(texture);
+    const index: u32 = ix: {
+        const ptr: *u32 = @ptrCast(@alignCast(texture));
+
+        break :ix ptr.*;
+    };
 
     const offsetRange = self.offsetRange.items[index];
     if (offsetRange.count > 0 and self.offsetsPool.items[offsetRange.offset..][offsetRange.count - 1].offset + self.offsetsPool[offsetRange.offset..][offsetRange.count - 1].count * global.vertexCount == offset) {
@@ -269,6 +297,27 @@ pub fn offsetsAdd(self: *Self, texture: *Texture, offset: u32) !void {
     }
 }
 
-pub fn giveBackTexture(self: *Self, texture: *Texture) void {
-    self.array.giveBack(texture);
+pub fn changeTextureLayout(self: *Self, texture: Texture_t, baseLayer: u32, layerCount: u32, layout: vk.VkImageLayout) void {
+    const tex = self.getTextureCotent(texture);
+    defer self.releaseTextureContent(tex);
+
+    tex.changeTextureLayout(baseLayer, layerCount, layout);
+}
+pub fn getCurrentLayouts(self: *Self, texture: Texture_t) []vk.VkImageLayout {
+    const tex = self.getTextureCotent(texture);
+    defer self.releaseTextureContent(tex);
+
+    return tex.layouts;
+}
+pub fn changeTextureQueue(self: *Self, texture: Texture_t, queueType: VkStruct.CommandPoolType) void {
+    const tex = self.getTextureCotent(texture);
+    defer self.releaseTextureContent(tex);
+
+    tex.changeTextureQueue(queueType);
+}
+pub fn getVkImage(self: *Self, texture: Texture_t) vk.VkImage {
+    const tex = self.getTextureCotent(texture);
+    defer self.releaseTextureContent(tex);
+
+    return tex.image.vkImage;
 }

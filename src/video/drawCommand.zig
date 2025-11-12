@@ -121,9 +121,9 @@ pub fn PrivateCommandTypeToCommandType(a: PrivateCommandType) CommandType {
 }
 
 const TransLayout = struct {
-    pTexture: *texture.Texture,
+    // pTexture: texture.Texture_t,
 
-    // image: vk.VkImage,
+    image: vk.VkImage,
     oldLayout: vk.VkImageLayout,
     newLayout: vk.VkImageLayout,
     baseLayer: u32,
@@ -140,7 +140,7 @@ const TransLayout = struct {
 };
 
 pub const CopyBufferToImage = struct {
-    pTexture: *texture.Texture,
+    pTexture: texture.Texture_t,
 
     width: u32,
     height: u32,

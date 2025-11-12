@@ -5,11 +5,11 @@ const Option = enum {
     Once,
 };
 
+pub const Handle = *anyopaque;
+
 pub fn Handles(comptime capacity: u32, comptime option: Option) type {
     return struct {
         const Self = @This();
-
-        const Handle = *anyopaque;
 
         array: []u32,
         index: std.atomic.Value(u32),
@@ -45,7 +45,7 @@ pub fn Handles(comptime capacity: u32, comptime option: Option) type {
 
                     std.process.abort();
                 } else {
-                    const current = self.index.fetchAdd(1, .SeqCst);
+                    const current = self.index.fetchAdd(1, .seq_cst);
 
                     if (current == capacity - 1) {
                         self.loop = true;
@@ -55,7 +55,7 @@ pub fn Handles(comptime capacity: u32, comptime option: Option) type {
                     return @ptrCast(@alignCast(&self.array[current]));
                 }
             } else if (option == .Once) {
-                const current = self.index.fetchAdd(1, .SeqCst);
+                const current = self.index.fetchAdd(1, .seq_cst);
 
                 std.debug.assert(current < capacity);
 

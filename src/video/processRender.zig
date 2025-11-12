@@ -932,7 +932,7 @@ pub const oneTimeCommand = struct {
                                 .newLayout = transLayout.newLayout,
                                 .srcQueueFamilyIndex = vk.VK_QUEUE_FAMILY_IGNORED,
                                 .dstQueueFamilyIndex = vk.VK_QUEUE_FAMILY_IGNORED,
-                                .image = transLayout.pTexture.image.vkImage,
+                                .image = transLayout.image,
 
                                 .subresourceRange = .{
                                     .aspectMask = flags.aspectMask,
@@ -983,7 +983,7 @@ pub const oneTimeCommand = struct {
                         .newLayout = transLayout.newLayout,
                         .srcQueueFamilyIndex = vk.VK_QUEUE_FAMILY_IGNORED,
                         .dstQueueFamilyIndex = vk.VK_QUEUE_FAMILY_IGNORED,
-                        .image = transLayout.pTexture.image.vkImage,
+                        .image = transLayout.image,
                         .subresourceRange = .{
                             .aspectMask = flags.aspectMask,
                             .baseMipLevel = transLayout.baseMipLevel,
@@ -1082,7 +1082,7 @@ pub const oneTimeCommand = struct {
                 const copyBuffer = ptr.value_ptr.command.copyBuffer;
                 const tempRegions = copyBuffer.regions;
 
-                if (copyBuffer.srcBuffer.queueIndex != .transfer) {}
+                if (copyBuffer.srcBuffer.queueIndex != .transfer and copyBuffer.srcBuffer.queueIndex != .init) {}
 
                 ptr.value_ptr.*.command.copyBuffer.regions = try self.allocator.dupe(vk.VkBufferCopy, tempRegions);
 
@@ -1093,19 +1093,11 @@ pub const oneTimeCommand = struct {
             .copyBufferToImage => {
                 node.data.commandPoolType = .transfer;
 
-                ptr.value_ptr.command.copyBufferToImage.dstImage = command.copyBufferToImage.pTexture.image.vkImage;
+                ptr.value_ptr.command.copyBufferToImage.dstImage = global.textureSet.getVkImage(ptr.value_ptr.command.copyBufferToImage.pTexture);
 
                 const copyBufferToImage = ptr.value_ptr.command.copyBufferToImage;
-                const oldLayouts = self.stackAllocator.alloc(vk.VkImageLayout, copyBufferToImage.layerCount) catch |err| mm: {
-                    std.log.err("stack alloc error {s}\n", .{@errorName(err)});
-                    break :mm try self.allocator.alloc(vk.VkImageLayout, copyBufferToImage.layerCount);
-                    // here may have memory leak
-                };
-                defer self.stackAllocator.free(oldLayouts);
+                const oldLayouts = global.textureSet.getCurrentLayouts(copyBufferToImage.pTexture);
 
-                for (copyBufferToImage.pTexture.layouts[copyBufferToImage.baseArrayLayer..copyBufferToImage.pTexture.layouts.len], oldLayouts) |value, *layout| {
-                    layout.* = value;
-                }
                 var currentLayout = oldLayouts[0];
                 var currentBase = copyBufferToImage.baseArrayLayer;
                 var count: u32 = 0;
@@ -1120,7 +1112,7 @@ pub const oneTimeCommand = struct {
                         count += 1;
                     } else {
                         currentNode = try self.addCommand2(.transLayout, .{ .transLayout = .{
-                            .pTexture = copyBufferToImage.pTexture,
+                            .image = copyBufferToImage.dstImage,
                             .oldLayout = currentLayout,
                             .newLayout = vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                             .baseLayer = currentBase,
@@ -1135,16 +1127,15 @@ pub const oneTimeCommand = struct {
                 }
                 if (count > 0) {
                     currentNode = try self.addCommand2(.transLayout, .{ .transLayout = .{
-                        .pTexture = copyBufferToImage.pTexture,
+                        .image = copyBufferToImage.dstImage,
                         .oldLayout = currentLayout,
                         .newLayout = vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                         .baseLayer = currentBase,
                         .layerCount = count,
                     } }, node, null);
                 }
-                copyBufferToImage.pTexture.changeTextureLayout(copyBufferToImage.baseArrayLayer, copyBufferToImage.layerCount, vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-                copyBufferToImage.pTexture.changeTextureQueue(.transfer);
-                global.textureSet.giveBackTexture(copyBufferToImage.pTexture);
+                global.textureSet.changeTextureLayout(copyBufferToImage.pTexture, copyBufferToImage.baseArrayLayer, copyBufferToImage.layerCount, vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+                global.textureSet.changeTextureQueue(copyBufferToImage.pTexture, .transfer);
 
                 try self.cacheMap.put(@ptrCast(copyBufferToImage.dstImage), ID);
             },

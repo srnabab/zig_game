@@ -3,7 +3,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const OneTimeCommand = @import("processRender").oneTimeCommand;
 const TextureSet = @import("textureSet");
-const Handle = @import("handle");
+const Handles = @import("handle");
 
 pub const databaseName = "Content.db";
 
@@ -19,4 +19,4 @@ pub var vulkan: *VkStruct = undefined;
 pub var graphic: *OneTimeCommand = undefined;
 pub var textureSet: *TextureSet = undefined;
 
-pub var handles: Handle.Handles(10240, .Once) = undefined;
+pub var handles: Handles.Handles(10240, .Once) = undefined;
