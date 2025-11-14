@@ -26,7 +26,6 @@ const tracy = @import("tracy");
 const Allocator = std.mem.Allocator;
 
 const global = @import("global");
-const assert = std.debug.assert;
 
 var thread_count: usize = 0;
 var update_thread: usize = 0;

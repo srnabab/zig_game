@@ -8,7 +8,6 @@ const VkStruct = @import("video");
 const global = @import("global");
 const MemoryPool = @import("memoryPool").MemoryPoolSlice;
 const tracy = @import("tracy");
-// const stableArray = @import("stableArray").StableArray;
 const objectPool = @import("objectPool").ObjectPool;
 const Handle = @import("handle").Handle;
 

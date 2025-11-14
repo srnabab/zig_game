@@ -279,7 +279,6 @@ pub fn build(b: *std.Build) void {
     textureSet_mod.addImport("global", global_mod);
     textureSet_mod.addImport("fileSystem", fileSystem_mod);
     textureSet_mod.addImport("tracy", tracy.module("tracy"));
-    textureSet_mod.addImport("stableArray", stableArray_mod);
     textureSet_mod.addImport("objectPool", objectPool_mod);
     textureSet_mod.addImport("handle", handle_mod);
     textureSet_mod.addIncludePath(b.path("include"));

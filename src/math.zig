@@ -1,5 +1,4 @@
 const std = @import("std");
-const tracy = @import("tracy");
 
 fn doubleWidthCast(value: anytype) doubleWidthIntType(@TypeOf(value)) {
     return @intCast(value);
