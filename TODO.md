@@ -19,3 +19,5 @@
 16. function offsetsAdd can optimize by analyse branch
 17. content manager image load parameter judgement
 18. complete addCommand .copyBuffer
+<!-- 19. use handle system to replace unstable pointer -->
+20. remove variable in global.zig

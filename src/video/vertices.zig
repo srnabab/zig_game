@@ -19,8 +19,8 @@ const vertex2DinitCount = 40000;
 const index2DinitCount = std.math.maxInt(u16) / 6;
 
 pub var vertices2D: []Vertex2D = &.{};
-pub var vertexBuffer2D: vkStruct.Buffer = undefined;
-pub var indexBuffer2D: vkStruct.Buffer = undefined;
+pub var vertexBuffer2D: vkStruct.Buffer_t = undefined;
+pub var indexBuffer2D: vkStruct.Buffer_t = undefined;
 
 pub fn init() !void {
     const zone = tracy.initZone(@src(), .{ .name = "vertices initialization" });
@@ -49,14 +49,15 @@ pub fn init() !void {
         };
 
         const stagingBuffer = try global.vulkan.createStagingBuffer(indices.len * @sizeOf(u16));
-        @memcpy(@as([*c]u16, @ptrCast(@alignCast(stagingBuffer.pMappedData.?))), &indices);
+        global.vulkan.buffers.copyDataToMapped(stagingBuffer, u16, &indices);
+        // @memcpy(@as([*c]u16, @ptrCast(@alignCast(stagingBuffer.pMappedData.?))), &indices);
 
-        std.log.debug("s: {d}, i: {d}", .{ stagingBuffer.size, indexBuffer2D.size });
+        // std.log.debug("s: {d}, i: {d}", .{ stagingBuffer.size, indexBuffer2D.size });
 
         var region = [_]vk.VkBufferCopy{.{
             .srcOffset = 0,
             .dstOffset = 0,
-            .size = indexBuffer2D.size,
+            .size = global.vulkan.buffers.getBufferSize(indexBuffer2D),
         }};
 
         try global.graphic.addCommand(.copyBuffer, .{ .copyBuffer = .{

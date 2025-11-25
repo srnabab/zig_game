@@ -153,7 +153,7 @@ pub const CopyBufferToImage = struct {
     baseArrayLayer: u32 = 0,
     layerCount: u32 = 1,
 
-    buffer: VkStruct.Buffer,
+    buffer: VkStruct.Buffer_t,
     bufferRowLength: u32 = 0,
     bufferImageHegiht: u32 = 0,
 
@@ -245,19 +245,19 @@ const Draw2D = struct {
 };
 
 const CopyBuffer = struct {
-    srcBuffer: VkStruct.Buffer,
-    dstBuffer: VkStruct.Buffer,
+    srcBuffer: VkStruct.Buffer_t,
+    dstBuffer: VkStruct.Buffer_t,
     regions: []vk.VkBufferCopy,
     clean: bool = true,
 };
 
 const BindVertexBuffer = struct {
     firstBinding: u32,
-    buffers: []VkStruct.Buffer,
+    buffers: []VkStruct.Buffer_t,
 };
 
 const ChangeBufferQueue = struct {
-    buffer: VkStruct.Buffer,
+    buffer: VkStruct.Buffer_t,
     srcQueueFamilyIndex: u32,
     dstQueueFamilyIndex: u32,
 };
@@ -277,7 +277,7 @@ pub const comm = union {
 
 pub const Output = union {
     image: vk.VkImage,
-    buffer: vk.VkBuffer,
+    buffer: VkStruct.Buffer_t,
     empty: void,
 };
 

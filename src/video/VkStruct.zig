@@ -7,19 +7,25 @@ const Mutex = std.Thread.Mutex;
 const Thread = std.Thread;
 const output = @import("output");
 const Allocator = std.mem.Allocator;
-const vulkanType = @import("vulkanType.zig");
+const VkResultToError = @import("resultToError");
+const vulkanType = VkResultToError.vulkanType;
 pub const VkError = vulkanType.VkError;
 const VkResult = vulkanType.VkResult;
 const VkPhysicalType = vulkanType.VkPhysicalDeviceType;
-const VkResultToError = @import("resultToError.zig");
+const checkVkResult = VkResultToError.checkVkResult;
 const VulkanPipelineInfo = @import("translate").VulkanPipelineInfo;
 const textureSet = @import("textureSet");
-const vma = @import("vma").vma;
 const tracy = @import("tracy");
 const file = @import("fileSystem");
 const translate = @import("translate");
-const samplerRead = @import("sampler");
 const math = @import("math");
+pub const Samplers = @import("vkStruct/sampler.zig");
+const vmaStruct = @import("vkStruct/vma.zig");
+const vma = vmaStruct.vma;
+const global = @import("global");
+
+const bufferStruct = @import("vkStruct/buffer.zig");
+pub const Buffer_t = bufferStruct.Buffer_t;
 
 const layerNeeded = layer: {
     break :layer switch (builtin.mode) {
@@ -60,8 +66,6 @@ const featureDynamicRenderingNeed = [_][]const u8{"dynamicRendering"};
 
 const DefaultWindowWidth = 800;
 const DefaultWindowHeight = 600;
-
-const BufferAlign = 16;
 
 const DefaultSurfaceFormat = vk.VkSurfaceFormatKHR{
     .colorSpace = vk.VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
@@ -143,18 +147,6 @@ pub const Pipeline = struct {
     pipeline: vk.VkPipeline,
 };
 
-pub const Buffer = struct {
-    vkBuffer: vk.VkBuffer,
-    allocation: vma.VmaAllocation,
-    // info: vma.VmaAllocationInfo,
-    size: vk.VkDeviceSize,
-    pMappedData: ?*anyopaque = @import("std").mem.zeroes(?*anyopaque),
-    queueIndex: CommandPoolType = .init,
-
-    pub fn changeQueueIndex(self: *Buffer, queueType: CommandPoolType) void {
-        self.queueIndex = queueType;
-    }
-};
 pub const Image = struct {
     vkImage: vk.VkImage,
     allocation: vma.VmaAllocation,
@@ -194,19 +186,12 @@ const AllocationCount = struct {
 };
 const Self = @This();
 
-const bufferRatio: f32 = 0.5 / 11;
-
-pub const SamplerType = enum {
-    pixel2d,
-};
-
-pixel2dSampler: vk.VkSampler = null,
-
 currentFrame: std.atomic.Value(u32) = .init(0),
 
 allocator: Allocator,
 allocCallBacks: vk.VkAllocationCallbacks = undefined,
 pAllocCallBacks: [*c]vk.VkAllocationCallbacks = null,
+vmaS: vmaStruct = .{},
 
 window: *sdl.SDL_Window = undefined,
 windowWidth: u32 = 0,
@@ -223,8 +208,6 @@ physicalDevice: vk.VkPhysicalDevice = null,
 device: vk.VkDevice = null,
 
 swapchain: vk.VkSwapchainKHR = null,
-
-vmaAllocator: vma.VmaAllocator = null,
 
 graphicQueueFamily: VkQueueFamily = .{},
 graphicQueue: VkTheadQueue = .{},
@@ -251,10 +234,7 @@ renderFinishSemaphore: [2]vk.VkSemaphore = undefined,
 globalTimelineSemaphore: vk.VkSemaphore = null,
 globalTimelineValue: std.atomic.Value(u64) = .init(0),
 
-textureSets: textureSet,
-
-vmaBufferAllocations: AllocationCount = .{},
-vmaImageAllocations: AllocationCount = .{},
+// textureSets: textureSet,
 
 globalDescriptorPool: vk.VkDescriptorPool = null,
 
@@ -265,28 +245,30 @@ global2dMVPMatrixDescriptorSet: vk.VkDescriptorSet = null,
 global3dMVPMatrixDescriptorSet: vk.VkDescriptorSet = null,
 globalTextureDescriptorSet: vk.VkDescriptorSet = null,
 
-vertexBuffer2d: Buffer = undefined,
-vertexBuffer3d: Buffer = undefined,
-
-indexBuffer2d: Buffer = undefined,
-indexBuffer3d: Buffer = undefined,
-
 writeDescriptorSets: std.array_list.Managed(vk.VkWriteDescriptorSet) = undefined,
 descriptorImageInfos: std.array_list.Managed(vk.VkDescriptorImageInfo) = undefined,
 descriptorBufferInfos: std.array_list.Managed(vk.VkDescriptorBufferInfo) = undefined,
 descriptorBufferViewInfos: std.array_list.Managed(vk.VkBufferView) = undefined,
 
-pub fn init(allocator: Allocator) Self {
+samplers: Samplers = .{},
+
+buffers: bufferStruct,
+
+handles: *global.HandlesType,
+
+pub fn init(allocator: Allocator, handles: *global.HandlesType) Self {
     return Self{
         .allocator = allocator,
         .shaderModules = .init(allocator),
         .entryNames = .init(allocator),
         .pipelines = .init(allocator),
-        .textureSets = .init(allocator),
+        // .textureSets = .init(allocator, handles),
         .writeDescriptorSets = .init(allocator),
         .descriptorImageInfos = .init(allocator),
         .descriptorBufferInfos = .init(allocator),
         .descriptorBufferViewInfos = .init(allocator),
+        .buffers = .init(allocator),
+        .handles = handles,
     };
 }
 
@@ -303,7 +285,12 @@ pub fn initVulkan(self: *Self) !void {
     try self.setQueueFamilies();
     try self.createDevice();
     self.createQueue();
-    try self.createVmaAllocator();
+    self.vmaS = try vmaStruct.createVmaAllocator(
+        self.physicalDevice,
+        self.device,
+        self.instance,
+        self.pAllocCallBacks,
+    );
 
     var semaphores: [4]vk.VkSemaphore = undefined;
     try self.createBinarySemaphore(0, &semaphores);
@@ -344,7 +331,7 @@ pub fn initVulkan(self: *Self) !void {
 
     self.globalTextureDescriptorSet = set1Sets[0];
 
-    try self.initSamplers();
+    try self.samplers.initSamplers(self.device, self.pAllocCallBacks, self.allocator);
 }
 
 pub fn deinit(self: *Self) void {
@@ -357,7 +344,8 @@ pub fn deinit(self: *Self) void {
     const zone = tracy.initZone(@src(), .{ .name = "deinit vulkan resources" });
     defer zone.deinit();
 
-    self.destroySamplers();
+    self.samplers.destroySamplers(self.device, self.pAllocCallBacks);
+    self.buffers.deinit();
 
     self.writeDescriptorSets.deinit();
     self.descriptorImageInfos.deinit();
@@ -408,9 +396,9 @@ pub fn deinit(self: *Self) void {
     }
     self.destroySemaphore(self.globalTimelineSemaphore);
 
-    std.log.debug("vma buffer allocation residue count: {d}", .{self.vmaBufferAllocations.load(.seq_cst)});
-    std.log.debug("vma image allocation residue count: {d}", .{self.vmaImageAllocations.load(.seq_cst)});
-    vma.vmaDestroyAllocator(self.vmaAllocator);
+    std.log.debug("vma buffer allocation residue count: {d}", .{self.vmaS.vmaBufferAllocations.load(.seq_cst)});
+    std.log.debug("vma image allocation residue count: {d}", .{self.vmaS.vmaImageAllocations.load(.seq_cst)});
+    self.vmaS.destroyVmaAllocator();
 
     vk.vkDestroyDevice(self.device, self.pAllocCallBacks);
     sdl.SDL_Vulkan_DestroySurface(@ptrCast(self.*.instance), @ptrCast(self.*.surface), @ptrCast(self.*.pAllocCallBacks));
@@ -513,12 +501,6 @@ fn initAllocCallBacks(self: *Self) void {
     // self.*.allocCallBacks.pfnFree = vkFree;
     // self.*.allocCallBacks.pfnInternalAllocation = null;
     // self.*.allocCallBacks.pfnInternalFree = null;
-}
-
-fn checkVkResult(result: vk.VkResult) VkError!void {
-    VkResultToError.VkResultToError(@enumFromInt(result)) catch |err| {
-        return err;
-    };
 }
 
 fn getVulkanVersion() VkError!u32 {
@@ -875,103 +857,6 @@ fn createDevice(self: *Self) !void {
     try checkVkResult(vk.vkCreateDevice(self.physicalDevice, @ptrCast(&createInfo), self.pAllocCallBacks, @ptrCast(&self.device)));
 }
 
-fn createVmaAllocator(self: *Self) !void {
-    const zone = tracy.initZone(@src(), .{ .name = "create vma allocator" });
-    defer zone.deinit();
-
-    var allocatorCreateInfo = vma.VmaAllocatorCreateInfo{
-        .flags = 0,
-        .physicalDevice = @ptrCast(self.physicalDevice),
-        .device = @ptrCast(self.device),
-        .pAllocationCallbacks = @ptrCast(self.pAllocCallBacks),
-        .instance = @ptrCast(self.instance),
-        .vulkanApiVersion = vk.VK_API_VERSION_1_4,
-    };
-
-    try checkVkResult(vma.vmaCreateAllocator(@ptrCast(&allocatorCreateInfo), @ptrCast(&self.vmaAllocator)));
-}
-
-fn _createBuffer(
-    self: *Self,
-    flags: u32,
-    pNext: ?*anyopaque,
-    sharingMode: vk.VkSharingMode,
-    bufferSize: vk.VkDeviceSize,
-    usage: vk.VkBufferUsageFlags,
-    vmaFlags: u32,
-    vmaUsage: vma.VmaMemoryUsage,
-) VkError!Buffer {
-    var bufferCreateInfo = vk.VkBufferCreateInfo{
-        .sType = vk.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .flags = flags,
-        .pNext = pNext,
-        .sharingMode = sharingMode,
-        .size = bufferSize,
-        .usage = usage,
-    };
-
-    var allocationCreateInfo = vma.VmaAllocationCreateInfo{
-        .flags = vmaFlags,
-        .usage = vmaUsage,
-    };
-
-    var pBuffer: vk.VkBuffer = null;
-    var pAllocation: vma.VmaAllocation = null;
-    var allocationInfo = vma.VmaAllocationInfo{};
-
-    try checkVkResult(vma.vmaCreateBuffer(self.vmaAllocator, @ptrCast(&bufferCreateInfo), @ptrCast(&allocationCreateInfo), @ptrCast(&pBuffer), @ptrCast(&pAllocation), @ptrCast(&allocationInfo)));
-
-    _ = self.vmaBufferAllocations.fetchAdd(1, .seq_cst);
-
-    return Buffer{
-        .vkBuffer = pBuffer,
-        .allocation = pAllocation,
-        // .info = allocationInfo,
-        .size = allocationInfo.size,
-        .pMappedData = allocationInfo.pMappedData,
-        .queueIndex = .init,
-    };
-}
-
-pub fn destroyBuffer(self: *Self, buffer: Buffer) void {
-    const zone = tracy.initZone(@src(), .{ .name = "destroy buffer" });
-    defer zone.deinit();
-
-    _ = self.vmaBufferAllocations.fetchSub(1, .seq_cst);
-
-    vma.vmaDestroyBuffer(self.vmaAllocator, @ptrCast(buffer.vkBuffer), buffer.allocation);
-}
-
-pub fn createStagingBuffer(self: *Self, bufferSize: vk.VkDeviceSize) VkError!Buffer {
-    const zone = tracy.initZone(@src(), .{ .name = "create staging buffer" });
-    defer zone.deinit();
-
-    return self._createBuffer(
-        0,
-        null,
-        vk.VK_SHARING_MODE_EXCLUSIVE,
-        @intCast(math.round(BufferAlign, @intCast(bufferSize))),
-        vk.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | vma.VMA_ALLOCATION_CREATE_MAPPED_BIT,
-        vma.VMA_MEMORY_USAGE_CPU_TO_GPU,
-    );
-}
-
-pub fn createVertexBuffer(self: *Self, bufferSize: vk.VkDeviceSize) VkError!Buffer {
-    const zone = tracy.initZone(@src(), .{ .name = "create vertex buffer" });
-    defer zone.deinit();
-
-    return self._createBuffer(
-        0,
-        null,
-        vk.VK_SHARING_MODE_EXCLUSIVE,
-        @intCast(math.round(BufferAlign, bufferSize)),
-        vk.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | vk.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-        vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT,
-        vma.VMA_MEMORY_USAGE_GPU_ONLY,
-    );
-}
-
 fn createQueue(self: *Self) void {
     const zone = tracy.initZone(@src(), .{ .name = "create queues" });
     defer zone.deinit();
@@ -987,12 +872,8 @@ fn createQueue(self: *Self) void {
     }
 }
 
-pub const CommandPoolType = enum {
-    graphic,
-    compute,
-    transfer,
-    init,
-};
+pub const CommandPoolType = @import("vkStruct/queueType.zig").QueueType;
+
 pub fn _createCommandPool(self: *Self, pNext: ?*anyopaque, cpType: CommandPoolType, flags: u32, pCommandPool: *vk.VkCommandPool) !void {
     var createInfo = vk.VkCommandPoolCreateInfo{
         .sType = vk.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -1003,7 +884,7 @@ pub fn _createCommandPool(self: *Self, pNext: ?*anyopaque, cpType: CommandPoolTy
                 .graphic => self.graphicQueueFamily.familyIndice,
                 .compute => self.computeQueueFamily.familyIndice,
                 .transfer => self.transferQueueFamily.familyIndice,
-                .init => unreachable,
+                .present, .init => unreachable,
             },
         ),
     };
@@ -1257,9 +1138,13 @@ fn _createVkImage(
 
     var img: vk.VkImage = null;
     var allocation: vma.VmaAllocation = null;
-    try checkVkResult(vma.vmaCreateImage(self.vmaAllocator, @ptrCast(&imageInfo), @ptrCast(&allocationInfo), @ptrCast(&img), @ptrCast(&allocation), null));
-
-    _ = self.vmaImageAllocations.fetchAdd(1, .seq_cst);
+    try self.vmaS._createImage(
+        @ptrCast(&imageInfo),
+        @ptrCast(&allocationInfo),
+        @ptrCast(&img),
+        @ptrCast(&allocation),
+        null,
+    );
 
     return Image{
         .vkImage = img,
@@ -1358,7 +1243,7 @@ pub fn createTimelineSemaphore(self: *Self, flags: vk.VkSemaphoreCreateFlags, pS
     try self._createSemaphore(&createInfo, flags, pSemaphore);
 }
 
-pub fn _createSemaphore(self: *Self, pNext: ?*anyopaque, flags: vk.VkSamplerCreateFlags, pSemaphore: []vk.VkSemaphore) !void {
+pub fn _createSemaphore(self: *Self, pNext: ?*anyopaque, flags: vk.VkSemaphoreCreateFlags, pSemaphore: []vk.VkSemaphore) !void {
     var createInfo = vk.VkSemaphoreCreateInfo{
         .sType = vk.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
         .pNext = pNext,
@@ -1497,7 +1382,7 @@ pub fn queueSubmit(self: *Self, kind: CommandPoolType, submitCount: u32, pSubmit
             .graphic => self.graphicQueue,
             .compute => self.computeQueue,
             .transfer => self.transferQueue,
-            .init => unreachable,
+            .present, .init => unreachable,
         };
 
     queue.mutex.lock();
@@ -1580,9 +1465,7 @@ pub fn destroyImage(self: *Self, image: Image) void {
     const zone = tracy.initZone(@src(), .{ .name = "destroy image" });
     defer zone.deinit();
 
-    vma.vmaDestroyImage(self.vmaAllocator, @ptrCast(image.vkImage), image.allocation);
-
-    _ = self.vmaImageAllocations.fetchSub(1, .seq_cst);
+    self.vmaS.destroyImage(@ptrCast(image.vkImage), image.allocation);
 }
 
 pub fn readPipelineFileAndAdd(self: *Self, fileID: i32) !void {
@@ -1652,27 +1535,6 @@ pub fn allocateDescriptorSets(self: *Self, pool: vk.VkDescriptorPool, setLayouts
     };
 
     try checkVkResult(vk.vkAllocateDescriptorSets(self.device, @ptrCast(&allocaInfo), @ptrCast(descriptorSets)));
-}
-
-pub fn vmaStatistics(self: *Self) void {
-    const zone = tracy.initZone(@src(), .{ .name = "vma statistics" });
-    defer zone.deinit();
-
-    var stat: vma.VmaTotalStatistics = .{};
-
-    vma.vmaCalculateStatistics(self.vmaAllocator, @ptrCast(&stat));
-
-    for (stat.memoryHeap) |value| {
-        if (value.statistics.blockCount == 0) continue;
-
-        std.log.debug("{}", .{value});
-    }
-    for (stat.memoryType) |value| {
-        if (value.statistics.blockCount == 0) continue;
-
-        std.log.debug("{}", .{value});
-    }
-    std.log.debug("{}", .{stat.total});
 }
 
 pub fn addWriteDescriptorSetImage(self: *Self, dstArrayElement: u32, imageView: vk.VkImageView, sampler: vk.VkSampler) !void {
@@ -1778,47 +1640,49 @@ pub fn createImageView2D(self: *Self, image: vk.VkImage, format: vk.VkFormat) Vk
     );
 }
 
-pub fn _createSampler(self: *Self, ID: u32, anisotropy: f32) !vk.VkSampler {
-    var info = try samplerRead.readSampler(ID, self.allocator);
-    info.maxAnisotropy = anisotropy;
-
-    var sampler: vk.VkSampler = null;
-
-    try checkVkResult(vk.vkCreateSampler(self.device, @ptrCast(&info), self.pAllocCallBacks, @ptrCast(&sampler)));
-
-    return sampler;
+pub fn getPipeline(self: *Self, pipelineName: []const u8) ?Pipeline {
+    return self.pipelines.get(pipelineName);
 }
 
 pub fn destroyImageView(self: *Self, imageView: vk.VkImageView) void {
     vk.vkDestroyImageView(self.device, imageView, self.pAllocCallBacks);
 }
 
-pub fn initSamplers(self: *Self) !void {
-    self.pixel2dSampler = try self._createSampler(comptime file.comptimeGetID("pixel2dSampler.sampler"), 1.0);
-}
-
-pub fn destroySamplers(self: *Self) void {
-    vk.vkDestroySampler(self.device, self.pixel2dSampler, self.pAllocCallBacks);
-}
-
-pub fn getDefaultSampler(self: *Self, samplerType: SamplerType) vk.VkSampler {
-    return switch (samplerType) {
-        .pixel2d => self.pixel2dSampler,
-    };
-}
-
-pub fn getPipeline(self: *Self, pipelineName: []const u8) ?Pipeline {
-    return self.pipelines.get(pipelineName);
-}
-
-pub fn createIndexBuffer(self: *Self, size: vk.VkDeviceSize) VkError!Buffer {
-    return self._createBuffer(
-        0,
-        null,
-        vk.VK_SHARING_MODE_EXCLUSIVE,
-        @intCast(math.round(BufferAlign, size)),
-        vk.VK_BUFFER_USAGE_INDEX_BUFFER_BIT | vk.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-        vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-        vma.VMA_MEMORY_USAGE_GPU_ONLY,
+pub fn _createBuffer(
+    self: *Self,
+    flags: u32,
+    pNext: ?*anyopaque,
+    sharingMode: vk.VkSharingMode,
+    bufferSize: vk.VkDeviceSize,
+    usage: vk.VkBufferUsageFlags,
+    vmaFlags: u32,
+    vmaUsage: vma.VmaMemoryUsage,
+) !Buffer_t {
+    return self.buffers._createBuffer(
+        &self.vmaS,
+        flags,
+        pNext,
+        sharingMode,
+        bufferSize,
+        usage,
+        vmaFlags,
+        vmaUsage,
+        self.handles,
     );
+}
+
+pub fn createStagingBuffer(self: *Self, bufferSize: vk.VkDeviceSize) !Buffer_t {
+    return self.buffers.createStagingBuffer(&self.vmaS, bufferSize, self.handles);
+}
+
+pub fn createVertexBuffer(self: *Self, bufferSize: vk.VkDeviceSize) !Buffer_t {
+    return self.buffers.createVertexBuffer(&self.vmaS, bufferSize, self.handles);
+}
+
+pub fn createIndexBuffer(self: *Self, bufferSize: vk.VkDeviceSize) !Buffer_t {
+    return self.buffers.createIndexBuffer(&self.vmaS, bufferSize, self.handles);
+}
+
+pub fn destroyBuffer(self: *Self, buffer: Buffer_t) void {
+    return self.buffers.destroyBuffer(&self.vmaS, buffer, self.handles);
 }

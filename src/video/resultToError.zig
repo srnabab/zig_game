@@ -1,6 +1,7 @@
-const VkError = @import("vulkanType.zig").VkError;
-const VkResult = @import("vulkanType.zig").VkResult;
-pub fn VkResultToError(result: VkResult) VkError!void {
+ const vk = @import("vulkan").vulkan; const VkError = @import("vulkanType.zig").VkError;
+pub const vulkanType= @import("vulkanType.zig");
+ const VkResult = vulkanType.VkResult;
+ pub fn VkResultToError(result: VkResult) VkError!void {
 return switch(result) {
 .VK_ERROR_OUT_OF_HOST_MEMORY => VkError.VK_ERROR_OUT_OF_HOST_MEMORY,
 .VK_ERROR_OUT_OF_DEVICE_MEMORY => VkError.VK_ERROR_OUT_OF_DEVICE_MEMORY,
@@ -39,4 +40,6 @@ return switch(result) {
 .VK_ERROR_NOT_ENOUGH_SPACE_KHR => VkError.VK_ERROR_NOT_ENOUGH_SPACE_KHR,
 else => {},
 };
+}
+ pub fn checkVkResult(result: vk.VkResult) VkError!void { VkResultToError(@enumFromInt(result)) catch |err| { return err; };  
 }

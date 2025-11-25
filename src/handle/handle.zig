@@ -7,6 +7,12 @@ const Option = enum {
 
 pub const Handle = *anyopaque;
 
+pub fn getIndex(handle: Handle) u32 {
+    const ptr: *u32 = @ptrCast(@alignCast(handle));
+
+    return ptr.*;
+}
+
 pub fn Handles(comptime capacity: u32, comptime option: Option) type {
     return struct {
         const Self = @This();

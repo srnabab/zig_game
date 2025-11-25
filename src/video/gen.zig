@@ -41,8 +41,8 @@ pub fn main() !void {
     const file = try std.fs.createFileAbsolute(args[1], .{});
     defer file.close();
 
-    const func_start = "const VkError = @import(\"vulkanType.zig\").VkError;\nconst VkResult = @import(\"vulkanType.zig\").VkResult;\npub fn VkResultToError(result: VkResult) VkError!void {\nreturn switch(result) {\n";
-    const func_end = "};\n}";
+    const func_start = " const vk = @import(\"vulkan\").vulkan; const VkError = @import(\"vulkanType.zig\").VkError;\npub const vulkanType= @import(\"vulkanType.zig\");\n const VkResult = vulkanType.VkResult;\n pub fn VkResultToError(result: VkResult) VkError!void {\nreturn switch(result) {\n";
+    const func_end = "};\n}\n pub fn checkVkResult(result: vk.VkResult) VkError!void { VkResultToError(@enumFromInt(result)) catch |err| { return err; };  \n}\n";
 
     var func = std.array_list.Managed(u8).init(gpa);
     defer func.deinit();

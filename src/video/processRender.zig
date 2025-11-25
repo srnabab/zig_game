@@ -145,7 +145,7 @@ const CommandPools = struct {
             .graphic => 0,
             .transfer => 1,
             .compute => 2,
-            .init => unreachable,
+            .present, .init => unreachable,
         };
         if (self.commandPools[idx]) |p| {
             return p.primaryCommandBuffer[index];
@@ -169,7 +169,7 @@ const CommandPools = struct {
             .graphic => 0,
             .transfer => 1,
             .compute => 2,
-            .init => unreachable,
+            .present, .init => unreachable,
         };
 
         if (self.commandPools[idx]) |*p| {
@@ -664,9 +664,9 @@ const garbageDataTag = enum {
     empty,
 };
 const garbageData = union(garbageDataTag) {
-    buffer: VkStruct.Buffer,
+    buffer: VkStruct.Buffer_t,
     bufferAndRegion: struct {
-        buffer: VkStruct.Buffer,
+        buffer: VkStruct.Buffer_t,
         region: []vk.VkBufferCopy,
     },
     regions: []vk.VkBufferCopy,
@@ -710,7 +710,7 @@ pub const oneTimeCommand = struct {
 
     pub fn init(allocator: std.mem.Allocator, stackAllocator: std.mem.Allocator) Self {
         std.log.info("command size: {d}", .{@sizeOf(drawC.comm)});
-        std.log.info("vk struct Buffer size: {d}", .{@sizeOf(VkStruct.Buffer)});
+        std.log.info("vk struct Buffer size: {d}", .{@sizeOf(VkStruct.Buffer_t)});
         return Self{
             .queue = .init(allocator),
             .allocator = allocator,
@@ -760,7 +760,7 @@ pub const oneTimeCommand = struct {
                 break :rs drawC.Output{ .image = command.copyBufferToImage.dstImage };
             },
             .copyBuffer => {
-                break :rs drawC.Output{ .buffer = command.copyBuffer.dstBuffer.vkBuffer };
+                break :rs drawC.Output{ .buffer = command.copyBuffer.dstBuffer };
             },
             // .transLayout => {
             //     break :rs drawC.Output{ .image = command.transLayout.pTexture.image.vkImage };
@@ -1082,13 +1082,15 @@ pub const oneTimeCommand = struct {
                 const copyBuffer = ptr.value_ptr.command.copyBuffer;
                 const tempRegions = copyBuffer.regions;
 
-                if (copyBuffer.srcBuffer.queueIndex != .transfer and copyBuffer.srcBuffer.queueIndex != .init) {}
+                const oldSrcQueueType = global.vulkan.buffers.getBufferQueueType(copyBuffer.srcBuffer);
+                if (oldSrcQueueType != .transfer and oldSrcQueueType != .init) {}
 
                 ptr.value_ptr.*.command.copyBuffer.regions = try self.allocator.dupe(vk.VkBufferCopy, tempRegions);
 
-                ptr.value_ptr.command.copyBuffer.srcBuffer.changeQueueIndex(.transfer);
+                // ptr.value_ptr.command.copyBuffer.srcBuffer.changeQueueIndex(.transfer);
+                global.vulkan.buffers.changeQueueType(ptr.value_ptr.command.copyBuffer.srcBuffer, .transfer);
 
-                try self.cacheMap.put(@ptrCast(copyBuffer.dstBuffer.vkBuffer), ID);
+                try self.cacheMap.put(@ptrCast(copyBuffer.dstBuffer), ID);
             },
             .copyBufferToImage => {
                 node.data.commandPoolType = .transfer;
@@ -1165,7 +1167,7 @@ pub const oneTimeCommand = struct {
             .copyBuffer => {
                 const copyBuffer = comm.command.copyBuffer;
 
-                const index_ = self.cacheMap.get(@ptrCast(copyBuffer.srcBuffer.vkBuffer));
+                const index_ = self.cacheMap.get(@ptrCast(copyBuffer.srcBuffer));
                 if (index_) |idnex| {
                     const prev = self.nodeDag.get(idnex).?;
                     if (prev == node) {
@@ -1230,7 +1232,7 @@ pub const oneTimeCommand = struct {
                 };
                 vk.vkCmdCopyBufferToImage(
                     commandBuffer,
-                    copyBufferToImage.buffer.vkBuffer,
+                    global.vulkan.buffers.getVkBuffer(copyBufferToImage.buffer),
                     copyBufferToImage.dstImage,
                     copyBufferToImage.dstImageLayout,
                     1,
@@ -1364,8 +1366,8 @@ pub const oneTimeCommand = struct {
                 const copyBuffer = command.command.copyBuffer;
                 vk.vkCmdCopyBuffer(
                     commandBuffer,
-                    copyBuffer.srcBuffer.vkBuffer,
-                    copyBuffer.dstBuffer.vkBuffer,
+                    global.vulkan.buffers.getVkBuffer(copyBuffer.srcBuffer),
+                    global.vulkan.buffers.getVkBuffer(copyBuffer.dstBuffer),
                     @intCast(copyBuffer.regions.len),
                     @ptrCast(copyBuffer.regions.ptr),
                 );
@@ -1819,7 +1821,7 @@ pub const oneTimeCommand = struct {
                         .graphic => graphicSemaphoreValue = currentSemaphoreValue,
                         .transfer => transferSemaphoreValue = currentSemaphoreValue,
                         .compute => computeSemaphoreValue = currentSemaphoreValue,
-                        .init => unreachable,
+                        .present, .init => unreachable,
                     }
 
                     begin = false;
@@ -1851,7 +1853,7 @@ pub const oneTimeCommand = struct {
                             currentType = .compute;
                             try global.vulkan.waitSemaphore(1, &global.vulkan.globalTimelineSemaphore, &computeSemaphoreValue);
                         },
-                        .init => unreachable,
+                        .init, .present => unreachable,
                     }
                     // try VkStruct.resetCommandBuffer(currentCommandBuffer);
                     try VkStruct._beginCommandBuffer(currentCommandBuffer, null, vk.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, null);

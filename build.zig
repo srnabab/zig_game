@@ -30,7 +30,7 @@ pub fn build(b: *std.Build) void {
     const selectModifiedFileToTxt = selectModifiedFileToTxtModule.artifact("selectModifiedFileToTxt");
 
     const vk_mod = b.createModule(.{
-        .root_source_file = b.path("src/vulkan.zig"),
+        .root_source_file = b.path("src/vulkan/vulkan.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -212,8 +212,21 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const resultToError_mod = b.createModule(.{
+        .root_source_file = b.path("src/video/resultToError.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const fixedIndexArray_mod = b.createModule(.{
+        .root_source_file = b.path("src/fixedIndexArray/array.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     // dependency
+    resultToError_mod.addImport("enumFromC", enum_c_mod);
+    resultToError_mod.addImport("vulkan", vk_mod);
+
     cglm_mod.addIncludePath(b.path("include"));
 
     vertices_mod.addImport("tracy", tracy.module("tracy"));
@@ -300,6 +313,10 @@ pub fn build(b: *std.Build) void {
     video_mod.addImport("fileSystem", fileSystem_mod);
     video_mod.addImport("sampler", sampler_read_mod);
     video_mod.addImport("math", math_mod);
+    video_mod.addImport("resultToError", resultToError_mod);
+    video_mod.addImport("fixedIndexArray", fixedIndexArray_mod);
+    video_mod.addImport("handle", handle_mod);
+    video_mod.addImport("global", global_mod);
 
     queue_mod.addImport("tracy", tracy.module("tracy"));
 

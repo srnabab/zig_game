@@ -27,6 +27,8 @@ const Allocator = std.mem.Allocator;
 
 const global = @import("global");
 
+var handles: global.HandlesType = undefined;
+
 var thread_count: usize = 0;
 var update_thread: usize = 0;
 var render_thread: usize = 0;
@@ -79,8 +81,8 @@ pub fn main() !void {
         try global.cwd.setAsCwd();
     }
 
-    global.handles = try .init(gpa);
-    defer global.handles.deinit(gpa);
+    handles = try .init(gpa);
+    defer handles.deinit(gpa);
 
     file.init();
     defer file.deinit();
@@ -94,7 +96,7 @@ pub fn main() !void {
     defer sdl.SDL_Quit();
     std.log.debug("SDL Version: {d}.{d}.{d}", .{ sdl.SDL_MAJOR_VERSION, sdl.SDL_MINOR_VERSION, sdl.SDL_MICRO_VERSION });
 
-    var vulkan = VkStruct.init(global.gpa.*);
+    var vulkan = VkStruct.init(global.gpa.*, &handles);
     try vulkan.initVulkan();
     defer vulkan.deinit();
 
@@ -103,7 +105,7 @@ pub fn main() !void {
     global.graphic = &graphic;
     defer global.graphic.deinit();
 
-    var textureSett = textureSet.init(global.gpa.*);
+    var textureSett = textureSet.init(global.gpa.*, &handles);
     global.textureSet = &textureSett;
     defer global.textureSet.deinit();
 

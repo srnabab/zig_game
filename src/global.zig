@@ -19,4 +19,4 @@ pub var vulkan: *VkStruct = undefined;
 pub var graphic: *OneTimeCommand = undefined;
 pub var textureSet: *TextureSet = undefined;
 
-pub var handles: Handles.Handles(10240, .Once) = undefined;
+pub const HandlesType = Handles.Handles(10240, .Once);
