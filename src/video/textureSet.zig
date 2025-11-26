@@ -140,8 +140,8 @@ pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Sample
         defer img.file.close();
 
         const imgStat = try img.file.stat();
-        const fileMem = try global.gpa.alloc(u8, imgStat.size);
-        defer global.gpa.free(fileMem);
+        const fileMem = try self.allocator.alloc(u8, imgStat.size);
+        defer self.allocator.free(fileMem);
         _ = try img.file.readAll(fileMem);
 
         const imageMem = stb_image.stbi_load_from_memory(

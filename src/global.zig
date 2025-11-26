@@ -11,7 +11,6 @@ pub const StackMemorySize = 512 * 1024;
 pub const vertexCount = 4;
 pub const indexCount = 6;
 
-pub var gpa: *Allocator = undefined;
 pub var down = false;
 pub var vulkan: *VkStruct = undefined;
 

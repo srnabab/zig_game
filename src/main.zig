@@ -47,7 +47,7 @@ pub fn main() !void {
     var tracyAllocator = tracy.TracingAllocator.initNamed("pool", gpa);
     defer tracyAllocator.deinit();
     var taa = tracyAllocator.allocator();
-    global.gpa = &taa;
+    const allocator_t = &taa;
 
     tracy.startupProfiler();
     defer tracy.shutdownProfiler();
@@ -64,8 +64,8 @@ pub fn main() !void {
 
     output.init();
 
-    const args = try process.argsAlloc(global.gpa.*);
-    defer process.argsFree(global.gpa.*, args);
+    const args = try process.argsAlloc(allocator_t.*);
+    defer process.argsFree(allocator_t.*, args);
 
     for (args) |arg| {
         // try output.out.print("arg: {s}\n", .{arg});
@@ -96,16 +96,16 @@ pub fn main() !void {
     defer sdl.SDL_Quit();
     std.log.debug("SDL Version: {d}.{d}.{d}", .{ sdl.SDL_MAJOR_VERSION, sdl.SDL_MINOR_VERSION, sdl.SDL_MICRO_VERSION });
 
-    var vulkan = VkStruct.init(global.gpa.*, &handles);
+    var vulkan = VkStruct.init(allocator_t.*, &handles);
     try vulkan.initVulkan();
     defer vulkan.deinit();
 
     global.vulkan = &vulkan;
-    var graphic = OneTimeCommand.init(global.gpa.*, sma);
+    var graphic = OneTimeCommand.init(allocator_t.*, sma);
     global.graphic = &graphic;
     defer global.graphic.deinit();
 
-    var textureSett = textureSet.init(global.gpa.*, &handles);
+    var textureSett = textureSet.init(allocator_t.*, &handles);
     global.textureSet = &textureSett;
     defer global.textureSet.deinit();
 
