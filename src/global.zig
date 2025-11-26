@@ -1,4 +1,4 @@
-const VkStruct = @import("video");
+pub const VkStruct = @import("video");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const OneTimeCommand = @import("processRender").oneTimeCommand;

@@ -1501,7 +1501,7 @@ pub fn readPipelineFileAndAdd(self: *Self, fileID: i32) !void {
     }
     zone3.deinit();
 
-    try translate.toVulkan(pipelineInfo, shaderCodes, @constCast(&self.descriptorSetLayout));
+    try translate.toVulkan(pipelineInfo, shaderCodes, @constCast(&self.descriptorSetLayout), self);
 
     try self.addPipelineCreateInfo(pipelineInfo);
 }
