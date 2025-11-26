@@ -150,7 +150,8 @@ pub const Pipeline = struct {
 pub const Image = struct {
     vkImage: vk.VkImage,
     allocation: vma.VmaAllocation,
-    queueIndex: i32 = -1,
+    queueIndex: CommandPoolType = .init,
+    // queueIndex: i32 = -1,
 };
 
 const CommandPool = struct {
@@ -1149,7 +1150,7 @@ fn _createVkImage(
     return Image{
         .vkImage = img,
         .allocation = allocation,
-        .queueIndex = -1,
+        .queueIndex = .init,
     };
 }
 
