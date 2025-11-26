@@ -105,7 +105,7 @@ pub fn main() !void {
     global.graphic = &graphic;
     defer global.graphic.deinit();
 
-    var textureSett = textureSet.init(allocator_t.*, &handles);
+    var textureSett = textureSet.init(allocator_t.*, &handles, &vulkan);
     global.textureSet = &textureSett;
     defer global.textureSet.deinit();
 

@@ -75,7 +75,9 @@ tempTextureRecord: *Texture = undefined,
 
 handles: *global.HandlesType,
 
-pub fn init(allocator: std.mem.Allocator, handles: *global.HandlesType) Self {
+vulkan: *VkStruct,
+
+pub fn init(allocator: std.mem.Allocator, handles: *global.HandlesType, vulkan: *VkStruct) Self {
     const zone = tracy.initZone(@src(), .{ .name = "init texture set" });
     defer zone.deinit();
 
@@ -89,6 +91,7 @@ pub fn init(allocator: std.mem.Allocator, handles: *global.HandlesType) Self {
         .offsetsPool = .init(allocator),
         .offsetRange = .init(allocator),
         .handles = handles,
+        .vulkan = vulkan,
     };
 }
 
@@ -96,14 +99,14 @@ pub fn deinit(self: *Self) void {
     const zone = tracy.initZone(@src(), .{ .name = "texture set deinit" });
     defer zone.deinit();
 
-    global.vulkan.waitDevice() catch |err| {
+    self.vulkan.waitDevice() catch |err| {
         std.log.err("wait device error {s}\n", .{@errorName(err)});
     };
 
     // std.log.debug("texture deinit", .{});
     for (self.array.items) |texture| {
-        global.vulkan.destroyImage(texture.image);
-        global.vulkan.destroyImageView(texture.imageView);
+        self.vulkan.destroyImage(texture.image);
+        self.vulkan.destroyImageView(texture.imageView);
     }
 
     std.log.debug("texture count {d}", .{self.array.capacity});
@@ -154,14 +157,14 @@ pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Sample
         );
         const pixelSize: u64 = @intCast(@sizeOf(u8) * imgWidth * imgHeight * channel);
 
-        stagingBuffer = try global.vulkan.createStagingBuffer(pixelSize);
-        errdefer global.vulkan.destroyBuffer(stagingBuffer);
+        stagingBuffer = try self.vulkan.createStagingBuffer(pixelSize);
+        errdefer self.vulkan.destroyBuffer(stagingBuffer);
 
-        global.vulkan.buffers.copyDataToMapped(stagingBuffer, u8, imageMem[0..pixelSize]);
+        self.vulkan.buffers.copyDataToMapped(stagingBuffer, u8, imageMem[0..pixelSize]);
         // @memcpy(@as([*c]u8, @ptrCast(stagingBuffer.pMappedData.?)), imageMem[0..pixelSize]);
 
-        const image = try global.vulkan.createImage2D(imgWidth, imgHeight, img.format, img.tiling, img.usage);
-        errdefer global.vulkan.destroyImage(image);
+        const image = try self.vulkan.createImage2D(imgWidth, imgHeight, img.format, img.tiling, img.usage);
+        errdefer self.vulkan.destroyImage(image);
 
         // texture = try self.memory.create();
 
@@ -209,13 +212,13 @@ pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Sample
         } },
     );
 
-    texture.imageView = try global.vulkan.createImageView2D(texture.image.vkImage, texture.format);
+    texture.imageView = try self.vulkan.createImageView2D(texture.image.vkImage, texture.format);
 
     const dstArrayElement = try self.getDescriptorSetIndex(ID);
-    try global.vulkan.addWriteDescriptorSetImage(
+    try self.vulkan.addWriteDescriptorSetImage(
         dstArrayElement,
         texture.imageView,
-        global.vulkan.samplers.getDefaultSampler(samplerType),
+        self.vulkan.samplers.getDefaultSampler(samplerType),
     );
 
     return texture;
