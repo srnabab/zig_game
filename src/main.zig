@@ -100,7 +100,7 @@ pub fn main() !void {
     try vulkan.initVulkan();
     defer vulkan.deinit();
 
-    global.vulkan = &vulkan;
+    // global.vulkan = &vulkan;
     var graphic = OneTimeCommand.init(allocator_t.*, sma, &vulkan);
     global.graphic = &graphic;
     defer global.graphic.deinit();
@@ -118,10 +118,10 @@ pub fn main() !void {
 
     try global.graphic.addCommandEnd();
 
-    global.vulkan.writeCachedDescriptorSetResources();
+    vulkan.writeCachedDescriptorSetResources();
 
     try global.graphic.executeCommands();
-    global.vulkan.nextFrame();
+    vulkan.nextFrame();
 
     try vulkan.readPipelineFileAndAdd(comptime file.comptimeGetID("flat2d.pipeb"));
 
@@ -136,7 +136,7 @@ pub fn main() !void {
         // } });
         try global.graphic.addCommandEnd();
         try global.graphic.executeCommands();
-        global.vulkan.nextFrame();
+        vulkan.nextFrame();
         if (std.time.milliTimestamp() - renderStart > 2) {
             break;
         }

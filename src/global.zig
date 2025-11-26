@@ -11,8 +11,6 @@ pub const StackMemorySize = 512 * 1024;
 pub const vertexCount = 4;
 pub const indexCount = 6;
 
-pub var vulkan: *VkStruct = undefined;
-
 pub var graphic: *OneTimeCommand = undefined;
 pub var textureSet: *TextureSet = undefined;
 
