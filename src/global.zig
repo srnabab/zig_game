@@ -13,7 +13,6 @@ pub const indexCount = 6;
 
 pub var gpa: *Allocator = undefined;
 pub var down = false;
-pub var cwd: std.fs.Dir = undefined;
 pub var vulkan: *VkStruct = undefined;
 
 pub var graphic: *OneTimeCommand = undefined;

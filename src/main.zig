@@ -77,8 +77,8 @@ pub fn main() !void {
         defer zone.deinit();
 
         const index = std.mem.lastIndexOf(u8, args[0], "\\").?;
-        global.cwd = try std.fs.openDirAbsolute(args[0][0..index], .{});
-        try global.cwd.setAsCwd();
+        var temp = try std.fs.openDirAbsolute(args[0][0..index], .{});
+        try temp.setAsCwd();
     }
 
     handles = try .init(gpa);

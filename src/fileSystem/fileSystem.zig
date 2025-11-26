@@ -19,7 +19,7 @@ pub fn getFile(id: i32) !std.fs.File {
     const zone = tracy.initZone(@src(), .{ .name = "open file from database" });
     defer zone.deinit();
 
-    return base.getFile(id, global.cwd);
+    return base.getFile(id, std.fs.cwd());
 }
 
 pub const imageLoad = struct {
@@ -38,7 +38,7 @@ pub fn getImageLoadParam(id: i32) !imageLoad {
     const ptr = @as([*c]u8, @constCast(&res.relativePath));
     const len = std.mem.len(ptr);
     return imageLoad{
-        .file = try global.cwd.openFile(res.relativePath[0..len], .{}),
+        .file = try std.fs.cwd().openFile(res.relativePath[0..len], .{}),
         .format = res.format,
         .tiling = res.tiling,
         .usage = res.usage,
