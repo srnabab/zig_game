@@ -176,11 +176,13 @@ pub fn main() !void {
     achievements.UnlockAchievement(@ptrCast(&steam.g_rgAchievements[1]));
     achievements.StoreStatsIfNecessary();
 
+    var endSemaphore: std.Thread.Semaphore = .{};
+
     var update_t = try Thread.spawn(.{}, update.update_thread_func, .{update_thread});
     defer update_t.join();
 
-    var render_t = try Thread.spawn(.{}, render.render_thread_func, .{render_thread});
+    var render_t = try Thread.spawn(.{}, render.render_thread_func, .{ render_thread, &endSemaphore });
     defer render_t.join();
 
-    global.down = true;
+    endSemaphore.post();
 }

@@ -3,10 +3,11 @@ const video = @import("video");
 const process = @import("processRender");
 const global = @import("global");
 const tracy = @import("tracy");
+const Semaphore = std.Thread.Semaphore;
 
 // const drawCommandProcess = @import("video/drawCommandProcess.zig");
 
-pub fn render_thread_func(thread_count: usize) !void {
+pub fn render_thread_func(thread_count: usize, endSemaphore: *Semaphore) !void {
     tracy.setThreadName("render");
     defer tracy.message("render exit");
 
@@ -20,9 +21,10 @@ pub fn render_thread_func(thread_count: usize) !void {
     // global.vulkan = vulkan;
 
     while (true) {
-        if (global.down) {
-            break;
-        }
+        endSemaphore.timedWait(1) catch |err| switch (err) {
+            error.Timeout => continue,
+        };
+        break;
     }
 
     _ = thread_count;
