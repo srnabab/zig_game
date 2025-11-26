@@ -111,7 +111,7 @@ pub fn main() !void {
 
     try global.graphic.startCommand();
 
-    try vertices.init();
+    try vertices.init(&vulkan);
     defer vertices.deinit();
     _ = try global.textureSet.createImageTexture(comptime file.comptimeGetID("non_exist.png"), .pixel2d);
     _ = global.textureSet.createImageTextureEnsureWithErrorImage(comptime file.comptimeGetID("circle.png"), .pixel2d);

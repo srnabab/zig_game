@@ -21,13 +21,16 @@ const index2DinitCount = std.math.maxInt(u16) / 6;
 pub var vertices2D: []Vertex2D = &.{};
 pub var vertexBuffer2D: vkStruct.Buffer_t = undefined;
 pub var indexBuffer2D: vkStruct.Buffer_t = undefined;
+var vulkan: *vkStruct = undefined;
 
-pub fn init() !void {
+pub fn init(vulkan_t: *vkStruct) !void {
     const zone = tracy.initZone(@src(), .{ .name = "vertices initialization" });
     defer zone.deinit();
 
-    vertexBuffer2D = try global.vulkan.createVertexBuffer(vertex2DinitCount * @sizeOf(Vertex2D));
-    indexBuffer2D = try global.vulkan.createIndexBuffer(index2DinitCount * 6 * @sizeOf(u16));
+    vulkan = vulkan_t;
+
+    vertexBuffer2D = try vulkan.createVertexBuffer(vertex2DinitCount * @sizeOf(Vertex2D));
+    indexBuffer2D = try vulkan.createIndexBuffer(index2DinitCount * 6 * @sizeOf(u16));
 
     {
         const indices = comptime is: {
@@ -48,8 +51,8 @@ pub fn init() !void {
             break :is s;
         };
 
-        const stagingBuffer = try global.vulkan.createStagingBuffer(indices.len * @sizeOf(u16));
-        global.vulkan.buffers.copyDataToMapped(stagingBuffer, u16, &indices);
+        const stagingBuffer = try vulkan.createStagingBuffer(indices.len * @sizeOf(u16));
+        vulkan.buffers.copyDataToMapped(stagingBuffer, u16, &indices);
         // @memcpy(@as([*c]u16, @ptrCast(@alignCast(stagingBuffer.pMappedData.?))), &indices);
 
         // std.log.debug("s: {d}, i: {d}", .{ stagingBuffer.size, indexBuffer2D.size });
@@ -57,7 +60,7 @@ pub fn init() !void {
         var region = [_]vk.VkBufferCopy{.{
             .srcOffset = 0,
             .dstOffset = 0,
-            .size = global.vulkan.buffers.getBufferSize(indexBuffer2D),
+            .size = vulkan.buffers.getBufferSize(indexBuffer2D),
         }};
 
         try global.graphic.addCommand(.copyBuffer, .{ .copyBuffer = .{
@@ -69,11 +72,11 @@ pub fn init() !void {
 }
 
 pub fn deinit() void {
-    global.vulkan.waitDevice() catch |err| {
+    vulkan.waitDevice() catch |err| {
         std.log.err("wait device error {s}\n", .{@errorName(err)});
         return;
     };
 
-    global.vulkan.destroyBuffer(vertexBuffer2D);
-    global.vulkan.destroyBuffer(indexBuffer2D);
+    vulkan.destroyBuffer(vertexBuffer2D);
+    vulkan.destroyBuffer(indexBuffer2D);
 }

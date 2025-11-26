@@ -47,13 +47,6 @@ pub const Texture = struct {
         const zone = tracy.initZone(@src(), .{ .name = "change texture queue type" });
         defer zone.deinit();
 
-        // const queueIndex = switch (queueType) {
-        //     .graphic => global.vulkan.graphicQueueFamily.familyIndice,
-        //     .transfer => global.vulkan.transferQueueFamily.familyIndice,
-        //     .compute => global.vulkan.computeQueueFamily.familyIndice,
-        //     else => unreachable,
-        // };
-
         self.image.queueIndex = queueType;
     }
 };
