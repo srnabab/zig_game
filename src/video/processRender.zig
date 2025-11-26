@@ -43,7 +43,7 @@ const SecondaryCommandBuffers = struct {
         };
     }
 
-    pub fn getFreeBuffer(self: *Self) !vk.VkCommandBuffer {
+    pub fn getFreeBuffer(self: *Self, vulkan: *VkStruct) !vk.VkCommandBuffer {
         if (self.commandPool) |pool| {
             if (self.available[0] > 0) {
                 const idx: usize = @intCast(self.available[0]);
@@ -59,7 +59,7 @@ const SecondaryCommandBuffers = struct {
 
                 var cb: vk.VkCommandBuffer = null;
 
-                try global.vulkan._createCommandBuffers(null, pool, vk.VK_COMMAND_BUFFER_LEVEL_SECONDARY, 1, @ptrCast(&cb));
+                try vulkan._createCommandBuffers(null, pool, vk.VK_COMMAND_BUFFER_LEVEL_SECONDARY, 1, @ptrCast(&cb));
 
                 self.commandBuffers[self.count] = cb;
                 self.count += 1;
@@ -96,9 +96,9 @@ const CommandPool = struct {
     primaryCommandBuffer: [2]vk.VkCommandBuffer,
     secondaryCommandBuffers: ?SecondaryCommandBuffers = null,
 
-    pub fn initPrimary(commandPooll: vk.VkCommandPool) !Self {
+    pub fn initPrimary(commandPooll: vk.VkCommandPool, vulkan: *VkStruct) !Self {
         var cbs: [2]vk.VkCommandBuffer = undefined;
-        try global.vulkan._createCommandBuffers(null, commandPooll, vk.VK_COMMAND_BUFFER_LEVEL_PRIMARY, 2, @ptrCast(&cbs));
+        try vulkan._createCommandBuffers(null, commandPooll, vk.VK_COMMAND_BUFFER_LEVEL_PRIMARY, 2, @ptrCast(&cbs));
 
         return .{
             .commandPool = commandPooll,
@@ -106,9 +106,9 @@ const CommandPool = struct {
         };
     }
 
-    pub fn initWithSecondary(allocator: std.mem.Allocator, commandPooll: vk.VkCommandPool, secondarySize: usize) !Self {
+    pub fn initWithSecondary(allocator: std.mem.Allocator, commandPooll: vk.VkCommandPool, secondarySize: usize, vulkan: *VkStruct) !Self {
         var cbs: [2]vk.VkCommandBuffer = undefined;
-        try global.vulkan._createCommandBuffers(null, commandPooll, vk.VK_COMMAND_BUFFER_LEVEL_PRIMARY, 2, @ptrCast(&cbs));
+        try vulkan._createCommandBuffers(null, commandPooll, vk.VK_COMMAND_BUFFER_LEVEL_PRIMARY, 2, @ptrCast(&cbs));
         return .{
             .commandPool = commandPooll,
             .primaryCommandBuffer = cbs,
@@ -137,7 +137,7 @@ const CommandPools = struct {
         };
     }
 
-    pub fn getPrimaryCommandBuffer(self: *Self, kind: VkStruct.CommandPoolType, index: u32) !vk.VkCommandBuffer {
+    pub fn getPrimaryCommandBuffer(self: *Self, kind: VkStruct.CommandPoolType, index: u32, vulkan: *VkStruct) !vk.VkCommandBuffer {
         const zone = tracy.initZone(@src(), .{ .name = "get primary command buffer" });
         defer zone.deinit();
 
@@ -151,17 +151,17 @@ const CommandPools = struct {
             return p.primaryCommandBuffer[index];
         } else {
             var commandPool: vk.VkCommandPool = null;
-            try global.vulkan._createCommandPool(null, kind, vk.VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | vk.VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, @ptrCast(&commandPool));
+            try vulkan._createCommandPool(null, kind, vk.VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | vk.VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, @ptrCast(&commandPool));
             self.commandPools[idx] = if (self.secondarySizes[idx] > 0)
-                try .initWithSecondary(self.allocator, commandPool, self.secondarySizes[idx])
+                try .initWithSecondary(self.allocator, commandPool, self.secondarySizes[idx], vulkan)
             else
-                try .initPrimary(commandPool);
+                try .initPrimary(commandPool, vulkan);
 
             return self.commandPools[idx].?.primaryCommandBuffer[index];
         }
     }
 
-    pub fn getSecondaryCommandBuffer(self: *Self, kind: VkStruct.CommandPoolType) !vk.VkCommandBuffer {
+    pub fn getSecondaryCommandBuffer(self: *Self, kind: VkStruct.CommandPoolType, vulkan: *VkStruct) !vk.VkCommandBuffer {
         const zone = tracy.initZone(@src(), .{ .name = "get secondary command buffer" });
         defer zone.deinit();
 
@@ -174,17 +174,17 @@ const CommandPools = struct {
 
         if (self.commandPools[idx]) |*p| {
             if (self.secondarySizes[idx] > 0)
-                return p.secondaryCommandBuffers.?.getFreeBuffer();
+                return p.secondaryCommandBuffers.?.getFreeBuffer(vulkan);
         } else {
             var commandPool: vk.VkCommandPool = null;
-            try global.vulkan._createCommandPool(null, kind, vk.VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, @ptrCast(&commandPool));
+            try vulkan._createCommandPool(null, kind, vk.VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, @ptrCast(&commandPool));
             self.commandPools[idx] = if (self.secondarySizes[idx] > 0)
-                try .initWithSecondary(self.allocator, commandPool, self.secondarySizes[idx])
+                try .initWithSecondary(self.allocator, commandPool, self.secondarySizes[idx], vulkan)
             else
-                try .initPrimary(commandPool);
+                try .initPrimary(commandPool, vulkan);
 
             if (self.secondarySizes[idx] > 0)
-                return self.commandPools[idx].?.secondaryCommandBuffers.?.getFreeBuffer();
+                return self.commandPools[idx].?.secondaryCommandBuffers.?.getFreeBuffer(vulkan);
         }
 
         return error.NoSecondaryCommandBuffer;
@@ -203,11 +203,11 @@ const CommandPools = struct {
         }
     }
 
-    pub fn deinit(self: *Self) void {
+    pub fn deinit(self: *Self, vulkan: *VkStruct) void {
         for (0..self.commandPools.len) |i| {
             if (self.commandPools[i] != null) {
                 self.commandPools[i].?.deinit(self.allocator);
-                global.vulkan.destroyCommandPool(self.commandPools[i].?.commandPool);
+                vulkan.destroyCommandPool(self.commandPools[i].?.commandPool);
             }
         }
     }
@@ -236,7 +236,7 @@ fn SpecialThreadPool(maxThreads: u32) type {
             };
         }
 
-        pub fn getFreeThread(self: *Self, commandBufferQueue: commandBufferDAG, commandPoolType: VkStruct.CommandPoolType) !*ThreadContext {
+        pub fn getFreeThread(self: *Self, commandBufferQueue: commandBufferDAG, commandPoolType: VkStruct.CommandPoolType, vulkan: *VkStruct) !*ThreadContext {
             const zone = tracy.initZone(@src(), .{ .name = "get free thread" });
             defer zone.deinit();
 
@@ -268,6 +268,7 @@ fn SpecialThreadPool(maxThreads: u32) type {
                     .index = @intCast(self.threadCount),
                     .threadPool = self,
                     .commandPoolType = commandPoolType,
+                    .vulkan = vulkan,
                 };
 
                 const t = try Thread.spawn(.{}, oneTimeCommand.recordCommand, .{&self.info[self.threadCount].?});
@@ -292,7 +293,7 @@ fn SpecialThreadPool(maxThreads: u32) type {
             self.freeCount += 1;
         }
 
-        pub fn waitThread(self: *Self) void {
+        pub fn waitThread(self: *Self, vulkan: *VkStruct) void {
             for (0..self.threads.len) |i| {
                 var end = drawC{
                     .ID = 1234124142,
@@ -322,7 +323,7 @@ fn SpecialThreadPool(maxThreads: u32) type {
 
                 if (self.info[i] != null) {
                     self.info[i].?.taskQueue.deinit();
-                    self.info[i].?.commandPool.deinit();
+                    self.info[i].?.commandPool.deinit(vulkan);
                     self.info[i].?.commandBuffers.deinit();
                 }
             }
@@ -632,6 +633,7 @@ const ThreadContext = struct {
 
     /// only one
     commandBuffers: commandBufferDAG,
+    vulkan: *VkStruct,
 };
 
 const dependencyData = struct {
@@ -684,6 +686,7 @@ pub const oneTimeCommand = struct {
     // pub const TaskCallback = *const fn (ctx: *anyopaque) VkStruct.VkError!void;
     // const EnqueueTaskCallback = *const fn (taskCallback: TaskCallback, taskCtx: *anyopaque, userCtx: *anyopaque) *anyopaque;
     // const FinishTaskCallback = *const fn (userTask: *anyopaque, userCtx: *anyopaque) void;
+    vulkan: *VkStruct,
 
     innerID: u32 = 0,
     innerCommandBufferID: u32 = 0,
@@ -708,7 +711,7 @@ pub const oneTimeCommand = struct {
 
     // commandPools: std.array_list.Managed(vk.VkCommandPool),
 
-    pub fn init(allocator: std.mem.Allocator, stackAllocator: std.mem.Allocator) Self {
+    pub fn init(allocator: std.mem.Allocator, stackAllocator: std.mem.Allocator, vulkan: *VkStruct) Self {
         std.log.info("command size: {d}", .{@sizeOf(drawC.comm)});
         std.log.info("vk struct Buffer size: {d}", .{@sizeOf(VkStruct.Buffer_t)});
         return Self{
@@ -721,6 +724,7 @@ pub const oneTimeCommand = struct {
             .stackAllocator = stackAllocator,
             .combineMap = .init(allocator),
             .cacheMap = .init(allocator),
+            .vulkan = vulkan,
         };
     }
 
@@ -728,18 +732,18 @@ pub const oneTimeCommand = struct {
         const zone = tracy.initZone(@src(), .{ .name = "deinit OnetimeCommand" });
         defer zone.deinit();
 
-        var waitValue = global.vulkan.globalTimelineValue.load(.seq_cst);
-        global.vulkan.waitSemaphore(
+        var waitValue = self.vulkan.globalTimelineValue.load(.seq_cst);
+        self.vulkan.waitSemaphore(
             1,
-            &global.vulkan.globalTimelineSemaphore,
+            &self.vulkan.globalTimelineSemaphore,
             &waitValue,
         ) catch |err| {
             std.log.err("wait semaphore error {s}\n", .{@errorName(err)});
         };
         self.queue.deinit();
         self.nodeDag.deinit();
-        self.threadPool.waitThread();
-        self.primaryCommandPool.deinit();
+        self.threadPool.waitThread(self.vulkan);
+        self.primaryCommandPool.deinit(self.vulkan);
         self.cleanGarbage() catch |err| {
             std.log.err("clean garbage error {s}\n", .{@errorName(err)});
         };
@@ -1082,13 +1086,13 @@ pub const oneTimeCommand = struct {
                 const copyBuffer = ptr.value_ptr.command.copyBuffer;
                 const tempRegions = copyBuffer.regions;
 
-                const oldSrcQueueType = global.vulkan.buffers.getBufferQueueType(copyBuffer.srcBuffer);
+                const oldSrcQueueType = self.vulkan.buffers.getBufferQueueType(copyBuffer.srcBuffer);
                 if (oldSrcQueueType != .transfer and oldSrcQueueType != .init) {}
 
                 ptr.value_ptr.*.command.copyBuffer.regions = try self.allocator.dupe(vk.VkBufferCopy, tempRegions);
 
                 // ptr.value_ptr.command.copyBuffer.srcBuffer.changeQueueIndex(.transfer);
-                global.vulkan.buffers.changeQueueType(ptr.value_ptr.command.copyBuffer.srcBuffer, .transfer);
+                self.vulkan.buffers.changeQueueType(ptr.value_ptr.command.copyBuffer.srcBuffer, .transfer);
 
                 try self.cacheMap.put(@ptrCast(copyBuffer.dstBuffer), ID);
             },
@@ -1203,7 +1207,7 @@ pub const oneTimeCommand = struct {
         self.executeSemaphore.post();
     }
 
-    fn record(command: *drawC, commandBuffer: vk.VkCommandBuffer, stackAllocator: std.mem.Allocator) void {
+    fn record(command: *drawC, commandBuffer: vk.VkCommandBuffer, stackAllocator: std.mem.Allocator, vulkan: *VkStruct) void {
         const zone = tracy.initZone(@src(), .{ .name = "record vulkan command" });
         defer zone.deinit();
 
@@ -1232,7 +1236,7 @@ pub const oneTimeCommand = struct {
                 };
                 vk.vkCmdCopyBufferToImage(
                     commandBuffer,
-                    global.vulkan.buffers.getVkBuffer(copyBufferToImage.buffer),
+                    vulkan.buffers.getVkBuffer(copyBufferToImage.buffer),
                     copyBufferToImage.dstImage,
                     copyBufferToImage.dstImageLayout,
                     1,
@@ -1366,8 +1370,8 @@ pub const oneTimeCommand = struct {
                 const copyBuffer = command.command.copyBuffer;
                 vk.vkCmdCopyBuffer(
                     commandBuffer,
-                    global.vulkan.buffers.getVkBuffer(copyBuffer.srcBuffer),
-                    global.vulkan.buffers.getVkBuffer(copyBuffer.dstBuffer),
+                    vulkan.buffers.getVkBuffer(copyBuffer.srcBuffer),
+                    vulkan.buffers.getVkBuffer(copyBuffer.dstBuffer),
                     @intCast(copyBuffer.regions.len),
                     @ptrCast(copyBuffer.regions.ptr),
                 );
@@ -1404,7 +1408,7 @@ pub const oneTimeCommand = struct {
             if (command) |comm| {
                 const com = comm.com;
                 if (com.commandType == .beginSecondaryRecord) {
-                    commandBuffer = try ctx.commandPool.getSecondaryCommandBuffer(ctx.commandPoolType);
+                    commandBuffer = try ctx.commandPool.getSecondaryCommandBuffer(ctx.commandPoolType, ctx.vulkan);
                     {
                         ctx.mutex.lock();
                         defer ctx.mutex.unlock();
@@ -1457,7 +1461,7 @@ pub const oneTimeCommand = struct {
                 } else if (com.commandType == .end) {
                     break;
                 } else {
-                    record(com, cbb.commandBufer, sma);
+                    record(com, cbb.commandBufer, sma, ctx.vulkan);
                 }
             } else {
                 break;
@@ -1509,13 +1513,13 @@ pub const oneTimeCommand = struct {
         const zone = tracy.initZone(@src(), .{ .name = "clean garbage" });
         defer zone.deinit();
 
-        const currentSemaphoreValue = try global.vulkan.getSemaphoreCounterValue(global.vulkan.globalTimelineSemaphore);
+        const currentSemaphoreValue = try self.vulkan.getSemaphoreCounterValue(self.vulkan.globalTimelineSemaphore);
 
         for (self.garbageData.items, 0..) |g, i| {
             switch (g.data) {
                 .buffer => {
                     if (currentSemaphoreValue < g.semaphoreValue) continue;
-                    global.vulkan.destroyBuffer(g.data.buffer);
+                    self.vulkan.destroyBuffer(g.data.buffer);
                     self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
                 },
                 .barriers => {
@@ -1524,7 +1528,7 @@ pub const oneTimeCommand = struct {
                 },
                 .bufferAndRegion => {
                     if (currentSemaphoreValue < g.semaphoreValue) continue;
-                    global.vulkan.destroyBuffer(g.data.bufferAndRegion.buffer);
+                    self.vulkan.destroyBuffer(g.data.bufferAndRegion.buffer);
                     self.allocator.free(g.data.bufferAndRegion.region);
                     self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
                 },
@@ -1628,7 +1632,7 @@ pub const oneTimeCommand = struct {
                 var ctx: ?*ThreadContext = null;
                 if (nn.threadCtx == null) {
                     if (nn.queueNode.data.startThread) {
-                        ctx = try self.threadPool.getFreeThread(commandBufferss, nn.queueNode.data.commandPoolType);
+                        ctx = try self.threadPool.getFreeThread(commandBufferss, nn.queueNode.data.commandPoolType, self.vulkan);
 
                         pNode.?.threadCtx = ctx;
                     }
@@ -1717,13 +1721,13 @@ pub const oneTimeCommand = struct {
             mutex.lock();
             defer mutex.unlock();
 
-            const currentFrames = global.vulkan.currentFrame.load(.seq_cst);
+            const currentFrames = self.vulkan.currentFrame.load(.seq_cst);
 
-            const graphicCommandBuffer = try self.primaryCommandPool.getPrimaryCommandBuffer(.graphic, currentFrames);
-            const transferCommandBuffer = try self.primaryCommandPool.getPrimaryCommandBuffer(.transfer, currentFrames);
-            const computeCommandBuffer = try self.primaryCommandPool.getPrimaryCommandBuffer(.compute, currentFrames);
+            const graphicCommandBuffer = try self.primaryCommandPool.getPrimaryCommandBuffer(.graphic, currentFrames, self.vulkan);
+            const transferCommandBuffer = try self.primaryCommandPool.getPrimaryCommandBuffer(.transfer, currentFrames, self.vulkan);
+            const computeCommandBuffer = try self.primaryCommandPool.getPrimaryCommandBuffer(.compute, currentFrames, self.vulkan);
             var graphicSemaphoreValue, var transferSemaphoreValue, var computeSemaphoreValue, var currentSemaphoreValue = va: {
-                const value = global.vulkan.globalTimelineValue.load(.seq_cst);
+                const value = self.vulkan.globalTimelineValue.load(.seq_cst);
                 break :va .{ value, value, value, value };
             };
 
@@ -1785,7 +1789,7 @@ pub const oneTimeCommand = struct {
 
                     try VkStruct.endCommandBuffer(currentCommandBuffer);
                     const temp = try waitSemaphores.addOne();
-                    temp.* = global.vulkan.globalTimelineSemaphore;
+                    temp.* = self.vulkan.globalTimelineSemaphore;
                     const temp2 = try waitStages.addOne();
                     if (firstSubmit) {
                         temp2.* = vk.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
@@ -1797,7 +1801,7 @@ pub const oneTimeCommand = struct {
                     temp3.* = timelinewaitValue;
 
                     const temp4 = try signalSemaphores.addOne();
-                    temp4.* = global.vulkan.globalTimelineSemaphore;
+                    temp4.* = self.vulkan.globalTimelineSemaphore;
                     const temp5 = try signalValues.addOne();
                     currentSemaphoreValue += 1;
                     temp5.* = currentSemaphoreValue;
@@ -1815,7 +1819,7 @@ pub const oneTimeCommand = struct {
                     submitInfo.signalSemaphoreCount = @intCast(signalSemaphores.items.len);
                     submitInfo.pSignalSemaphores = @ptrCast(signalSemaphores.items.ptr);
 
-                    try global.vulkan.queueSubmit(currentType, 1, &submitInfo, null);
+                    try self.vulkan.queueSubmit(currentType, 1, &submitInfo, null);
 
                     switch (currentType) {
                         .graphic => graphicSemaphoreValue = currentSemaphoreValue,
@@ -1833,25 +1837,25 @@ pub const oneTimeCommand = struct {
                             currentCommandBuffer = graphicCommandBuffer;
                             currentType = .graphic;
                             if (firstSubmit) {
-                                try global.vulkan.acquireNextImage(&currentIndex);
+                                try self.vulkan.acquireNextImage(&currentIndex);
                                 const temp = try waitSemaphores.addOne();
-                                temp.* = global.vulkan.imageAvailableSemaphore[currentFrames];
+                                temp.* = self.vulkan.imageAvailableSemaphore[currentFrames];
                                 const temp2 = try waitStages.addOne();
                                 temp2.* = vk.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
                                 const temp3 = try waitValues.addOne();
                                 temp3.* = 0;
                             }
-                            try global.vulkan.waitSemaphore(1, &global.vulkan.globalTimelineSemaphore, &graphicSemaphoreValue);
+                            try self.vulkan.waitSemaphore(1, &self.vulkan.globalTimelineSemaphore, &graphicSemaphoreValue);
                         },
                         .transfer => {
                             currentCommandBuffer = transferCommandBuffer;
                             currentType = .transfer;
-                            try global.vulkan.waitSemaphore(1, &global.vulkan.globalTimelineSemaphore, &transferSemaphoreValue);
+                            try self.vulkan.waitSemaphore(1, &self.vulkan.globalTimelineSemaphore, &transferSemaphoreValue);
                         },
                         .compute => {
                             currentCommandBuffer = computeCommandBuffer;
                             currentType = .compute;
-                            try global.vulkan.waitSemaphore(1, &global.vulkan.globalTimelineSemaphore, &computeSemaphoreValue);
+                            try self.vulkan.waitSemaphore(1, &self.vulkan.globalTimelineSemaphore, &computeSemaphoreValue);
                         },
                         .init, .present => unreachable,
                     }
@@ -1896,7 +1900,7 @@ pub const oneTimeCommand = struct {
                         if (cbs.items.len > 0)
                             vk.vkCmdExecuteCommands(currentCommandBuffer, @intCast(cbs.items.len), @ptrCast(cbs.items.ptr));
 
-                        record(self.queue.getPtr(nn.ID).?, currentCommandBuffer, self.stackAllocator);
+                        record(self.queue.getPtr(nn.ID).?, currentCommandBuffer, self.stackAllocator, self.vulkan);
                     }
                     firstNode = nn.getFirstUndoneChild();
                     if (firstNode == null) {
@@ -1940,7 +1944,7 @@ pub const oneTimeCommand = struct {
                 try VkStruct.endCommandBuffer(currentCommandBuffer);
 
                 const temp = try waitSemaphores.addOne();
-                temp.* = global.vulkan.globalTimelineSemaphore;
+                temp.* = self.vulkan.globalTimelineSemaphore;
                 const temp2 = try waitStages.addOne();
                 if (firstSubmit) {
                     temp2.* = vk.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
@@ -1952,14 +1956,14 @@ pub const oneTimeCommand = struct {
                 temp3.* = timelinewaitValue;
 
                 const temp4 = try signalSemaphores.addOne();
-                temp4.* = global.vulkan.globalTimelineSemaphore;
+                temp4.* = self.vulkan.globalTimelineSemaphore;
                 const temp6 = try signalValues.addOne();
                 currentSemaphoreValue += 1;
                 temp6.* = currentSemaphoreValue;
 
                 if (present) {
                     const temp5 = try signalSemaphores.addOne();
-                    temp5.* = global.vulkan.renderFinishSemaphore[currentFrames];
+                    temp5.* = self.vulkan.renderFinishSemaphore[currentFrames];
                     const temp7 = try signalValues.addOne();
                     temp7.* = 0;
                 }
@@ -1977,7 +1981,7 @@ pub const oneTimeCommand = struct {
                 submitInfo.signalSemaphoreCount = @intCast(signalSemaphores.items.len);
                 submitInfo.pSignalSemaphores = @ptrCast(signalSemaphores.items.ptr);
 
-                try global.vulkan.queueSubmit(currentType, 1, &submitInfo, null);
+                try self.vulkan.queueSubmit(currentType, 1, &submitInfo, null);
             }
 
             if (present) {
@@ -1985,16 +1989,16 @@ pub const oneTimeCommand = struct {
                     .sType = vk.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
                     .pNext = null,
                     .waitSemaphoreCount = 1,
-                    .pWaitSemaphores = @ptrCast(&global.vulkan.renderFinishSemaphore[currentFrames]),
+                    .pWaitSemaphores = @ptrCast(&self.vulkan.renderFinishSemaphore[currentFrames]),
                     .swapchainCount = 1,
-                    .pSwapchains = @ptrCast(&global.vulkan.swapchain),
+                    .pSwapchains = @ptrCast(&self.vulkan.swapchain),
                     .pImageIndices = @ptrCast(&currentIndex),
                     .pResults = null,
                 };
-                try global.vulkan.presentSubmit(@ptrCast(&presentInfo));
+                try self.vulkan.presentSubmit(@ptrCast(&presentInfo));
             }
 
-            global.vulkan.globalTimelineValue.store(currentSemaphoreValue, .seq_cst);
+            self.vulkan.globalTimelineValue.store(currentSemaphoreValue, .seq_cst);
         }
 
         for (0..self.threadPool.info.len) |i| {

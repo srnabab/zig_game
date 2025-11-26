@@ -101,7 +101,7 @@ pub fn main() !void {
     defer vulkan.deinit();
 
     global.vulkan = &vulkan;
-    var graphic = OneTimeCommand.init(allocator_t.*, sma);
+    var graphic = OneTimeCommand.init(allocator_t.*, sma, &vulkan);
     global.graphic = &graphic;
     defer global.graphic.deinit();
 
