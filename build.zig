@@ -234,6 +234,7 @@ pub fn build(b: *std.Build) void {
     vertices_mod.addImport("global", global_mod);
     vertices_mod.addImport("video", video_mod);
     vertices_mod.addImport("cglm", cglm_mod);
+    vertices_mod.addImport("processRender", processRender_mod);
 
     objectPool_mod.addImport("tracy", tracy.module("tracy"));
 
@@ -294,6 +295,7 @@ pub fn build(b: *std.Build) void {
     textureSet_mod.addImport("tracy", tracy.module("tracy"));
     textureSet_mod.addImport("objectPool", objectPool_mod);
     textureSet_mod.addImport("handle", handle_mod);
+    textureSet_mod.addImport("processRender", processRender_mod);
     textureSet_mod.addIncludePath(b.path("include"));
 
     stableArray_mod.addImport("tracy", tracy.module("tracy"));

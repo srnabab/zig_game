@@ -10,6 +10,7 @@ const MemoryPool = @import("memoryPool").MemoryPoolSlice;
 const tracy = @import("tracy");
 const objectPool = @import("objectPool").ObjectPool;
 const Handle = @import("handle").Handle;
+const OneTimeCommand = @import("processRender").oneTimeCommand;
 
 const Self = @This();
 
@@ -69,8 +70,9 @@ tempTextureRecord: *Texture = undefined,
 handles: *global.HandlesType,
 
 vulkan: *VkStruct,
+graphic: *OneTimeCommand,
 
-pub fn init(allocator: std.mem.Allocator, handles: *global.HandlesType, vulkan: *VkStruct) Self {
+pub fn init(allocator: std.mem.Allocator, handles: *global.HandlesType, vulkan: *VkStruct, graphic: *OneTimeCommand) Self {
     const zone = tracy.initZone(@src(), .{ .name = "init texture set" });
     defer zone.deinit();
 
@@ -85,6 +87,7 @@ pub fn init(allocator: std.mem.Allocator, handles: *global.HandlesType, vulkan: 
         .offsetRange = .init(allocator),
         .handles = handles,
         .vulkan = vulkan,
+        .graphic = graphic,
     };
 }
 
@@ -194,7 +197,7 @@ pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Sample
     }
     // errdefer self.array.giveBack(texture);
 
-    try global.graphic.addCommand(
+    try self.graphic.addCommand(
         .copyBufferToImage,
         .{ .copyBufferToImage = .{
             .pTexture = texture_t,

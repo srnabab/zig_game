@@ -100,27 +100,25 @@ pub fn main() !void {
     try vulkan.initVulkan();
     defer vulkan.deinit();
 
-    // global.vulkan = &vulkan;
     var graphic = OneTimeCommand.init(allocator_t.*, sma, &vulkan);
-    global.graphic = &graphic;
-    defer global.graphic.deinit();
+    defer graphic.deinit();
 
-    var textureSett = textureSet.init(allocator_t.*, &handles, &vulkan);
+    var textureSett = textureSet.init(allocator_t.*, &handles, &vulkan, &graphic);
     global.textureSet = &textureSett;
     defer global.textureSet.deinit();
 
-    try global.graphic.startCommand();
+    try graphic.startCommand();
 
-    try vertices.init(&vulkan);
+    try vertices.init(&vulkan, &graphic);
     defer vertices.deinit();
     _ = try global.textureSet.createImageTexture(comptime file.comptimeGetID("non_exist.png"), .pixel2d);
     _ = global.textureSet.createImageTextureEnsureWithErrorImage(comptime file.comptimeGetID("circle.png"), .pixel2d);
 
-    try global.graphic.addCommandEnd();
+    try graphic.addCommandEnd();
 
     vulkan.writeCachedDescriptorSetResources();
 
-    try global.graphic.executeCommands();
+    try graphic.executeCommands();
     vulkan.nextFrame();
 
     try vulkan.readPipelineFileAndAdd(comptime file.comptimeGetID("flat2d.pipeb"));
@@ -129,13 +127,13 @@ pub fn main() !void {
 
     const renderStart = std.time.milliTimestamp();
     while (true) {
-        try global.graphic.startCommand();
-        // try global.graphic.addCommand(.draw2D, .{ .draw2d = .{
+        try graphic.startCommand();
+        // try graphic.addCommand(.draw2D, .{ .draw2d = .{
         //     .pipeline = global.vulkan.getPipeline("flat2d").?,
         //     .pTexture = global.textureSet.getTexture(@intCast(file.getID("circle.png"))).?,
         // } });
-        try global.graphic.addCommandEnd();
-        try global.graphic.executeCommands();
+        try graphic.addCommandEnd();
+        try graphic.executeCommands();
         vulkan.nextFrame();
         if (std.time.milliTimestamp() - renderStart > 2) {
             break;

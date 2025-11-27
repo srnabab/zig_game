@@ -6,6 +6,8 @@ const vkStruct = @import("video");
 const vk = @import("vulkan").vulkan;
 const global = @import("global");
 
+const OneTimeCommand = @import("processRender").oneTimeCommand;
+
 pub const vec3 = cglm.vec3;
 pub const vec2 = cglm.vec3;
 
@@ -23,7 +25,7 @@ pub var vertexBuffer2D: vkStruct.Buffer_t = undefined;
 pub var indexBuffer2D: vkStruct.Buffer_t = undefined;
 var vulkan: *vkStruct = undefined;
 
-pub fn init(vulkan_t: *vkStruct) !void {
+pub fn init(vulkan_t: *vkStruct, graphic: *OneTimeCommand) !void {
     const zone = tracy.initZone(@src(), .{ .name = "vertices initialization" });
     defer zone.deinit();
 
@@ -63,7 +65,7 @@ pub fn init(vulkan_t: *vkStruct) !void {
             .size = vulkan.buffers.getBufferSize(indexBuffer2D),
         }};
 
-        try global.graphic.addCommand(.copyBuffer, .{ .copyBuffer = .{
+        try graphic.addCommand(.copyBuffer, .{ .copyBuffer = .{
             .srcBuffer = stagingBuffer,
             .dstBuffer = indexBuffer2D,
             .regions = &region,
