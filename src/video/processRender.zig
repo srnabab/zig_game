@@ -952,15 +952,13 @@ pub const oneTimeCommand = struct {
                         },
                     }
 
-                    if (prev) |p| {
-                        // p.insertPrev(node);
-                        try rootNode.childrenAppend(&p.ID);
-                        try p.parentsAppend(&rootNode.ID);
-                    }
-                    if (next) |n| {
-                        // n.insertNext(node);
+                    if (prev) |n| {
                         try rootNode.parentsAppend(&n.ID);
                         try n.childrenAppend(&rootNode.ID);
+                    }
+                    if (next) |p| {
+                        try rootNode.childrenAppend(&p.ID);
+                        try p.parentsAppend(&rootNode.ID);
                     }
 
                     resNode = rootNode;
@@ -999,17 +997,16 @@ pub const oneTimeCommand = struct {
 
                     res.value_ptr.* = node;
 
-                    if (prev) |p| {
-                        // p.insertPrev(node);
-                        node.data.commandPoolType = p.data.commandPoolType;
-                        try node.childrenAppend(&p.ID);
-                        try p.parentsAppend(&node.ID);
-                    }
-                    if (next) |n| {
-                        // n.insertNext(node);
+                    if (prev) |n| {
                         node.data.commandPoolType = n.data.commandPoolType;
                         try node.parentsAppend(&n.ID);
                         try n.childrenAppend(&node.ID);
+                    }
+
+                    if (next) |p| {
+                        node.data.commandPoolType = p.data.commandPoolType;
+                        try node.childrenAppend(&p.ID);
+                        try p.parentsAppend(&node.ID);
                     }
                     resNode = node;
                 }
@@ -1086,8 +1083,23 @@ pub const oneTimeCommand = struct {
                 const copyBuffer = ptr.value_ptr.command.copyBuffer;
                 const tempRegions = copyBuffer.regions;
 
-                const oldSrcQueueType = self.vulkan.buffers.getBufferQueueType(copyBuffer.srcBuffer);
-                if (oldSrcQueueType != .transfer and oldSrcQueueType != .init) {}
+                // const oldSrcQueueType = self.vulkan.buffers.getBufferQueueType(copyBuffer.srcBuffer);
+                // if (oldSrcQueueType != .transfer and oldSrcQueueType != .init) {
+                //     currentNode = try self.addCommand2(.changeBufferQueue, .{ .changeBufferQueue = .{
+                //         .buffer = copyBuffer.srcBuffer,
+                //         .srcQueueFamilyIndex = self.vulkan.getQueueIndex(oldSrcQueueType),
+                //         .dstQueueFamilyIndex = self.vulkan.getQueueIndex(.transfer),
+                //     } }, currentNode, null);
+                // }
+
+                // const oldDstQueueType = self.vulkan.buffers.getBufferQueueType(copyBuffer.dstBuffer);
+                // if (oldDstQueueType != .transfer and oldDstQueueType != .init) {
+                //     currentNode = try self.addCommand2(.changeBufferQueue, .{ .changeBufferQueue = .{
+                //         .buffer = copyBuffer.dstBuffer,
+                //         .srcQueueFamilyIndex = self.vulkan.getQueueIndex(oldDstQueueType),
+                //         .dstQueueFamilyIndex = self.vulkan.getQueueIndex(.transfer),
+                //     } }, currentNode, null);
+                // }
 
                 ptr.value_ptr.*.command.copyBuffer.regions = try self.allocator.dupe(vk.VkBufferCopy, tempRegions);
 
@@ -1124,7 +1136,7 @@ pub const oneTimeCommand = struct {
                             .newLayout = vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                             .baseLayer = currentBase,
                             .layerCount = count,
-                        } }, node, null);
+                        } }, null, node);
                         currentLayout = layout;
                         currentBase += count;
                         if (currentLayout != vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
@@ -1139,7 +1151,7 @@ pub const oneTimeCommand = struct {
                         .newLayout = vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                         .baseLayer = currentBase,
                         .layerCount = count,
-                    } }, node, null);
+                    } }, null, node);
                 }
                 textureSet.changeTextureLayout(copyBufferToImage.pTexture, copyBufferToImage.baseArrayLayer, copyBufferToImage.layerCount, vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
                 textureSet.changeTextureQueue(copyBufferToImage.pTexture, .transfer);
