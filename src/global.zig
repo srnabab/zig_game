@@ -11,6 +11,4 @@ pub const StackMemorySize = 512 * 1024;
 pub const vertexCount = 4;
 pub const indexCount = 6;
 
-pub var textureSet: *TextureSet = undefined;
-
 pub const HandlesType = Handles.Handles(10240, .Once);

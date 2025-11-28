@@ -69,10 +69,10 @@ tempTextureRecord: *Texture = undefined,
 
 handles: *global.HandlesType,
 
-vulkan: *VkStruct,
-graphic: *OneTimeCommand,
+// vulkan: *VkStruct,
+// graphic: *OneTimeCommand,
 
-pub fn init(allocator: std.mem.Allocator, handles: *global.HandlesType, vulkan: *VkStruct, graphic: *OneTimeCommand) Self {
+pub fn init(allocator: std.mem.Allocator, handles: *global.HandlesType) Self {
     const zone = tracy.initZone(@src(), .{ .name = "init texture set" });
     defer zone.deinit();
 
@@ -86,23 +86,23 @@ pub fn init(allocator: std.mem.Allocator, handles: *global.HandlesType, vulkan: 
         .offsetsPool = .init(allocator),
         .offsetRange = .init(allocator),
         .handles = handles,
-        .vulkan = vulkan,
-        .graphic = graphic,
+        // .vulkan = vulkan,
+        // .graphic = graphic,
     };
 }
 
-pub fn deinit(self: *Self) void {
+pub fn deinit(self: *Self, vulkan: *VkStruct) void {
     const zone = tracy.initZone(@src(), .{ .name = "texture set deinit" });
     defer zone.deinit();
 
-    self.vulkan.waitDevice() catch |err| {
+    vulkan.waitDevice() catch |err| {
         std.log.err("wait device error {s}\n", .{@errorName(err)});
     };
 
     // std.log.debug("texture deinit", .{});
     for (self.array.items) |texture| {
-        self.vulkan.destroyImage(texture.image);
-        self.vulkan.destroyImageView(texture.imageView);
+        vulkan.destroyImage(texture.image);
+        vulkan.destroyImageView(texture.imageView);
     }
 
     std.log.debug("texture count {d}", .{self.array.capacity});
@@ -115,7 +115,7 @@ pub fn deinit(self: *Self) void {
     self.descriptorSetIndices.deinit();
 }
 
-pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Samplers.SamplerType) !Texture_t {
+pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Samplers.SamplerType, vulkan: *VkStruct, graphic: *OneTimeCommand) !Texture_t {
     const zone = tracy.initZone(@src(), .{ .name = "create image texutre from file" });
     defer zone.deinit();
 
@@ -153,14 +153,14 @@ pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Sample
         );
         const pixelSize: u64 = @intCast(@sizeOf(u8) * imgWidth * imgHeight * channel);
 
-        stagingBuffer = try self.vulkan.createStagingBuffer(pixelSize);
-        errdefer self.vulkan.destroyBuffer(stagingBuffer);
+        stagingBuffer = try vulkan.createStagingBuffer(pixelSize);
+        errdefer vulkan.destroyBuffer(stagingBuffer);
 
-        self.vulkan.buffers.copyDataToMapped(stagingBuffer, u8, imageMem[0..pixelSize]);
+        vulkan.buffers.copyDataToMapped(stagingBuffer, u8, imageMem[0..pixelSize]);
         // @memcpy(@as([*c]u8, @ptrCast(stagingBuffer.pMappedData.?)), imageMem[0..pixelSize]);
 
-        const image = try self.vulkan.createImage2D(imgWidth, imgHeight, img.format, img.tiling, img.usage);
-        errdefer self.vulkan.destroyImage(image);
+        const image = try vulkan.createImage2D(imgWidth, imgHeight, img.format, img.tiling, img.usage);
+        errdefer vulkan.destroyImage(image);
 
         // texture = try self.memory.create();
 
@@ -197,10 +197,11 @@ pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Sample
     }
     // errdefer self.array.giveBack(texture);
 
-    try self.graphic.addCommand(
+    try graphic.addCommand(
         .copyBufferToImage,
         .{ .copyBufferToImage = .{
             .pTexture = texture_t,
+            .pTextureSet = self,
             .dstImage = texture.image.vkImage,
             .width = texture.source_width,
             .height = texture.source_height,
@@ -208,13 +209,13 @@ pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Sample
         } },
     );
 
-    texture.imageView = try self.vulkan.createImageView2D(texture.image.vkImage, texture.format);
+    texture.imageView = try vulkan.createImageView2D(texture.image.vkImage, texture.format);
 
     const dstArrayElement = try self.getDescriptorSetIndex(ID);
-    try self.vulkan.addWriteDescriptorSetImage(
+    try vulkan.addWriteDescriptorSetImage(
         dstArrayElement,
         texture.imageView,
-        self.vulkan.samplers.getDefaultSampler(samplerType),
+        vulkan.samplers.getDefaultSampler(samplerType),
     );
 
     return texture;
@@ -231,10 +232,10 @@ fn getDescriptorSetIndex(self: *Self, ID: u32) !u32 {
     return @intCast(index);
 }
 
-pub fn createImageTextureEnsureWithErrorImage(self: *Self, fileID: u32, samplerType: VkStruct.Samplers.SamplerType) Texture_t {
-    return self.createImageTexture(fileID, samplerType) catch |err| {
+pub fn createImageTextureEnsureWithErrorImage(self: *Self, fileID: u32, samplerType: VkStruct.Samplers.SamplerType, vulkan: *VkStruct, graphic: *OneTimeCommand) Texture_t {
+    return self.createImageTexture(fileID, samplerType, vulkan, graphic) catch |err| {
         std.log.err("create image {d} texture error {s} {d}", .{ fileID, @errorName(err), @sizeOf(Texture) });
-        return self.createImageTexture(comptime file.comptimeGetID("non_exist.png"), .pixel2d) catch unreachable;
+        return self.createImageTexture(comptime file.comptimeGetID("non_exist.png"), .pixel2d, vulkan, graphic) catch unreachable;
     };
 }
 

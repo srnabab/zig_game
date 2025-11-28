@@ -141,6 +141,7 @@ const TransLayout = struct {
 
 pub const CopyBufferToImage = struct {
     pTexture: texture.Texture_t,
+    pTextureSet: *texture,
 
     width: u32,
     height: u32,

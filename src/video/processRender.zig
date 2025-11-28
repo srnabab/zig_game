@@ -1099,10 +1099,11 @@ pub const oneTimeCommand = struct {
             .copyBufferToImage => {
                 node.data.commandPoolType = .transfer;
 
-                ptr.value_ptr.command.copyBufferToImage.dstImage = global.textureSet.getVkImage(ptr.value_ptr.command.copyBufferToImage.pTexture);
+                const textureSet = ptr.value_ptr.command.copyBufferToImage.pTextureSet;
+                ptr.value_ptr.command.copyBufferToImage.dstImage = textureSet.getVkImage(ptr.value_ptr.command.copyBufferToImage.pTexture);
 
                 const copyBufferToImage = ptr.value_ptr.command.copyBufferToImage;
-                const oldLayouts = global.textureSet.getCurrentLayouts(copyBufferToImage.pTexture);
+                const oldLayouts = textureSet.getCurrentLayouts(copyBufferToImage.pTexture);
 
                 var currentLayout = oldLayouts[0];
                 var currentBase = copyBufferToImage.baseArrayLayer;
@@ -1140,8 +1141,8 @@ pub const oneTimeCommand = struct {
                         .layerCount = count,
                     } }, node, null);
                 }
-                global.textureSet.changeTextureLayout(copyBufferToImage.pTexture, copyBufferToImage.baseArrayLayer, copyBufferToImage.layerCount, vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-                global.textureSet.changeTextureQueue(copyBufferToImage.pTexture, .transfer);
+                textureSet.changeTextureLayout(copyBufferToImage.pTexture, copyBufferToImage.baseArrayLayer, copyBufferToImage.layerCount, vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+                textureSet.changeTextureQueue(copyBufferToImage.pTexture, .transfer);
 
                 try self.cacheMap.put(@ptrCast(copyBufferToImage.dstImage), ID);
             },

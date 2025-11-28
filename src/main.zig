@@ -103,16 +103,15 @@ pub fn main() !void {
     var graphic = OneTimeCommand.init(allocator_t.*, sma, &vulkan);
     defer graphic.deinit();
 
-    var textureSett = textureSet.init(allocator_t.*, &handles, &vulkan, &graphic);
-    global.textureSet = &textureSett;
-    defer global.textureSet.deinit();
+    var textureSett = textureSet.init(allocator_t.*, &handles);
+    defer textureSett.deinit(&vulkan);
 
     try graphic.startCommand();
 
     try vertices.init(&vulkan, &graphic);
     defer vertices.deinit();
-    _ = try global.textureSet.createImageTexture(comptime file.comptimeGetID("non_exist.png"), .pixel2d);
-    _ = global.textureSet.createImageTextureEnsureWithErrorImage(comptime file.comptimeGetID("circle.png"), .pixel2d);
+    _ = try textureSett.createImageTexture(comptime file.comptimeGetID("non_exist.png"), .pixel2d, &vulkan, &graphic);
+    _ = textureSett.createImageTextureEnsureWithErrorImage(comptime file.comptimeGetID("circle.png"), .pixel2d, &vulkan, &graphic);
 
     try graphic.addCommandEnd();
 
