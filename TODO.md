@@ -20,4 +20,5 @@
 17. content manager image load parameter judgement
 18. complete addCommand .copyBuffer
 <!-- 19. use handle system to replace unstable pointer -->
-20. remove variable in global.zig
+<!-- 20. remove variable in global.zig -->
+21. buffer regions process in change buffer queue

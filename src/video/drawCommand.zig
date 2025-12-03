@@ -244,10 +244,16 @@ const BindVertexBuffer = struct {
     buffers: []VkStruct.Buffer_t,
 };
 
+pub const SizeOffset = struct {
+    size: vk.VkDeviceSize,
+    offset: vk.VkDeviceSize,
+};
+
 const ChangeBufferQueue = struct {
     buffer: VkStruct.Buffer_t,
     srcQueueFamily: VkStruct.CommandPoolType,
-    dstQueueFamilyIndex: VkStruct.CommandPoolType,
+    dstQueueFamily: VkStruct.CommandPoolType,
+    regions: []SizeOffset,
 };
 
 const ChangeTextureQueue = struct {
