@@ -318,6 +318,7 @@ pub fn build(b: *std.Build) void {
     video_mod.addImport("resultToError", resultToError_mod);
     video_mod.addImport("fixedIndexArray", fixedIndexArray_mod);
     video_mod.addImport("handle", handle_mod);
+    video_mod.addImport("processRender", processRender_mod);
     video_mod.addImport("global", global_mod);
 
     queue_mod.addImport("tracy", tracy.module("tracy"));

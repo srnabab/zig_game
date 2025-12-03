@@ -7,6 +7,8 @@ pub const CommandType = enum {
     start,
     draw2D,
     transLayout,
+    changeBufferQueue,
+    changeTextureQueue,
     pipelineBarrier,
     copyBufferToImage,
     copyBuffer,
@@ -25,6 +27,8 @@ pub const CommandType = enum {
 const privateEnum = [_]CommandType{
     .start,
     .transLayout,
+    .changeBufferQueue,
+    .changeTextureQueue,
     .bindVertexBuffer,
     .beginPrimaryRecord,
     .beginRendering,
@@ -96,27 +100,10 @@ pub const PublicCommandType: type = blk: {
 };
 
 pub fn PublicCommandTypeToCommandType(a: PublicCommandType) CommandType {
-    // return switch (a) {
-    //     .draw2D => .draw2D,
-    //     .copyBufferToImage => .copyBufferToImage,
-    //     .present => .present,
-    //     .graphicTransfer => .graphicTransfer,
-    //     .transfer => .transfer,
-    // };
     return @enumFromInt(@intFromEnum(a));
 }
 
 pub fn PrivateCommandTypeToCommandType(a: PrivateCommandType) CommandType {
-    // return switch (a) {
-    //     .start => .start,
-    //     .transLayout => .transLayout,
-    //     .beginPrimaryRecord => .beginPrimaryRecord,
-    //     .beginRendering => .beginRendering,
-    //     .beginSecondaryRecord => .beginSecondaryRecord,
-    //     .endRecord => .endRecord,
-    //     .endRendering => .endRendering,
-    //     .end => .end,
-    // };
     return @enumFromInt(@intFromEnum(a));
 }
 
@@ -259,6 +246,12 @@ const BindVertexBuffer = struct {
 
 const ChangeBufferQueue = struct {
     buffer: VkStruct.Buffer_t,
+    srcQueueFamily: VkStruct.CommandPoolType,
+    dstQueueFamilyIndex: VkStruct.CommandPoolType,
+};
+
+const ChangeTextureQueue = struct {
+    texture: texture.Texture_t,
     srcQueueFamilyIndex: u32,
     dstQueueFamilyIndex: u32,
 };
@@ -268,6 +261,8 @@ pub const comm = union {
     draw2d: Draw2D,
     copyBuffer: CopyBuffer,
     transLayout: TransLayout,
+    changeBufferQueue: ChangeBufferQueue,
+    changeTextureQueue: ChangeTextureQueue,
     bindVertexBuffer: BindVertexBuffer,
     copyBufferToImage: CopyBufferToImage,
     beginRecoed: BeginSecondaryRecord,
@@ -280,6 +275,16 @@ pub const Output = union {
     image: vk.VkImage,
     buffer: VkStruct.Buffer_t,
     empty: void,
+};
+
+pub const BufferUsage = enum {
+    none,
+    vertex,
+    index,
+    uniform,
+    // transfer,
+    storage,
+    staging,
 };
 
 commandType: CommandType,

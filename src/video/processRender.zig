@@ -1,7 +1,7 @@
 const std = @import("std");
 const Thread = std.Thread;
 const Atomic = std.atomic;
-const drawC = @import("drawCommand.zig");
+pub const drawC = @import("drawCommand.zig");
 // const drawCProcess = @import("drawCommandProcess.zig");
 const texture = @import("textureSet");
 const vk = @import("vulkan").vulkan;
@@ -881,6 +881,90 @@ pub const oneTimeCommand = struct {
         };
     }
 
+    fn inferReleasePipelinBarrierInfoByCommandTypeAndBufferUsage(
+        commandType: drawC.PublicCommandType,
+        bufferUsage: drawC.BufferUsage,
+        srcQueue: VkStruct.CommandPoolType,
+        dstQueue: VkStruct.CommandPoolType,
+    ) struct {
+        srcAccessMask: vk.VkAccessFlags,
+        dstAccessMask: vk.VkAccessFlags,
+        sourceStage: vk.VkPipelineStageFlags,
+        destinationStage: vk.VkPipelineStageFlags,
+    } {
+        const zone = tracy.initZone(@src(), .{ .name = "infer release pipelin barrier info" });
+        defer zone.deinit();
+
+        _ = commandType;
+        _ = bufferUsage;
+        var srcAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE;
+        const dstAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE;
+        var sourceStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_NONE;
+        const destinationStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+
+        if (srcQueue == .transfer) {
+            if (dstQueue == .graphic) {
+                sourceStage = vk.VK_PIPELINE_STAGE_TRANSFER_BIT;
+                srcAccessMask = vk.VK_ACCESS_TRANSFER_WRITE_BIT;
+            } else {
+                std.debug.panic("unsupported dst queue {s}", .{@typeName(@TypeOf(dstQueue))});
+            }
+        } else {
+            std.debug.panic("unsupported src queue {s}", .{@typeName(@TypeOf(srcQueue))});
+        }
+
+        return .{
+            .srcAccessMask = srcAccessMask,
+            .dstAccessMask = dstAccessMask,
+            .sourceStage = sourceStage,
+            .destinationStage = destinationStage,
+        };
+    }
+
+    fn inferAcquirePipelinBarrierInfoByCommandTypeAndBufferUsage(
+        commandType: drawC.PublicCommandType,
+        bufferUsage: drawC.BufferUsage,
+        srcQueue: VkStruct.CommandPoolType,
+        dstQueue: VkStruct.CommandPoolType,
+    ) struct {
+        srcAccessMask: vk.VkAccessFlags,
+        dstAccessMask: vk.VkAccessFlags,
+        sourceStage: vk.VkPipelineStageFlags,
+        destinationStage: vk.VkPipelineStageFlags,
+    } {
+        const zone = tracy.initZone(@src(), .{ .name = "infer acquire pipelin barrier info" });
+        defer zone.deinit();
+
+        _ = commandType;
+        const srcAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE;
+        var dstAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE;
+        const sourceStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        var destinationStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_NONE;
+
+        if (srcQueue == .transfer) {
+            if (dstQueue == .graphic) {
+                switch (bufferUsage) {
+                    .vertex => {
+                        destinationStage = vk.VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+                        dstAccessMask = vk.VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+                    },
+                    else => std.debug.panic("unsupported buffer usage {s}", .{@typeName(@TypeOf(bufferUsage))}),
+                }
+            } else {
+                std.debug.panic("unsupported dst queue {s}", .{@typeName(@TypeOf(dstQueue))});
+            }
+        } else {
+            std.debug.panic("unsupported src queue {s}", .{@typeName(@TypeOf(srcQueue))});
+        }
+
+        return .{
+            .srcAccessMask = srcAccessMask,
+            .dstAccessMask = dstAccessMask,
+            .sourceStage = sourceStage,
+            .destinationStage = destinationStage,
+        };
+    }
+
     pub fn startCommand(self: *Self) !void {
         const zone = tracy.initZone(@src(), .{ .name = "start vulkan commands" });
         defer zone.deinit();
@@ -900,7 +984,7 @@ pub const oneTimeCommand = struct {
         self.init3d = false;
     }
 
-    fn addCommand2(self: *Self, commandType: drawC.PrivateCommandType, command: drawC.comm, prev: ?*QueueNode, next: ?*QueueNode) !*QueueNode {
+    fn addCommand2(self: *Self, commandType: drawC.PrivateCommandType, command: drawC.comm, prev: ?*QueueNode, next: ?*QueueNode, enterCommandType: drawC.PublicCommandType) !*QueueNode {
         const zone = tracy.initZone(@src(), .{ .name = "add command 2" });
         defer zone.deinit();
 
@@ -911,6 +995,9 @@ pub const oneTimeCommand = struct {
 
         switch (commandType) {
             .transLayout => {
+                const zone2 = tracy.initZone(@src(), .{ .name = "transLayout" });
+                defer zone2.deinit();
+
                 var flags = inferTransLayoutFlagsByOldLayoutAndNewLayout(&commandCopy);
 
                 if (commandCopy.transLayout.newLayout == vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
@@ -921,95 +1008,85 @@ pub const oneTimeCommand = struct {
                 const hash = math.szudzikPairing(flags.sourceStage, flags.destinationStage);
 
                 const res = try self.combineMap.getOrPut(hash);
-                if (res.found_existing) {
-                    const rootNode = res.value_ptr.*;
-                    var root = self.queue.getPtr(rootNode.ID).?;
-                    switch (root.commandType) {
-                        .pipelineBarrier => {
-                            var pipelineBarrier = &root.command.pipelineBarrier;
-                            const index = pipelineBarrier.barriers.len;
-                            pipelineBarrier.barriers = try self.allocator.realloc(pipelineBarrier.barriers, pipelineBarrier.barriers.len + 1);
-                            pipelineBarrier.barriers[index] = .{ .imageMemory = .{
-                                .srcAccessMask = flags.srcAccessMask,
-                                .dstAccessMask = flags.dstAccessMask,
-                                .oldLayout = transLayout.oldLayout,
-                                .newLayout = transLayout.newLayout,
-                                .srcQueueFamilyIndex = vk.VK_QUEUE_FAMILY_IGNORED,
-                                .dstQueueFamilyIndex = vk.VK_QUEUE_FAMILY_IGNORED,
-                                .image = transLayout.image,
+                const new_barrier = drawC.Barrier{ .imageMemory = .{
+                    .srcAccessMask = flags.srcAccessMask,
+                    .dstAccessMask = flags.dstAccessMask,
+                    .oldLayout = transLayout.oldLayout,
+                    .newLayout = transLayout.newLayout,
+                    .srcQueueFamilyIndex = vk.VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex = vk.VK_QUEUE_FAMILY_IGNORED,
+                    .image = transLayout.image,
+                    .subresourceRange = .{
+                        .aspectMask = flags.aspectMask,
+                        .baseMipLevel = transLayout.baseMipLevel,
+                        .levelCount = transLayout.levelCount,
+                        .baseArrayLayer = transLayout.baseLayer,
+                        .layerCount = transLayout.layerCount,
+                    },
+                } };
 
-                                .subresourceRange = .{
-                                    .aspectMask = flags.aspectMask,
-                                    .baseMipLevel = transLayout.baseMipLevel,
-                                    .levelCount = transLayout.levelCount,
-                                    .baseArrayLayer = transLayout.baseLayer,
-                                    .layerCount = transLayout.layerCount,
-                                },
-                            } };
-                        },
-                        else => {
-                            std.debug.panic("not supported commandType {s}", .{@tagName(root.commandType)});
-                        },
-                    }
-
-                    if (prev) |n| {
-                        try rootNode.parentsAppend(&n.ID);
-                        try n.childrenAppend(&rootNode.ID);
-                    }
-                    if (next) |p| {
-                        try rootNode.childrenAppend(&p.ID);
-                        try p.parentsAppend(&rootNode.ID);
-                    }
-
-                    resNode = rootNode;
-                } else {
+                const rootNode = if (res.found_existing) blk: {
+                    const node = res.value_ptr.*;
+                    // 简单的类型检查，panic 放在这一行保持紧凑
+                    const cmd = self.queue.getPtr(node.ID).?;
+                    if (cmd.commandType != .pipelineBarrier) std.debug.panic("not supported commandType {s}", .{@tagName(cmd.commandType)});
+                    break :blk node;
+                } else blk: {
+                    // 2. 新节点的创建逻辑
                     const node = try self.nodeDag.create();
-                    const ID = node.ID;
-
-                    const ptr = try self.queue.getOrPut(ID);
+                    res.value_ptr.* = node;
+                    const ptr = try self.queue.getOrPut(node.ID);
                     ptr.value_ptr.* = drawC{
-                        .ID = ID,
+                        .ID = node.ID,
                         .timestamp = std.time.nanoTimestamp(),
-                        .command = .{ .pipelineBarrier = .{
-                            .sourceStage = flags.sourceStage,
-                            .destinationStage = flags.destinationStage,
-                            .barriers = try self.allocator.alloc(drawC.Barrier, 1),
-                        } },
+                        .command = .{
+                            .pipelineBarrier = .{
+                                .sourceStage = flags.sourceStage,
+                                .destinationStage = flags.destinationStage,
+                                .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
+                            },
+                        },
                         .commandType = .pipelineBarrier,
                         .output = .{ .empty = void{} },
                     };
-                    ptr.value_ptr.command.pipelineBarrier.barriers[0] = .{ .imageMemory = .{
-                        .srcAccessMask = flags.srcAccessMask,
-                        .dstAccessMask = flags.dstAccessMask,
-                        .oldLayout = transLayout.oldLayout,
-                        .newLayout = transLayout.newLayout,
-                        .srcQueueFamilyIndex = vk.VK_QUEUE_FAMILY_IGNORED,
-                        .dstQueueFamilyIndex = vk.VK_QUEUE_FAMILY_IGNORED,
-                        .image = transLayout.image,
-                        .subresourceRange = .{
-                            .aspectMask = flags.aspectMask,
-                            .baseMipLevel = transLayout.baseMipLevel,
-                            .levelCount = transLayout.levelCount,
-                            .baseArrayLayer = transLayout.baseLayer,
-                            .layerCount = transLayout.layerCount,
-                        },
-                    } };
+                    break :blk node;
+                };
 
-                    res.value_ptr.* = node;
+                // 3. 统一的 Barrier 添加逻辑 (利用 realloc 自动处理空切片情况)
+                var pipelineBarrier = &self.queue.getPtr(rootNode.ID).?.command.pipelineBarrier;
+                const new_len = pipelineBarrier.barriers.len + 1;
+                pipelineBarrier.barriers = try self.allocator.realloc(pipelineBarrier.barriers, new_len);
+                pipelineBarrier.barriers[new_len - 1] = new_barrier;
 
-                    if (prev) |n| {
-                        node.data.commandPoolType = n.data.commandPoolType;
-                        try node.parentsAppend(&n.ID);
-                        try n.childrenAppend(&node.ID);
-                    }
-
-                    if (next) |p| {
-                        node.data.commandPoolType = p.data.commandPoolType;
-                        try node.childrenAppend(&p.ID);
-                        try p.parentsAppend(&node.ID);
-                    }
-                    resNode = node;
+                // 4. 统一的节点连接逻辑
+                // 注意：仅在新创建节点时才设置 commandPoolType
+                if (prev) |n| {
+                    if (!res.found_existing) rootNode.data.commandPoolType = n.data.commandPoolType;
+                    try rootNode.parentsAppend(&n.ID);
+                    try n.childrenAppend(&rootNode.ID);
                 }
+                if (next) |p| {
+                    if (!res.found_existing) rootNode.data.commandPoolType = p.data.commandPoolType;
+                    try rootNode.childrenAppend(&p.ID);
+                    try p.parentsAppend(&rootNode.ID);
+                }
+
+                resNode = rootNode;
+            },
+            .changeBufferQueue => {
+                const zone2 = tracy.initZone(@src(), .{ .name = "changeBufferQueue" });
+                defer zone2.deinit();
+
+                const changeBufferQueue = command.changeBufferQueue;
+                const bufferUsage = self.vulkan.buffers.getBufferUsage(changeBufferQueue.buffer);
+
+                const releaseFlags = inferReleasePipelinBarrierInfoByCommandTypeAndBufferUsage(
+                    enterCommandType,
+                    bufferUsage,
+                    changeBufferQueue.srcQueueFamily,
+                    changeBufferQueue.dstQueueFamilyIndex,
+                );
+                _ = releaseFlags;
             },
             else => {
                 std.debug.panic("not supported commandType {s}", .{@tagName(commandType)});
@@ -1083,28 +1160,31 @@ pub const oneTimeCommand = struct {
                 const copyBuffer = ptr.value_ptr.command.copyBuffer;
                 const tempRegions = copyBuffer.regions;
 
-                // const oldSrcQueueType = self.vulkan.buffers.getBufferQueueType(copyBuffer.srcBuffer);
-                // if (oldSrcQueueType != .transfer and oldSrcQueueType != .init) {
-                //     currentNode = try self.addCommand2(.changeBufferQueue, .{ .changeBufferQueue = .{
-                //         .buffer = copyBuffer.srcBuffer,
-                //         .srcQueueFamilyIndex = self.vulkan.getQueueIndex(oldSrcQueueType),
-                //         .dstQueueFamilyIndex = self.vulkan.getQueueIndex(.transfer),
-                //     } }, currentNode, null);
-                // }
+                const oldSrcQueueType = self.vulkan.buffers.getBufferQueueType(copyBuffer.srcBuffer);
+                if (oldSrcQueueType != .transfer) {
+                    if (oldSrcQueueType != .init) {
+                        currentNode = try self.addCommand2(.changeBufferQueue, .{ .changeBufferQueue = .{
+                            .buffer = copyBuffer.srcBuffer,
+                            .srcQueueFamily = oldSrcQueueType,
+                            .dstQueueFamilyIndex = .transfer,
+                        } }, null, currentNode, commandType);
+                    }
+                    self.vulkan.buffers.changeQueueType(ptr.value_ptr.command.copyBuffer.srcBuffer, .transfer);
+                }
 
-                // const oldDstQueueType = self.vulkan.buffers.getBufferQueueType(copyBuffer.dstBuffer);
-                // if (oldDstQueueType != .transfer and oldDstQueueType != .init) {
-                //     currentNode = try self.addCommand2(.changeBufferQueue, .{ .changeBufferQueue = .{
-                //         .buffer = copyBuffer.dstBuffer,
-                //         .srcQueueFamilyIndex = self.vulkan.getQueueIndex(oldDstQueueType),
-                //         .dstQueueFamilyIndex = self.vulkan.getQueueIndex(.transfer),
-                //     } }, currentNode, null);
-                // }
+                const oldDstQueueType = self.vulkan.buffers.getBufferQueueType(copyBuffer.dstBuffer);
+                if (oldDstQueueType != .transfer) {
+                    if (oldDstQueueType != .init) {
+                        currentNode = try self.addCommand2(.changeBufferQueue, .{ .changeBufferQueue = .{
+                            .buffer = copyBuffer.dstBuffer,
+                            .srcQueueFamily = oldDstQueueType,
+                            .dstQueueFamilyIndex = .transfer,
+                        } }, null, currentNode, commandType);
+                    }
+                    self.vulkan.buffers.changeQueueType(ptr.value_ptr.command.copyBuffer.dstBuffer, .transfer);
+                }
 
                 ptr.value_ptr.*.command.copyBuffer.regions = try self.allocator.dupe(vk.VkBufferCopy, tempRegions);
-
-                // ptr.value_ptr.command.copyBuffer.srcBuffer.changeQueueIndex(.transfer);
-                self.vulkan.buffers.changeQueueType(ptr.value_ptr.command.copyBuffer.srcBuffer, .transfer);
 
                 try self.cacheMap.put(@ptrCast(copyBuffer.dstBuffer), ID);
             },
@@ -1136,7 +1216,7 @@ pub const oneTimeCommand = struct {
                             .newLayout = vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                             .baseLayer = currentBase,
                             .layerCount = count,
-                        } }, null, node);
+                        } }, null, node, commandType);
                         currentLayout = layout;
                         currentBase += count;
                         if (currentLayout != vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
@@ -1151,7 +1231,7 @@ pub const oneTimeCommand = struct {
                         .newLayout = vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                         .baseLayer = currentBase,
                         .layerCount = count,
-                    } }, null, node);
+                    } }, null, node, commandType);
                 }
                 textureSet.changeTextureLayout(copyBufferToImage.pTexture, copyBufferToImage.baseArrayLayer, copyBufferToImage.layerCount, vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
                 textureSet.changeTextureQueue(copyBufferToImage.pTexture, .transfer);
@@ -1247,6 +1327,7 @@ pub const oneTimeCommand = struct {
                         .baseArrayLayer = copyBufferToImage.baseArrayLayer,
                     },
                 };
+                std.log.debug("buffer usage {s}", .{@tagName(vulkan.buffers.getBufferUsage(copyBufferToImage.buffer))});
                 vk.vkCmdCopyBufferToImage(
                     commandBuffer,
                     vulkan.buffers.getVkBuffer(copyBufferToImage.buffer),

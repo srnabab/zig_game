@@ -7,6 +7,7 @@ const QueueType = @import("queueType.zig").QueueType;
 const VkResultToError = @import("resultToError");
 const vulkanType = VkResultToError.vulkanType;
 const VkError = vulkanType.VkError;
+const Usage = @import("processRender").drawC.BufferUsage;
 const FixedIndexArray = @import("fixedIndexArray").FixedIndexArray;
 const Handles = @import("handle");
 const Handle = Handles.Handle;
@@ -22,6 +23,7 @@ pub const Buffer = struct {
     size: vk.VkDeviceSize,
     pMappedData: ?*anyopaque = @import("std").mem.zeroes(?*anyopaque),
     queueIndex: QueueType = .init,
+    usage: Usage = .none,
 
     pub fn changeQueueIndex(self: *Buffer, queueType: QueueType) void {
         self.queueIndex = queueType;
@@ -45,6 +47,22 @@ pub fn init(allocator: std.mem.Allocator) Self {
 
 pub fn deinit(self: *Self) void {
     self.buffers.deinit();
+}
+
+fn inferUsage(usage: vk.VkBufferUsageFlags) Usage {
+    if (usage & vk.VK_BUFFER_USAGE_INDEX_BUFFER_BIT != 0) {
+        return .index;
+    } else if (usage & vk.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT != 0) {
+        return .vertex;
+    } else if (usage & vk.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT != 0) {
+        return .uniform;
+    } else if (usage & vk.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT != 0) {
+        return .storage;
+    } else if (usage & vk.VK_BUFFER_USAGE_TRANSFER_SRC_BIT != 0) {
+        return .staging;
+    } else {
+        return .none;
+    }
 }
 
 pub fn _createBuffer(
@@ -90,6 +108,7 @@ pub fn _createBuffer(
         .size = allocationInfo.size,
         .pMappedData = allocationInfo.pMappedData,
         .queueIndex = .init,
+        .usage = inferUsage(usage),
     };
 
     const handle = handles.createHandle(@intCast(pack.index));
@@ -189,6 +208,13 @@ pub fn changeQueueType(self: *Self, buffer: Buffer_t, queueType: QueueType) void
     ptr.queueIndex = queueType;
 }
 
+// pub fn changeUsage(self: *Self, buffer: Buffer_t, usage: Usage) void {
+//     const index = getIndex(buffer);
+//     const ptr = self.buffers.get(index);
+
+//     ptr.lastUsage = usage;
+// }
+
 pub fn getBufferSize(self: *Self, buffer: Buffer_t) vk.VkDeviceSize {
     const index = getIndex(buffer);
     const ptr = self.buffers.get(index);
@@ -201,4 +227,11 @@ pub fn getVkBuffer(self: *Self, buffer: Buffer_t) vk.VkBuffer {
     const ptr = self.buffers.get(index);
 
     return ptr.vkBuffer;
+}
+
+pub fn getBufferUsage(self: *Self, buffer: Buffer_t) Usage {
+    const index = getIndex(buffer);
+    const ptr = self.buffers.get(index);
+
+    return ptr.usage;
 }

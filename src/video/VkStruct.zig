@@ -1687,3 +1687,12 @@ pub fn createIndexBuffer(self: *Self, bufferSize: vk.VkDeviceSize) !Buffer_t {
 pub fn destroyBuffer(self: *Self, buffer: Buffer_t) void {
     return self.buffers.destroyBuffer(&self.vmaS, buffer, self.handles);
 }
+
+pub fn getQueueIndex(self: *Self, queueType: CommandPoolType) u32 {
+    return @intCast(switch (queueType) {
+        .graphic => self.graphicQueueFamily.familyIndice,
+        .compute => self.computeQueueFamily.familyIndice,
+        .transfer => self.transferQueueFamily.familyIndice,
+        .present, .init => unreachable,
+    });
+}
