@@ -258,8 +258,8 @@ const ChangeBufferQueue = struct {
 
 const ChangeTextureQueue = struct {
     texture: texture.Texture_t,
-    srcQueueFamilyIndex: u32,
-    dstQueueFamilyIndex: u32,
+    srcQueueFamily: VkStruct.CommandPoolType,
+    dstQueueFamily: VkStruct.CommandPoolType,
 };
 
 pub const comm = union {
@@ -292,6 +292,12 @@ pub const BufferUsage = enum {
     storage,
     staging,
 };
+
+// pub const TextureUsage = enum {
+//     none,
+//     color,
+//     shader,
+// };
 
 commandType: CommandType,
 timestamp: i128,

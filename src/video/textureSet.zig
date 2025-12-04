@@ -10,7 +10,8 @@ const MemoryPool = @import("memoryPool").MemoryPoolSlice;
 const tracy = @import("tracy");
 const objectPool = @import("objectPool").ObjectPool;
 const Handle = @import("handle").Handle;
-const OneTimeCommand = @import("processRender").oneTimeCommand;
+const processRender = @import("processRender");
+const OneTimeCommand = processRender.oneTimeCommand;
 
 const Self = @This();
 
@@ -32,6 +33,7 @@ pub const Texture = struct {
 
     image: VkStruct.Image,
     imageView: vk.VkImageView,
+    // usage: processRender.drawC.TextureUsage,
 
     // offsets: []Offsets = &.{},
 
@@ -49,6 +51,13 @@ pub const Texture = struct {
         defer zone.deinit();
 
         self.image.queueIndex = queueType;
+    }
+
+    pub fn changeTextureUsage(self: *Texture, usage: processRender.drawC.TextureUsage) void {
+        const zone = tracy.initZone(@src(), .{ .name = "change texture usage" });
+        defer zone.deinit();
+
+        self.usage = usage;
     }
 };
 
@@ -186,6 +195,7 @@ pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Sample
             .layouts = try self.layoutMemory.create(1),
             .imageView = null,
             .format = img.format,
+            // .usage = .shader,
         };
         for (0..texture.layouts.len) |i| {
             texture.layouts[i] = vk.VK_IMAGE_LAYOUT_UNDEFINED;
@@ -323,4 +333,10 @@ pub fn getVkImage(self: *Self, texture: Texture_t) vk.VkImage {
     defer self.releaseTextureContent(tex);
 
     return tex.image.vkImage;
+}
+pub fn getImageQueueType(self: *Self, texture: Texture_t) VkStruct.CommandPoolType {
+    const tex = self.getTextureCotent(texture);
+    defer self.releaseTextureContent(tex);
+
+    return tex.image.queueIndex;
 }

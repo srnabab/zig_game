@@ -965,6 +965,94 @@ pub const oneTimeCommand = struct {
         };
     }
 
+    fn inferReleasePipelineBarrierInfoByImageUsage(
+        commandType: drawC.PublicCommandType,
+        imageUsage: drawC.TextureUsage,
+        srcQueue: VkStruct.CommandPoolType,
+        dstQueue: VkStruct.CommandPoolType,
+    ) struct {
+        srcAccessMask: vk.VkAccessFlags,
+        dstAccessMask: vk.VkAccessFlags,
+        sourceStage: vk.VkPipelineStageFlags,
+        destinationStage: vk.VkPipelineStageFlags,
+    } {
+        const zone = tracy.initZone(@src(), .{ .name = "infer release pipelin barrier info" });
+        defer zone.deinit();
+
+        _ = commandType;
+        _ = imageUsage;
+        var srcAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE;
+        const dstAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE;
+        var sourceStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_NONE;
+        const destinationStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+
+        if (srcQueue == .transfer) {
+            if (dstQueue == .graphic) {
+                sourceStage = vk.VK_PIPELINE_STAGE_TRANSFER_BIT;
+                srcAccessMask = vk.VK_ACCESS_TRANSFER_WRITE_BIT;
+            } else {
+                std.debug.panic("unsupported dst queue {s}", .{@typeName(@TypeOf(dstQueue))});
+            }
+        } else {
+            std.debug.panic("unsupported src queue {s}", .{@typeName(@TypeOf(srcQueue))});
+        }
+
+        return .{
+            .srcAccessMask = srcAccessMask,
+            .dstAccessMask = dstAccessMask,
+            .sourceStage = sourceStage,
+            .destinationStage = destinationStage,
+        };
+    }
+
+    fn inferAcquirePipelineBarrierInfoByImageUsage(
+        commandType: drawC.PublicCommandType,
+        // imageUsage: drawC.TextureUsage,
+        srcQueue: VkStruct.CommandPoolType,
+        dstQueue: VkStruct.CommandPoolType,
+    ) struct {
+        srcAccessMask: vk.VkAccessFlags,
+        dstAccessMask: vk.VkAccessFlags,
+        sourceStage: vk.VkPipelineStageFlags,
+        destinationStage: vk.VkPipelineStageFlags,
+    } {
+        const zone = tracy.initZone(@src(), .{ .name = "infer acquire pipelin barrier info" });
+        defer zone.deinit();
+
+        _ = commandType;
+        const srcAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE;
+        var dstAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE;
+        const sourceStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        var destinationStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_NONE;
+
+        dstAccessMask = vk.VK_ACCESS_NONE;
+        destinationStage = vk.VK_PIPELINE_STAGE_NONE;
+
+        if (srcQueue == .transfer) {
+            if (dstQueue == .graphic) {
+                // switch (imageUsage) {
+                //     .color => {
+                //         destinationStage = vk.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+                //         dstAccessMask = vk.VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+                //     },
+                //     else => std.debug.panic("unsupported image usage {s}", .{@typeName(@TypeOf(imageUsage))}),
+                // }
+                std.debug.panic("unsupported dst queue {s}", .{@typeName(@TypeOf(dstQueue))});
+            } else {
+                std.debug.panic("unsupported dst queue {s}", .{@typeName(@TypeOf(dstQueue))});
+            }
+        } else {
+            std.debug.panic("unsupported src queue {s}", .{@typeName(@TypeOf(srcQueue))});
+        }
+
+        return .{
+            .srcAccessMask = srcAccessMask,
+            .dstAccessMask = dstAccessMask,
+            .sourceStage = sourceStage,
+            .destinationStage = destinationStage,
+        };
+    }
+
     pub fn startCommand(self: *Self) !void {
         const zone = tracy.initZone(@src(), .{ .name = "start vulkan commands" });
         defer zone.deinit();
@@ -1218,6 +1306,7 @@ pub const oneTimeCommand = struct {
                     try p.parentsAppend(&resNode.ID);
                 }
             },
+            // .changeTextureQueue => {},
             else => {
                 std.debug.panic("not supported commandType {s}", .{@tagName(commandType)});
             },
@@ -1342,6 +1431,36 @@ pub const oneTimeCommand = struct {
                 const copyBufferToImage = ptr.value_ptr.command.copyBufferToImage;
                 const oldLayouts = textureSet.getCurrentLayouts(copyBufferToImage.pTexture);
 
+                const imageQueuType = textureSet.getImageQueueType(copyBufferToImage.pTexture);
+                if (imageQueuType != .transfer) {
+                    if (imageQueuType != .init) {
+                        currentNode = try self.addCommand2(.changeTextureQueue, .{ .changeTextureQueue = .{
+                            .texture = copyBufferToImage.pTexture,
+                            .srcQueueFamily = imageQueuType,
+                            .dstQueueFamily = .transfer,
+                        } }, null, currentNode, commandType);
+                    }
+                    textureSet.changeTextureQueue(copyBufferToImage.pTexture, .transfer);
+                }
+
+                const bufferQueuqType = self.vulkan.buffers.getBufferQueueType(copyBufferToImage.buffer);
+                if (bufferQueuqType != .transfer) {
+                    if (bufferQueuqType != .init) {
+                        var region = [1]drawC.SizeOffset{.{
+                            .offset = 0,
+                            .size = self.vulkan.buffers.getBufferSize(copyBufferToImage.buffer),
+                        }};
+
+                        currentNode = try self.addCommand2(.changeBufferQueue, .{ .changeBufferQueue = .{
+                            .buffer = copyBufferToImage.buffer,
+                            .srcQueueFamily = bufferQueuqType,
+                            .dstQueueFamily = .transfer,
+                            .regions = &region,
+                        } }, null, currentNode, commandType);
+                    }
+                    self.vulkan.buffers.changeQueueType(copyBufferToImage.buffer, .transfer);
+                }
+
                 var currentLayout = oldLayouts[0];
                 var currentBase = copyBufferToImage.baseArrayLayer;
                 var count: u32 = 0;
@@ -1379,7 +1498,7 @@ pub const oneTimeCommand = struct {
                     } }, null, node, commandType);
                 }
                 textureSet.changeTextureLayout(copyBufferToImage.pTexture, copyBufferToImage.baseArrayLayer, copyBufferToImage.layerCount, vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-                textureSet.changeTextureQueue(copyBufferToImage.pTexture, .transfer);
+                // textureSet.changeTextureQueue(copyBufferToImage.pTexture, .transfer);
 
                 try self.cacheMap.put(@ptrCast(copyBufferToImage.dstImage), ID);
             },
