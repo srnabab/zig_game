@@ -1,5 +1,6 @@
 const std = @import("std");
 const sdl = @import("sdl").sdl;
+const SDL_CheckResult = @import("sdl").SDL_CheckResult;
 
 const tracy = @import("tracy");
 
@@ -15,10 +16,6 @@ pub fn createWindow(width: *u32, height: *u32) !*sdl.SDL_Window {
     if (height.* == 0) height.* = DefaultWindowHeight;
 
     const temp = sdl.SDL_CreateWindow("window", @intCast(width.*), @intCast(height.*), sdl.SDL_WINDOW_VULKAN);
-    if (temp) |window| {
-        return window;
-    } else {
-        std.log.err("SDL error {s}", .{sdl.SDL_GetError()});
-        return error.ErrorSDL;
-    }
+    try SDL_CheckResult(temp);
+    return temp.?;
 }

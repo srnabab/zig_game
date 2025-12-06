@@ -2,7 +2,7 @@ const std = @import("std");
 const process = std.process;
 
 const sdl = @cImport(@cInclude("SDL3/SDL.h"));
-const SDL_CheckResult = @import("sdlError").SDL_CheckResult;
+const SDL_CheckResult = @import("sdl").SDL_CheckResult;
 
 const Thread = std.Thread;
 const builtin = @import("builtin");

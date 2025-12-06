@@ -106,11 +106,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    const sdlError_mod = b.createModule(.{
-        .root_source_file = b.path("src/sdlError.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
     const translate_mod = b.createModule(.{
         .root_source_file = b.path("src/video/pipeline/translate.zig"),
         .target = target,
@@ -222,6 +217,11 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const error_mod = b.createModule(.{
+        .root_source_file = b.path("src/error/messageBox.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     // dependency
     resultToError_mod.addImport("enumFromC", enum_c_mod);
@@ -278,8 +278,6 @@ pub fn build(b: *std.Build) void {
 
     sdl_mod.addIncludePath(b.path("include"));
 
-    sdlError_mod.addImport("sdl", sdl_mod);
-
     translate_mod.addImport("vulkan", vk_mod);
     translate_mod.addImport("fileSystem", fileSystem_mod);
     translate_mod.addImport("global", global_mod);
@@ -305,7 +303,6 @@ pub fn build(b: *std.Build) void {
     vma_mod.addIncludePath(b.path("include"));
 
     video_mod.addImport("sdl", sdl_mod);
-    video_mod.addImport("sdlError", sdlError_mod);
     video_mod.addImport("vma", vma_mod);
     video_mod.addImport("vulkan", vk_mod);
     video_mod.addImport("translate", translate_mod);
@@ -320,6 +317,7 @@ pub fn build(b: *std.Build) void {
     video_mod.addImport("handle", handle_mod);
     video_mod.addImport("processRender", processRender_mod);
     video_mod.addImport("global", global_mod);
+    video_mod.addImport("error", error_mod);
 
     queue_mod.addImport("tracy", tracy.module("tracy"));
 
@@ -353,7 +351,6 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("output", output_mod);
     exe_mod.addImport("fileSystem", fileSystem_mod);
     exe_mod.addImport("global", global_mod);
-    exe_mod.addImport("sdlError", sdlError_mod);
     exe_mod.addImport("translate", translate_mod);
     exe_mod.addImport("textureSet", textureSet_mod);
     exe_mod.addImport("queue", queue_mod);
@@ -362,6 +359,7 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("tracy", tracy.module("tracy"));
     exe_mod.addImport("vertices", vertices_mod);
     exe_mod.addImport("handle", handle_mod);
+    exe_mod.addImport("sdl", sdl_mod);
     exe_mod.addIncludePath(b.path("include/"));
 
     exe_mod.addLibraryPath(b.path("lib/"));

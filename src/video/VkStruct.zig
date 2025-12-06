@@ -1,6 +1,6 @@
 const vk = @import("vulkan").vulkan;
 const sdl = @import("sdl").sdl;
-const SDL_CheckResult = @import("sdlError").SDL_CheckResult;
+const SDL_CheckResult = @import("sdl").SDL_CheckResult;
 const std = @import("std");
 const builtin = @import("builtin");
 const Mutex = std.Thread.Mutex;
@@ -24,6 +24,7 @@ const vmaStruct = @import("vkStruct/vma.zig");
 const vma = vmaStruct.vma;
 const global = @import("global");
 const Window = @import("vkStruct/window.zig");
+const Queue = @import("vkStruct/queue.zig");
 
 const bufferStruct = @import("vkStruct/buffer.zig");
 pub const Buffer_t = bufferStruct.Buffer_t;
@@ -130,10 +131,7 @@ const set1SetLayoutCreateInfos = descriptorSetLayoutCreateInfo{
 };
 const globalTextureBinding = 0;
 
-const VkQueueFamily = struct {
-    familyIndice: i32 = -1,
-    queueCount: u32 = 0,
-};
+const VkQueueFamily = Queue.VkQueueFamily;
 const VkTheadQueue = struct { queue: vk.VkQueue = null, mutex: Mutex = .{} };
 
 const setLayoutLimit = @import("translate").setLayoutLimit;
@@ -276,13 +274,27 @@ pub fn initVulkan(self: *Self) !void {
     defer zone.deinit();
 
     self.window = try Window.createWindow(&self.windowWidth, &self.windowsHeight);
-
     const version = try getVulkanVersion();
     printVersion(version);
+
+    // mark
     try self.createInstance();
-    try self.createSurface();
+
+    try SDL_CheckResult(sdl.SDL_Vulkan_CreateSurface(
+        self.window,
+        @ptrCast(self.instance),
+        @ptrCast(self.pAllocCallBacks),
+        @ptrCast(&self.surface),
+    ));
+
+    // mark
     try self.pickPhysicalDevice();
-    try self.setQueueFamilies();
+
+    self.graphicQueueFamily, self.computeQueueFamily, self.transferQueueFamily = kl: {
+        const res = try Queue.setQueueFamilies(self.physicalDevice, self.allocator, self.surface);
+        break :kl .{ res.graphic, res.compute, res.transfer };
+    };
+
     try self.createDevice();
     self.createQueue();
     self.vmaS = try vmaStruct.createVmaAllocator(
@@ -592,13 +604,6 @@ fn chooseEnabledLayers(self: *Self, comptime fields: type, comptime field_name: 
     return namesEnabled;
 }
 
-fn createSurface(self: *Self) !void {
-    const zone = tracy.initZone(@src(), .{ .name = "create surface" });
-    defer zone.deinit();
-
-    try SDL_CheckResult(sdl.SDL_Vulkan_CreateSurface(self.*.window, @ptrCast(self.*.instance), @ptrCast(self.*.pAllocCallBacks), @ptrCast(&self.*.surface)));
-}
-
 fn pickPhysicalDevice(self: *Self) !void {
     const zone = tracy.initZone(@src(), .{ .name = "pick physical device" });
     defer zone.deinit();
@@ -692,81 +697,6 @@ fn pickPhysicalDevice(self: *Self) !void {
     std.log.debug("gpu memory: {d} GB", .{@as(f64, @floatFromInt(self.physicalDeviceMemoryCount)) / (1024 * 1024 * 1024)});
 }
 
-fn setQueueFamilies(self: *Self) !void {
-    const zone = tracy.initZone(@src(), .{ .name = "set queue families" });
-    defer zone.deinit();
-
-    var queueFamilyCount: u32 = 0;
-    vk.vkGetPhysicalDeviceQueueFamilyProperties(self.*.physicalDevice, &queueFamilyCount, null);
-
-    const queueFamilys: []vk.VkQueueFamilyProperties = self.*.allocator.alloc(vk.VkQueueFamilyProperties, queueFamilyCount) catch |err| {
-        showErrorWithMessageBox(self.*.window, @errorName(err));
-
-        return VkError.VK_ERROR_OUT_OF_HOST_MEMORY;
-    };
-    defer self.*.allocator.free(queueFamilys);
-    vk.vkGetPhysicalDeviceQueueFamilyProperties(self.*.physicalDevice, &queueFamilyCount, @ptrCast(queueFamilys.ptr));
-
-    var graphic: bool = false;
-    var compute: bool = false;
-    var transfer: bool = false;
-    var present: bool = false;
-    var sparse: bool = false;
-    var encode: bool = false;
-    var decode: bool = false;
-    for (queueFamilys, 0..queueFamilyCount) |queueFamily, i_usize| {
-        const i: u32 = @truncate(i_usize);
-        const i_i32 = @as(i32, @bitCast(i));
-        graphic = false;
-        transfer = false;
-        present = false;
-        compute = false;
-        sparse = false;
-        encode = false;
-        decode = false;
-        if ((queueFamily.queueFlags & vk.VK_QUEUE_GRAPHICS_BIT) != 0) {
-            graphic = true;
-        }
-        if ((queueFamily.queueFlags & vk.VK_QUEUE_COMPUTE_BIT) != 0) {
-            compute = true;
-        }
-        if ((queueFamily.queueFlags & vk.VK_QUEUE_TRANSFER_BIT) != 0) {
-            transfer = true;
-        }
-        if ((queueFamily.queueFlags & vk.VK_QUEUE_SPARSE_BINDING_BIT) != 0) {
-            sparse = true;
-        }
-        if ((queueFamily.queueFlags & vk.VK_QUEUE_VIDEO_ENCODE_BIT_KHR) != 0) {
-            encode = true;
-        }
-        if ((queueFamily.queueFlags & vk.VK_QUEUE_VIDEO_DECODE_BIT_KHR) != 0) {
-            decode = true;
-        }
-        var presentSupport: u32 = 0;
-        try checkVkResult(vk.vkGetPhysicalDeviceSurfaceSupportKHR(self.*.physicalDevice, i, self.*.surface, @ptrCast(&presentSupport)));
-        if (presentSupport == 1) {
-            present = true;
-        }
-
-        if (graphic and present) {
-            self.graphicQueueFamily.familyIndice = i_i32;
-            self.graphicQueueFamily.queueCount = queueFamily.queueCount;
-            // std.debug.print("family a g_P {d}\n", .{i_usize});
-        }
-
-        if (compute and !graphic) {
-            self.computeQueueFamily.familyIndice = i_i32;
-            self.computeQueueFamily.queueCount = queueFamily.queueCount;
-            // std.debug.print("family a com {d}\n", .{i_usize});
-        }
-
-        if (transfer and !graphic and !compute and !decode and !encode) {
-            self.transferQueueFamily.familyIndice = i_i32;
-            self.transferQueueFamily.queueCount = queueFamily.queueCount;
-            // std.debug.print("family a tra\n", .{});
-        }
-    }
-}
 fn createDevice(self: *Self) !void {
     const zone = tracy.initZone(@src(), .{ .name = "create logical device" });
     defer zone.deinit();

@@ -1,0 +1,97 @@
+const std = @import("std");
+
+const errorProcess = @import("error");
+
+const vk = @import("vulkan").vulkan;
+const checkVkResult = @import("resultToError").checkVkResult;
+
+const tracy = @import("tracy");
+
+pub const VkQueueFamily = struct {
+    familyIndice: i32 = -1,
+    queueCount: u32 = 0,
+};
+
+pub fn setQueueFamilies(physicalDevice: vk.VkPhysicalDevice, allocator: std.mem.Allocator, surface: vk.VkSurfaceKHR) !struct {
+    graphic: VkQueueFamily = .{},
+    compute: VkQueueFamily = .{},
+    transfer: VkQueueFamily = .{},
+} {
+    const zone = tracy.initZone(@src(), .{ .name = "set queue families" });
+    defer zone.deinit();
+
+    var queueFamilyCount: u32 = 0;
+    vk.vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, null);
+
+    const queueFamilys: []vk.VkQueueFamilyProperties = try allocator.alloc(vk.VkQueueFamilyProperties, queueFamilyCount);
+    defer allocator.free(queueFamilys);
+
+    vk.vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, @ptrCast(queueFamilys.ptr));
+
+    var graphicQueue: VkQueueFamily = .{};
+    var computeQueue: VkQueueFamily = .{};
+    var transferQueue: VkQueueFamily = .{};
+
+    var graphic: bool = false;
+    var compute: bool = false;
+    var transfer: bool = false;
+    var present: bool = false;
+    var sparse: bool = false;
+    var encode: bool = false;
+    var decode: bool = false;
+    for (queueFamilys, 0..queueFamilyCount) |queueFamily, i_usize| {
+        const i: u32 = @truncate(i_usize);
+        const i_i32 = @as(i32, @bitCast(i));
+        graphic = false;
+        transfer = false;
+        present = false;
+        compute = false;
+        sparse = false;
+        encode = false;
+        decode = false;
+        if ((queueFamily.queueFlags & vk.VK_QUEUE_GRAPHICS_BIT) != 0) {
+            graphic = true;
+        }
+        if ((queueFamily.queueFlags & vk.VK_QUEUE_COMPUTE_BIT) != 0) {
+            compute = true;
+        }
+        if ((queueFamily.queueFlags & vk.VK_QUEUE_TRANSFER_BIT) != 0) {
+            transfer = true;
+        }
+        if ((queueFamily.queueFlags & vk.VK_QUEUE_SPARSE_BINDING_BIT) != 0) {
+            sparse = true;
+        }
+        if ((queueFamily.queueFlags & vk.VK_QUEUE_VIDEO_ENCODE_BIT_KHR) != 0) {
+            encode = true;
+        }
+        if ((queueFamily.queueFlags & vk.VK_QUEUE_VIDEO_DECODE_BIT_KHR) != 0) {
+            decode = true;
+        }
+        var presentSupport: u32 = 0;
+        try checkVkResult(vk.vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, i, surface, @ptrCast(&presentSupport)));
+        if (presentSupport == 1) {
+            present = true;
+        }
+
+        if (graphic and present) {
+            graphicQueue.familyIndice = i_i32;
+            graphicQueue.queueCount = queueFamily.queueCount;
+        }
+
+        if (compute and !graphic) {
+            computeQueue.familyIndice = i_i32;
+            computeQueue.queueCount = queueFamily.queueCount;
+        }
+
+        if (transfer and !graphic and !compute and !decode and !encode) {
+            transferQueue.familyIndice = i_i32;
+            transferQueue.queueCount = queueFamily.queueCount;
+        }
+    }
+
+    return .{
+        .graphic = graphicQueue,
+        .compute = computeQueue,
+        .transfer = transferQueue,
+    };
+}
