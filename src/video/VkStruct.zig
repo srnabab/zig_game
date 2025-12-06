@@ -23,6 +23,7 @@ pub const Samplers = @import("vkStruct/sampler.zig");
 const vmaStruct = @import("vkStruct/vma.zig");
 const vma = vmaStruct.vma;
 const global = @import("global");
+const Window = @import("vkStruct/window.zig");
 
 const bufferStruct = @import("vkStruct/buffer.zig");
 pub const Buffer_t = bufferStruct.Buffer_t;
@@ -63,9 +64,6 @@ const featureIndexingNeed = [_][]const u8{
 };
 const featureTimelineSemaphoreNeed = [_][]const u8{"timelineSemaphore"};
 const featureDynamicRenderingNeed = [_][]const u8{"dynamicRendering"};
-
-const DefaultWindowWidth = 800;
-const DefaultWindowHeight = 600;
 
 const DefaultSurfaceFormat = vk.VkSurfaceFormatKHR{
     .colorSpace = vk.VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
@@ -277,7 +275,8 @@ pub fn initVulkan(self: *Self) !void {
     const zone = tracy.initZone(@src(), .{ .name = "init vulkan resources" });
     defer zone.deinit();
 
-    try self.*.createWindow();
+    self.window = try Window.createWindow(&self.windowWidth, &self.windowsHeight);
+
     const version = try getVulkanVersion();
     printVersion(version);
     try self.createInstance();
@@ -470,28 +469,6 @@ fn featureNeededCheck(comptime featureType: type, featurePack: anytype) bool {
         },
     }
     return count == len;
-}
-
-fn createWindow(self: *Self) !void {
-    const zone = tracy.initZone(@src(), .{ .name = "create window" });
-    defer zone.deinit();
-
-    const width = w: {
-        if (self.windowWidth == 0) self.windowWidth = DefaultWindowWidth;
-        break :w self.windowWidth;
-    };
-
-    const height = h: {
-        if (self.windowsHeight == 0) self.windowsHeight = DefaultWindowHeight;
-        break :h self.windowsHeight;
-    };
-    const temp = sdl.SDL_CreateWindow("window", @intCast(width), @intCast(height), sdl.SDL_WINDOW_VULKAN);
-    if (temp) |window| {
-        self.*.window = window;
-    } else {
-        std.log.err("SDL error {s}", .{sdl.SDL_GetError()});
-        return VkError.VK_ERROR_UNKNOWN;
-    }
 }
 
 fn initAllocCallBacks(self: *Self) void {
