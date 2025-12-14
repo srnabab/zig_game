@@ -26,6 +26,7 @@ const global = @import("global");
 const Window = @import("vkStruct/window.zig");
 const Queue = @import("vkStruct/queue.zig");
 const InstanceDevice = @import("vkStruct/instance_device.zig");
+const Semaphore = @import("vkStruct/semaphore.zig");
 
 const bufferStruct = @import("vkStruct/buffer.zig");
 pub const Buffer_t = bufferStruct.Buffer_t;
@@ -286,13 +287,14 @@ pub fn initVulkan(self: *Self) !void {
     );
 
     var semaphores: [4]vk.VkSemaphore = undefined;
-    try self.createBinarySemaphore(0, &semaphores);
+    try Semaphore.createBinarySemaphore(self.device, self.pAllocCallBacks, 0, &semaphores);
     self.imageAvailableSemaphore[0] = semaphores[0];
     self.imageAvailableSemaphore[1] = semaphores[1];
     self.renderFinishSemaphore[0] = semaphores[2];
     self.renderFinishSemaphore[1] = semaphores[3];
+
     var semaphores2: [1]vk.VkSemaphore = undefined;
-    try self.createTimelineSemaphore(0, &semaphores2, 0);
+    try Semaphore.createTimelineSemaphore(self.device, self.pAllocCallBacks, 0, &semaphores2, 0);
     self.globalTimelineSemaphore = semaphores2[0];
 
     self.surfaceFormat = try self.getSurfaceFormat();
@@ -801,38 +803,6 @@ pub fn endCommandBuffer(commandBuffer: vk.VkCommandBuffer) !void {
     defer zone.deinit();
 
     try checkVkResult(vk.vkEndCommandBuffer(commandBuffer));
-}
-
-pub fn createBinarySemaphore(self: *Self, flags: vk.VkSemaphoreCreateFlags, pSemaphore: []vk.VkSemaphore) !void {
-    const zone = tracy.initZone(@src(), .{ .name = "create semaphores" });
-    defer zone.deinit();
-
-    try self._createSemaphore(null, flags, pSemaphore);
-}
-
-pub fn createTimelineSemaphore(self: *Self, flags: vk.VkSemaphoreCreateFlags, pSemaphore: []vk.VkSemaphore, initialValue: u64) !void {
-    const zone = tracy.initZone(@src(), .{ .name = "create semaphores" });
-    defer zone.deinit();
-
-    var createInfo = vk.VkSemaphoreTypeCreateInfo{
-        .sType = vk.VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
-        .pNext = null,
-        .semaphoreType = vk.VK_SEMAPHORE_TYPE_TIMELINE,
-        .initialValue = initialValue,
-    };
-
-    try self._createSemaphore(&createInfo, flags, pSemaphore);
-}
-
-pub fn _createSemaphore(self: *Self, pNext: ?*anyopaque, flags: vk.VkSemaphoreCreateFlags, pSemaphore: []vk.VkSemaphore) !void {
-    var createInfo = vk.VkSemaphoreCreateInfo{
-        .sType = vk.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-        .pNext = pNext,
-        .flags = flags,
-    };
-
-    for (0..pSemaphore.len) |i|
-        try checkVkResult(vk.vkCreateSemaphore(self.device, @ptrCast(&createInfo), self.pAllocCallBacks, @ptrCast(&pSemaphore[i])));
 }
 
 pub fn acquireNextImage(self: *Self, pIndex: *u32) !void {
