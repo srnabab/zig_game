@@ -95,8 +95,6 @@ const set1SetLayoutCreateInfos = descriptorSetLayoutCreateInfo{
 };
 const globalTextureBinding = 0;
 
-const VkTheadQueue = struct { queue: vk.VkQueue = null, mutex: Mutex = .{} };
-
 const setLayoutLimit = @import("translate").setLayoutLimit;
 pub const Pipeline = struct {
     // descriptorSetLayouts: [setLayoutLimit]vk.VkDescriptorSetLayout,
@@ -170,11 +168,11 @@ device: vk.VkDevice = null,
 swapchain: vk.VkSwapchainKHR = null,
 
 graphicQueueFamily: Queue.VkQueueFamily = .{},
-graphicQueue: VkTheadQueue = .{},
+graphicQueue: Queue.VkTheadQueue = .{},
 computeQueueFamily: Queue.VkQueueFamily = .{},
-computeQueue: VkTheadQueue = .{},
+computeQueue: Queue.VkTheadQueue = .{},
 transferQueueFamily: Queue.VkQueueFamily = .{},
-transferQueue: VkTheadQueue = .{},
+transferQueue: Queue.VkTheadQueue = .{},
 
 shaderModules: std.StringHashMap(vk.VkShaderModule),
 entryNames: std.StringHashMap(void),
@@ -241,7 +239,6 @@ pub fn initVulkan(self: *Self) !void {
     printVersion(version);
 
     self.instance = try InstanceDevice.createInstance(self.pAllocCallBacks, self.allocator);
-    // try self.createInstance();
 
     try SDL_CheckResult(sdl.SDL_Vulkan_CreateSurface(
         self.window,
@@ -250,14 +247,12 @@ pub fn initVulkan(self: *Self) !void {
         @ptrCast(&self.surface),
     ));
 
-    // mark
     var deviceGroup = try InstanceDevice.pickPhysicalDevice(
         self.instance,
         self.allocator,
         &self.physicalDeviceMemoryCount,
     );
     self.physicalDevice = deviceGroup.physicalDevices[0];
-    // try self.pickPhysicalDevice();
 
     self.graphicQueueFamily, self.computeQueueFamily, self.transferQueueFamily = kl: {
         const res = try Queue.setQueueFamilies(self.physicalDevice, self.allocator, self.surface);
@@ -272,8 +267,18 @@ pub fn initVulkan(self: *Self) !void {
         self.computeQueueFamily,
         self.transferQueueFamily,
     );
-    // try self.createDevice();
-    self.createQueue();
+
+    Queue.createQueue(
+        &self.graphicQueueFamily,
+        &self.computeQueueFamily,
+        &self.transferQueueFamily,
+        &self.graphicQueue,
+        &self.computeQueue,
+        &self.transferQueue,
+        self.device,
+    );
+    // self.createQueue();
+
     self.vmaS = try vmaStruct.createVmaAllocator(
         self.physicalDevice,
         self.device,
@@ -447,21 +452,6 @@ fn printVersion(apiVersion: u32) void {
     const patch = vk.VK_VERSION_PATCH(apiVersion);
 
     std.log.debug("Vulkan API Version: {d}.{d}.{d}", .{ major, minor, patch });
-}
-
-fn createQueue(self: *Self) void {
-    const zone = tracy.initZone(@src(), .{ .name = "create queues" });
-    defer zone.deinit();
-
-    const families = [3]*Queue.VkQueueFamily{ &self.graphicQueueFamily, &self.computeQueueFamily, &self.transferQueueFamily };
-    const queuess = [3]*VkTheadQueue{ &self.graphicQueue, &self.computeQueue, &self.transferQueue };
-    for (families, queuess) |family, queues| {
-        if (family.familyIndice != -1) {
-            vk.vkGetDeviceQueue(self.device, @bitCast(family.familyIndice), @intCast(family.familyIndice), @ptrCast(&queues.queue));
-        } else {
-            family.familyIndice = families[0].familyIndice;
-        }
-    }
 }
 
 pub const CommandPoolType = @import("vkStruct/queueType.zig").QueueType;

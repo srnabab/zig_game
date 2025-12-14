@@ -1,4 +1,5 @@
 const std = @import("std");
+const Mutex = std.Thread.Mutex;
 
 const errorProcess = @import("error");
 
@@ -10,6 +11,7 @@ const tracy = @import("tracy");
 const types = @import("types");
 
 pub const VkQueueFamily = types.VkQueueFamily;
+pub const VkTheadQueue = struct { queue: vk.VkQueue = null, mutex: Mutex = .{} };
 
 pub fn setQueueFamilies(physicalDevice: vk.VkPhysicalDevice, allocator: std.mem.Allocator, surface: vk.VkSurfaceKHR) !struct {
     graphic: VkQueueFamily = .{},
@@ -101,4 +103,32 @@ pub fn setQueueFamilies(physicalDevice: vk.VkPhysicalDevice, allocator: std.mem.
         .compute = computeQueue,
         .transfer = transferQueue,
     };
+}
+
+pub fn createQueue(
+    graphicQueueFamily: *VkQueueFamily,
+    computeQueueFamily: *VkQueueFamily,
+    transferQueueFamily: *VkQueueFamily,
+    graphicQueue: *VkTheadQueue,
+    computeQueue: *VkTheadQueue,
+    transferQueue: *VkTheadQueue,
+    device: vk.VkDevice,
+) void {
+    const zone = tracy.initZone(@src(), .{ .name = "create queues" });
+    defer zone.deinit();
+
+    const families = [3]*VkQueueFamily{ graphicQueueFamily, computeQueueFamily, transferQueueFamily };
+    const queuess = [3]*VkTheadQueue{ graphicQueue, computeQueue, transferQueue };
+    for (families, queuess) |family, queues| {
+        if (family.familyIndice != -1) {
+            vk.vkGetDeviceQueue(
+                device,
+                @bitCast(family.familyIndice),
+                @intCast(family.familyIndice),
+                @ptrCast(&queues.queue),
+            );
+        } else {
+            family.familyIndice = families[0].familyIndice;
+        }
+    }
 }
