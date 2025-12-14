@@ -105,7 +105,7 @@ pub fn setQueueFamilies(physicalDevice: vk.VkPhysicalDevice, allocator: std.mem.
     };
 }
 
-pub fn createQueue(
+pub fn createQueues(
     graphicQueueFamily: *VkQueueFamily,
     computeQueueFamily: *VkQueueFamily,
     transferQueueFamily: *VkQueueFamily,

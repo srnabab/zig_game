@@ -268,7 +268,7 @@ pub fn initVulkan(self: *Self) !void {
         self.transferQueueFamily,
     );
 
-    Queue.createQueue(
+    Queue.createQueues(
         &self.graphicQueueFamily,
         &self.computeQueueFamily,
         &self.transferQueueFamily,
@@ -277,7 +277,6 @@ pub fn initVulkan(self: *Self) !void {
         &self.transferQueue,
         self.device,
     );
-    // self.createQueue();
 
     self.vmaS = try vmaStruct.createVmaAllocator(
         self.physicalDevice,
