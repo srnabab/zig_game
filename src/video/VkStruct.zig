@@ -27,6 +27,8 @@ const Window = @import("vkStruct/window.zig");
 const Queue = @import("vkStruct/queue.zig");
 const InstanceDevice = @import("vkStruct/instance_device.zig");
 const Semaphore = @import("vkStruct/semaphore.zig");
+const Swapchain = @import("vkStruct/swapchain.zig");
+const Debug = @import("debug");
 
 const bufferStruct = @import("vkStruct/buffer.zig");
 pub const Buffer_t = bufferStruct.Buffer_t;
@@ -241,12 +243,7 @@ pub fn initVulkan(self: *Self) !void {
 
     self.instance = try InstanceDevice.createInstance(self.pAllocCallBacks, self.allocator);
 
-    try SDL_CheckResult(sdl.SDL_Vulkan_CreateSurface(
-        self.window,
-        @ptrCast(self.instance),
-        @ptrCast(self.pAllocCallBacks),
-        @ptrCast(&self.surface),
-    ));
+    self.surface = try Swapchain.createSurface(self.window, self.instance, self.pAllocCallBacks);
 
     var deviceGroup = try InstanceDevice.pickPhysicalDevice(
         self.instance,
@@ -835,6 +832,7 @@ pub fn getSurfaceFormat(self: *Self) !vk.VkSurfaceFormatKHR {
     try checkVkResult(vk.vkGetPhysicalDeviceSurfaceFormatsKHR(self.physicalDevice, self.surface, @ptrCast(&formatCount), @ptrCast(&formats)));
 
     for (0..formatCount) |i| {
+        // Debug.print.printVkSurfaceFormatKHR(formats[i]);
         if (formats[i].colorSpace == DefaultSurfaceFormat.colorSpace and formats[i].format == DefaultSurfaceFormat.format) {
             return formats[i];
         }

@@ -227,11 +227,11 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    // const device_instance_mod = b.createModule(.{
-    //     .root_source_file = b.path("src/video/vkStruct/instance_device.zig"),
-    //     .target = target,
-    //     .optimize = optimize,
-    // });
+    const debug_mod = b.createModule(.{
+        .root_source_file = b.path("src/debug/debug.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     // dependency
     error_mod.addImport("sdl", sdl_mod);
@@ -308,6 +308,9 @@ pub fn build(b: *std.Build) void {
     textureSet_mod.addImport("processRender", processRender_mod);
     textureSet_mod.addIncludePath(b.path("include"));
 
+    debug_mod.addImport("vulkan", vk_mod);
+    debug_mod.addImport("resultToError", resultToError_mod);
+
     stableArray_mod.addImport("tracy", tracy.module("tracy"));
 
     stb_image_mod.addIncludePath(b.path("include"));
@@ -331,6 +334,7 @@ pub fn build(b: *std.Build) void {
     video_mod.addImport("global", global_mod);
     video_mod.addImport("error", error_mod);
     video_mod.addImport("types", vk_types_mod);
+    video_mod.addImport("debug", debug_mod);
 
     queue_mod.addImport("tracy", tracy.module("tracy"));
 
