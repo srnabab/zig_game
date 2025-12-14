@@ -20,12 +20,19 @@ pub fn setQueueFamilies(physicalDevice: vk.VkPhysicalDevice, allocator: std.mem.
     defer zone.deinit();
 
     var queueFamilyCount: u32 = 0;
-    vk.vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, null);
+    vk.vkGetPhysicalDeviceQueueFamilyProperties2(physicalDevice, &queueFamilyCount, null);
 
-    const queueFamilys: []vk.VkQueueFamilyProperties = try allocator.alloc(vk.VkQueueFamilyProperties, queueFamilyCount);
+    const queueFamilys: []vk.VkQueueFamilyProperties2 = try allocator.alloc(vk.VkQueueFamilyProperties2, queueFamilyCount);
     defer allocator.free(queueFamilys);
 
-    vk.vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, @ptrCast(queueFamilys.ptr));
+    for (queueFamilys) |*v| {
+        v.* = .{
+            .sType = vk.VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2,
+            .pNext = null,
+        };
+    }
+
+    vk.vkGetPhysicalDeviceQueueFamilyProperties2(physicalDevice, &queueFamilyCount, @ptrCast(queueFamilys.ptr));
 
     var graphicQueue: VkQueueFamily = .{};
     var computeQueue: VkQueueFamily = .{};
@@ -38,9 +45,10 @@ pub fn setQueueFamilies(physicalDevice: vk.VkPhysicalDevice, allocator: std.mem.
     var sparse: bool = false;
     var encode: bool = false;
     var decode: bool = false;
-    for (queueFamilys, 0..queueFamilyCount) |queueFamily, i_usize| {
+    for (queueFamilys, 0..queueFamilyCount) |queueFamily2, i_usize| {
         const i: u32 = @truncate(i_usize);
         const i_i32 = @as(i32, @bitCast(i));
+        const queueFamily = queueFamily2.queueFamilyProperties;
         graphic = false;
         transfer = false;
         present = false;
