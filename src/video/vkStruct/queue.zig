@@ -7,10 +7,9 @@ const checkVkResult = @import("resultToError").checkVkResult;
 
 const tracy = @import("tracy");
 
-pub const VkQueueFamily = struct {
-    familyIndice: i32 = -1,
-    queueCount: u32 = 0,
-};
+const types = @import("types");
+
+pub const VkQueueFamily = types.VkQueueFamily;
 
 pub fn setQueueFamilies(physicalDevice: vk.VkPhysicalDevice, allocator: std.mem.Allocator, surface: vk.VkSurfaceKHR) !struct {
     graphic: VkQueueFamily = .{},

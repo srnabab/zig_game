@@ -25,46 +25,10 @@ const vma = vmaStruct.vma;
 const global = @import("global");
 const Window = @import("vkStruct/window.zig");
 const Queue = @import("vkStruct/queue.zig");
+const InstanceDevice = @import("vkStruct/instance_device.zig");
 
 const bufferStruct = @import("vkStruct/buffer.zig");
 pub const Buffer_t = bufferStruct.Buffer_t;
-
-const layerNeeded = layer: {
-    break :layer switch (builtin.mode) {
-        .Debug, .ReleaseSafe => [_][*c]const u8{"VK_LAYER_KHRONOS_validation"},
-        .ReleaseFast, .ReleaseSmall => [_][*c]const u8{},
-    };
-};
-const extensionNeeded = [_][*c]const u8{ "VK_KHR_surface", "VK_KHR_win32_surface" };
-const deviceExtensionNeeded = [_][*c]const u8{
-    "VK_KHR_swapchain",
-    "VK_EXT_descriptor_indexing",
-    "VK_KHR_maintenance3",
-    "VK_KHR_synchronization2",
-    "VK_KHR_timeline_semaphore",
-    "VK_KHR_dynamic_rendering",
-    "VK_EXT_extended_dynamic_state",
-};
-const featureNeed = [_][]const u8{
-    "geometryShader",
-    "independentBlend",
-    "samplerAnisotropy",
-    "logicOp",
-    "depthClamp",
-    "depthBiasClamp",
-    "wideLines",
-};
-const featureIndexingNeed = [_][]const u8{
-    "shaderUniformBufferArrayNonUniformIndexing",
-    "shaderStorageBufferArrayNonUniformIndexing",
-    "shaderSampledImageArrayNonUniformIndexing",
-    "descriptorBindingUniformBufferUpdateAfterBind",
-    "descriptorBindingSampledImageUpdateAfterBind",
-    "descriptorBindingPartiallyBound",
-    "runtimeDescriptorArray",
-};
-const featureTimelineSemaphoreNeed = [_][]const u8{"timelineSemaphore"};
-const featureDynamicRenderingNeed = [_][]const u8{"dynamicRendering"};
 
 const DefaultSurfaceFormat = vk.VkSurfaceFormatKHR{
     .colorSpace = vk.VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
@@ -131,7 +95,6 @@ const set1SetLayoutCreateInfos = descriptorSetLayoutCreateInfo{
 };
 const globalTextureBinding = 0;
 
-const VkQueueFamily = Queue.VkQueueFamily;
 const VkTheadQueue = struct { queue: vk.VkQueue = null, mutex: Mutex = .{} };
 
 const setLayoutLimit = @import("translate").setLayoutLimit;
@@ -206,11 +169,11 @@ device: vk.VkDevice = null,
 
 swapchain: vk.VkSwapchainKHR = null,
 
-graphicQueueFamily: VkQueueFamily = .{},
+graphicQueueFamily: Queue.VkQueueFamily = .{},
 graphicQueue: VkTheadQueue = .{},
-computeQueueFamily: VkQueueFamily = .{},
+computeQueueFamily: Queue.VkQueueFamily = .{},
 computeQueue: VkTheadQueue = .{},
-transferQueueFamily: VkQueueFamily = .{},
+transferQueueFamily: Queue.VkQueueFamily = .{},
 transferQueue: VkTheadQueue = .{},
 
 shaderModules: std.StringHashMap(vk.VkShaderModule),
@@ -277,8 +240,8 @@ pub fn initVulkan(self: *Self) !void {
     const version = try getVulkanVersion();
     printVersion(version);
 
-    // mark
-    try self.createInstance();
+    self.instance = try InstanceDevice.createInstance(self.pAllocCallBacks, self.allocator);
+    // try self.createInstance();
 
     try SDL_CheckResult(sdl.SDL_Vulkan_CreateSurface(
         self.window,
@@ -288,14 +251,28 @@ pub fn initVulkan(self: *Self) !void {
     ));
 
     // mark
-    try self.pickPhysicalDevice();
+    var deviceGroup = try InstanceDevice.pickPhysicalDevice(
+        self.instance,
+        self.allocator,
+        &self.physicalDeviceMemoryCount,
+    );
+    self.physicalDevice = deviceGroup.physicalDevices[0];
+    // try self.pickPhysicalDevice();
 
     self.graphicQueueFamily, self.computeQueueFamily, self.transferQueueFamily = kl: {
         const res = try Queue.setQueueFamilies(self.physicalDevice, self.allocator, self.surface);
         break :kl .{ res.graphic, res.compute, res.transfer };
     };
 
-    try self.createDevice();
+    self.device = try InstanceDevice.createDevice(
+        deviceGroup.count,
+        &deviceGroup.physicalDevices,
+        self.pAllocCallBacks,
+        self.graphicQueueFamily,
+        self.computeQueueFamily,
+        self.transferQueueFamily,
+    );
+    // try self.createDevice();
     self.createQueue();
     self.vmaS = try vmaStruct.createVmaAllocator(
         self.physicalDevice,
@@ -318,9 +295,18 @@ pub fn initVulkan(self: *Self) !void {
     self.presentMode = try self.getPresentMode();
     self.swapchain = try self.createSwapchain();
 
-    self.globalDescriptorPool = try self._createDescriptorPool(vk.VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT, @constCast(&globalDescriptorPoolSizes), globalDescriptorMaxSets);
+    self.globalDescriptorPool = try self._createDescriptorPool(
+        vk.VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
+        @constCast(&globalDescriptorPoolSizes),
+        globalDescriptorMaxSets,
+    );
 
-    self.descriptorSetLayout[0] = try self.createDescriptorSetLayout(null, set0SetLayoutCreateInfos.flag, set0SetLayoutCreateInfos.bindingCount, @constCast(&set0SetLayoutCreateInfos.bindings));
+    self.descriptorSetLayout[0] = try self.createDescriptorSetLayout(
+        null,
+        set0SetLayoutCreateInfos.flag,
+        set0SetLayoutCreateInfos.bindingCount,
+        @constCast(&set0SetLayoutCreateInfos.bindings),
+    );
     var bindingFlagsInfo = vk.VkDescriptorSetLayoutBindingFlagsCreateInfo{
         .sType = vk.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
         .pNext = null,
@@ -435,54 +421,6 @@ fn showErrorWithMessageBox(window: *sdl.SDL_Window, err: []const u8) void {
     };
 }
 
-fn calculateMemoryGPU(memoryProperty: vk.VkPhysicalDeviceMemoryProperties) u64 {
-    var totalCount: u64 = 0;
-    for (0..memoryProperty.memoryHeapCount) |i| {
-        if (memoryProperty.memoryHeaps[i].flags & vk.VK_MEMORY_HEAP_DEVICE_LOCAL_BIT != 0) {
-            totalCount += memoryProperty.memoryHeaps[i].size;
-        }
-    }
-    return totalCount;
-}
-
-fn featureNeededCheck(comptime featureType: type, featurePack: anytype) bool {
-    var count: u32 = 0;
-    var len: u32 = 0;
-    switch (featureType) {
-        vk.VkPhysicalDeviceFeatures => {
-            len = featureNeed.len;
-            inline for (featureNeed) |feature| {
-                // if (@field(featurePack, feature) == 1) {
-                //     count += 1;
-                // }
-                count += @field(featurePack, feature);
-            }
-        },
-        vk.VkPhysicalDeviceDescriptorIndexingFeatures => {
-            len = featureIndexingNeed.len;
-            inline for (featureIndexingNeed) |feature| {
-                count += @field(featurePack, feature);
-            }
-        },
-        vk.VkPhysicalDeviceTimelineSemaphoreFeatures => {
-            len = featureTimelineSemaphoreNeed.len;
-            inline for (featureTimelineSemaphoreNeed) |feature| {
-                count += @field(featurePack, feature);
-            }
-        },
-        vk.VkPhysicalDeviceDynamicRenderingFeatures => {
-            len = featureDynamicRenderingNeed.len;
-            inline for (featureDynamicRenderingNeed) |feature| {
-                count += @field(featurePack, feature);
-            }
-        },
-        else => {
-            @compileError("unsupported");
-        },
-    }
-    return count == len;
-}
-
 fn initAllocCallBacks(self: *Self) void {
     _ = self;
     // self.*.allocCallBacks.pUserData = null;
@@ -511,265 +449,11 @@ fn printVersion(apiVersion: u32) void {
     std.log.debug("Vulkan API Version: {d}.{d}.{d}", .{ major, minor, patch });
 }
 
-fn createInstance(self: *Self) VkError!void {
-    const zone = tracy.initZone(@src(), .{ .name = "create instance" });
-    defer zone.deinit();
-
-    var appInfo = vk.VkApplicationInfo{
-        .sType = vk.VK_STRUCTURE_TYPE_APPLICATION_INFO,
-        .pNext = null,
-        .pApplicationName = "game",
-        .applicationVersion = vk.VK_MAKE_API_VERSION(0, 1, 0, 0),
-        .pEngineName = "engine",
-        .engineVersion = vk.VK_MAKE_API_VERSION(0, 1, 0, 0),
-        .apiVersion = vk.VK_API_VERSION_1_4,
-    };
-
-    const layers = try self.*.chooseEnabledLayers(vk.VkLayerProperties, "layerName", layerNeeded[0..layerNeeded.len], null);
-    defer layers.deinit();
-    const extension = try self.*.chooseEnabledLayers(vk.VkExtensionProperties, "extensionName", extensionNeeded[0..extensionNeeded.len], null);
-    defer extension.deinit();
-
-    const createInfo = self.*.allocator.create(vk.VkInstanceCreateInfo) catch |err| {
-        std.debug.print("err: {s}\n", .{@errorName(err)});
-        return VkError.VK_ERROR_OUT_OF_HOST_MEMORY;
-    };
-    defer self.*.allocator.destroy(createInfo);
-
-    createInfo.*.sType = vk.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    createInfo.*.pNext = null;
-    createInfo.*.flags = 0;
-    createInfo.*.pApplicationInfo = &appInfo;
-    createInfo.*.enabledLayerCount = @truncate(layers.items.len);
-    createInfo.*.ppEnabledLayerNames = @ptrCast(layers.items.ptr);
-    createInfo.*.enabledExtensionCount = @truncate(extension.items.len);
-    // std.debug.print("len {d}\n", .{extension.items.len});
-    createInfo.*.ppEnabledExtensionNames = @ptrCast(extension.items.ptr);
-
-    try checkVkResult(vk.vkCreateInstance(createInfo, self.*.pAllocCallBacks, @ptrCast(&self.*.instance)));
-}
-
-fn chooseEnabledLayers(self: *Self, comptime fields: type, comptime field_name: []const u8, neededName: []const [*c]const u8, physicalDevice: vk.VkPhysicalDevice) VkError!std.array_list.Managed([*c]const u8) {
-    var namesEnabled = std.array_list.Managed([*c]const u8).init(self.*.allocator);
-
-    var count: u32 = 0;
-    var vulkanNames: []fields = undefined;
-    switch (fields) {
-        vk.VkLayerProperties => {
-            try checkVkResult(vk.vkEnumerateInstanceLayerProperties(&count, null));
-            vulkanNames = self.*.allocator.alloc(fields, count) catch |err| {
-                std.debug.print("err: {s}\n", .{@errorName(err)});
-                return VkError.VK_ERROR_OUT_OF_HOST_MEMORY;
-            };
-            try checkVkResult(vk.vkEnumerateInstanceLayerProperties(&count, vulkanNames.ptr));
-        },
-        vk.VkExtensionProperties => {
-            if (physicalDevice) |device| {
-                try checkVkResult(vk.vkEnumerateDeviceExtensionProperties(device, null, &count, null));
-                vulkanNames = self.*.allocator.alloc(fields, count) catch |err| {
-                    std.debug.print("err: {s}\n", .{@errorName(err)});
-                    return VkError.VK_ERROR_OUT_OF_HOST_MEMORY;
-                };
-                try checkVkResult(vk.vkEnumerateDeviceExtensionProperties(device, null, &count, vulkanNames.ptr));
-            } else {
-                try checkVkResult(vk.vkEnumerateInstanceExtensionProperties(null, &count, null));
-                vulkanNames = self.*.allocator.alloc(fields, count) catch |err| {
-                    std.debug.print("err: {s}\n", .{@errorName(err)});
-                    return VkError.VK_ERROR_OUT_OF_HOST_MEMORY;
-                };
-                try checkVkResult(vk.vkEnumerateInstanceExtensionProperties(null, &count, vulkanNames.ptr));
-            }
-        },
-        else => {
-            @compileError("not supported type");
-        },
-    }
-    defer self.*.allocator.free(vulkanNames);
-
-    for (neededName) |need| {
-        var str: [256]u8 = undefined;
-        const len = sdl.SDL_strlen(need);
-        for (vulkanNames) |vulkan| {
-            @memcpy(str[0..len], need);
-            // std.debug.print("len: {d}, name1: {s}, name2: {s}\n", .{ len, str[0..len], @field(vulkan, field_name) });
-            if (std.mem.eql(u8, str[0..len], @field(vulkan, field_name)[0..len])) {
-                namesEnabled.append(need) catch |err| {
-                    std.debug.print("err: {s}\n", .{@errorName(err)});
-                    return VkError.VK_ERROR_OUT_OF_HOST_MEMORY;
-                };
-                break;
-            }
-        }
-    }
-    return namesEnabled;
-}
-
-fn pickPhysicalDevice(self: *Self) !void {
-    const zone = tracy.initZone(@src(), .{ .name = "pick physical device" });
-    defer zone.deinit();
-
-    var deviceCount: u32 = 0;
-    try checkVkResult(vk.vkEnumeratePhysicalDevices(self.*.instance, @ptrCast(&deviceCount), null));
-    if (deviceCount == 0) {
-        try SDL_CheckResult(sdl.SDL_ShowSimpleMessageBox(sdl.SDL_MESSAGEBOX_ERROR, "vulkan not support", "you device is not support vulkan", self.*.window));
-    }
-
-    const physicalDevices: []vk.VkPhysicalDevice = self.*.allocator.alloc(vk.VkPhysicalDevice, deviceCount) catch |err| {
-        showErrorWithMessageBox(self.*.window, @errorName(err));
-
-        return VkError.VK_ERROR_OUT_OF_HOST_MEMORY;
-    };
-    defer self.*.allocator.free(physicalDevices);
-    std.log.debug("device count: {d}", .{deviceCount});
-    try checkVkResult(vk.vkEnumeratePhysicalDevices(self.*.instance, @ptrCast(&deviceCount), @ptrCast(physicalDevices.ptr)));
-
-    var biggestMemory: u64 = 0;
-    for (physicalDevices) |device| {
-        if (device) |devicee| {
-            const array = try self.*.chooseEnabledLayers(vk.VkExtensionProperties, "extensionName", deviceExtensionNeeded[0..deviceExtensionNeeded.len], devicee);
-            defer array.deinit();
-            if (array.items.len != deviceExtensionNeeded.len) {
-                continue;
-            }
-            var deviceProperty: vk.VkPhysicalDeviceProperties = undefined;
-            var deviceMemoryProperty: vk.VkPhysicalDeviceMemoryProperties = undefined;
-            var deviceFeatures: vk.VkPhysicalDeviceFeatures = undefined;
-
-            var renderingFeature = vk.VkPhysicalDeviceDynamicRenderingFeatures{
-                .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
-                .pNext = null,
-            };
-            var timelineFeature = vk.VkPhysicalDeviceTimelineSemaphoreFeatures{
-                .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES,
-                .pNext = &renderingFeature,
-            };
-            var indexingFeature = vk.VkPhysicalDeviceDescriptorIndexingFeatures{
-                .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES,
-                .pNext = &timelineFeature,
-            };
-            var deviceFeatures2 = vk.VkPhysicalDeviceFeatures2{
-                .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-                .pNext = &indexingFeature,
-            };
-
-            vk.vkGetPhysicalDeviceProperties(devicee, @ptrCast(&deviceProperty));
-            vk.vkGetPhysicalDeviceMemoryProperties(devicee, @ptrCast(&deviceMemoryProperty));
-            vk.vkGetPhysicalDeviceFeatures(devicee, @ptrCast(&deviceFeatures));
-            vk.vkGetPhysicalDeviceFeatures2(devicee, @ptrCast(&deviceFeatures2));
-
-            // TODO memory requirement undeclared
-            const memoryCount = calculateMemoryGPU(deviceMemoryProperty);
-            if (memoryCount < biggestMemory) {
-                continue;
-            }
-
-            const featureSupported = featureNeededCheck(vk.VkPhysicalDeviceFeatures, deviceFeatures);
-            const featureIndexingSupported = featureNeededCheck(vk.VkPhysicalDeviceDescriptorIndexingFeatures, indexingFeature);
-            const featureTimelineSemaphoreSupported = featureNeededCheck(vk.VkPhysicalDeviceTimelineSemaphoreFeatures, timelineFeature);
-            const featureDynamicRenderingSupported = featureNeededCheck(vk.VkPhysicalDeviceDynamicRenderingFeatures, renderingFeature);
-
-            if (featureSupported and featureIndexingSupported and featureTimelineSemaphoreSupported and featureDynamicRenderingSupported) {
-                switch (deviceProperty.deviceType) {
-                    vk.VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU => {
-                        self.*.physicalDevice = devicee;
-                        biggestMemory = @max(biggestMemory, memoryCount);
-
-                        std.log.debug("device: choosed {s}", .{@tagName(@as(VkPhysicalType, @enumFromInt(deviceProperty.deviceType)))});
-                    },
-                    vk.VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU => {
-                        if (self.*.physicalDevice == null) {
-                            self.*.physicalDevice = devicee;
-                            biggestMemory = @max(biggestMemory, memoryCount);
-
-                            std.log.debug("device: choosed {s}", .{@tagName(@as(VkPhysicalType, @enumFromInt(deviceProperty.deviceType)))});
-                        }
-                    },
-                    else => {
-                        // TODO add warn message box
-                        return VkError.VK_ERROR_UNKNOWN;
-                    },
-                }
-            } else {}
-        } else {}
-    }
-
-    self.physicalDeviceMemoryCount = biggestMemory;
-    std.log.debug("gpu memory: {d} GB", .{@as(f64, @floatFromInt(self.physicalDeviceMemoryCount)) / (1024 * 1024 * 1024)});
-}
-
-fn createDevice(self: *Self) !void {
-    const zone = tracy.initZone(@src(), .{ .name = "create logical device" });
-    defer zone.deinit();
-
-    var dynamicRenderingFeature = vk.VkPhysicalDeviceDynamicRenderingFeatures{
-        .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
-        .pNext = null,
-    };
-    inline for (featureDynamicRenderingNeed) |feature| {
-        @field(dynamicRenderingFeature, feature) = 1;
-    }
-    var timelineSemaphoreFeature = vk.VkPhysicalDeviceTimelineSemaphoreFeatures{
-        .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES,
-        .pNext = &dynamicRenderingFeature,
-    };
-    inline for (featureTimelineSemaphoreNeed) |feature| {
-        @field(timelineSemaphoreFeature, feature) = 1;
-    }
-    var indexingFeature = vk.VkPhysicalDeviceDescriptorIndexingFeatures{
-        .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES,
-        .pNext = &timelineSemaphoreFeature,
-    };
-    inline for (featureIndexingNeed) |feature| {
-        @field(indexingFeature, feature) = 1;
-    }
-    var feature2 = vk.VkPhysicalDeviceFeatures2{
-        .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-        .pNext = &indexingFeature,
-    };
-    inline for (featureNeed) |feature| {
-        @field(feature2.features, feature) = 1;
-    }
-
-    const queueCreateInfo, const queueCount = blk: {
-        const queuePriorities = [_]f32{0.0} ** 16;
-        var count: u32 = 0;
-        var createInfos: [3]vk.VkDeviceQueueCreateInfo = undefined;
-        const queueFamilies: [3]VkQueueFamily = .{ self.graphicQueueFamily, self.computeQueueFamily, self.transferQueueFamily };
-        for (queueFamilies) |queue| {
-            if (queue.familyIndice != -1) {
-                createInfos[count].sType = vk.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-                createInfos[count].pNext = null;
-                createInfos[count].flags = 0;
-                createInfos[count].queueCount = queue.queueCount;
-                createInfos[count].queueFamilyIndex = @bitCast(queue.familyIndice);
-                createInfos[count].pQueuePriorities = @ptrCast(&queuePriorities);
-                count += 1;
-            }
-        }
-        break :blk .{ createInfos, count };
-    };
-
-    var createInfo = vk.VkDeviceCreateInfo{
-        .sType = vk.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-        .pNext = &feature2,
-        .flags = 0,
-        .queueCreateInfoCount = queueCount,
-        .pQueueCreateInfos = @ptrCast(&queueCreateInfo),
-        .enabledLayerCount = @truncate(layerNeeded.len),
-        .ppEnabledLayerNames = @ptrCast(&layerNeeded),
-        .enabledExtensionCount = @truncate(deviceExtensionNeeded.len),
-        .ppEnabledExtensionNames = @ptrCast(&deviceExtensionNeeded),
-        .pEnabledFeatures = null,
-    };
-
-    try checkVkResult(vk.vkCreateDevice(self.physicalDevice, @ptrCast(&createInfo), self.pAllocCallBacks, @ptrCast(&self.device)));
-}
-
 fn createQueue(self: *Self) void {
     const zone = tracy.initZone(@src(), .{ .name = "create queues" });
     defer zone.deinit();
 
-    const families = [3]*VkQueueFamily{ &self.graphicQueueFamily, &self.computeQueueFamily, &self.transferQueueFamily };
+    const families = [3]*Queue.VkQueueFamily{ &self.graphicQueueFamily, &self.computeQueueFamily, &self.transferQueueFamily };
     const queuess = [3]*VkTheadQueue{ &self.graphicQueue, &self.computeQueue, &self.transferQueue };
     for (families, queuess) |family, queues| {
         if (family.familyIndice != -1) {

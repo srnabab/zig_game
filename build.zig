@@ -222,8 +222,20 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const vk_types_mod = b.createModule(.{
+        .root_source_file = b.path("src/video/vkStruct/types.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    // const device_instance_mod = b.createModule(.{
+    //     .root_source_file = b.path("src/video/vkStruct/instance_device.zig"),
+    //     .target = target,
+    //     .optimize = optimize,
+    // });
 
     // dependency
+    error_mod.addImport("sdl", sdl_mod);
+
     resultToError_mod.addImport("enumFromC", enum_c_mod);
     resultToError_mod.addImport("vulkan", vk_mod);
 
@@ -318,6 +330,7 @@ pub fn build(b: *std.Build) void {
     video_mod.addImport("processRender", processRender_mod);
     video_mod.addImport("global", global_mod);
     video_mod.addImport("error", error_mod);
+    video_mod.addImport("types", vk_types_mod);
 
     queue_mod.addImport("tracy", tracy.module("tracy"));
 
