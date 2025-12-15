@@ -29,14 +29,10 @@ const InstanceDevice = @import("vkStruct/instance_device.zig");
 const Semaphore = @import("vkStruct/semaphore.zig");
 const Swapchain = @import("vkStruct/swapchain.zig");
 const Debug = @import("debug");
+const Types = @import("types");
 
 const bufferStruct = @import("vkStruct/buffer.zig");
 pub const Buffer_t = bufferStruct.Buffer_t;
-
-const DefaultSurfaceFormat = vk.VkSurfaceFormatKHR{
-    .colorSpace = vk.VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
-    .format = vk.VK_FORMAT_R8G8B8A8_SRGB,
-};
 
 const globalDescriptorPoolSizes = [_]vk.VkDescriptorPoolSize{
     .{ .type = vk.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 2048 },
@@ -161,8 +157,8 @@ windowsHeight: u32 = 0,
 instance: vk.VkInstance = null,
 surface: vk.VkSurfaceKHR = null,
 
-surfaceFormat: vk.VkSurfaceFormatKHR = .{},
-presentMode: vk.VkPresentModeKHR = 0,
+surfaceFormats: Types.SurfaceFormats = undefined,
+presentModes: Types.PresentModes = undefined,
 
 physicalDeviceMemoryCount: u64 = 0,
 physicalDevice: vk.VkPhysicalDevice = null,
@@ -291,12 +287,29 @@ pub fn initVulkan(self: *Self) !void {
     self.renderFinishSemaphore[1] = semaphores[3];
 
     var semaphores2: [1]vk.VkSemaphore = undefined;
-    try Semaphore.createTimelineSemaphore(self.device, self.pAllocCallBacks, 0, &semaphores2, 0);
+    try Semaphore.createTimelineSemaphore(
+        self.device,
+        self.pAllocCallBacks,
+        0,
+        &semaphores2,
+        0,
+    );
     self.globalTimelineSemaphore = semaphores2[0];
 
-    self.surfaceFormat = try self.getSurfaceFormat();
-    self.presentMode = try self.getPresentMode();
-    self.swapchain = try self.createSwapchain();
+    self.surfaceFormats = try Swapchain.getSurfaceFormat(self.physicalDevice, self.surface, self.allocator);
+    self.presentModes = try Swapchain.getPresentMode(self.physicalDevice, self.surface, self.allocator);
+
+    self.swapchain = try Swapchain.createSwapchain(
+        self.physicalDevice,
+        self.device,
+        self.surface,
+        self.surfaceFormats.formats[@intCast(self.surfaceFormats.sdr)],
+        self.presentModes.modes[@intCast(self.presentModes.immediate)],
+        self.windowWidth,
+        self.windowsHeight,
+        null,
+        self.pAllocCallBacks,
+    );
 
     self.globalDescriptorPool = try self._createDescriptorPool(
         vk.VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
@@ -387,6 +400,8 @@ pub fn deinit(self: *Self) void {
     }
     self.shaderModules.deinit();
 
+    self.allocator.free(self.surfaceFormats.formats);
+    self.allocator.free(self.presentModes.modes);
     self.destroySwapchain(self.swapchain);
 
     for (self.renderFinishSemaphore) |value| {
@@ -813,113 +828,6 @@ pub fn nextFrame(self: *Self) void {
     var val = self.currentFrame.load(.seq_cst);
     val = (val + 1) % 2;
     self.currentFrame.store(val, .seq_cst);
-}
-
-pub fn getSurfaceFormat(self: *Self) !vk.VkSurfaceFormatKHR {
-    const zone = tracy.initZone(@src(), .{ .name = "get surface format" });
-    defer zone.deinit();
-
-    if (self.surfaceFormat.colorSpace != 0 and self.surfaceFormat.format != 0) {
-        return self.surfaceFormat;
-    }
-
-    var formatCount: u32 = 0;
-    try checkVkResult(vk.vkGetPhysicalDeviceSurfaceFormatsKHR(self.physicalDevice, self.surface, @ptrCast(&formatCount), null));
-
-    if (formatCount == 0) return error.NoSurfaceFormat;
-
-    var formats = [_]vk.VkSurfaceFormatKHR{.{}} ** 24;
-    try checkVkResult(vk.vkGetPhysicalDeviceSurfaceFormatsKHR(self.physicalDevice, self.surface, @ptrCast(&formatCount), @ptrCast(&formats)));
-
-    for (0..formatCount) |i| {
-        // Debug.print.printVkSurfaceFormatKHR(formats[i]);
-        if (formats[i].colorSpace == DefaultSurfaceFormat.colorSpace and formats[i].format == DefaultSurfaceFormat.format) {
-            return formats[i];
-        }
-    }
-
-    return formats[0];
-}
-
-pub fn getPresentMode(self: *Self) !vk.VkPresentModeKHR {
-    const zone = tracy.initZone(@src(), .{ .name = "get present mode" });
-    defer zone.deinit();
-
-    if (self.presentMode != 0) {
-        return self.presentMode;
-    }
-
-    var modeCount: u32 = 0;
-    try checkVkResult(vk.vkGetPhysicalDeviceSurfacePresentModesKHR(self.physicalDevice, self.surface, @ptrCast(&modeCount), null));
-
-    if (modeCount == 0) return error.NoPresentMode;
-
-    var modes = [_]vk.VkPresentModeKHR{0} ** 16;
-    try checkVkResult(vk.vkGetPhysicalDeviceSurfacePresentModesKHR(self.physicalDevice, self.surface, @ptrCast(&modeCount), @ptrCast(&modes)));
-
-    var MAILBOX: vk.VkPresentModeKHR = 0;
-    var FIFO: vk.VkPresentModeKHR = 0;
-    var IMMEDIATE: vk.VkPresentModeKHR = 0;
-
-    for (0..modeCount) |i| {
-        if (modes[i] == vk.VK_PRESENT_MODE_FIFO_KHR) {
-            FIFO = vk.VK_PRESENT_MODE_FIFO_KHR;
-        } else if (modes[i] == vk.VK_PRESENT_MODE_MAILBOX_KHR) {
-            MAILBOX = vk.VK_PRESENT_MODE_FIFO_KHR;
-        } else if (modes[i] == vk.VK_PRESENT_MODE_IMMEDIATE_KHR) {
-            IMMEDIATE = vk.VK_PRESENT_MODE_IMMEDIATE_KHR;
-        }
-    }
-
-    if (MAILBOX > 0) return MAILBOX;
-    if (FIFO > 0) return FIFO;
-    if (IMMEDIATE > 0) return IMMEDIATE;
-
-    return vk.VK_PRESENT_MODE_IMMEDIATE_KHR;
-}
-
-pub fn createSwapchain(self: *Self) !vk.VkSwapchainKHR {
-    const zone = tracy.initZone(@src(), .{ .name = "create swapchain" });
-    defer zone.deinit();
-
-    var surfaceCapabilities: vk.VkSurfaceCapabilitiesKHR = .{};
-    try checkVkResult(vk.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(self.physicalDevice, self.surface, @ptrCast(&surfaceCapabilities)));
-
-    var swapchain: vk.VkSwapchainKHR = null;
-    const imageCount: u32 = @max(surfaceCapabilities.minImageCount + 1, surfaceCapabilities.maxImageCount);
-
-    var createInfo = vk.VkSwapchainCreateInfoKHR{
-        .sType = vk.VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
-        .pNext = null,
-        .flags = 0,
-        .surface = self.surface,
-        .minImageCount = imageCount,
-        .imageFormat = self.surfaceFormat.format,
-        .imageColorSpace = self.surfaceFormat.colorSpace,
-        .imageExtent = vk.VkExtent2D{
-            .width = self.windowWidth,
-            .height = self.windowsHeight,
-        },
-        .imageArrayLayers = 1,
-        .imageUsage = vk.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-        .preTransform = surfaceCapabilities.currentTransform,
-        .compositeAlpha = vk.VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-        .presentMode = self.presentMode,
-        .clipped = vk.VK_TRUE,
-        .oldSwapchain = self.swapchain,
-        .imageSharingMode = vk.VK_SHARING_MODE_EXCLUSIVE,
-        .queueFamilyIndexCount = 0,
-        .pQueueFamilyIndices = null,
-    };
-
-    try checkVkResult(vk.vkCreateSwapchainKHR(self.device, @ptrCast(&createInfo), self.pAllocCallBacks, @ptrCast(&swapchain)));
-
-    return swapchain;
-}
-
-pub fn createSwapchainImages(self: *Self) !void {
-    var count: u32 = 0;
-    try checkVkResult(vk.vkGetSwapchainImagesKHR(self.device, self.swapchain, @ptrCast(&count), null));
 }
 
 pub fn queueSubmit(self: *Self, kind: CommandPoolType, submitCount: u32, pSubmits: *vk.VkSubmitInfo, fence: vk.VkFence) VkError!void {

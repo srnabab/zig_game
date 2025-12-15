@@ -317,6 +317,8 @@ pub fn build(b: *std.Build) void {
 
     vma_mod.addIncludePath(b.path("include"));
 
+    vk_types_mod.addImport("vulkan", vk_mod);
+
     video_mod.addImport("sdl", sdl_mod);
     video_mod.addImport("vma", vma_mod);
     video_mod.addImport("vulkan", vk_mod);

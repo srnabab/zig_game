@@ -22,3 +22,6 @@ pub const VkError: type = blk: {
 };
 
 pub const VkPhysicalDeviceType: type = cEnum.generateEnumFromC(vk, vk.VkPhysicalDeviceType, "VK_PHYSICAL_DEVICE_TYPE_OTHER", "VK_PHYSICAL_DEVICE_TYPE_MAX_ENUM");
+
+pub const VkFormat: type = cEnum.generateEnumFromC(vk, vk.VkFormat, "VK_FORMAT_UNDEFINED", "VK_FORMAT_MAX_ENUM");
+pub const VkColorSpaceKHR: type = cEnum.generateEnumFromC(vk, vk.VkColorSpaceKHR, "VK_COLOR_SPACE_SRGB_NONLINEAR_KHR", "VK_COLOR_SPACE_MAX_ENUM_KHR");
