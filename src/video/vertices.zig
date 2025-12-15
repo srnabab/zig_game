@@ -59,7 +59,9 @@ pub fn init(vulkan_t: *vkStruct, graphic: *OneTimeCommand) !void {
 
         // std.log.debug("s: {d}, i: {d}", .{ stagingBuffer.size, indexBuffer2D.size });
 
-        var region = [_]vk.VkBufferCopy{.{
+        var region = [_]vk.VkBufferCopy2{.{
+            .sType = vk.VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+            .pNext = null,
             .srcOffset = 0,
             .dstOffset = 0,
             .size = vulkan.buffers.getBufferSize(indexBuffer2D),

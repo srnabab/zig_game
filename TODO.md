@@ -15,6 +15,8 @@
 12. complete addCommand .draw2d
 <!-- 13. change texture set implement from **memory pool + hash map** to **array + extra process + hash map** -->
 14. refactor VkStruct.zig
+    <!-- 1. funcs in function initVulkan -->
+    2. others
 <!-- 15. add offsets to texture set  -->
 16. function offsetsAdd can optimize by analyse branch
 17. content manager image load parameter judgement

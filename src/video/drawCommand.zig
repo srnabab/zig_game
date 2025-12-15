@@ -235,7 +235,7 @@ const Draw2D = struct {
 const CopyBuffer = struct {
     srcBuffer: VkStruct.Buffer_t,
     dstBuffer: VkStruct.Buffer_t,
-    regions: []vk.VkBufferCopy,
+    regions: []vk.VkBufferCopy2,
     clean: bool = true,
 };
 

@@ -16,9 +16,9 @@ pub const HandlesType = Handles.Handles(10240, .Once);
 pub const Name = "Game";
 pub const AppVersionMajor = 0;
 pub const AppVersionMinor = 1;
-pub const AppVersionPatch = 124;
+pub const AppVersionPatch = 125;
 
 pub const EngineName = "Engine";
 pub const EngineVersionMajor = 0;
 pub const EngineVersionMinor = 1;
-pub const EngineVersionPatch = 124;
+pub const EngineVersionPatch = 125;

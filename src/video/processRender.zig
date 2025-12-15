@@ -669,9 +669,9 @@ const garbageData = union(garbageDataTag) {
     buffer: VkStruct.Buffer_t,
     bufferAndRegion: struct {
         buffer: VkStruct.Buffer_t,
-        region: []vk.VkBufferCopy,
+        region: []vk.VkBufferCopy2,
     },
-    regions: []vk.VkBufferCopy,
+    regions: []vk.VkBufferCopy2,
     barriers: []drawC.Barrier,
     empty: void,
 };
@@ -1418,7 +1418,7 @@ pub const oneTimeCommand = struct {
                     self.vulkan.buffers.changeQueueType(ptr.value_ptr.command.copyBuffer.dstBuffer, .transfer);
                 }
 
-                ptr.value_ptr.*.command.copyBuffer.regions = try self.allocator.dupe(vk.VkBufferCopy, tempRegions);
+                ptr.value_ptr.*.command.copyBuffer.regions = try self.allocator.dupe(vk.VkBufferCopy2, tempRegions);
 
                 try self.cacheMap.put(@ptrCast(copyBuffer.dstBuffer), ID);
             },
@@ -1726,12 +1726,17 @@ pub const oneTimeCommand = struct {
                 defer innerZone.deinit();
 
                 const copyBuffer = command.command.copyBuffer;
-                vk.vkCmdCopyBuffer(
+                var bufferCopyInfo = vk.VkCopyBufferInfo2{
+                    .sType = vk.VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+                    .pNext = null,
+                    .srcBuffer = vulkan.buffers.getVkBuffer(copyBuffer.srcBuffer),
+                    .dstBuffer = vulkan.buffers.getVkBuffer(copyBuffer.dstBuffer),
+                    .regionCount = @intCast(copyBuffer.regions.len),
+                    .pRegions = @ptrCast(copyBuffer.regions.ptr),
+                };
+                vk.vkCmdCopyBuffer2(
                     commandBuffer,
-                    vulkan.buffers.getVkBuffer(copyBuffer.srcBuffer),
-                    vulkan.buffers.getVkBuffer(copyBuffer.dstBuffer),
-                    @intCast(copyBuffer.regions.len),
-                    @ptrCast(copyBuffer.regions.ptr),
+                    &bufferCopyInfo,
                 );
             },
             else => {

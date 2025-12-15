@@ -95,9 +95,7 @@ const set1SetLayoutCreateInfos = descriptorSetLayoutCreateInfo{
 };
 const globalTextureBinding = 0;
 
-const setLayoutLimit = @import("translate").setLayoutLimit;
 pub const Pipeline = struct {
-    // descriptorSetLayouts: [setLayoutLimit]vk.VkDescriptorSetLayout,
     setCount: u32,
     vertexBindingCount: u32,
     pipelineLayout: vk.VkPipelineLayout,
