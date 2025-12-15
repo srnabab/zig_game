@@ -24,3 +24,20 @@ pub fn _createDescriptorPool(device: vk.VkDevice, pAllocCallBacks: [*c]vk.VkAllo
 pub fn destroyDescriptorPool(device: vk.VkDevice, pAllocCallBacks: [*c]vk.VkAllocationCallbacks, pool: vk.VkDescriptorPool) void {
     vk.vkDestroyDescriptorPool(device, pool, pAllocCallBacks);
 }
+
+pub fn createDescriptorSetLayout(device: vk.VkDevice, pAllocCallBacks: [*c]vk.VkAllocationCallbacks, pNext: ?*anyopaque, flags: vk.VkDescriptorSetLayoutCreateFlags, bindingCount: u32, pBindings: [*]vk.VkDescriptorSetLayoutBinding) !vk.VkDescriptorSetLayout {
+    var setLayoutCreateInfo = vk.VkDescriptorSetLayoutCreateInfo{
+        .sType = vk.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .pNext = pNext,
+        .flags = flags,
+        .bindingCount = bindingCount,
+        .pBindings = @ptrCast(pBindings),
+    };
+    var res: vk.VkDescriptorSetLayout = undefined;
+    try checkVkResult(vk.vkCreateDescriptorSetLayout(device, @ptrCast(&setLayoutCreateInfo), pAllocCallBacks, @ptrCast(&res)));
+    return res;
+}
+
+pub fn destroyDescriptorSetLayout(device: vk.VkDevice, pAllocCallBacks: [*c]vk.VkAllocationCallbacks, descriptorSetLayout: vk.VkDescriptorSetLayout) void {
+    vk.vkDestroyDescriptorSetLayout(device, descriptorSetLayout, pAllocCallBacks);
+}

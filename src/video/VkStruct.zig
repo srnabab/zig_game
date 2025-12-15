@@ -320,7 +320,9 @@ pub fn initVulkan(self: *Self) !void {
         globalDescriptorMaxSets,
     );
 
-    self.descriptorSetLayout[0] = try self.createDescriptorSetLayout(
+    self.descriptorSetLayout[0] = try Descriptor.createDescriptorSetLayout(
+        self.device,
+        self.pAllocCallBacks,
         null,
         set0SetLayoutCreateInfos.flag,
         set0SetLayoutCreateInfos.bindingCount,
@@ -332,7 +334,14 @@ pub fn initVulkan(self: *Self) !void {
         .bindingCount = set1SetLayoutCreateInfos.bindingCount,
         .pBindingFlags = &set1SetLayoutCreateInfos.bindingFlags,
     };
-    self.descriptorSetLayout[1] = try self.createDescriptorSetLayout(&bindingFlagsInfo, set1SetLayoutCreateInfos.flag, set1SetLayoutCreateInfos.bindingCount, @constCast(&set1SetLayoutCreateInfos.bindings));
+    self.descriptorSetLayout[1] = try Descriptor.createDescriptorSetLayout(
+        self.device,
+        self.pAllocCallBacks,
+        &bindingFlagsInfo,
+        set1SetLayoutCreateInfos.flag,
+        set1SetLayoutCreateInfos.bindingCount,
+        @constCast(&set1SetLayoutCreateInfos.bindings),
+    );
 
     var set0Sets: [3]vk.VkDescriptorSet = undefined;
     var set0Setlayout = [_]vk.VkDescriptorSetLayout{ self.descriptorSetLayout[0], self.descriptorSetLayout[0], self.descriptorSetLayout[0] };
@@ -370,7 +379,11 @@ pub fn deinit(self: *Self) void {
     self.descriptorBufferViewInfos.deinit();
 
     for (self.descriptorSetLayout) |value| {
-        self.destroyDescriptorSetLayout(value);
+        Descriptor.destroyDescriptorSetLayout(
+            self.device,
+            self.pAllocCallBacks,
+            value,
+        );
     }
 
     Descriptor.destroyDescriptorPool(self.device, self.pAllocCallBacks, self.globalDescriptorPool);
@@ -540,23 +553,6 @@ pub fn clearAllShaderModule(self: *Self) void {
     }
 
     self.shaderModules.clearAndFree();
-}
-
-pub fn createDescriptorSetLayout(self: *Self, pNext: ?*anyopaque, flags: vk.VkDescriptorSetLayoutCreateFlags, bindingCount: u32, pBindings: [*]vk.VkDescriptorSetLayoutBinding) !vk.VkDescriptorSetLayout {
-    var setLayoutCreateInfo = vk.VkDescriptorSetLayoutCreateInfo{
-        .sType = vk.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        .pNext = pNext,
-        .flags = flags,
-        .bindingCount = bindingCount,
-        .pBindings = @ptrCast(pBindings),
-    };
-    var res: vk.VkDescriptorSetLayout = undefined;
-    try checkVkResult(vk.vkCreateDescriptorSetLayout(self.device, @ptrCast(&setLayoutCreateInfo), self.pAllocCallBacks, @ptrCast(&res)));
-    return res;
-}
-
-pub fn destroyDescriptorSetLayout(self: *Self, descriptorSetLayout: vk.VkDescriptorSetLayout) void {
-    vk.vkDestroyDescriptorSetLayout(self.device, descriptorSetLayout, self.pAllocCallBacks);
 }
 
 pub fn createPipelineLayout(self: *Self, createInfo: vk.VkPipelineLayoutCreateInfo) !vk.VkPipelineLayout {
