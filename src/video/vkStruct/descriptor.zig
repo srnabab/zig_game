@@ -41,3 +41,15 @@ pub fn createDescriptorSetLayout(device: vk.VkDevice, pAllocCallBacks: [*c]vk.Vk
 pub fn destroyDescriptorSetLayout(device: vk.VkDevice, pAllocCallBacks: [*c]vk.VkAllocationCallbacks, descriptorSetLayout: vk.VkDescriptorSetLayout) void {
     vk.vkDestroyDescriptorSetLayout(device, descriptorSetLayout, pAllocCallBacks);
 }
+
+pub fn allocateDescriptorSets(device: vk.VkDevice, pool: vk.VkDescriptorPool, setLayouts: []vk.VkDescriptorSetLayout, descriptorSets: [*]vk.VkDescriptorSet) !void {
+    var allocaInfo = vk.VkDescriptorSetAllocateInfo{
+        .sType = vk.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .pNext = null,
+        .descriptorPool = pool,
+        .descriptorSetCount = @intCast(setLayouts.len),
+        .pSetLayouts = @ptrCast(setLayouts.ptr),
+    };
+
+    try checkVkResult(vk.vkAllocateDescriptorSets(device, @ptrCast(&allocaInfo), @ptrCast(descriptorSets)));
+}

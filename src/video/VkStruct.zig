@@ -345,7 +345,12 @@ pub fn initVulkan(self: *Self) !void {
 
     var set0Sets: [3]vk.VkDescriptorSet = undefined;
     var set0Setlayout = [_]vk.VkDescriptorSetLayout{ self.descriptorSetLayout[0], self.descriptorSetLayout[0], self.descriptorSetLayout[0] };
-    try self.allocateDescriptorSets(self.globalDescriptorPool, &set0Setlayout, &set0Sets);
+    try Descriptor.allocateDescriptorSets(
+        self.device,
+        self.globalDescriptorPool,
+        &set0Setlayout,
+        &set0Sets,
+    );
 
     self.globalFixed2dMVPMatrixDescriptorSet = set0Sets[0];
     self.global2dMVPMatrixDescriptorSet = set0Sets[1];
@@ -353,7 +358,12 @@ pub fn initVulkan(self: *Self) !void {
 
     var set1Sets: [1]vk.VkDescriptorSet = undefined;
     var set1Setlayout = [_]vk.VkDescriptorSetLayout{self.descriptorSetLayout[1]};
-    try self.allocateDescriptorSets(self.globalDescriptorPool, &set1Setlayout, &set1Sets);
+    try Descriptor.allocateDescriptorSets(
+        self.device,
+        self.globalDescriptorPool,
+        &set1Setlayout,
+        &set1Sets,
+    );
 
     self.globalTextureDescriptorSet = set1Sets[0];
 
@@ -959,18 +969,6 @@ pub fn readPipelineFileAndAdd(self: *Self, fileID: i32) !void {
     try translate.toVulkan(pipelineInfo, shaderCodes, @constCast(&self.descriptorSetLayout), self);
 
     try self.addPipelineCreateInfo(pipelineInfo);
-}
-
-pub fn allocateDescriptorSets(self: *Self, pool: vk.VkDescriptorPool, setLayouts: []vk.VkDescriptorSetLayout, descriptorSets: [*]vk.VkDescriptorSet) !void {
-    var allocaInfo = vk.VkDescriptorSetAllocateInfo{
-        .sType = vk.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .pNext = null,
-        .descriptorPool = pool,
-        .descriptorSetCount = @intCast(setLayouts.len),
-        .pSetLayouts = @ptrCast(setLayouts.ptr),
-    };
-
-    try checkVkResult(vk.vkAllocateDescriptorSets(self.device, @ptrCast(&allocaInfo), @ptrCast(descriptorSets)));
 }
 
 pub fn addWriteDescriptorSetImage(self: *Self, dstArrayElement: u32, imageView: vk.VkImageView, sampler: vk.VkSampler) !void {

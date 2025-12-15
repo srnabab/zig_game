@@ -22,3 +22,4 @@
 <!-- 19. use handle system to replace unstable pointer -->
 <!-- 20. remove variable in global.zig -->
 21. buffer regions process in change buffer queue
+22. add HDR support
