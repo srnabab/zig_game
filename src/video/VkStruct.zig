@@ -30,6 +30,7 @@ const Semaphore = @import("vkStruct/semaphore.zig");
 const Swapchain = @import("vkStruct/swapchain.zig");
 const Debug = @import("debug");
 const Types = @import("types");
+const Descriptor = @import("vkStruct/descriptor.zig");
 
 const bufferStruct = @import("vkStruct/buffer.zig");
 pub const Buffer_t = bufferStruct.Buffer_t;
@@ -311,7 +312,9 @@ pub fn initVulkan(self: *Self) !void {
         self.pAllocCallBacks,
     );
 
-    self.globalDescriptorPool = try self._createDescriptorPool(
+    self.globalDescriptorPool = try Descriptor._createDescriptorPool(
+        self.device,
+        self.pAllocCallBacks,
         vk.VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
         @constCast(&globalDescriptorPoolSizes),
         globalDescriptorMaxSets,
@@ -370,7 +373,7 @@ pub fn deinit(self: *Self) void {
         self.destroyDescriptorSetLayout(value);
     }
 
-    self.destroyDescriptorPool(self.globalDescriptorPool);
+    Descriptor.destroyDescriptorPool(self.device, self.pAllocCallBacks, self.globalDescriptorPool);
 
     var pipelines = self.pipelines.iterator();
     while (pipelines.next()) |val| {
@@ -960,26 +963,6 @@ pub fn readPipelineFileAndAdd(self: *Self, fileID: i32) !void {
     try translate.toVulkan(pipelineInfo, shaderCodes, @constCast(&self.descriptorSetLayout), self);
 
     try self.addPipelineCreateInfo(pipelineInfo);
-}
-
-pub fn _createDescriptorPool(self: *Self, flag: vk.VkDescriptorPoolCreateFlags, poolSizes: []vk.VkDescriptorPoolSize, maxSets: u32) VkError!vk.VkDescriptorPool {
-    var createInfo = vk.VkDescriptorPoolCreateInfo{
-        .sType = vk.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-        .pNext = null,
-        .flags = flag,
-        .pPoolSizes = @ptrCast(poolSizes.ptr),
-        .poolSizeCount = @intCast(poolSizes.len),
-        .maxSets = maxSets,
-    };
-    var pool: vk.VkDescriptorPool = null;
-
-    try checkVkResult(vk.vkCreateDescriptorPool(self.device, &createInfo, self.pAllocCallBacks, &pool));
-
-    return pool;
-}
-
-pub fn destroyDescriptorPool(self: *Self, pool: vk.VkDescriptorPool) void {
-    vk.vkDestroyDescriptorPool(self.device, pool, self.pAllocCallBacks);
 }
 
 pub fn allocateDescriptorSets(self: *Self, pool: vk.VkDescriptorPool, setLayouts: []vk.VkDescriptorSetLayout, descriptorSets: [*]vk.VkDescriptorSet) !void {
