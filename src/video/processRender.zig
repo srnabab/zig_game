@@ -1574,7 +1574,9 @@ pub const oneTimeCommand = struct {
                 defer innerZone.deinit();
                 const copyBufferToImage = command.command.copyBufferToImage;
                 // std.log.debug("offset {d}", .{copyBufferToImage.buffer.info.offset});
-                var region = vk.VkBufferImageCopy{
+                var region = vk.VkBufferImageCopy2{
+                    .sType = vk.VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2,
+                    .pNext = null,
                     .bufferImageHeight = copyBufferToImage.bufferImageHegiht,
                     .bufferOffset = 0,
                     .bufferRowLength = copyBufferToImage.bufferRowLength,
@@ -1591,14 +1593,23 @@ pub const oneTimeCommand = struct {
                         .baseArrayLayer = copyBufferToImage.baseArrayLayer,
                     },
                 };
-                std.log.debug("buffer usage {s}", .{@tagName(vulkan.buffers.getBufferUsage(copyBufferToImage.buffer))});
-                vk.vkCmdCopyBufferToImage(
+
+                std.log.debug("buffer usage {s}", .{
+                    @tagName(vulkan.buffers.getBufferUsage(copyBufferToImage.buffer)),
+                });
+                var copyBufferToImageInfo2 = vk.VkCopyBufferToImageInfo2{
+                    .sType = vk.VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2,
+                    .pNext = null,
+                    .srcBuffer = vulkan.buffers.getVkBuffer(copyBufferToImage.buffer),
+                    .dstImage = copyBufferToImage.dstImage,
+                    .dstImageLayout = copyBufferToImage.dstImageLayout,
+                    .regionCount = 1,
+                    .pRegions = &region,
+                };
+
+                vk.vkCmdCopyBufferToImage2(
                     commandBuffer,
-                    vulkan.buffers.getVkBuffer(copyBufferToImage.buffer),
-                    copyBufferToImage.dstImage,
-                    copyBufferToImage.dstImageLayout,
-                    1,
-                    &region,
+                    &copyBufferToImageInfo2,
                 );
             },
             .start => {},
