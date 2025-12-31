@@ -837,7 +837,7 @@ pub fn nextFrame(self: *Self) void {
     self.currentFrame.store(val, .seq_cst);
 }
 
-pub fn queueSubmit(self: *Self, kind: CommandPoolType, submitCount: u32, pSubmits: *vk.VkSubmitInfo, fence: vk.VkFence) VkError!void {
+pub fn queueSubmit(self: *Self, kind: CommandPoolType, submitCount: u32, pSubmits: *vk.VkSubmitInfo2, fence: vk.VkFence) VkError!void {
     const zone = tracy.initZone(@src(), .{ .name = "queue submit" });
     defer zone.deinit();
 
@@ -852,7 +852,7 @@ pub fn queueSubmit(self: *Self, kind: CommandPoolType, submitCount: u32, pSubmit
     queue.mutex.lock();
     defer queue.mutex.unlock();
 
-    try checkVkResult(vk.vkQueueSubmit(queue.queue, submitCount, @ptrCast(pSubmits), fence));
+    try checkVkResult(vk.vkQueueSubmit2(queue.queue, submitCount, @ptrCast(pSubmits), fence));
 }
 
 pub fn presentSubmit(self: *Self, pPresentInfo: [*c]vk.VkPresentInfoKHR) !void {

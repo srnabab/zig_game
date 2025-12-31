@@ -2097,25 +2097,34 @@ pub const oneTimeCommand = struct {
 
             const currentFrames = self.vulkan.currentFrame.load(.seq_cst);
 
-            const graphicCommandBuffer = try self.primaryCommandPool.getPrimaryCommandBuffer(.graphic, currentFrames, self.vulkan);
-            const transferCommandBuffer = try self.primaryCommandPool.getPrimaryCommandBuffer(.transfer, currentFrames, self.vulkan);
-            const computeCommandBuffer = try self.primaryCommandPool.getPrimaryCommandBuffer(.compute, currentFrames, self.vulkan);
-            var graphicSemaphoreValue, var transferSemaphoreValue, var computeSemaphoreValue, var currentSemaphoreValue = va: {
-                const value = self.vulkan.globalTimelineValue.load(.seq_cst);
-                break :va .{ value, value, value, value };
-            };
+            const graphicCommandBuffer = try self.primaryCommandPool.getPrimaryCommandBuffer(
+                .graphic,
+                currentFrames,
+                self.vulkan,
+            );
+            const transferCommandBuffer = try self.primaryCommandPool.getPrimaryCommandBuffer(
+                .transfer,
+                currentFrames,
+                self.vulkan,
+            );
+            const computeCommandBuffer = try self.primaryCommandPool.getPrimaryCommandBuffer(
+                .compute,
+                currentFrames,
+                self.vulkan,
+            );
+            var graphicSemaphoreValue, var transferSemaphoreValue, var computeSemaphoreValue, var currentSemaphoreValue =
+                va: {
+                    const value = self.vulkan.globalTimelineValue.load(.seq_cst);
+                    break :va .{ value, value, value, value };
+                };
 
-            var waitSemaphores = std.array_list.Managed(vk.VkSemaphore).init(self.allocator);
-            defer waitSemaphores.deinit();
-            var waitValues = std.array_list.Managed(u64).init(self.allocator);
-            defer waitValues.deinit();
-            var waitStages = std.array_list.Managed(vk.VkPipelineStageFlags).init(self.allocator);
-            defer waitStages.deinit();
+            var waitSemaphoreSubmitInfos =
+                std.array_list.Managed(vk.VkSemaphoreSubmitInfo).init(self.allocator);
+            defer waitSemaphoreSubmitInfos.deinit();
 
-            var signalSemaphores = std.array_list.Managed(vk.VkSemaphore).init(self.allocator);
-            defer signalSemaphores.deinit();
-            var signalValues = std.array_list.Managed(u64).init(self.allocator);
-            defer signalValues.deinit();
+            var signalSemaphoreSubmitInfos =
+                std.array_list.Managed(vk.VkSemaphoreSubmitInfo).init(self.allocator);
+            defer signalSemaphoreSubmitInfos.deinit();
 
             var firstStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
             var lastStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
@@ -2131,12 +2140,10 @@ pub const oneTimeCommand = struct {
             const startComm = self.queue.get(0).?;
             const present = startComm.command.start.present;
 
-            var timelineSemaphoreSubmitInfo = vk.VkTimelineSemaphoreSubmitInfo{
-                .sType = vk.VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO,
-            };
-            var submitInfo = vk.VkSubmitInfo{
-                .sType = vk.VK_STRUCTURE_TYPE_SUBMIT_INFO,
-                .pNext = @ptrCast(&timelineSemaphoreSubmitInfo),
+            var submitInfo = vk.VkSubmitInfo2{
+                .sType = vk.VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+                .pNext = null,
+                .flags = 0,
             };
 
             var timelinewaitValue: u64 = currentSemaphoreValue;
@@ -2155,43 +2162,45 @@ pub const oneTimeCommand = struct {
                 }
 
                 if (begin and nn.data.commandPoolType != currentType) {
-                    defer waitSemaphores.clearRetainingCapacity();
-                    defer waitStages.clearRetainingCapacity();
-                    defer waitValues.clearRetainingCapacity();
-                    defer signalSemaphores.clearRetainingCapacity();
-                    defer signalValues.clearRetainingCapacity();
+                    defer signalSemaphoreSubmitInfos.clearRetainingCapacity();
+                    defer waitSemaphoreSubmitInfos.clearRetainingCapacity();
 
                     try VkStruct.endCommandBuffer(currentCommandBuffer);
-                    const temp = try waitSemaphores.addOne();
-                    temp.* = self.vulkan.globalTimelineSemaphore;
-                    const temp2 = try waitStages.addOne();
+                    const temp = try waitSemaphoreSubmitInfos.addOne();
+                    // const temp = try waitSemaphores.addOne();
+                    temp.sType = vk.VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+                    temp.pNext = null;
+                    temp.deviceIndex = 0;
+                    temp.semaphore = self.vulkan.globalTimelineSemaphore;
                     if (firstSubmit) {
-                        temp2.* = vk.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+                        temp.stageMask = vk.VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
                         firstSubmit = false;
                     } else {
-                        temp2.* = firstStage;
+                        temp.stageMask = firstStage;
                     }
-                    const temp3 = try waitValues.addOne();
-                    temp3.* = timelinewaitValue;
+                    temp.value = timelinewaitValue;
 
-                    const temp4 = try signalSemaphores.addOne();
-                    temp4.* = self.vulkan.globalTimelineSemaphore;
-                    const temp5 = try signalValues.addOne();
-                    currentSemaphoreValue += 1;
-                    temp5.* = currentSemaphoreValue;
+                    const temp2 = try signalSemaphoreSubmitInfos.addOne();
+                    temp2.sType = vk.VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+                    temp2.pNext = null;
+                    temp2.deviceIndex = 0;
+                    temp2.semaphore = self.vulkan.globalTimelineSemaphore;
+                    temp2.stageMask = vk.VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
+                    temp2.value = currentSemaphoreValue;
 
-                    timelineSemaphoreSubmitInfo.waitSemaphoreValueCount = @intCast(waitValues.items.len);
-                    timelineSemaphoreSubmitInfo.pWaitSemaphoreValues = @ptrCast(waitValues.items.ptr);
-                    timelineSemaphoreSubmitInfo.signalSemaphoreValueCount = @intCast(signalValues.items.len);
-                    timelineSemaphoreSubmitInfo.pSignalSemaphoreValues = @ptrCast(signalValues.items.ptr);
+                    var temp3 = vk.VkCommandBufferSubmitInfo{
+                        .sType = vk.VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+                        .pNext = null,
+                        .commandBuffer = currentCommandBuffer,
+                        .deviceMask = 0,
+                    };
 
-                    submitInfo.waitSemaphoreCount = @intCast(waitSemaphores.items.len);
-                    submitInfo.pWaitSemaphores = @ptrCast(waitSemaphores.items.ptr);
-                    submitInfo.pWaitDstStageMask = @ptrCast(waitStages.items.ptr);
-                    submitInfo.commandBufferCount = 1;
-                    submitInfo.pCommandBuffers = @ptrCast(&currentCommandBuffer);
-                    submitInfo.signalSemaphoreCount = @intCast(signalSemaphores.items.len);
-                    submitInfo.pSignalSemaphores = @ptrCast(signalSemaphores.items.ptr);
+                    submitInfo.waitSemaphoreInfoCount = @intCast(waitSemaphoreSubmitInfos.items.len);
+                    submitInfo.pWaitSemaphoreInfos = @ptrCast(waitSemaphoreSubmitInfos.items.ptr);
+                    submitInfo.commandBufferInfoCount = 1;
+                    submitInfo.pCommandBufferInfos = @ptrCast(&temp3);
+                    submitInfo.signalSemaphoreInfoCount = @intCast(signalSemaphoreSubmitInfos.items.len);
+                    submitInfo.pSignalSemaphoreInfos = @ptrCast(signalSemaphoreSubmitInfos.items.ptr);
 
                     try self.vulkan.queueSubmit(currentType, 1, &submitInfo, null);
 
@@ -2212,12 +2221,13 @@ pub const oneTimeCommand = struct {
                             currentType = .graphic;
                             if (firstSubmit) {
                                 try self.vulkan.acquireNextImage(&currentIndex);
-                                const temp = try waitSemaphores.addOne();
-                                temp.* = self.vulkan.imageAvailableSemaphore[currentFrames];
-                                const temp2 = try waitStages.addOne();
-                                temp2.* = vk.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-                                const temp3 = try waitValues.addOne();
-                                temp3.* = 0;
+                                const temp = try waitSemaphoreSubmitInfos.addOne();
+                                temp.sType = vk.VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+                                temp.pNext = null;
+                                temp.deviceIndex = 0;
+                                temp.semaphore = self.vulkan.imageAvailableSemaphore[currentIndex];
+                                temp.stageMask = vk.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+                                temp.value = 0;
                             }
                             try self.vulkan.waitSemaphore(1, &self.vulkan.globalTimelineSemaphore, &graphicSemaphoreValue);
                         },
@@ -2317,43 +2327,51 @@ pub const oneTimeCommand = struct {
             if (begin) {
                 try VkStruct.endCommandBuffer(currentCommandBuffer);
 
-                const temp = try waitSemaphores.addOne();
-                temp.* = self.vulkan.globalTimelineSemaphore;
-                const temp2 = try waitStages.addOne();
+                const temp = try waitSemaphoreSubmitInfos.addOne();
+                temp.sType = vk.VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+                temp.pNext = null;
+                temp.deviceIndex = 0;
+                temp.semaphore = self.vulkan.globalTimelineSemaphore;
                 if (firstSubmit) {
-                    temp2.* = vk.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+                    temp.stageMask = vk.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
                     firstSubmit = false;
                 } else {
-                    temp2.* = vk.VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+                    temp.stageMask = vk.VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
                 }
-                const temp3 = try waitValues.addOne();
-                temp3.* = timelinewaitValue;
+                temp.value = timelinewaitValue;
 
-                const temp4 = try signalSemaphores.addOne();
-                temp4.* = self.vulkan.globalTimelineSemaphore;
-                const temp6 = try signalValues.addOne();
+                const temp2 = try signalSemaphoreSubmitInfos.addOne();
+                temp2.sType = vk.VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+                temp2.pNext = null;
+                temp2.deviceIndex = 0;
+                temp2.semaphore = self.vulkan.globalTimelineSemaphore;
+                temp2.stageMask = vk.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
                 currentSemaphoreValue += 1;
-                temp6.* = currentSemaphoreValue;
+                temp2.value = currentSemaphoreValue;
 
                 if (present) {
-                    const temp5 = try signalSemaphores.addOne();
-                    temp5.* = self.vulkan.renderFinishSemaphore[currentFrames];
-                    const temp7 = try signalValues.addOne();
-                    temp7.* = 0;
+                    const temp3 = try signalSemaphoreSubmitInfos.addOne();
+                    temp3.sType = vk.VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+                    temp3.pNext = null;
+                    temp3.deviceIndex = 0;
+                    temp3.semaphore = self.vulkan.renderFinishSemaphore[currentFrames];
+                    temp3.stageMask = vk.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+                    temp3.value = 0;
                 }
 
-                timelineSemaphoreSubmitInfo.waitSemaphoreValueCount = @intCast(waitValues.items.len);
-                timelineSemaphoreSubmitInfo.pWaitSemaphoreValues = @ptrCast(waitValues.items.ptr);
-                timelineSemaphoreSubmitInfo.signalSemaphoreValueCount = @intCast(signalValues.items.len);
-                timelineSemaphoreSubmitInfo.pSignalSemaphoreValues = @ptrCast(signalValues.items.ptr);
+                var temp4 = vk.VkCommandBufferSubmitInfo{
+                    .sType = vk.VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+                    .pNext = null,
+                    .commandBuffer = currentCommandBuffer,
+                    .deviceMask = 0,
+                };
 
-                submitInfo.waitSemaphoreCount = @intCast(waitSemaphores.items.len);
-                submitInfo.pWaitSemaphores = @ptrCast(waitSemaphores.items.ptr);
-                submitInfo.pWaitDstStageMask = @ptrCast(waitStages.items.ptr);
-                submitInfo.commandBufferCount = 1;
-                submitInfo.pCommandBuffers = @ptrCast(&currentCommandBuffer);
-                submitInfo.signalSemaphoreCount = @intCast(signalSemaphores.items.len);
-                submitInfo.pSignalSemaphores = @ptrCast(signalSemaphores.items.ptr);
+                submitInfo.waitSemaphoreInfoCount = @intCast(waitSemaphoreSubmitInfos.items.len);
+                submitInfo.pWaitSemaphoreInfos = @ptrCast(waitSemaphoreSubmitInfos.items.ptr);
+                submitInfo.commandBufferInfoCount = 1;
+                submitInfo.pCommandBufferInfos = @ptrCast(&temp4);
+                submitInfo.signalSemaphoreInfoCount = @intCast(signalSemaphoreSubmitInfos.items.len);
+                submitInfo.pSignalSemaphoreInfos = @ptrCast(signalSemaphoreSubmitInfos.items.ptr);
 
                 try self.vulkan.queueSubmit(currentType, 1, &submitInfo, null);
             }
