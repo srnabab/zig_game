@@ -1121,6 +1121,7 @@ pub const oneTimeCommand = struct {
                         // 简单的类型检查，panic 放在这一行保持紧凑
                         const cmd = self.queue.getPtr(node.ID).?;
                         if (cmd.commandType != .pipelineBarrier) std.debug.panic("not supported commandType {s}", .{@tagName(cmd.commandType)});
+
                         break :blk node;
                     } else blk: {
                         // 2. 新节点的创建逻辑
@@ -1132,6 +1133,7 @@ pub const oneTimeCommand = struct {
                             .timestamp = std.time.nanoTimestamp(),
                             .command = .{
                                 .pipelineBarrier = .{
+                                    .lastSrcStageMask = flags.sourceStage,
                                     .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
                                 },
                             },
@@ -1146,6 +1148,7 @@ pub const oneTimeCommand = struct {
                 const new_len = pipelineBarrier.barriers.len + 1;
                 pipelineBarrier.barriers = try self.allocator.realloc(pipelineBarrier.barriers, new_len);
                 pipelineBarrier.barriers[new_len - 1] = new_barrier;
+                pipelineBarrier.lastSrcStageMask = @min(pipelineBarrier.lastSrcStageMask, flags.sourceStage);
 
                 // 4. 统一的节点连接逻辑
                 // 注意：仅在新创建节点时才设置 commandPoolType
@@ -1529,15 +1532,15 @@ pub const oneTimeCommand = struct {
         const comm = self.queue.get(currentNode.ID).?;
         switch (comm.commandType) {
             .pipelineBarrier => {
-                // const pipelineBarrier = comm.command.pipelineBarrier;
+                const pipelineBarrier = comm.command.pipelineBarrier;
 
-                // if (pipelineBarrier.sourceStage == vk.VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT) {
-                const root = self.nodeDag.get(0).?;
-                try root.childrenAppend(&currentNode.ID);
-                try currentNode.parentsAppend(&root.ID);
-                // } else {
-                //     std.debug.panic("not supported", .{});
-                // }
+                if (pipelineBarrier.lastSrcStageMask == vk.VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT) {
+                    const root = self.nodeDag.get(0).?;
+                    try root.childrenAppend(&currentNode.ID);
+                    try currentNode.parentsAppend(&root.ID);
+                } else {
+                    std.debug.panic("not supported", .{});
+                }
             },
             .copyBuffer => {
                 const copyBuffer = comm.command.copyBuffer;

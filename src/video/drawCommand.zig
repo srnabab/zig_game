@@ -226,6 +226,7 @@ pub const Barrier = union(BarrierType) {
     imageMemory: ImageMemoryBarrier,
 };
 const PipelineBarrier = struct {
+    lastSrcStageMask: vk.VkPipelineStageFlags2 = std.math.maxInt(vk.VkPipelineStageFlags2),
     barriers: []Barrier,
 };
 
