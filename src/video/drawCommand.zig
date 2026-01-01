@@ -116,8 +116,8 @@ const TransLayout = struct {
     baseLayer: u32,
     layerCount: u32,
 
-    // srcAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE,
-    // dstAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE,
+    // srcAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_NONE,
+    // dstAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_NONE,
     // aspectMask: vk.VkImageAspectFlags = vk.VK_IMAGE_ASPECT_NONE,
     // sourceStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_NONE,
     // destinationStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_NONE,
@@ -185,12 +185,16 @@ pub const Start = struct {
 };
 
 const MemoryBarrier = struct {
-    srcAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE,
-    dstAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE,
+    srcStageMask: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_NONE,
+    srcAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_NONE,
+    dstStageMask: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_NONE,
+    dstAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_NONE,
 };
 const BufferMemoryBarrier = struct {
-    srcAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE,
-    dstAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE,
+    srcStageMask: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_NONE,
+    srcAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_NONE,
+    dstStageMask: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_NONE,
+    dstAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_NONE,
 
     srcQueueFamilyIndex: u32,
     dstQueueFamilyIndex: u32,
@@ -200,8 +204,10 @@ const BufferMemoryBarrier = struct {
     size: vk.VkDeviceSize,
 };
 const ImageMemoryBarrier = struct {
-    srcAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE,
-    dstAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE,
+    srcStageMask: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_NONE,
+    srcAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_NONE,
+    dstStageMask: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_NONE,
+    dstAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_NONE,
 
     oldLayout: vk.VkImageLayout,
     newLayout: vk.VkImageLayout,
@@ -220,8 +226,6 @@ pub const Barrier = union(BarrierType) {
     imageMemory: ImageMemoryBarrier,
 };
 const PipelineBarrier = struct {
-    sourceStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_NONE,
-    destinationStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_NONE,
     barriers: []Barrier,
 };
 

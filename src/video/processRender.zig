@@ -787,25 +787,25 @@ pub const oneTimeCommand = struct {
     }
 
     fn inferTransLayoutFlagsByOldLayoutAndNewLayout(command: *drawC.comm) struct {
-        srcAccessMask: vk.VkAccessFlags,
-        dstAccessMask: vk.VkAccessFlags,
+        srcAccessMask: vk.VkAccessFlags2,
+        dstAccessMask: vk.VkAccessFlags2,
         aspectMask: vk.VkImageAspectFlags,
-        sourceStage: vk.VkPipelineStageFlags,
-        destinationStage: vk.VkPipelineStageFlags,
+        sourceStage: vk.VkPipelineStageFlags2,
+        destinationStage: vk.VkPipelineStageFlags2,
     } {
         const zone = tracy.initZone(@src(), .{ .name = "infer trans layout" });
         defer zone.deinit();
 
-        var srcAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE;
-        var dstAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE;
+        var srcAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_2_NONE;
+        var dstAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_2_NONE;
         var aspectMask: vk.VkImageAspectFlags = vk.VK_IMAGE_ASPECT_NONE;
-        var sourceStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_NONE;
-        var destinationStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_NONE;
+        var sourceStage: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_NONE;
+        var destinationStage: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_NONE;
 
         switch (command.transLayout.oldLayout) {
             vk.VK_IMAGE_LAYOUT_UNDEFINED => {
-                srcAccessMask = vk.VK_ACCESS_NONE;
-                sourceStage = vk.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+                srcAccessMask = vk.VK_ACCESS_2_NONE;
+                sourceStage = vk.VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
                 aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
             },
 
@@ -862,7 +862,7 @@ pub const oneTimeCommand = struct {
             },
 
             vk.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR => {
-                dstAccessMask = vk.VK_ACCESS_NONE;
+                dstAccessMask = vk.VK_ACCESS_2_NONE;
                 destinationStage = vk.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
                 aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
             },
@@ -887,20 +887,20 @@ pub const oneTimeCommand = struct {
         srcQueue: VkStruct.CommandPoolType,
         dstQueue: VkStruct.CommandPoolType,
     ) struct {
-        srcAccessMask: vk.VkAccessFlags,
-        dstAccessMask: vk.VkAccessFlags,
-        sourceStage: vk.VkPipelineStageFlags,
-        destinationStage: vk.VkPipelineStageFlags,
+        srcAccessMask: vk.VkAccessFlags2,
+        dstAccessMask: vk.VkAccessFlags2,
+        sourceStage: vk.VkPipelineStageFlags2,
+        destinationStage: vk.VkPipelineStageFlags2,
     } {
         const zone = tracy.initZone(@src(), .{ .name = "infer release pipelin barrier info" });
         defer zone.deinit();
 
         _ = commandType;
         _ = bufferUsage;
-        var srcAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE;
-        const dstAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE;
-        var sourceStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_NONE;
-        const destinationStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+        var srcAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_2_NONE;
+        const dstAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_2_NONE;
+        var sourceStage: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_NONE;
+        const destinationStage: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
 
         if (srcQueue == .transfer) {
             if (dstQueue == .graphic) {
@@ -927,19 +927,19 @@ pub const oneTimeCommand = struct {
         srcQueue: VkStruct.CommandPoolType,
         dstQueue: VkStruct.CommandPoolType,
     ) struct {
-        srcAccessMask: vk.VkAccessFlags,
-        dstAccessMask: vk.VkAccessFlags,
-        sourceStage: vk.VkPipelineStageFlags,
-        destinationStage: vk.VkPipelineStageFlags,
+        srcAccessMask: vk.VkAccessFlags2,
+        dstAccessMask: vk.VkAccessFlags2,
+        sourceStage: vk.VkPipelineStageFlags2,
+        destinationStage: vk.VkPipelineStageFlags2,
     } {
         const zone = tracy.initZone(@src(), .{ .name = "infer acquire pipelin barrier info" });
         defer zone.deinit();
 
         _ = commandType;
-        const srcAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE;
-        var dstAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE;
-        const sourceStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-        var destinationStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_NONE;
+        const srcAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_2_NONE;
+        var dstAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_2_NONE;
+        const sourceStage: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+        var destinationStage: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_NONE;
 
         if (srcQueue == .transfer) {
             if (dstQueue == .graphic) {
@@ -971,20 +971,20 @@ pub const oneTimeCommand = struct {
         srcQueue: VkStruct.CommandPoolType,
         dstQueue: VkStruct.CommandPoolType,
     ) struct {
-        srcAccessMask: vk.VkAccessFlags,
-        dstAccessMask: vk.VkAccessFlags,
-        sourceStage: vk.VkPipelineStageFlags,
-        destinationStage: vk.VkPipelineStageFlags,
+        srcAccessMask: vk.VkAccessFlags2,
+        dstAccessMask: vk.VkAccessFlags2,
+        sourceStage: vk.VkPipelineStageFlags2,
+        destinationStage: vk.VkPipelineStageFlags2,
     } {
         const zone = tracy.initZone(@src(), .{ .name = "infer release pipelin barrier info" });
         defer zone.deinit();
 
         _ = commandType;
         _ = imageUsage;
-        var srcAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE;
-        const dstAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE;
-        var sourceStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_NONE;
-        const destinationStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+        var srcAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_2_NONE;
+        const dstAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_2_NONE;
+        var sourceStage: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_NONE;
+        const destinationStage: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
 
         if (srcQueue == .transfer) {
             if (dstQueue == .graphic) {
@@ -1011,22 +1011,22 @@ pub const oneTimeCommand = struct {
         srcQueue: VkStruct.CommandPoolType,
         dstQueue: VkStruct.CommandPoolType,
     ) struct {
-        srcAccessMask: vk.VkAccessFlags,
-        dstAccessMask: vk.VkAccessFlags,
-        sourceStage: vk.VkPipelineStageFlags,
-        destinationStage: vk.VkPipelineStageFlags,
+        srcAccessMask: vk.VkAccessFlags2,
+        dstAccessMask: vk.VkAccessFlags2,
+        sourceStage: vk.VkPipelineStageFlags2,
+        destinationStage: vk.VkPipelineStageFlags2,
     } {
         const zone = tracy.initZone(@src(), .{ .name = "infer acquire pipelin barrier info" });
         defer zone.deinit();
 
         _ = commandType;
-        const srcAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE;
-        var dstAccessMask: vk.VkAccessFlags = vk.VK_ACCESS_NONE;
-        const sourceStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-        var destinationStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_NONE;
+        const srcAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_2_NONE;
+        var dstAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_2_NONE;
+        const sourceStage: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+        var destinationStage: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_NONE;
 
-        dstAccessMask = vk.VK_ACCESS_NONE;
-        destinationStage = vk.VK_PIPELINE_STAGE_NONE;
+        dstAccessMask = vk.VK_ACCESS_2_NONE;
+        destinationStage = vk.VK_PIPELINE_STAGE_2_NONE;
 
         if (srcQueue == .transfer) {
             if (dstQueue == .graphic) {
@@ -1093,11 +1093,13 @@ pub const oneTimeCommand = struct {
                 }
 
                 const transLayout = commandCopy.transLayout;
-                const hash = math.szudzikPairing(flags.sourceStage, flags.destinationStage);
+                // const hash = flags.sourceStage + flags.destinationStage;
 
-                const res = try self.combineMap.getOrPut(hash);
+                // const res = try self.combineMap.getOrPut(hash);
                 const new_barrier = drawC.Barrier{ .imageMemory = .{
+                    .srcStageMask = flags.sourceStage,
                     .srcAccessMask = flags.srcAccessMask,
+                    .dstStageMask = flags.destinationStage,
                     .dstAccessMask = flags.dstAccessMask,
                     .oldLayout = transLayout.oldLayout,
                     .newLayout = transLayout.newLayout,
@@ -1113,32 +1115,32 @@ pub const oneTimeCommand = struct {
                     },
                 } };
 
-                const rootNode = if (res.found_existing) blk: {
-                    const node = res.value_ptr.*;
-                    // 简单的类型检查，panic 放在这一行保持紧凑
-                    const cmd = self.queue.getPtr(node.ID).?;
-                    if (cmd.commandType != .pipelineBarrier) std.debug.panic("not supported commandType {s}", .{@tagName(cmd.commandType)});
-                    break :blk node;
-                } else blk: {
-                    // 2. 新节点的创建逻辑
-                    const node = try self.nodeDag.create();
-                    res.value_ptr.* = node;
-                    const ptr = try self.queue.getOrPut(node.ID);
-                    ptr.value_ptr.* = drawC{
-                        .ID = node.ID,
-                        .timestamp = std.time.nanoTimestamp(),
-                        .command = .{
-                            .pipelineBarrier = .{
-                                .sourceStage = flags.sourceStage,
-                                .destinationStage = flags.destinationStage,
-                                .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
+                const rootNode =
+                    // if (res.found_existing) blk: {
+                    //     const node = res.value_ptr.*;
+                    //     // 简单的类型检查，panic 放在这一行保持紧凑
+                    //     const cmd = self.queue.getPtr(node.ID).?;
+                    //     if (cmd.commandType != .pipelineBarrier) std.debug.panic("not supported commandType {s}", .{@tagName(cmd.commandType)});
+                    //     break :blk node;
+                    // } else
+                    blk: {
+                        // 2. 新节点的创建逻辑
+                        const node = try self.nodeDag.create();
+                        // res.value_ptr.* = node;
+                        const ptr = try self.queue.getOrPut(node.ID);
+                        ptr.value_ptr.* = drawC{
+                            .ID = node.ID,
+                            .timestamp = std.time.nanoTimestamp(),
+                            .command = .{
+                                .pipelineBarrier = .{
+                                    .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
+                                },
                             },
-                        },
-                        .commandType = .pipelineBarrier,
-                        .output = .{ .empty = void{} },
+                            .commandType = .pipelineBarrier,
+                            .output = .{ .empty = void{} },
+                        };
+                        break :blk node;
                     };
-                    break :blk node;
-                };
 
                 // 3. 统一的 Barrier 添加逻辑 (利用 realloc 自动处理空切片情况)
                 var pipelineBarrier = &self.queue.getPtr(rootNode.ID).?.command.pipelineBarrier;
@@ -1149,12 +1151,14 @@ pub const oneTimeCommand = struct {
                 // 4. 统一的节点连接逻辑
                 // 注意：仅在新创建节点时才设置 commandPoolType
                 if (prev) |n| {
-                    if (!res.found_existing) rootNode.data.commandPoolType = n.data.commandPoolType;
+                    // if (!res.found_existing)
+                    rootNode.data.commandPoolType = n.data.commandPoolType;
                     try rootNode.parentsAppend(&n.ID);
                     try n.childrenAppend(&rootNode.ID);
                 }
                 if (next) |p| {
-                    if (!res.found_existing) rootNode.data.commandPoolType = p.data.commandPoolType;
+                    // if (!res.found_existing)
+                    rootNode.data.commandPoolType = p.data.commandPoolType;
                     try rootNode.childrenAppend(&p.ID);
                     try p.parentsAppend(&rootNode.ID);
                 }
@@ -1175,12 +1179,15 @@ pub const oneTimeCommand = struct {
                     changeBufferQueue.dstQueueFamily,
                 );
 
-                const releaseHash = math.szudzikPairing(releaseFlags.sourceStage, releaseFlags.destinationStage);
+                // const releaseHash =
+                // releaseFlags.sourceStage + releaseFlags.destinationStage;
 
-                const release = try self.combineMap.getOrPut(releaseHash);
+                // const release = try self.combineMap.getOrPut(releaseHash);
                 const release_new_barrier = drawC.Barrier{
                     .bufferMemory = .{
+                        .srcStageMask = releaseFlags.sourceStage,
                         .srcAccessMask = releaseFlags.srcAccessMask,
+                        .dstStageMask = releaseFlags.destinationStage,
                         .dstAccessMask = releaseFlags.dstAccessMask,
                         .srcQueueFamilyIndex = vk.VK_QUEUE_FAMILY_IGNORED,
                         .dstQueueFamilyIndex = vk.VK_QUEUE_FAMILY_IGNORED,
@@ -1191,30 +1198,30 @@ pub const oneTimeCommand = struct {
                     },
                 };
 
-                const releaseNode = if (release.found_existing) blk: {
-                    const node = release.value_ptr.*;
-                    const cmd = self.queue.getPtr(node.ID).?;
-                    if (cmd.commandType != .pipelineBarrier) std.debug.panic("not supported commandType {s}", .{@tagName(cmd.commandType)});
-                    break :blk node;
-                } else blk: {
-                    const node = try self.nodeDag.create();
-                    release.value_ptr.* = node;
-                    const ptr = try self.queue.getOrPut(node.ID);
-                    ptr.value_ptr.* = drawC{
-                        .ID = node.ID,
-                        .timestamp = std.time.nanoTimestamp(),
-                        .command = .{
-                            .pipelineBarrier = .{
-                                .sourceStage = releaseFlags.sourceStage,
-                                .destinationStage = releaseFlags.destinationStage,
-                                .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
+                const releaseNode =
+                    // if (release.found_existing) blk: {
+                    //     const node = release.value_ptr.*;
+                    //     const cmd = self.queue.getPtr(node.ID).?;
+                    //     if (cmd.commandType != .pipelineBarrier) std.debug.panic("not supported commandType {s}", .{@tagName(cmd.commandType)});
+                    //     break :blk node;
+                    // } else
+                    blk: {
+                        const node = try self.nodeDag.create();
+                        // release.value_ptr.* = node;
+                        const ptr = try self.queue.getOrPut(node.ID);
+                        ptr.value_ptr.* = drawC{
+                            .ID = node.ID,
+                            .timestamp = std.time.nanoTimestamp(),
+                            .command = .{
+                                .pipelineBarrier = .{
+                                    .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
+                                },
                             },
-                        },
-                        .commandType = .pipelineBarrier,
-                        .output = .{ .empty = void{} },
+                            .commandType = .pipelineBarrier,
+                            .output = .{ .empty = void{} },
+                        };
+                        break :blk node;
                     };
-                    break :blk node;
-                };
                 releaseNode.data.commandPoolType = changeBufferQueue.srcQueueFamily;
 
                 var releasePipelineBarrier = &self.queue.getPtr(releaseNode.ID).?.command.pipelineBarrier;
@@ -1236,12 +1243,15 @@ pub const oneTimeCommand = struct {
                     changeBufferQueue.dstQueueFamily,
                 );
 
-                const acquireHash = math.szudzikPairing(acquireFlags.sourceStage, acquireFlags.destinationStage);
+                const acquireHash =
+                    acquireFlags.sourceStage + acquireFlags.destinationStage;
 
                 const acquire = try self.combineMap.getOrPut(acquireHash);
                 const acquire_new_barrier = drawC.Barrier{
                     .bufferMemory = .{
+                        .srcStageMask = acquireFlags.sourceStage,
                         .srcAccessMask = acquireFlags.srcAccessMask,
+                        .dstStageMask = acquireFlags.destinationStage,
                         .dstAccessMask = acquireFlags.dstAccessMask,
                         .srcQueueFamilyIndex = vk.VK_QUEUE_FAMILY_IGNORED,
                         .dstQueueFamilyIndex = vk.VK_QUEUE_FAMILY_IGNORED,
@@ -1266,8 +1276,6 @@ pub const oneTimeCommand = struct {
                         .timestamp = std.time.nanoTimestamp(),
                         .command = .{
                             .pipelineBarrier = .{
-                                .sourceStage = acquireFlags.sourceStage,
-                                .destinationStage = acquireFlags.destinationStage,
                                 .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
                             },
                         },
@@ -1512,18 +1520,19 @@ pub const oneTimeCommand = struct {
 
         const zone3 = tracy.initZone(@src(), .{ .name = "infer dependency 2" });
         errdefer zone3.deinit();
+
         const comm = self.queue.get(currentNode.ID).?;
         switch (comm.commandType) {
             .pipelineBarrier => {
-                const pipelineBarrier = comm.command.pipelineBarrier;
+                // const pipelineBarrier = comm.command.pipelineBarrier;
 
-                if (pipelineBarrier.sourceStage == vk.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT) {
-                    const root = self.nodeDag.get(0).?;
-                    try root.childrenAppend(&currentNode.ID);
-                    try currentNode.parentsAppend(&root.ID);
-                } else {
-                    std.debug.panic("not supported", .{});
-                }
+                // if (pipelineBarrier.sourceStage == vk.VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT) {
+                const root = self.nodeDag.get(0).?;
+                try root.childrenAppend(&currentNode.ID);
+                try currentNode.parentsAppend(&root.ID);
+                // } else {
+                //     std.debug.panic("not supported", .{});
+                // }
             },
             .copyBuffer => {
                 const copyBuffer = comm.command.copyBuffer;
@@ -1661,17 +1670,17 @@ pub const oneTimeCommand = struct {
                     }
                 }
 
-                var imageMemoryBarriers = std.ArrayList(vk.VkImageMemoryBarrier).initCapacity(stackAllocator, imageMemoryBarrierCount) catch |err| {
+                var imageMemoryBarriers = std.ArrayList(vk.VkImageMemoryBarrier2).initCapacity(stackAllocator, imageMemoryBarrierCount) catch |err| {
                     std.log.err("stack alloc error {s}\n", .{@errorName(err)});
                     std.debug.panic("stack alloc error", .{});
                 };
                 defer imageMemoryBarriers.deinit(stackAllocator);
-                var bufferMemoryBarriers = std.ArrayList(vk.VkBufferMemoryBarrier).initCapacity(stackAllocator, bufferMemoryBarrierCount) catch |err| {
+                var bufferMemoryBarriers = std.ArrayList(vk.VkBufferMemoryBarrier2).initCapacity(stackAllocator, bufferMemoryBarrierCount) catch |err| {
                     std.log.err("stack alloc error {s}\n", .{@errorName(err)});
                     std.debug.panic("stack alloc error", .{});
                 };
                 defer bufferMemoryBarriers.deinit(stackAllocator);
-                var memoryBarriers = std.ArrayList(vk.VkMemoryBarrier).initCapacity(stackAllocator, memoryBarrierCount) catch |err| {
+                var memoryBarriers = std.ArrayList(vk.VkMemoryBarrier2).initCapacity(stackAllocator, memoryBarrierCount) catch |err| {
                     std.log.err("stack alloc error {s}\n", .{@errorName(err)});
                     std.debug.panic("stack alloc error", .{});
                 };
@@ -1681,10 +1690,12 @@ pub const oneTimeCommand = struct {
                     switch (barrier) {
                         .imageMemory => {
                             const ptr = imageMemoryBarriers.addOneAssumeCapacity();
-                            ptr.* = vk.VkImageMemoryBarrier{
-                                .sType = vk.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                            ptr.* = vk.VkImageMemoryBarrier2{
+                                .sType = vk.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
                                 .pNext = null,
+                                .srcStageMask = barrier.imageMemory.srcStageMask,
                                 .srcAccessMask = barrier.imageMemory.srcAccessMask,
+                                .dstStageMask = barrier.imageMemory.dstStageMask,
                                 .dstAccessMask = barrier.imageMemory.dstAccessMask,
                                 .oldLayout = barrier.imageMemory.oldLayout,
                                 .newLayout = barrier.imageMemory.newLayout,
@@ -1696,10 +1707,12 @@ pub const oneTimeCommand = struct {
                         },
                         .bufferMemory => {
                             const ptr = bufferMemoryBarriers.addOneAssumeCapacity();
-                            ptr.* = vk.VkBufferMemoryBarrier{
-                                .sType = vk.VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+                            ptr.* = vk.VkBufferMemoryBarrier2{
+                                .sType = vk.VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
                                 .pNext = null,
+                                .srcStageMask = barrier.bufferMemory.srcStageMask,
                                 .srcAccessMask = barrier.bufferMemory.srcAccessMask,
+                                .dstStageMask = barrier.bufferMemory.dstStageMask,
                                 .dstAccessMask = barrier.bufferMemory.dstAccessMask,
                                 .srcQueueFamilyIndex = barrier.bufferMemory.srcQueueFamilyIndex,
                                 .dstQueueFamilyIndex = barrier.bufferMemory.dstQueueFamilyIndex,
@@ -1710,26 +1723,31 @@ pub const oneTimeCommand = struct {
                         },
                         .memory => {
                             const ptr = memoryBarriers.addOneAssumeCapacity();
-                            ptr.* = vk.VkMemoryBarrier{
-                                .sType = vk.VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+                            ptr.* = vk.VkMemoryBarrier2{
+                                .sType = vk.VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
                                 .pNext = null,
+                                .srcStageMask = barrier.memory.srcStageMask,
                                 .srcAccessMask = barrier.memory.srcAccessMask,
+                                .dstStageMask = barrier.memory.dstStageMask,
                                 .dstAccessMask = barrier.memory.dstAccessMask,
                             };
                         },
                     }
                 }
-                vk.vkCmdPipelineBarrier(
+                var dependencyInfo = vk.VkDependencyInfo{
+                    .sType = vk.VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                    .pNext = null,
+                    .dependencyFlags = 0,
+                    .memoryBarrierCount = memoryBarrierCount,
+                    .pMemoryBarriers = memoryBarriers.items.ptr,
+                    .bufferMemoryBarrierCount = bufferMemoryBarrierCount,
+                    .pBufferMemoryBarriers = bufferMemoryBarriers.items.ptr,
+                    .imageMemoryBarrierCount = imageMemoryBarrierCount,
+                    .pImageMemoryBarriers = imageMemoryBarriers.items.ptr,
+                };
+                vk.vkCmdPipelineBarrier2(
                     commandBuffer,
-                    pipelineBarrier.sourceStage,
-                    pipelineBarrier.destinationStage,
-                    0,
-                    memoryBarrierCount,
-                    memoryBarriers.items.ptr,
-                    bufferMemoryBarrierCount,
-                    bufferMemoryBarriers.items.ptr,
-                    imageMemoryBarrierCount,
-                    imageMemoryBarriers.items.ptr,
+                    &dependencyInfo,
                 );
             },
             .copyBuffer => {
@@ -2126,7 +2144,7 @@ pub const oneTimeCommand = struct {
                 std.array_list.Managed(vk.VkSemaphoreSubmitInfo).init(self.allocator);
             defer signalSemaphoreSubmitInfos.deinit();
 
-            var firstStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            var firstStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
             var lastStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
 
             var currentCommandBuffer: vk.VkCommandBuffer = null;
@@ -2333,7 +2351,7 @@ pub const oneTimeCommand = struct {
                 temp.deviceIndex = 0;
                 temp.semaphore = self.vulkan.globalTimelineSemaphore;
                 if (firstSubmit) {
-                    temp.stageMask = vk.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+                    temp.stageMask = vk.VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
                     firstSubmit = false;
                 } else {
                     temp.stageMask = vk.VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
