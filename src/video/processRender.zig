@@ -1093,9 +1093,9 @@ pub const oneTimeCommand = struct {
                 }
 
                 const transLayout = commandCopy.transLayout;
-                // const hash = flags.sourceStage + flags.destinationStage;
+                const hash: u64 = flags.destinationStage;
 
-                // const res = try self.combineMap.getOrPut(hash);
+                const res = try self.combineMap.getOrPut(hash);
                 const new_barrier = drawC.Barrier{ .imageMemory = .{
                     .srcStageMask = flags.sourceStage,
                     .srcAccessMask = flags.srcAccessMask,
@@ -1116,17 +1116,16 @@ pub const oneTimeCommand = struct {
                 } };
 
                 const rootNode =
-                    // if (res.found_existing) blk: {
-                    //     const node = res.value_ptr.*;
-                    //     // 简单的类型检查，panic 放在这一行保持紧凑
-                    //     const cmd = self.queue.getPtr(node.ID).?;
-                    //     if (cmd.commandType != .pipelineBarrier) std.debug.panic("not supported commandType {s}", .{@tagName(cmd.commandType)});
-                    //     break :blk node;
-                    // } else
-                    blk: {
+                    if (res.found_existing) blk: {
+                        const node = res.value_ptr.*;
+                        // 简单的类型检查，panic 放在这一行保持紧凑
+                        const cmd = self.queue.getPtr(node.ID).?;
+                        if (cmd.commandType != .pipelineBarrier) std.debug.panic("not supported commandType {s}", .{@tagName(cmd.commandType)});
+                        break :blk node;
+                    } else blk: {
                         // 2. 新节点的创建逻辑
                         const node = try self.nodeDag.create();
-                        // res.value_ptr.* = node;
+                        res.value_ptr.* = node;
                         const ptr = try self.queue.getOrPut(node.ID);
                         ptr.value_ptr.* = drawC{
                             .ID = node.ID,
@@ -1151,14 +1150,14 @@ pub const oneTimeCommand = struct {
                 // 4. 统一的节点连接逻辑
                 // 注意：仅在新创建节点时才设置 commandPoolType
                 if (prev) |n| {
-                    // if (!res.found_existing)
-                    rootNode.data.commandPoolType = n.data.commandPoolType;
+                    if (!res.found_existing) rootNode.data.commandPoolType = n.data.commandPoolType;
+
                     try rootNode.parentsAppend(&n.ID);
                     try n.childrenAppend(&rootNode.ID);
                 }
                 if (next) |p| {
-                    // if (!res.found_existing)
-                    rootNode.data.commandPoolType = p.data.commandPoolType;
+                    if (!res.found_existing) rootNode.data.commandPoolType = p.data.commandPoolType;
+
                     try rootNode.childrenAppend(&p.ID);
                     try p.parentsAppend(&rootNode.ID);
                 }
@@ -1442,11 +1441,17 @@ pub const oneTimeCommand = struct {
                 const imageQueuType = textureSet.getImageQueueType(copyBufferToImage.pTexture);
                 if (imageQueuType != .transfer) {
                     if (imageQueuType != .init) {
-                        currentNode = try self.addCommand2(.changeTextureQueue, .{ .changeTextureQueue = .{
-                            .texture = copyBufferToImage.pTexture,
-                            .srcQueueFamily = imageQueuType,
-                            .dstQueueFamily = .transfer,
-                        } }, null, currentNode, commandType);
+                        currentNode = try self.addCommand2(
+                            .changeTextureQueue,
+                            .{ .changeTextureQueue = .{
+                                .texture = copyBufferToImage.pTexture,
+                                .srcQueueFamily = imageQueuType,
+                                .dstQueueFamily = .transfer,
+                            } },
+                            null,
+                            currentNode,
+                            commandType,
+                        );
                     }
                     textureSet.changeTextureQueue(copyBufferToImage.pTexture, .transfer);
                 }
