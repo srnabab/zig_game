@@ -228,6 +228,11 @@ pub fn pickPhysicalDevice(instance: vk.VkInstance, allocator: std.mem.Allocator,
         return VkError.VK_ERROR_OUT_OF_HOST_MEMORY;
     };
     defer allocator.free(physicalDeviceGroups);
+    for (physicalDeviceGroups) |*deviceGroup| {
+        deviceGroup.* = vk.VkPhysicalDeviceGroupProperties{
+            .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES,
+        };
+    }
 
     std.log.debug("device group count: {d}", .{deviceGroupCount});
     try checkVkResult(vk.vkEnumeratePhysicalDeviceGroups(instance, @ptrCast(&deviceGroupCount), @ptrCast(physicalDeviceGroups.ptr)));

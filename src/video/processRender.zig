@@ -706,9 +706,6 @@ pub const oneTimeCommand = struct {
     cacheMap: std.AutoHashMap(*anyopaque, u32),
     garbageData: std.array_list.Managed(GarbageData),
 
-    init2d: bool = false,
-    init3d: bool = false,
-
     // commandPools: std.array_list.Managed(vk.VkCommandPool),
 
     pub fn init(allocator: std.mem.Allocator, stackAllocator: std.mem.Allocator, vulkan: *VkStruct) Self {
@@ -1067,9 +1064,6 @@ pub const oneTimeCommand = struct {
             .command = .{ .start = .{} },
             .output = .{ .empty = void{} },
         };
-
-        self.init2d = false;
-        self.init3d = false;
     }
 
     fn addCommand2(self: *Self, commandType: drawC.PrivateCommandType, command: drawC.comm, prev: ?*QueueNode, next: ?*QueueNode, enterCommandType: drawC.PublicCommandType) !*QueueNode {
@@ -1191,8 +1185,8 @@ pub const oneTimeCommand = struct {
                         .srcAccessMask = releaseFlags.srcAccessMask,
                         .dstStageMask = releaseFlags.destinationStage,
                         .dstAccessMask = releaseFlags.dstAccessMask,
-                        .srcQueueFamilyIndex = vk.VK_QUEUE_FAMILY_IGNORED,
-                        .dstQueueFamilyIndex = vk.VK_QUEUE_FAMILY_IGNORED,
+                        .srcQueueFamilyIndex = self.vulkan.getQueueIndex(changeBufferQueue.srcQueueFamily),
+                        .dstQueueFamilyIndex = self.vulkan.getQueueIndex(changeBufferQueue.dstQueueFamily),
                         .buffer = self.vulkan.buffers.getVkBuffer(changeBufferQueue.buffer),
                         // assigned later
                         .offset = 0,
@@ -1245,18 +1239,18 @@ pub const oneTimeCommand = struct {
                     changeBufferQueue.dstQueueFamily,
                 );
 
-                const acquireHash =
-                    acquireFlags.sourceStage + acquireFlags.destinationStage;
+                // const acquireHash =
+                //     acquireFlags.sourceStage + acquireFlags.destinationStage;
 
-                const acquire = try self.combineMap.getOrPut(acquireHash);
+                // const acquire = try self.combineMap.getOrPut(acquireHash);
                 const acquire_new_barrier = drawC.Barrier{
                     .bufferMemory = .{
                         .srcStageMask = acquireFlags.sourceStage,
                         .srcAccessMask = acquireFlags.srcAccessMask,
                         .dstStageMask = acquireFlags.destinationStage,
                         .dstAccessMask = acquireFlags.dstAccessMask,
-                        .srcQueueFamilyIndex = vk.VK_QUEUE_FAMILY_IGNORED,
-                        .dstQueueFamilyIndex = vk.VK_QUEUE_FAMILY_IGNORED,
+                        .srcQueueFamilyIndex = self.vulkan.getQueueIndex(changeBufferQueue.srcQueueFamily),
+                        .dstQueueFamilyIndex = self.vulkan.getQueueIndex(changeBufferQueue.dstQueueFamily),
                         .buffer = self.vulkan.buffers.getVkBuffer(changeBufferQueue.buffer),
                         // assigned later
                         .offset = 0,
@@ -1264,29 +1258,31 @@ pub const oneTimeCommand = struct {
                     },
                 };
 
-                const acquireNode = if (acquire.found_existing) blk: {
-                    const node = acquire.value_ptr.*;
-                    const cmd = self.queue.getPtr(node.ID).?;
-                    if (cmd.commandType != .pipelineBarrier) std.debug.panic("not supported commandType {s}", .{@tagName(cmd.commandType)});
-                    break :blk node;
-                } else blk: {
-                    const node = try self.nodeDag.create();
-                    acquire.value_ptr.* = node;
-                    const ptr = try self.queue.getOrPut(node.ID);
-                    ptr.value_ptr.* = drawC{
-                        .ID = node.ID,
-                        .timestamp = std.time.nanoTimestamp(),
-                        .command = .{
-                            .pipelineBarrier = .{
-                                .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
+                const acquireNode =
+                    // if (acquire.found_existing) blk: {
+                    //     const node = acquire.value_ptr.*;
+                    //     const cmd = self.queue.getPtr(node.ID).?;
+                    //     if (cmd.commandType != .pipelineBarrier) std.debug.panic("not supported commandType {s}", .{@tagName(cmd.commandType)});
+                    //     break :blk node;
+                    // } else
+                    blk: {
+                        const node = try self.nodeDag.create();
+                        // acquire.value_ptr.* = node;
+                        const ptr = try self.queue.getOrPut(node.ID);
+                        ptr.value_ptr.* = drawC{
+                            .ID = node.ID,
+                            .timestamp = std.time.nanoTimestamp(),
+                            .command = .{
+                                .pipelineBarrier = .{
+                                    .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
+                                },
                             },
-                        },
-                        .commandType = .pipelineBarrier,
-                        .output = .{ .empty = void{} },
+                            .commandType = .pipelineBarrier,
+                            .output = .{ .empty = void{} },
+                        };
+                        break :blk node;
                     };
-                    break :blk node;
-                };
-                acquireNode.data.commandPoolType = changeBufferQueue.srcQueueFamily;
+                acquireNode.data.commandPoolType = changeBufferQueue.dstQueueFamily;
 
                 var acquirePipelineBarrier = &self.queue.getPtr(acquireNode.ID).?.command.pipelineBarrier;
                 const new_len_2 = acquirePipelineBarrier.barriers.len + changeBufferQueue.regions.len;
@@ -1378,11 +1374,12 @@ pub const oneTimeCommand = struct {
         const zone2 = tracy.initZone(@src(), .{ .name = "infer dependency 1" });
         errdefer zone2.deinit();
         switch (commandType) {
-            // .draw2D => {
-            //     node.data.commandPoolType = .graphic;
+            .draw2D => {
+                node.data.commandPoolType = .graphic;
 
-            //     const draw2D = ptr.value_ptr.command.draw2d;
-            // },
+                const draw2D = ptr.value_ptr.command.draw2d;
+                _ = draw2D;
+            },
             .copyBuffer => {
                 node.data.commandPoolType = .transfer;
 

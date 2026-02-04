@@ -94,7 +94,11 @@ pub fn main() !void {
         try SDL_CheckResult(sdl.SDL_Init(sdl.SDL_INIT_EVENTS | sdl.SDL_INIT_VIDEO | sdl.SDL_INIT_AUDIO | sdl.SDL_INIT_GAMEPAD));
     }
     defer sdl.SDL_Quit();
-    std.log.debug("SDL Version: {d}.{d}.{d}", .{ sdl.SDL_MAJOR_VERSION, sdl.SDL_MINOR_VERSION, sdl.SDL_MICRO_VERSION });
+    std.log.debug("SDL Version: {d}.{d}.{d}", .{
+        sdl.SDL_MAJOR_VERSION,
+        sdl.SDL_MINOR_VERSION,
+        sdl.SDL_MICRO_VERSION,
+    });
 
     var vulkan = VkStruct.init(allocator_t.*, &handles);
     try vulkan.initVulkan();
@@ -110,8 +114,18 @@ pub fn main() !void {
 
     try vertices.init(&vulkan, &graphic);
     defer vertices.deinit();
-    _ = try textureSett.createImageTexture(comptime file.comptimeGetID("non_exist.png"), .pixel2d, &vulkan, &graphic);
-    _ = textureSett.createImageTextureEnsureWithErrorImage(comptime file.comptimeGetID("circle.png"), .pixel2d, &vulkan, &graphic);
+    _ = try textureSett.createImageTexture(
+        comptime file.comptimeGetID("non_exist.png"),
+        .pixel2d,
+        &vulkan,
+        &graphic,
+    );
+    _ = textureSett.createImageTextureEnsureWithErrorImage(
+        comptime file.comptimeGetID("circle.png"),
+        .pixel2d,
+        &vulkan,
+        &graphic,
+    );
 
     try graphic.addCommandEnd();
 
@@ -178,7 +192,11 @@ pub fn main() !void {
     var update_t = try Thread.spawn(.{}, update.update_thread_func, .{update_thread});
     defer update_t.join();
 
-    var render_t = try Thread.spawn(.{}, render.render_thread_func, .{ render_thread, &endSemaphore });
+    var render_t = try Thread.spawn(
+        .{},
+        render.render_thread_func,
+        .{ render_thread, &endSemaphore },
+    );
     defer render_t.join();
 
     endSemaphore.post();

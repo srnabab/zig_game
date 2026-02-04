@@ -25,3 +25,5 @@
 <!-- 20. remove variable in global.zig -->
 21. buffer regions process in change buffer queue
 22. add HDR support
+23. combine pipeline barrier
+24. rendering info destroy function record empty index

@@ -119,7 +119,7 @@ pub fn createQueues(
 
     const families = [3]*VkQueueFamily{ graphicQueueFamily, computeQueueFamily, transferQueueFamily };
     const queuess = [3]*VkTheadQueue{ graphicQueue, computeQueue, transferQueue };
-    for (families, queuess) |family, queues| {
+    for (families, queuess, 0..) |family, queues, i| {
         if (family.familyIndice != -1) {
             vk.vkGetDeviceQueue(
                 device,
@@ -128,7 +128,8 @@ pub fn createQueues(
                 @ptrCast(&queues.queue),
             );
         } else {
-            family.familyIndice = families[0].familyIndice;
+            families[i].* = families[0].*;
+            queuess[i].* = queuess[0].*;
         }
     }
 }
