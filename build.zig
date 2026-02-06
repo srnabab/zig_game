@@ -232,8 +232,17 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const rendering_mod = b.createModule(.{
+        .root_source_file = b.path("src/video/vkStruct/rendering.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     // dependency
+    rendering_mod.addImport("vulkan", vk_mod);
+    rendering_mod.addImport("global", global_mod);
+    rendering_mod.addImport("handle", handle_mod);
+
     error_mod.addImport("sdl", sdl_mod);
 
     resultToError_mod.addImport("enumFromC", enum_c_mod);
@@ -379,6 +388,7 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("vertices", vertices_mod);
     exe_mod.addImport("handle", handle_mod);
     exe_mod.addImport("sdl", sdl_mod);
+    exe_mod.addImport("rendering", rendering_mod);
     exe_mod.addIncludePath(b.path("include/"));
 
     exe_mod.addLibraryPath(b.path("lib/"));

@@ -12,6 +12,7 @@ const ECS = @import("ECS");
 const steam = @import("steam");
 const steamInner = steam.steamInner;
 const textureSet = @import("textureSet");
+const rendering = @import("rendering");
 
 const update = @import("update.zig");
 const render = @import("render.zig");
@@ -103,6 +104,9 @@ pub fn main() !void {
     var vulkan = VkStruct.init(allocator_t.*, &handles);
     try vulkan.initVulkan();
     defer vulkan.deinit();
+
+    var renderingInfo = rendering.init(allocator_t.*, &handles);
+    defer renderingInfo.deinit();
 
     var graphic = OneTimeCommand.init(allocator_t.*, sma, &vulkan);
     defer graphic.deinit();
