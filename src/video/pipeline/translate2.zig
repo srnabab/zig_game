@@ -5,6 +5,7 @@ const vk = @import("vulkan").vulkan;
 const reflect = @import("reflect");
 const efc = @import("enumFromC");
 
+const VkFormat = efc.generateEnumFromC(vk, vk.VkFormat, "VK_FORMAT_UNDEFINED", "VK_FORMAT_MAX_ENUM");
 pub const VulkanPipelineInfo = s.VulkanPipelineInfo;
 const setLayoutLimit = s.setLayoutLimit;
 const bindingLimit = s.bindingLimit;
@@ -28,6 +29,8 @@ pub const PipelineShaderInfo = struct {
     bindings: ?[]binding,
     pushConstantSize: u64,
     pushConstants: ?PushConstants,
+    outputCount: u32,
+    outputs: ?[]reflect.input,
 
     pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
         if (self.bindings) |mem| {
@@ -74,6 +77,12 @@ fn getPipelineShaderInfos(shaders: [5][]const u8, count: u32, shaderFolder: []co
         nameZ = try std.fmt.bufPrintZ(&nameBuffer, "{s}", .{shaders[i]});
 
         {
+            var frag = false;
+            if (std.mem.endsWith(u8, shaders[i], ".frag.spv")) {
+                frag = true;
+                std.log.debug("{s}", .{shaders[i]});
+            }
+
             file = try folder.openFile(shaders[i], .{});
             defer file.close();
 
@@ -85,6 +94,18 @@ fn getPipelineShaderInfos(shaders: [5][]const u8, count: u32, shaderFolder: []co
 
             const res = try reflect.reflect(allocator, cc, content);
             defer res.deinit(allocator);
+
+            // if (frag) {
+            //     if (res.outputs) |os| {
+            //         for (os) |ss| {
+            //             std.log.debug("location {d}, {d} {s}", .{
+            //                 ss.location,
+            //                 ss.varType,
+            //                 @tagName(@as(VkFormat, @enumFromInt(ss.varType))),
+            //             });
+            //         }
+            //     }
+            // }
 
             if (res.pushConstantSize > 0) {}
 
@@ -108,6 +129,8 @@ fn getPipelineShaderInfos(shaders: [5][]const u8, count: u32, shaderFolder: []co
                 .bindingCount = res.bindingCount,
                 .fileSize = cc.size,
                 .shaderCode = content,
+                .outputCount = if (frag) res.outputCount else 0,
+                .outputs = if (frag) try allocator.dupe(reflect.input, res.outputs.?) else null,
                 .pushConstants = if (res.pushConstantSize > 0) blk: {
                     break :blk PushConstants{
                         .stage = res.stage,
@@ -214,9 +237,30 @@ pub fn toVulkan2(info: *pipeline.pipelineInfo, shaderFolder: []const u8, allocat
     defer {
         for (0..shaderInfos.len) |i| {
             shaderInfos[i].deinit(allocator);
+            if (shaderInfos[i].outputCount > 0)
+                allocator.free(shaderInfos[i].outputs.?);
         }
         allocator.free(shaderInfos);
     }
+
+    std.log.debug("point 1", .{});
+    for (shaderInfos) |value| {
+        if (value.outputCount > 0) {
+            std.log.debug("point 2", .{});
+            std.debug.assert(value.outputCount <= 10);
+            std.log.debug("point 3", .{});
+            for (0..value.outputCount) |i| {
+                res.outputs[i] = .{
+                    .location = value.outputs.?[i].location,
+                    .var_type = value.outputs.?[i].varType,
+                };
+                // _ = i;
+            }
+            res.outputCount = value.outputCount;
+            break;
+        }
+    }
+    std.log.debug("point 4", .{});
 
     const pushconstantCount = sc: {
         var count: u32 = 0;

@@ -48,12 +48,17 @@ const shaderInfo = struct {
     inputCount: u32,
     bindings: ?[]binding,
     inputs: ?[]input,
+    outputCount: u32,
+    outputs: ?[]input,
 
     pub fn deinit(self: Self, allocator: std.mem.Allocator) void {
         if (self.bindings) |ss| {
             allocator.free(ss);
         }
         if (self.inputs) |ss| {
+            allocator.free(ss);
+        }
+        if (self.outputs) |ss| {
             allocator.free(ss);
         }
     }
@@ -182,6 +187,29 @@ pub fn reflect(allocator: std.mem.Allocator, cc: std.fs.File.Stat, content: []co
     } else {
         res.inputs = null;
         res.inputCount = 0;
+    }
+
+    var_count = 0;
+    spv_result = s.spvReflectEnumerateOutputVariables(@ptrCast(&module), @ptrCast(&var_count), null);
+    assert(spv_result == s.SPV_REFLECT_RESULT_SUCCESS);
+
+    if (var_count != 0) {
+        const is = try allocator.alloc(input, var_count);
+        const inputs = try allocator.alloc([*c]s.SpvReflectInterfaceVariable, var_count);
+        defer allocator.free(inputs);
+
+        spv_result = s.spvReflectEnumerateOutputVariables(@ptrCast(&module), @ptrCast(&var_count), @ptrCast(inputs.ptr));
+        assert(spv_result == s.SPV_REFLECT_RESULT_SUCCESS);
+
+        for (inputs, 0..) |bbb, i| {
+            is[i].location = bbb.*.location;
+            is[i].varType = bbb.*.format;
+        }
+        res.outputs = is;
+        res.outputCount = var_count;
+    } else {
+        res.outputs = null;
+        res.outputCount = 0;
     }
 
     return res;

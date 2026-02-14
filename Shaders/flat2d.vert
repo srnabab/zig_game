@@ -1,6 +1,10 @@
 #version 460
 #extension GL_ARB_separate_shader_objects : enable
 
+layout(push_constant) uniform _PushConstans{
+    float rotation;
+} PushConstants;
+
 layout(set = 0, binding = 0) uniform UniformBufferObject {
     mat4 model;
     mat4 view;

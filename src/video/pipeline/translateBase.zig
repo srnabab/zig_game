@@ -145,25 +145,32 @@ const pipelineLayout = extern struct {
     layout: vk.VkPipelineLayout,
 };
 
+const Output = extern struct {
+    location: u32,
+    var_type: vk.VkFormat,
+};
+
 pub const VulkanPipelineInfo = extern struct {
     const Self = @This();
 
     // compile time comfirmed need runtime pointer
     vertexInputInfo: VulkanVertexInputInfo,
+    haveTessella: bool,
+    hasRendering: bool,
     inputAssemblyInfo: vk.VkPipelineInputAssemblyStateCreateInfo,
     tessellationInfo: vk.VkPipelineTessellationStateCreateInfo,
-    haveTessella: bool,
     viewportInfo: vulkanViewport,
     rasterizationInfo: vk.VkPipelineRasterizationStateCreateInfo,
     multisampleInfo: vk.VkPipelineMultisampleStateCreateInfo,
     depthStencilInfo: vk.VkPipelineDepthStencilStateCreateInfo,
     colorBlendInfo: VulkanColorBlendInfo,
     dynamicStateInfo: VulkanDynamicStateInfo,
-    shaderStageCount: u32,
     renderingInfo: vulkanRenderingInfo,
-    hasRendering: bool,
     name: [64]u8 = std.mem.zeroes([64]u8),
     shaderName: [5][64]u8 = std.mem.zeroes([5][64]u8),
+    outputCount: u32,
+    shaderStageCount: u32,
+    outputs: [10]Output,
 
     /// need create runtime resources
     shaderStageCreateInfo: [5]vk.VkPipelineShaderStageCreateInfo,
