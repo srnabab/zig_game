@@ -8,7 +8,7 @@ layout(location = 1) flat in uint fragTexIndex;
 
 // 全局绑定的纹理数组
 // 假设绑定在 set = 0, binding = 0
-layout(set = 0, binding = 0) uniform sampler2D textures[];
+layout(set = 1, binding = 0) uniform sampler2D textures[];
 
 // 输出颜色
 layout(location = 0) out vec4 outColor;

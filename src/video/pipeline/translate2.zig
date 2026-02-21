@@ -81,6 +81,8 @@ fn getPipelineShaderInfos(shaders: [5][]const u8, count: u32, shaderFolder: []co
             if (std.mem.endsWith(u8, shaders[i], ".frag.spv")) {
                 frag = true;
                 std.log.debug("{s}", .{shaders[i]});
+            } else {
+                std.log.debug("{s}", .{shaders[i]});
             }
 
             file = try folder.openFile(shaders[i], .{});
@@ -194,6 +196,7 @@ fn createPipelineLayoutCreateInfo(shaderInfos: []PipelineShaderInfo, pipeRes: *V
         }
         break :sc max;
     };
+    std.log.debug("set count {d}", .{setCount});
     for (shaderInfos) |sInfo| {
         if (sInfo.pushConstantSize > 0) {
             pushConstants.*[pushConstantCount.*].stageFlags = sInfo.stage;
@@ -243,12 +246,12 @@ pub fn toVulkan2(info: *pipeline.pipelineInfo, shaderFolder: []const u8, allocat
         allocator.free(shaderInfos);
     }
 
-    std.log.debug("point 1", .{});
+    // std.log.debug("point 1", .{});
     for (shaderInfos) |value| {
         if (value.outputCount > 0) {
-            std.log.debug("point 2", .{});
+            // std.log.debug("point 2", .{});
             std.debug.assert(value.outputCount <= 10);
-            std.log.debug("point 3", .{});
+            // std.log.debug("point 3", .{});
             for (0..value.outputCount) |i| {
                 res.outputs[i] = .{
                     .location = value.outputs.?[i].location,
@@ -260,7 +263,7 @@ pub fn toVulkan2(info: *pipeline.pipelineInfo, shaderFolder: []const u8, allocat
             break;
         }
     }
-    std.log.debug("point 4", .{});
+    // std.log.debug("point 4", .{});
 
     const pushconstantCount = sc: {
         var count: u32 = 0;

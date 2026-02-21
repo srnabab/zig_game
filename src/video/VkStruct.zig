@@ -95,11 +95,17 @@ const set1SetLayoutCreateInfos = descriptorSetLayoutCreateInfo{
 };
 const globalTextureBinding = 0;
 
+pub const Out = struct {
+    location: u32,
+    var_type: vk.VkFormat,
+};
+
 pub const Pipeline = struct {
     setCount: u32,
     vertexBindingCount: u32,
     pipelineLayout: vk.VkPipelineLayout,
     pipeline: vk.VkPipeline,
+    outputs: []Out,
 };
 
 pub const Image = struct {
@@ -400,6 +406,7 @@ pub fn deinit(self: *Self) void {
     while (pipelines.next()) |val| {
         vk.vkDestroyPipeline(self.device, val.value_ptr.pipeline, self.pAllocCallBacks);
         vk.vkDestroyPipelineLayout(self.device, val.value_ptr.pipelineLayout, self.pAllocCallBacks);
+        self.allocator.free(val.value_ptr.outputs);
         self.allocator.free(val.key_ptr.*);
         // for (0..val.setCount) |i| {
         //     vk.vkDestroyDescriptorSetLayout(
@@ -656,10 +663,16 @@ pub fn createAllPipelinesAdded(self: *Self) !void {
             .setCount = self.preGraphicInfoPtrs[i].pipelineCreateInfoInfo.setLayoutCount,
             .pipelineLayout = self.preGraphicInfoPtrs[i].pipelineLayout.layout,
             .pipeline = temp[i],
+            .outputs = try self.allocator.alloc(Out, self.preGraphicInfoPtrs[i].outputCount),
         };
         const len = std.mem.len(@as([*c]u8, @ptrCast(&self.preGraphicInfoPtrs[i].name)));
         const name = try self.allocator.alloc(u8, len);
         @memcpy(name, self.preGraphicInfoPtrs[i].name[0..len]);
+
+        for (pp.outputs, 0..) |*v, j| {
+            v.location = self.preGraphicInfoPtrs[i].outputs[j].location;
+            v.var_type = self.preGraphicInfoPtrs[i].outputs[j].var_type;
+        }
 
         try self.pipelines.put(name, pp);
         std.log.debug("{s}", .{self.preGraphicInfoPtrs[i].name});
@@ -670,6 +683,7 @@ pub fn createAllPipelinesAdded(self: *Self) !void {
 pub fn destroyPipeline(self: *Self, name: []const u8) !void {
     const kv = self.pipelines.fetchRemove(name);
     if (kv) |val| {
+        self.allocator.free(val.value.outputs);
         try checkVkResult(vk.vkDestroyPipeline(self.device, val.value.pipeline, self.pAllocCallBacks));
         try checkVkResult(vk.vkDestroyPipelineLayout(self.device, val.value.pipelineLayout, self.pAllocCallBacks));
         for (0..val.value.setCount) |i| {

@@ -37,7 +37,7 @@
 	},
 	{
 		"path": "Shaders\\flat2d.frag",
-		"hash": "59c620ea4f2b89c7"
+		"hash": "f7e21d14205e7965"
 	},
 	{
 		"path": "Shaders\\combine.vert",
@@ -50,10 +50,6 @@
 	{
 		"path": "Shaders\\empty.frag",
 		"hash": "e98cfd7c1e104899"
-	},
-	{
-		"path": ".\\Sampler\\pixel2dSampler.json",
-		"hash": "f367baaa1822b4b1"
 	},
 	{
 		"path": "Shaders\\shape.frag",
