@@ -27,3 +27,4 @@
 22. add HDR support
 23. combine pipeline barrier
 24. rendering info destroy function record empty index
+25. minimize texture set mutex

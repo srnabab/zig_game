@@ -696,6 +696,14 @@ pub fn destroyPipeline(self: *Self, name: []const u8) !void {
     }
 }
 
+pub fn getPipelineOut(self: *Self, name: []const u8) ![]const Out {
+    const kv = self.pipelines.get(name);
+    if (kv) |val| {
+        return val.outputs;
+    }
+    return error.NotFound;
+}
+
 fn findMemoryType(self: *Self, typeFilter: u32, properties: vk.VkMemoryPropertyFlags) i32 {
     var memProperties = vk.VkPhysicalDeviceMemoryProperties{0};
     vk.vkGetPhysicalDeviceMemoryProperties(self.physicalDevice, @ptrCast(&memProperties));

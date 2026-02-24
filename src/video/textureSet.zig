@@ -12,6 +12,7 @@ const objectPool = @import("objectPool").ObjectPool;
 const Handle = @import("handle").Handle;
 const processRender = @import("processRender");
 const OneTimeCommand = processRender.oneTimeCommand;
+const hash = std.hash;
 
 const Self = @This();
 
@@ -173,7 +174,9 @@ pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Sample
 
         // texture = try self.memory.create();
 
+        // lock
         texture = try self.array.addOne();
+        const index: u32 = @intCast(self.array.items.len - 1);
 
         if (self.offsetRange.capacity < self.array.items.len) {
             try self.offsetRange.ensureTotalCapacity(self.array.items.len);
@@ -183,9 +186,9 @@ pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Sample
             .offset = 0,
             .count = 0,
         };
-        // errdefer self.array.giveBack(texture);
+        // unlock
 
-        const index: u32 = @intCast(self.array.items.len - 1);
+        // errdefer self.array.giveBack(texture);
 
         texture.* = .{
             .image = image,
@@ -228,7 +231,54 @@ pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Sample
         vulkan.samplers.getDefaultSampler(samplerType),
     );
 
-    return texture;
+    return texture_t;
+}
+
+pub fn create2DTexture(
+    self: *Self,
+    vulkan: *VkStruct,
+    width: u32,
+    height: u32,
+    format: vk.VkFormat,
+    tiling: vk.VkImageTiling,
+    usage: vk.VkImageUsageFlags,
+    name: []const u8,
+) !Texture_t {
+    mutex.lock();
+    defer mutex.unlock();
+
+    const image = try vulkan.createImage2D(width, height, format, tiling, usage);
+    errdefer vulkan.destroyImage(image);
+
+    // lock
+    var texture = try self.array.addOne();
+    const index: u32 = @intCast(self.array.items.len - 1);
+    std.log.debug("index {d}", .{index});
+    // unlock
+
+    const ID = hash.CityHash32.hash(name);
+
+    texture.* = .{
+        .image = image,
+        .ID = ID,
+        .source_width = width,
+        .source_height = height,
+        .layouts = try self.layoutMemory.create(1),
+        .imageView = null,
+        .format = format,
+        // .usage = .shader,
+    };
+    for (0..texture.layouts.len) |i| {
+        texture.layouts[i] = vk.VK_IMAGE_LAYOUT_UNDEFINED;
+    }
+
+    const texture_t = self.handles.createHandle(index);
+
+    try self.map.put(ID, texture_t);
+
+    texture.imageView = try vulkan.createImageView2D(texture.image.vkImage, texture.format);
+
+    return texture_t;
 }
 
 fn getDescriptorSetIndex(self: *Self, ID: u32) !u32 {
@@ -328,12 +378,21 @@ pub fn changeTextureQueue(self: *Self, texture: Texture_t, queueType: VkStruct.C
 
     tex.changeTextureQueue(queueType);
 }
+
 pub fn getVkImage(self: *Self, texture: Texture_t) vk.VkImage {
     const tex = self.getTextureCotent(texture);
     defer self.releaseTextureContent(tex);
 
     return tex.image.vkImage;
 }
+
+pub fn getVkImageView(self: *Self, texture: Texture_t) vk.VkImageView {
+    const tex = self.getTextureCotent(texture);
+    defer self.releaseTextureContent(tex);
+
+    return tex.imageView;
+}
+
 pub fn getImageQueueType(self: *Self, texture: Texture_t) VkStruct.CommandPoolType {
     const tex = self.getTextureCotent(texture);
     defer self.releaseTextureContent(tex);

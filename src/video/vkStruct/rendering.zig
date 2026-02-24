@@ -38,6 +38,10 @@ pub fn init(allocator: std.mem.Allocator, handles: *global.HandlesType) Self {
 }
 
 pub fn deinit(self: *Self) void {
+    for (0..self.array.items.len) |i| {
+        if (self.array.items[i].pColorAttachments != null or self.array.items[i].depthAttachment != null or self.array.items[i].stencilAttachment != null)
+            self.allocator.free(self.constructSlice(@intCast(i)));
+    }
     self.array.deinit();
 }
 
@@ -57,7 +61,7 @@ pub fn createRenderingInfo(
 
     const count = blk: {
         var s: u32 = 0;
-        if (pColorAttachments) |v| s += v.len;
+        if (pColorAttachments) |v| s += @intCast(v.len);
 
         if (depthAttachment) |v| {
             assert(v.len == 1);
@@ -78,8 +82,8 @@ pub fn createRenderingInfo(
     var stencil: u32 = 0;
     if (pColorAttachments) |v| {
         @memcpy(attachments[0..v.len], v);
-        depth = v.len;
-        stencil = v.len;
+        depth = @intCast(v.len);
+        stencil = @intCast(v.len);
     }
 
     if (depthAttachment) |v| {
@@ -101,10 +105,48 @@ pub fn createRenderingInfo(
         .stencilAttachment = if (stencilAttachment) |_| attachments[stencil..(stencil + 1)] else null,
     };
 
-    return self.handles.createHandle(index);
+    return self.handles.createHandle(@intCast(index));
 }
 
 pub fn destroyRenderingInfo(self: *Self, renderingInfo: RenderingInfo_t) void {
     const index = getIndex(renderingInfo);
     self.handles.destroyHandle(index);
+
+    const slice = self.constructSlice(index);
+    self.allocator.free(slice);
+
+    self.array.items[index].pColorAttachments = null;
+    self.array.items[index].depthAttachment = null;
+    self.array.items[index].stencilAttachment = null;
+}
+
+fn constructSlice(self: *Self, index: u32) []const vk.VkRenderingAttachmentInfo {
+    const slice = bk: {
+        var count: u32 = 0;
+        var ptr: ?[*]vk.VkRenderingAttachmentInfo = null;
+        if (self.array.items[index].pColorAttachments) |v| {
+            count += @intCast(v.len);
+            if (ptr == null) {
+                ptr = v.ptr;
+            }
+        }
+
+        if (self.array.items[index].depthAttachment) |v| {
+            count += @intCast(v.len);
+            if (ptr == null) {
+                ptr = v.ptr;
+            }
+        }
+
+        if (self.array.items[index].stencilAttachment) |v| {
+            count += @intCast(v.len);
+            if (ptr == null) {
+                ptr = v.ptr;
+            }
+        }
+
+        break :bk ptr.?[0..count];
+    };
+
+    return slice;
 }

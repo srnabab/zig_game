@@ -1,6 +1,7 @@
 const std = @import("std");
 const process = std.process;
 
+const vk = @import("vulkan").vulkan;
 const sdl = @cImport(@cInclude("SDL3/SDL.h"));
 const SDL_CheckResult = @import("sdl").SDL_CheckResult;
 
@@ -142,6 +143,39 @@ pub fn main() !void {
 
     try vulkan.createAllPipelinesAdded();
 
+    const o1 = try vulkan.getPipelineOut("flat2d");
+    for (o1) |value| {
+        std.log.debug("{}", .{value});
+    }
+    const texture_test = try textureSett.create2DTexture(
+        &vulkan,
+        vulkan.windowWidth,
+        vulkan.windowsHeight,
+        vk.VK_FORMAT_R8G8B8A8_SRGB,
+        vk.VK_IMAGE_TILING_OPTIMAL,
+        vk.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        "texture_test",
+    );
+
+    var colorAttachment: [1]vk.VkRenderingAttachmentInfo = undefined;
+    colorAttachment[0] = vk.VkRenderingAttachmentInfo{
+        .sType = vk.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .imageView = textureSett.getVkImageView(texture_test),
+        .imageLayout = vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        .loadOp = vk.VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = vk.VK_ATTACHMENT_STORE_OP_STORE,
+        .clearValue = vk.VkClearValue{
+            .color = vk.VkClearColorValue{
+                .float32 = [_]f32{ 0.0, 0.0, 0.0, 0.0 },
+            },
+        },
+    };
+
+    const rendering_test = try renderingInfo.createRenderingInfo(0, vk.VkRect2D{ .extent = .{
+        .width = vulkan.windowWidth,
+        .height = vulkan.windowsHeight,
+    }, .offset = .{ .x = 0, .y = 0 } }, 1, 0, &colorAttachment, null, null);
+    _ = rendering_test;
     const renderStart = std.time.milliTimestamp();
     while (true) {
         try graphic.startCommand();

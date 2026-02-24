@@ -389,6 +389,7 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("handle", handle_mod);
     exe_mod.addImport("sdl", sdl_mod);
     exe_mod.addImport("rendering", rendering_mod);
+    exe_mod.addImport("vulkan", vk_mod);
     exe_mod.addIncludePath(b.path("include/"));
 
     exe_mod.addLibraryPath(b.path("lib/"));
