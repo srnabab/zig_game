@@ -2,6 +2,7 @@ const std = @import("std");
 const texture = @import("textureSet");
 const vk = @import("vulkan").vulkan;
 const VkStruct = @import("video");
+const rendering = @import("rendering");
 
 pub const CommandType = enum {
     start,
@@ -232,9 +233,10 @@ const PipelineBarrier = struct {
 
 const Draw2D = struct {
     pipeline: VkStruct.Pipeline,
-    // vertexBuffer: VkStruct.Buffer,
-    // indexBuffer: VkStruct.Buffer,
-    pTexture: *texture.Texture,
+    rendering: rendering.RenderingInfo_t,
+    vertexBuffer: VkStruct.Buffer_t,
+    indexBuffer: VkStruct.Buffer_t,
+    pTexture: texture.Texture_t,
 };
 
 const CopyBuffer = struct {

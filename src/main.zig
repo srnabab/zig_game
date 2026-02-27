@@ -119,18 +119,22 @@ pub fn main() !void {
 
     try vertices.init(&vulkan, &graphic);
     defer vertices.deinit();
+
     _ = try textureSett.createImageTexture(
         comptime file.comptimeGetID("non_exist.png"),
         .pixel2d,
         &vulkan,
         &graphic,
     );
-    _ = textureSett.createImageTextureEnsureWithErrorImage(
-        comptime file.comptimeGetID("circle.png"),
-        .pixel2d,
-        &vulkan,
-        &graphic,
-    );
+    {
+        const temp = textureSett.createImageTextureEnsureWithErrorImage(
+            comptime file.comptimeGetID("circle.png"),
+            .pixel2d,
+            &vulkan,
+            &graphic,
+        );
+        try textureSett.offsetsAdd(temp, 0);
+    }
 
     try graphic.addCommandEnd();
 
@@ -147,6 +151,7 @@ pub fn main() !void {
     for (o1) |value| {
         std.log.debug("{}", .{value});
     }
+
     const texture_test = try textureSett.create2DTexture(
         &vulkan,
         vulkan.windowWidth,
@@ -171,17 +176,32 @@ pub fn main() !void {
         },
     };
 
-    const rendering_test = try renderingInfo.createRenderingInfo(0, vk.VkRect2D{ .extent = .{
-        .width = vulkan.windowWidth,
-        .height = vulkan.windowsHeight,
-    }, .offset = .{ .x = 0, .y = 0 } }, 1, 0, &colorAttachment, null, null);
+    const rendering_test = try renderingInfo.createRenderingInfo(
+        0,
+        vk.VkRect2D{
+            .extent = .{
+                .width = vulkan.windowWidth,
+                .height = vulkan.windowsHeight,
+            },
+            .offset = .{ .x = 0, .y = 0 },
+        },
+        1,
+        0,
+        &colorAttachment,
+        null,
+        null,
+    );
     _ = rendering_test;
+
     const renderStart = std.time.milliTimestamp();
     while (true) {
         try graphic.startCommand();
         // try graphic.addCommand(.draw2D, .{ .draw2d = .{
-        //     .pipeline = global.vulkan.getPipeline("flat2d").?,
-        //     .pTexture = global.textureSet.getTexture(@intCast(file.getID("circle.png"))).?,
+        //     .pipeline = vulkan.getPipeline("flat2d").?,
+        //     .pTexture = textureSett.getTexture(@intCast(file.getID("circle.png"))).?,
+        //     .rendering = rendering_test,
+        //     .vertexBuffer = vertices.vertexBuffer2D,
+        //     .indexBuffer = vertices.indexBuffer2D,
         // } });
         try graphic.addCommandEnd();
         try graphic.executeCommands();

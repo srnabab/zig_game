@@ -5,7 +5,8 @@ const Option = enum {
     Once,
 };
 
-pub const Handle = *anyopaque;
+const Context = opaque {};
+pub const Handle = *Context;
 
 pub fn getIndex(handle: Handle) u32 {
     const ptr: *u32 = @ptrCast(@alignCast(handle));

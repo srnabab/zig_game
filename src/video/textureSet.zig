@@ -299,7 +299,7 @@ pub fn createImageTextureEnsureWithErrorImage(self: *Self, fileID: u32, samplerT
     };
 }
 
-fn getTexture(self: *Self, textureID: u32) ?Texture_t {
+pub fn getTexture(self: *Self, textureID: u32) ?Texture_t {
     mutex.lock();
     defer mutex.unlock();
 
@@ -342,7 +342,7 @@ pub fn offsetsAdd(self: *Self, texture: Texture_t, offset: u32) !void {
     };
 
     const offsetRange = self.offsetRange.items[index];
-    if (offsetRange.count > 0 and self.offsetsPool.items[offsetRange.offset..][offsetRange.count - 1].offset + self.offsetsPool[offsetRange.offset..][offsetRange.count - 1].count * global.vertexCount == offset) {
+    if (offsetRange.count > 0 and self.offsetsPool.items[offsetRange.offset..][offsetRange.count - 1].offset + self.offsetsPool.items[offsetRange.offset..][offsetRange.count - 1].count * global.vertexCount == offset) {
         self.offsetsPool.items[offsetRange.offset..][offsetRange.count - 1].count += 1;
     } else {
         if (offsetRange.count == 0) {
