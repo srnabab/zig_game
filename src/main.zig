@@ -133,7 +133,8 @@ pub fn main() !void {
             &vulkan,
             &graphic,
         );
-        try textureSett.offsetsAdd(temp, 0);
+        const ix = try vertices.vertexInitialize2D(800, 600, 400, 300, 0.1, try textureSett.getDescriptorSetIndex(temp));
+        try textureSett.offsetsAdd(temp, ix);
     }
 
     try graphic.addCommandEnd();

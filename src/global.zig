@@ -10,6 +10,8 @@ pub const databaseName = "Content.db";
 pub const StackMemorySize = 512 * 1024;
 pub const vertexCount = 4;
 pub const indexCount = 6;
+pub const LOGICAL_HEIGHT = 600;
+pub const LOGICAL_WEIGHT = 800;
 
 pub const HandlesType = Handles.Handles(10240, .Once);
 

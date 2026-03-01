@@ -73,12 +73,13 @@ offsetRange: std.array_list.Managed(Offsets),
 
 map: std.hash_map.AutoHashMap(u32, Texture_t),
 layoutMemory: MemoryPool(vk.VkImageLayout),
-descriptorSetIndices: std.array_list.Managed(u32),
+descriptorSetIndices: std.AutoHashMap(u32, u32),
 
 tempTextureRecord: *Texture = undefined,
 
 handles: *global.HandlesType,
 
+descriptorSetIndex: u32 = 0,
 // vulkan: *VkStruct,
 // graphic: *OneTimeCommand,
 
@@ -141,6 +142,7 @@ pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Sample
     var imgWidth: u32 = 0;
     var imgHeight: u32 = 0;
     var channel: u32 = 0;
+    var index: u32 = 0;
     {
         mutex.lock();
         defer mutex.unlock();
@@ -176,7 +178,7 @@ pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Sample
 
         // lock
         texture = try self.array.addOne();
-        const index: u32 = @intCast(self.array.items.len - 1);
+        index = @intCast(self.array.items.len - 1);
 
         if (self.offsetRange.capacity < self.array.items.len) {
             try self.offsetRange.ensureTotalCapacity(self.array.items.len);
@@ -224,7 +226,7 @@ pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Sample
 
     texture.imageView = try vulkan.createImageView2D(texture.image.vkImage, texture.format);
 
-    const dstArrayElement = try self.getDescriptorSetIndex(ID);
+    const dstArrayElement = try self.acquireDescriptorSetIndex(ID);
     try vulkan.addWriteDescriptorSetImage(
         dstArrayElement,
         texture.imageView,
@@ -281,15 +283,27 @@ pub fn create2DTexture(
     return texture_t;
 }
 
-fn getDescriptorSetIndex(self: *Self, ID: u32) !u32 {
-    const zone = tracy.initZone(@src(), .{ .name = "get descriptor set index" });
-    defer zone.deinit();
+fn acquireDescriptorSetIndex(self: *Self, ID: u32) !u32 {
+    mutex.lock();
+    defer mutex.unlock();
 
-    const index = self.descriptorSetIndices.items.len;
+    try self.descriptorSetIndices.put(ID, self.descriptorSetIndex);
+    defer self.descriptorSetIndex += 1;
 
-    try self.descriptorSetIndices.append(ID);
+    return self.descriptorSetIndex;
+}
 
-    return @intCast(index);
+pub fn getDescriptorSetIndex(self: *Self, texture: Texture_t) !u32 {
+    const temp = self.getTextureCotent(texture);
+    const ID = temp.ID;
+    self.releaseTextureContent(temp);
+
+    mutex.lock();
+    defer mutex.unlock();
+
+    const index = self.descriptorSetIndices.get(ID) orelse return error.not_found;
+
+    return index;
 }
 
 pub fn createImageTextureEnsureWithErrorImage(self: *Self, fileID: u32, samplerType: VkStruct.Samplers.SamplerType, vulkan: *VkStruct, graphic: *OneTimeCommand) Texture_t {
@@ -313,6 +327,7 @@ pub fn getTexture(self: *Self, textureID: u32) ?Texture_t {
 
 fn getTextureCotent(self: *Self, texture: Texture_t) *Texture {
     mutex.lock();
+    // unlock in releaseTextureContent
 
     const index: u32 = ix: {
         const ptr: *u32 = @ptrCast(@alignCast(texture));
