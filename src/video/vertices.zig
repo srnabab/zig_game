@@ -22,6 +22,7 @@ const index2DinitCount = std.math.maxInt(u16) / 6;
 
 pub var vertices2D: []Vertex2D = &.{};
 var vertexCount2D: u32 = 0;
+var update2dStartIndex: u32 = 0;
 pub var vertexBuffer2D: vkStruct.Buffer_t = undefined;
 pub var indexBuffer2D: vkStruct.Buffer_t = undefined;
 var updated2D = false;
@@ -115,6 +116,10 @@ pub fn vertexInitialize2D(width: u32, height: u32, x: u32, y: u32, depth: f32, t
     // leftDown[0] = leftUp[0];
     // leftDown[1] = leftUp[1] + yOffset;
 
+    if (update2dStartIndex < vertexCount2D) {
+        update2dStartIndex = vertexCount2D;
+    }
+
     //left-up
     vertices2D[vertexCount2D].position[0] = leftUp[0];
     vertices2D[vertexCount2D].position[1] = leftUp[1];
@@ -159,4 +164,32 @@ pub fn vertexInitialize2D(width: u32, height: u32, x: u32, y: u32, depth: f32, t
     updated2D = true;
 
     return vertexCount2D - 4;
+}
+
+pub fn upload(graphic: *OneTimeCommand) !void {
+    const zone = tracy.initZone(@src(), .{ .name = "vertices upload" });
+    defer zone.deinit();
+
+    if (updated2D) {
+        const bufferSize = @sizeOf(Vertex2D) * (vertexCount2D - update2dStartIndex);
+        const stagingBuffer = try vulkan.createStagingBuffer(@intCast(bufferSize));
+
+        vulkan.buffers.copyDataToMapped(stagingBuffer, Vertex2D, vertices2D[update2dStartIndex..vertexCount2D]);
+
+        var region = [_]vk.VkBufferCopy2{.{
+            .sType = vk.VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+            .pNext = null,
+            .srcOffset = 0,
+            .dstOffset = update2dStartIndex * @sizeOf(Vertex2D),
+            .size = bufferSize,
+        }};
+
+        try graphic.addCommand(.copyBuffer, .{ .copyBuffer = .{
+            .srcBuffer = stagingBuffer,
+            .dstBuffer = vertexBuffer2D,
+            .regions = &region,
+        } });
+
+        updated2D = false;
+    }
 }
