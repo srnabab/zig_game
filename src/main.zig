@@ -109,7 +109,7 @@ pub fn main() !void {
     var renderingInfo = rendering.init(allocator_t.*, &handles);
     defer renderingInfo.deinit();
 
-    var graphic = OneTimeCommand.init(allocator_t.*, sma, &vulkan);
+    var graphic = OneTimeCommand.init(allocator_t.*, sma, &vulkan, &renderingInfo);
     defer graphic.deinit();
 
     var textureSett = textureSet.init(allocator_t.*, &handles);

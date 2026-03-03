@@ -2,7 +2,6 @@ const std = @import("std");
 const Thread = std.Thread;
 const Atomic = std.atomic;
 pub const drawC = @import("drawCommand.zig");
-// const drawCProcess = @import("drawCommandProcess.zig");
 const texture = @import("textureSet");
 const vk = @import("vulkan").vulkan;
 const VkStruct = @import("video");
@@ -11,7 +10,7 @@ const global = @import("global");
 const tracy = @import("tracy");
 const math = @import("math");
 const uniqueArrayList = @import("uniqueArrayList").UniqueArrayList;
-// const objectPool
+const renderings = @import("rendering");
 
 var mutex = Thread.Mutex{};
 
@@ -687,6 +686,7 @@ pub const oneTimeCommand = struct {
     // const EnqueueTaskCallback = *const fn (taskCallback: TaskCallback, taskCtx: *anyopaque, userCtx: *anyopaque) *anyopaque;
     // const FinishTaskCallback = *const fn (userTask: *anyopaque, userCtx: *anyopaque) void;
     vulkan: *VkStruct,
+    renderings: *renderings,
 
     innerID: u32 = 0,
     innerCommandBufferID: u32 = 0,
@@ -708,7 +708,7 @@ pub const oneTimeCommand = struct {
 
     // commandPools: std.array_list.Managed(vk.VkCommandPool),
 
-    pub fn init(allocator: std.mem.Allocator, stackAllocator: std.mem.Allocator, vulkan: *VkStruct) Self {
+    pub fn init(allocator: std.mem.Allocator, stackAllocator: std.mem.Allocator, vulkan: *VkStruct, rendering: *renderings) Self {
         std.log.info("command size: {d}", .{@sizeOf(drawC.comm)});
         std.log.info("vk struct Buffer size: {d}", .{@sizeOf(VkStruct.Buffer_t)});
         return Self{
@@ -722,6 +722,7 @@ pub const oneTimeCommand = struct {
             .combineMap = .init(allocator),
             .cacheMap = .init(allocator),
             .vulkan = vulkan,
+            .renderings = rendering,
         };
     }
 
@@ -1342,6 +1343,37 @@ pub const oneTimeCommand = struct {
         return resNode;
     }
 
+    fn changeTextureQueueHelper(
+        self: *Self,
+        requiredType: VkStruct.CommandPoolType,
+        currentType: VkStruct.CommandPoolType,
+        texture_: texture.Texture_t,
+        node: *QueueNode,
+        textureSet: *texture,
+        enterCommandType: drawC.PublicCommandType,
+    ) !*QueueNode {
+        var returnNode: *QueueNode = undefined;
+
+        if (currentType != requiredType) {
+            if (currentType != .init) {
+                returnNode = try self.addCommand2(
+                    .changeTextureQueue,
+                    .{ .changeTextureQueue = .{
+                        .texture = texture_,
+                        .srcQueueFamily = currentType,
+                        .dstQueueFamily = requiredType,
+                    } },
+                    null,
+                    node,
+                    enterCommandType,
+                );
+            }
+            textureSet.changeQueueIndex(texture_, requiredType);
+        }
+
+        return returnNode;
+    }
+
     pub fn addCommand(self: *Self, commandType: drawC.PublicCommandType, command: drawC.comm) !void {
         const zone = tracy.initZone(@src(), .{ .name = "add command" });
         defer zone.deinit();
@@ -1378,7 +1410,11 @@ pub const oneTimeCommand = struct {
                 node.data.commandPoolType = .graphic;
 
                 const draw2D = ptr.value_ptr.command.draw2d;
-                _ = draw2D;
+
+                const renderingInfo = draw2D.rendering;
+                if (!self.renderings.renderingStarted(renderingInfo)) {
+                    std.log.debug("start rendering", .{});
+                }
             },
             .copyBuffer => {
                 node.data.commandPoolType = .transfer;
@@ -1439,22 +1475,14 @@ pub const oneTimeCommand = struct {
                 const oldLayouts = textureSet.getCurrentLayouts(copyBufferToImage.pTexture);
 
                 const imageQueuType = textureSet.getImageQueueType(copyBufferToImage.pTexture);
-                if (imageQueuType != .transfer) {
-                    if (imageQueuType != .init) {
-                        currentNode = try self.addCommand2(
-                            .changeTextureQueue,
-                            .{ .changeTextureQueue = .{
-                                .texture = copyBufferToImage.pTexture,
-                                .srcQueueFamily = imageQueuType,
-                                .dstQueueFamily = .transfer,
-                            } },
-                            null,
-                            currentNode,
-                            commandType,
-                        );
-                    }
-                    textureSet.changeTextureQueue(copyBufferToImage.pTexture, .transfer);
-                }
+                currentNode = try self.changeTextureQueueHelper(
+                    .transfer,
+                    imageQueuType,
+                    copyBufferToImage.pTexture,
+                    currentNode,
+                    textureSet,
+                    commandType,
+                );
 
                 const bufferQueuqType = self.vulkan.buffers.getBufferQueueType(copyBufferToImage.buffer);
                 if (bufferQueuqType != .transfer) {
@@ -1560,7 +1588,7 @@ pub const oneTimeCommand = struct {
                 }
             },
             else => {
-                std.debug.panic("not supported", .{});
+                std.debug.panic("comm connect type not supported", .{});
             },
         }
         zone3.deinit();

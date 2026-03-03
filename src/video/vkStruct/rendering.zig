@@ -2,8 +2,11 @@ const std = @import("std");
 
 const global = @import("global");
 
+const tracy = @import("tracy");
+
 const vk = @import("vulkan").vulkan;
-const Handle = @import("handle").Handle;
+const Handles = @import("handle");
+const Handle = Handles.Handle;
 const getIndex = @import("handle").getIndex;
 
 const assert = std.debug.assert;
@@ -28,6 +31,7 @@ allocator: std.mem.Allocator,
 
 array: std.array_list.Managed(RenderingInfo),
 handles: *global.HandlesType,
+mutex: std.Thread.Mutex = .{},
 
 pub fn init(allocator: std.mem.Allocator, handles: *global.HandlesType) Self {
     return .{
@@ -149,4 +153,50 @@ fn constructSlice(self: *Self, index: u32) []const vk.VkRenderingAttachmentInfo 
     };
 
     return slice;
+}
+
+pub fn renderingStarted(self: *Self, rendering: RenderingInfo_t) bool {
+    const index = Handles.getIndex(rendering);
+
+    self.mutex.lock();
+    defer self.mutex.unlock();
+
+    return self.array.items[index].start;
+}
+
+pub fn getRenderingInfo(self: *Self, rendering: RenderingInfo_t) RenderingInfo {
+    self.mutex.lock();
+    defer self.mutex.unlock();
+
+    const index = Handles.getIndex(rendering);
+
+    return self.array.items[index];
+}
+
+pub fn updateRenderingInfo(self: *Self, args: anytype, texture: RenderingInfo_t) void {
+    const zone = tracy.initZone(@src(), .{ .name = "update texture" });
+    defer zone.deinit();
+
+    const args_type = @TypeOf(args);
+    const args_info = @typeInfo(args_type);
+
+    // std.log.debug("{s}", .{@typeName(args_type)});
+
+    if (args_info != .@"struct") {
+        @compileError("argument must be a struct");
+    }
+
+    self.mutex.lock();
+    defer self.mutex.unlock();
+
+    const index = Handles.getIndex(texture);
+    const temp = &self.array.items[index];
+
+    inline for (args_info.@"struct".fields) |field| {
+        if (!@hasField(RenderingInfo, field.name)) {
+            @compileError("struct has no field named '" ++ field.name ++ "'");
+        }
+
+        @field(temp, field.name) = @field(args, field.name);
+    }
 }
