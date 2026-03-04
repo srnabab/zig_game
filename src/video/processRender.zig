@@ -1147,18 +1147,18 @@ pub const oneTimeCommand = struct {
 
                 // 4. 统一的节点连接逻辑
                 // 注意：仅在新创建节点时才设置 commandPoolType
-                if (prev) |n| {
-                    if (!res.found_existing) rootNode.data.commandPoolType = n.data.commandPoolType;
+                // if (prev) |n| {
+                //     if (!res.found_existing) rootNode.data.commandPoolType = n.data.commandPoolType;
 
-                    try rootNode.parentsAppend(&n.ID);
-                    try n.childrenAppend(&rootNode.ID);
-                }
-                if (next) |p| {
-                    if (!res.found_existing) rootNode.data.commandPoolType = p.data.commandPoolType;
+                //     try rootNode.parentsAppend(&n.ID);
+                //     try n.childrenAppend(&rootNode.ID);
+                // }
+                // if (next) |p| {
+                //     if (!res.found_existing) rootNode.data.commandPoolType = p.data.commandPoolType;
 
-                    try rootNode.childrenAppend(&p.ID);
-                    try p.parentsAppend(&rootNode.ID);
-                }
+                //     try rootNode.childrenAppend(&p.ID);
+                //     try p.parentsAppend(&rootNode.ID);
+                // }
 
                 resNode = rootNode;
             },
@@ -1346,32 +1346,40 @@ pub const oneTimeCommand = struct {
     fn changeTextureQueueHelper(
         self: *Self,
         requiredType: VkStruct.CommandPoolType,
-        currentType: VkStruct.CommandPoolType,
         texture_: texture.Texture_t,
+        requiredLayout: vk.VkImageLayout,
         node: *QueueNode,
         textureSet: *texture,
         enterCommandType: drawC.PublicCommandType,
-    ) !*QueueNode {
+    ) !?*QueueNode {
         var returnNode: *QueueNode = undefined;
+        const tex = textureSet.getTextureCotent(texture_);
+        const currentType = tex.image.queueIndex;
 
         if (currentType != requiredType) {
             if (currentType != .init) {
                 returnNode = try self.addCommand2(
-                    .changeTextureQueue,
-                    .{ .changeTextureQueue = .{
-                        .texture = texture_,
-                        .srcQueueFamily = currentType,
-                        .dstQueueFamily = requiredType,
+                    .transLayout,
+                    .{ .transLayout = .{
+                        .image = tex.image.vkImage,
+                        .oldLayout = tex.layouts[0],
+                        .newLayout = requiredLayout,
+                        .baseLayer = 0,
+                        .layerCount = @intCast(tex.layouts.len),
+                        .srcQueue = currentType,
+                        .dstQueue = requiredType,
                     } },
                     null,
                     node,
                     enterCommandType,
                 );
+
+                return returnNode;
             }
             textureSet.changeQueueIndex(texture_, requiredType);
         }
 
-        return returnNode;
+        return null;
     }
 
     pub fn addCommand(self: *Self, commandType: drawC.PublicCommandType, command: drawC.comm) !void {
@@ -1409,12 +1417,24 @@ pub const oneTimeCommand = struct {
             .draw2D => {
                 node.data.commandPoolType = .graphic;
 
-                const draw2D = ptr.value_ptr.command.draw2d;
+                // const draw2D = ptr.value_ptr.command.draw2d;
+                // const textureSet = draw2D.textureSet;
+                // const renderingInfo = draw2D.rendering;
 
-                const renderingInfo = draw2D.rendering;
-                if (!self.renderings.renderingStarted(renderingInfo)) {
-                    std.log.debug("start rendering", .{});
-                }
+                // // const renderingContent = self.renderings.getRenderingInfo(renderingInfo);
+
+                // const tempTextureNode1 = try self.changeTextureQueueHelper(
+                //     .graphic,
+                //     draw2D.pTexture,
+                //     vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                //     null,
+                //     textureSet,
+                //     commandType,
+                // );
+
+                // if (!self.renderings.renderingStarted(renderingInfo)) {
+                //     std.log.debug("start rendering", .{});
+                // }
             },
             .copyBuffer => {
                 node.data.commandPoolType = .transfer;
@@ -1474,11 +1494,10 @@ pub const oneTimeCommand = struct {
                 const copyBufferToImage = ptr.value_ptr.command.copyBufferToImage;
                 const oldLayouts = textureSet.getCurrentLayouts(copyBufferToImage.pTexture);
 
-                const imageQueuType = textureSet.getImageQueueType(copyBufferToImage.pTexture);
                 currentNode = try self.changeTextureQueueHelper(
                     .transfer,
-                    imageQueuType,
                     copyBufferToImage.pTexture,
+                    oldLayouts[0],
                     currentNode,
                     textureSet,
                     commandType,

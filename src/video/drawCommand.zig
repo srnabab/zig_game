@@ -116,6 +116,8 @@ const TransLayout = struct {
     newLayout: vk.VkImageLayout,
     baseLayer: u32,
     layerCount: u32,
+    srcQueue: VkStruct.CommandPoolType,
+    dstQueue: VkStruct.CommandPoolType,
 
     // srcAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_NONE,
     // dstAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_NONE,
@@ -237,6 +239,7 @@ const Draw2D = struct {
     vertexBuffer: VkStruct.Buffer_t,
     indexBuffer: VkStruct.Buffer_t,
     pTexture: texture.Texture_t,
+    textureSet: *texture,
 };
 
 const CopyBuffer = struct {
