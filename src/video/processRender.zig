@@ -1066,7 +1066,7 @@ pub const oneTimeCommand = struct {
         };
     }
 
-    fn addCommand2(self: *Self, commandType: drawC.PrivateCommandType, command: drawC.comm, prev: ?*QueueNode, next: ?*QueueNode, enterCommandType: drawC.PublicCommandType) !*QueueNode {
+    fn addCommand2(self: *Self, commandType: drawC.PrivateCommandType, command: drawC.comm, enterCommandType: drawC.PublicCommandType) !*QueueNode {
         const zone = tracy.initZone(@src(), .{ .name = "add command 2" });
         defer zone.deinit();
 
@@ -1144,20 +1144,18 @@ pub const oneTimeCommand = struct {
                 pipelineBarrier.barriers[new_len - 1] = new_barrier;
                 pipelineBarrier.lastSrcStageMask = @min(pipelineBarrier.lastSrcStageMask, flags.sourceStage);
 
-                // 4. 统一的节点连接逻辑
-                // 注意：仅在新创建节点时才设置 commandPoolType
-                if (prev) |n| {
-                    if (!res.found_existing) rootNode.data.commandPoolType = n.data.commandPoolType;
+                // if (prev) |n| {
+                //     if (!res.found_existing) rootNode.data.commandPoolType = n.data.commandPoolType;
 
-                    try rootNode.parentsAppend(&n.ID);
-                    try n.childrenAppend(&rootNode.ID);
-                }
-                if (next) |p| {
-                    if (!res.found_existing) rootNode.data.commandPoolType = p.data.commandPoolType;
+                //     try rootNode.parentsAppend(&n.ID);
+                //     try n.childrenAppend(&rootNode.ID);
+                // }
+                // if (next) |p| {
+                //     if (!res.found_existing) rootNode.data.commandPoolType = p.data.commandPoolType;
 
-                    try rootNode.childrenAppend(&p.ID);
-                    try p.parentsAppend(&rootNode.ID);
-                }
+                //     try rootNode.childrenAppend(&p.ID);
+                //     try p.parentsAppend(&rootNode.ID);
+                // }
 
                 resNode = rootNode;
             },
@@ -1299,18 +1297,20 @@ pub const oneTimeCommand = struct {
                 try releaseNode.childrenAppend(&acquireNode.ID);
                 try acquireNode.parentsAppend(&releaseNode.ID);
 
-                if (prev) |n| {
-                    resNode = releaseNode;
+                resNode = releaseNode;
 
-                    try resNode.parentsAppend(&n.ID);
-                    try n.childrenAppend(&resNode.ID);
-                }
-                if (next) |p| {
-                    resNode = acquireNode;
+                // if (prev) |n| {
+                //     resNode = releaseNode;
 
-                    try resNode.childrenAppend(&p.ID);
-                    try p.parentsAppend(&resNode.ID);
-                }
+                //     try resNode.parentsAppend(&n.ID);
+                //     try n.childrenAppend(&resNode.ID);
+                // }
+                // if (next) |p| {
+                //     resNode = acquireNode;
+
+                //     try resNode.childrenAppend(&p.ID);
+                //     try p.parentsAppend(&resNode.ID);
+                // }
             },
             // .changeTextureQueue => {},
             else => {
@@ -1385,6 +1385,8 @@ pub const oneTimeCommand = struct {
 
                 const copyBuffer = ptr.value_ptr.command.copyBuffer;
                 const tempRegions = copyBuffer.regions;
+                var srcBufferNode: *QueueNode = undefined;
+                var dstBufferNode: *QueueNode = undefined;
 
                 const oldSrcQueueType = self.vulkan.buffers.getBufferQueueType(copyBuffer.srcBuffer);
                 if (oldSrcQueueType != .transfer) {
@@ -1395,12 +1397,12 @@ pub const oneTimeCommand = struct {
                             sizeOffset.offset = region.srcOffset;
                             sizeOffset.size = region.size;
                         }
-                        currentNode = try self.addCommand2(.changeBufferQueue, .{ .changeBufferQueue = .{
+                        srcBufferNode = try self.addCommand2(.changeBufferQueue, .{ .changeBufferQueue = .{
                             .buffer = copyBuffer.srcBuffer,
                             .srcQueueFamily = oldSrcQueueType,
                             .dstQueueFamily = .transfer,
                             .regions = regions,
-                        } }, null, currentNode, commandType);
+                        } }, commandType);
                     }
                     self.vulkan.buffers.changeQueueType(ptr.value_ptr.command.copyBuffer.srcBuffer, .transfer);
                 }
@@ -1415,12 +1417,12 @@ pub const oneTimeCommand = struct {
                             sizeOffset.size = region.size;
                         }
 
-                        currentNode = try self.addCommand2(.changeBufferQueue, .{ .changeBufferQueue = .{
+                        dstBufferNode = try self.addCommand2(.changeBufferQueue, .{ .changeBufferQueue = .{
                             .buffer = copyBuffer.dstBuffer,
                             .srcQueueFamily = oldDstQueueType,
                             .dstQueueFamily = .transfer,
                             .regions = regions,
-                        } }, null, currentNode, commandType);
+                        } }, commandType);
                     }
                     self.vulkan.buffers.changeQueueType(ptr.value_ptr.command.copyBuffer.dstBuffer, .transfer);
                 }
@@ -1448,8 +1450,6 @@ pub const oneTimeCommand = struct {
                                 .srcQueueFamily = imageQueuType,
                                 .dstQueueFamily = .transfer,
                             } },
-                            null,
-                            currentNode,
                             commandType,
                         );
                     }
@@ -1469,7 +1469,7 @@ pub const oneTimeCommand = struct {
                             .srcQueueFamily = bufferQueuqType,
                             .dstQueueFamily = .transfer,
                             .regions = &region,
-                        } }, null, currentNode, commandType);
+                        } }, commandType);
                     }
                     self.vulkan.buffers.changeQueueType(copyBufferToImage.buffer, .transfer);
                 }
@@ -1477,6 +1477,7 @@ pub const oneTimeCommand = struct {
                 var currentLayout = oldLayouts[0];
                 var currentBase = copyBufferToImage.baseArrayLayer;
                 var count: u32 = 0;
+                var transNode: *QueueNode = undefined;
                 for (oldLayouts) |layout| {
                     if (currentLayout == vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
                         currentLayout = layout;
@@ -1487,13 +1488,21 @@ pub const oneTimeCommand = struct {
                     if (layout == currentLayout) {
                         count += 1;
                     } else {
-                        currentNode = try self.addCommand2(.transLayout, .{ .transLayout = .{
+                        transNode = try self.addCommand2(.transLayout, .{ .transLayout = .{
                             .image = copyBufferToImage.dstImage,
                             .oldLayout = currentLayout,
                             .newLayout = vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                             .baseLayer = currentBase,
                             .layerCount = count,
-                        } }, null, node, commandType);
+                        } }, commandType);
+
+                        if (transNode != currentNode) {
+                            try transNode.childrenAppend(&currentNode.ID);
+                            try currentNode.parentsAppend(&transNode.ID);
+
+                            currentNode = transNode;
+                        }
+
                         currentLayout = layout;
                         currentBase += count;
                         if (currentLayout != vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
@@ -1502,13 +1511,20 @@ pub const oneTimeCommand = struct {
                     }
                 }
                 if (count > 0) {
-                    currentNode = try self.addCommand2(.transLayout, .{ .transLayout = .{
+                    transNode = try self.addCommand2(.transLayout, .{ .transLayout = .{
                         .image = copyBufferToImage.dstImage,
                         .oldLayout = currentLayout,
                         .newLayout = vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                         .baseLayer = currentBase,
                         .layerCount = count,
-                    } }, null, node, commandType);
+                    } }, commandType);
+
+                    if (transNode != currentNode) {
+                        try transNode.childrenAppend(&currentNode.ID);
+                        try currentNode.parentsAppend(&transNode.ID);
+
+                        currentNode = transNode;
+                    }
                 }
                 textureSet.changeTextureLayout(copyBufferToImage.pTexture, copyBufferToImage.baseArrayLayer, copyBufferToImage.layerCount, vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
                 // textureSet.changeTextureQueue(copyBufferToImage.pTexture, .transfer);
