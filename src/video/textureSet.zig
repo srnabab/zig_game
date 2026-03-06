@@ -9,7 +9,8 @@ const global = @import("global");
 const MemoryPool = @import("memoryPool").MemoryPoolSlice;
 const tracy = @import("tracy");
 const objectPool = @import("objectPool").ObjectPool;
-const Handle = @import("handle").Handle;
+const Handles = @import("handle");
+const Handle = Handles.Handle;
 const processRender = @import("processRender");
 const OneTimeCommand = processRender.oneTimeCommand;
 const hash = std.hash;
@@ -294,9 +295,7 @@ fn acquireDescriptorSetIndex(self: *Self, ID: u32) !u32 {
 }
 
 pub fn getDescriptorSetIndex(self: *Self, texture: Texture_t) !u32 {
-    const temp = self.getTextureCotent(texture);
-    const ID = temp.ID;
-    self.releaseTextureContent(temp);
+    const ID = self.getTextureCotent(texture).ID;
 
     mutex.lock();
     defer mutex.unlock();
@@ -325,25 +324,12 @@ pub fn getTexture(self: *Self, textureID: u32) ?Texture_t {
     return null;
 }
 
-fn getTextureCotent(self: *Self, texture: Texture_t) *Texture {
+fn getTextureCotent(self: *Self, texture: Texture_t) Texture {
     mutex.lock();
-    // unlock in releaseTextureContent
+    defer mutex.unlock();
 
-    const index: u32 = ix: {
-        const ptr: *u32 = @ptrCast(@alignCast(texture));
-
-        break :ix ptr.*;
-    };
-
-    self.tempTextureRecord = &self.array.items[index];
-
-    return self.tempTextureRecord;
-}
-
-pub fn releaseTextureContent(self: *Self, texture: *Texture) void {
-    if (self.tempTextureRecord == texture) {
-        mutex.unlock();
-    }
+    const index: u32 = Handles.getIndex(texture);
+    return self.array.items[index];
 }
 
 pub fn offsetsAdd(self: *Self, texture: Texture_t, offset: u32) !void {
@@ -376,41 +362,72 @@ pub fn offsetsAdd(self: *Self, texture: Texture_t, offset: u32) !void {
 }
 
 pub fn changeTextureLayout(self: *Self, texture: Texture_t, baseLayer: u32, layerCount: u32, layout: vk.VkImageLayout) void {
-    const tex = self.getTextureCotent(texture);
-    defer self.releaseTextureContent(tex);
+    mutex.lock();
+    defer mutex.unlock();
+
+    const index = Handles.getIndex(texture);
+    const tex = &self.array.items[index];
 
     tex.changeTextureLayout(baseLayer, layerCount, layout);
 }
+
 pub fn getCurrentLayouts(self: *Self, texture: Texture_t) []vk.VkImageLayout {
     const tex = self.getTextureCotent(texture);
-    defer self.releaseTextureContent(tex);
 
     return tex.layouts;
 }
 pub fn changeTextureQueue(self: *Self, texture: Texture_t, queueType: VkStruct.CommandPoolType) void {
-    const tex = self.getTextureCotent(texture);
-    defer self.releaseTextureContent(tex);
+    mutex.lock();
+    defer mutex.unlock();
+
+    const index = Handles.getIndex(texture);
+    const tex = &self.array.items[index];
 
     tex.changeTextureQueue(queueType);
 }
 
 pub fn getVkImage(self: *Self, texture: Texture_t) vk.VkImage {
     const tex = self.getTextureCotent(texture);
-    defer self.releaseTextureContent(tex);
 
     return tex.image.vkImage;
 }
 
 pub fn getVkImageView(self: *Self, texture: Texture_t) vk.VkImageView {
     const tex = self.getTextureCotent(texture);
-    defer self.releaseTextureContent(tex);
 
     return tex.imageView;
 }
 
 pub fn getImageQueueType(self: *Self, texture: Texture_t) VkStruct.CommandPoolType {
     const tex = self.getTextureCotent(texture);
-    defer self.releaseTextureContent(tex);
 
     return tex.image.queueIndex;
+}
+
+pub fn updateTexture(self: *Self, args: anytype, texture: Texture_t) void {
+    const zone = tracy.initZone(@src(), .{ .name = "update texture" });
+    defer zone.deinit();
+
+    const args_type = @TypeOf(args);
+    const args_info = @typeInfo(args_type);
+
+    // std.log.debug("{s}", .{@typeName(args_type)});
+
+    if (args_info != .@"struct") {
+        @compileError("argument must be a struct");
+    }
+
+    mutex.lock();
+    defer mutex.unlock();
+
+    const index = Handles.getIndex(texture);
+    const temp = &self.array.items[index];
+
+    inline for (args_info.@"struct".fields) |field| {
+        if (!@hasField(Texture, field.name)) {
+            @compileError("struct has no field named '" ++ field.name ++ "'");
+        }
+
+        @field(temp, field.name) = @field(args, field.name);
+    }
 }
