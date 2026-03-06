@@ -9,7 +9,6 @@ pub const CommandType = enum {
     draw2D,
     transLayout,
     changeBufferQueue,
-    changeTextureQueue,
     pipelineBarrier,
     copyBufferToImage,
     copyBuffer,
@@ -29,7 +28,6 @@ const privateEnum = [_]CommandType{
     .start,
     .transLayout,
     .changeBufferQueue,
-    .changeTextureQueue,
     .bindVertexBuffer,
     .beginPrimaryRecord,
     .beginRendering,
@@ -116,6 +114,9 @@ const TransLayout = struct {
     newLayout: vk.VkImageLayout,
     baseLayer: u32,
     layerCount: u32,
+
+    srcQueueFamily: VkStruct.CommandPoolType = .init,
+    dstQueueFamily: VkStruct.CommandPoolType = .init,
 
     // srcAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_NONE,
     // dstAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_NONE,
@@ -263,19 +264,12 @@ const ChangeBufferQueue = struct {
     regions: []SizeOffset,
 };
 
-const ChangeTextureQueue = struct {
-    texture: texture.Texture_t,
-    srcQueueFamily: VkStruct.CommandPoolType,
-    dstQueueFamily: VkStruct.CommandPoolType,
-};
-
 pub const comm = union {
     start: Start,
     draw2d: Draw2D,
     copyBuffer: CopyBuffer,
     transLayout: TransLayout,
     changeBufferQueue: ChangeBufferQueue,
-    changeTextureQueue: ChangeTextureQueue,
     bindVertexBuffer: BindVertexBuffer,
     copyBufferToImage: CopyBufferToImage,
     beginRecoed: BeginSecondaryRecord,
