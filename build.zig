@@ -436,6 +436,46 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(exe);
 
     // run task
+    const preKillContentManagerProcessCmd = b.addSystemCommand(if (builtin.target.os.tag == .windows) &.{
+        "cmd",
+        "/c",
+        "taskkill",
+        "/F",
+        "/IM",
+        "ContentManager.exe",
+        "2>nul",
+        "||",
+        "exit",
+        "/b",
+        "0",
+    } else unreachable);
+    const preKillPipelineParseProcessCmd = b.addSystemCommand(if (builtin.target.os.tag == .windows) &.{
+        "cmd",
+        "/c",
+        "taskkill",
+        "/F",
+        "/IM",
+        "pipelineJsonParse.exe",
+        "2>nul",
+        "||",
+        "exit",
+        "/b",
+        "0",
+    } else unreachable);
+    const preKillGameProcessCmd = b.addSystemCommand(if (builtin.target.os.tag == .windows) &.{
+        "cmd",
+        "/c",
+        "taskkill",
+        "/F",
+        "/IM",
+        "game.exe",
+        "2>nul",
+        "||",
+        "exit",
+        "/b",
+        "0",
+    } else unreachable);
+
     const root_path = b.build_root.path orelse "";
 
     // const compile_txt_generate = b.step("generate compile txt", "produce txt");
@@ -515,6 +555,9 @@ pub fn build(b: *std.Build) void {
     const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
 
     // run task dependency
+    shader_compile.dependOn(&preKillContentManagerProcessCmd.step);
+    shader_compile.dependOn(&preKillPipelineParseProcessCmd.step);
+    shader_compile.dependOn(&preKillGameProcessCmd.step);
     shader_compile.dependOn(&script_cmd.step);
     script_cmd.step.dependOn(&compile_txt_shaders_cmd.step);
 
