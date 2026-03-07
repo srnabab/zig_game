@@ -109,7 +109,7 @@ pub fn main() !void {
     var renderingInfo = rendering.init(allocator_t.*, &handles);
     defer renderingInfo.deinit();
 
-    var graphic = OneTimeCommand.init(allocator_t.*, sma, &vulkan);
+    var graphic = OneTimeCommand.init(allocator_t.*, sma, &vulkan, &renderingInfo);
     defer graphic.deinit();
 
     var textureSett = textureSet.init(allocator_t.*, &handles);
@@ -178,6 +178,7 @@ pub fn main() !void {
         },
     };
 
+    var texture_test_array = [_]textureSet.Texture_t{texture_test};
     const rendering_test = try renderingInfo.createRenderingInfo(
         0,
         vk.VkRect2D{
@@ -187,25 +188,27 @@ pub fn main() !void {
             },
             .offset = .{ .x = 0, .y = 0 },
         },
+
         1,
         0,
+        &texture_test_array,
         &colorAttachment,
         null,
         null,
     );
-    // _ = rendering_test;
+    _ = rendering_test;
 
     const renderStart = std.time.milliTimestamp();
     while (true) {
         try graphic.startCommand();
-        try graphic.addCommand(.draw2D, .{ .draw2d = .{
-            .pipeline = vulkan.getPipeline("flat2d").?,
-            .pTexture = textureSett.getTexture(@intCast(file.getID("circle.png"))).?,
-            .rendering = rendering_test,
-            .vertexBuffer = vertices.vertexBuffer2D,
-            .indexBuffer = vertices.indexBuffer2D,
-            .pTextureSet = &textureSett,
-        } });
+        // try graphic.addCommand(.draw2D, .{ .draw2d = .{
+        //     .pipeline = vulkan.getPipeline("flat2d").?,
+        //     .pTexture = textureSett.getTexture(@intCast(file.getID("circle.png"))).?,
+        //     .rendering = rendering_test,
+        //     .vertexBuffer = vertices.vertexBuffer2D,
+        //     .indexBuffer = vertices.indexBuffer2D,
+        //     .pTextureSet = &textureSett,
+        // } });
         try graphic.addCommandEnd();
         try graphic.executeCommands();
         vulkan.nextFrame();

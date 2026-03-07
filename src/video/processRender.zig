@@ -11,9 +11,14 @@ const global = @import("global");
 const tracy = @import("tracy");
 const math = @import("math");
 const uniqueArrayList = @import("uniqueArrayList").UniqueArrayList;
-// const objectPool
+const rendering = @import("rendering");
 
 var mutex = Thread.Mutex{};
+
+const twoQueueNode = struct {
+    a: ?*QueueNode = null,
+    b: ?*QueueNode = null,
+};
 
 pub const Drawable = struct {
     draw: bool,
@@ -687,6 +692,7 @@ pub const oneTimeCommand = struct {
     // const EnqueueTaskCallback = *const fn (taskCallback: TaskCallback, taskCtx: *anyopaque, userCtx: *anyopaque) *anyopaque;
     // const FinishTaskCallback = *const fn (userTask: *anyopaque, userCtx: *anyopaque) void;
     vulkan: *VkStruct,
+    pRendering: *rendering,
 
     innerID: u32 = 0,
     innerCommandBufferID: u32 = 0,
@@ -708,7 +714,7 @@ pub const oneTimeCommand = struct {
 
     // commandPools: std.array_list.Managed(vk.VkCommandPool),
 
-    pub fn init(allocator: std.mem.Allocator, stackAllocator: std.mem.Allocator, vulkan: *VkStruct) Self {
+    pub fn init(allocator: std.mem.Allocator, stackAllocator: std.mem.Allocator, vulkan: *VkStruct, pRendering: *rendering) Self {
         std.log.info("command size: {d}", .{@sizeOf(drawC.comm)});
         std.log.info("vk struct Buffer size: {d}", .{@sizeOf(VkStruct.Buffer_t)});
         return Self{
@@ -722,6 +728,7 @@ pub const oneTimeCommand = struct {
             .combineMap = .init(allocator),
             .cacheMap = .init(allocator),
             .vulkan = vulkan,
+            .pRendering = pRendering,
         };
     }
 
@@ -1041,14 +1048,14 @@ pub const oneTimeCommand = struct {
                 //         destinationStage = vk.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
                 //         dstAccessMask = vk.VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
                 //     },
-                //     else => std.debug.panic("unsupported image usage {s}", .{@typeName(@TypeOf(imageUsage))}),
+                //     else => std.debug.panic("unsupported image usage {s}", .{@tagName(imageUsage))}),
                 // }
-                std.debug.panic("unsupported dst queue {s}", .{@typeName(@TypeOf(dstQueue))});
+                std.debug.panic("unsupported dst queue {s}", .{@tagName(dstQueue)});
             } else {
-                std.debug.panic("unsupported dst queue {s}", .{@typeName(@TypeOf(dstQueue))});
+                std.debug.panic("unsupported dst queue {s}", .{@tagName(dstQueue)});
             }
         } else {
-            std.debug.panic("unsupported src queue {s}", .{@typeName(@TypeOf(srcQueue))});
+            std.debug.panic("unsupported src queue {s}", .{@tagName(srcQueue)});
         }
 
         return .{
@@ -1076,14 +1083,15 @@ pub const oneTimeCommand = struct {
         };
     }
 
-    fn addCommand2(self: *Self, commandType: drawC.PrivateCommandType, command: drawC.comm, enterCommandType: drawC.PublicCommandType) !*QueueNode {
+    fn addCommand2(self: *Self, commandType: drawC.PrivateCommandType, command: drawC.comm, enterCommandType: drawC.PublicCommandType) !twoQueueNode {
         const zone = tracy.initZone(@src(), .{ .name = "add command 2" });
         defer zone.deinit();
 
         // const allCommandType = drawC.PrivateCommandTypeToCommandType(commandType);
         var commandCopy = command;
 
-        var resNode: *QueueNode = undefined;
+        var resNode: ?*QueueNode = null;
+        var resNode2: ?*QueueNode = null;
 
         switch (commandType) {
             .transLayout => {
@@ -1225,10 +1233,8 @@ pub const oneTimeCommand = struct {
                         barrier.* = acquire_barrier;
                     }
 
-                    try releaseNode.childrenAppend(&acquireNode.ID);
-                    try acquireNode.parentsAppend(&releaseNode.ID);
-
                     resNode = releaseNode;
+                    resNode2 = acquireNode;
                 } else {
                     var flags = inferTransLayoutFlagsByOldLayoutAndNewLayout(&commandCopy);
 
@@ -1448,6 +1454,7 @@ pub const oneTimeCommand = struct {
                 try acquireNode.parentsAppend(&releaseNode.ID);
 
                 resNode = releaseNode;
+                resNode2 = acquireNode;
 
                 // if (prev) |n| {
                 //     resNode = releaseNode;
@@ -1489,7 +1496,10 @@ pub const oneTimeCommand = struct {
         //     }
         // };
 
-        return resNode;
+        return .{
+            .a = resNode,
+            .b = resNode2,
+        };
     }
 
     fn transLayoutHelper(
@@ -1501,7 +1511,7 @@ pub const oneTimeCommand = struct {
         newLayout: vk.VkImageLayout,
         newQueue: VkStruct.CommandPoolType,
         commandType: drawC.PublicCommandType,
-    ) !?*QueueNode {
+    ) !twoQueueNode {
         const textureContent = textureSet.getTextureCotent(texture_);
         const oldLayouts = textureContent.layouts;
         const oldQueue = textureContent.image.queueIndex;
@@ -1510,7 +1520,8 @@ pub const oneTimeCommand = struct {
         var currentLayout = oldLayouts[0];
         var currentBase = baseArrayLayer;
         var count: u32 = 0;
-        var transNode: ?*QueueNode = null;
+        var transNode: twoQueueNode = .{};
+
         for (oldLayouts) |layout| {
             if (currentLayout == newLayout) {
                 currentLayout = layout;
@@ -1555,6 +1566,78 @@ pub const oneTimeCommand = struct {
         return transNode;
     }
 
+    fn nodeConnect(self: *Self, nodes: []twoQueueNode) !twoQueueNode {
+        const newNodesA = self.stackAllocator.alloc(?*QueueNode, nodes.len) catch unreachable;
+        defer self.stackAllocator.free(newNodesA);
+
+        const newNodesB = self.stackAllocator.alloc(?*QueueNode, nodes.len) catch unreachable;
+        defer self.stackAllocator.free(newNodesB);
+
+        for (newNodesA, newNodesB) |*a, *b| {
+            a.* = null;
+            b.* = null;
+        }
+
+        for (nodes) |node| {
+            for (newNodesA) |*value| {
+                if (value.* == null) {
+                    value.* = node.a;
+                    break;
+                }
+                if (value.* == node.a) {
+                    break;
+                }
+            }
+
+            for (newNodesB) |*value| {
+                if (value.* == null) {
+                    value.* = node.b;
+                    break;
+                }
+                if (value.* == node.b) {
+                    break;
+                }
+            }
+        }
+
+        var lastA: ?*QueueNode = null;
+        var midA: ?*QueueNode = null;
+        var lastB: ?*QueueNode = null;
+        var midB: ?*QueueNode = null;
+        for (newNodesA, newNodesB) |a, b| {
+            if (a) |aa| {
+                if (lastA == null) {
+                    lastA = aa;
+                    midA = aa;
+                } else {
+                    try aa.childrenAppend(&lastA.?.ID);
+                    try lastA.?.parentsAppend(&aa.ID);
+
+                    lastA = aa;
+                }
+            }
+
+            if (b) |bb| {
+                if (lastB == null) {
+                    lastB = bb;
+                    midB = bb;
+                    try midA.?.childrenAppend(&midB.?.ID);
+                    try midB.?.parentsAppend(&midA.?.ID);
+                } else {
+                    try bb.parentsAppend(&lastB.?.ID);
+                    try lastB.?.childrenAppend(&bb.ID);
+
+                    lastB = bb;
+                }
+            }
+        }
+
+        // try midA.?.childrenAppend(&midB.?.ID);
+        // try midB.?.parentsAppend(&midA.?.ID);
+
+        return .{ .a = lastA, .b = if (lastB == null) midA else lastB };
+    }
+
     pub fn addCommand(self: *Self, commandType: drawC.PublicCommandType, command: drawC.comm) !void {
         const zone = tracy.initZone(@src(), .{ .name = "add command" });
         defer zone.deinit();
@@ -1591,17 +1674,101 @@ pub const oneTimeCommand = struct {
                 node.data.commandPoolType = .graphic;
 
                 const draw2D = ptr.value_ptr.command.draw2d;
-                const textureSet = draw2D.pTextureSet;
-                const drawImageQueueType = textureSet.getVkImageView(draw2D.pTexture);
-                _ = drawImageQueueType;
+                const pTextureSet = draw2D.pTextureSet;
+
+                const imageQueueNode = try self.transLayoutHelper(
+                    pTextureSet,
+                    draw2D.pTexture,
+                    0,
+                    1,
+                    vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                    .graphic,
+                    commandType,
+                );
+                _ = imageQueueNode;
+
+                if (!self.pRendering.renderingStarted(draw2D.rendering)) {
+                    const renderingInfo = self.pRendering.getRenderingInfoContent(draw2D.rendering);
+                    const renderingColorTextureLen = bl: {
+                        var count: u32 = 0;
+                        if (renderingInfo.depthAttachment != null) {
+                            count += 1;
+                        }
+                        if (renderingInfo.stencilAttachment != null) {
+                            count += 1;
+                        }
+                        break :bl renderingInfo.textures.len - count;
+                    };
+
+                    var renderingImageQueueNodes = try self.stackAllocator.alloc(twoQueueNode, renderingInfo.textures.len);
+                    defer self.stackAllocator.free(renderingImageQueueNodes);
+                    if (renderingInfo.pColorAttachments) |v| {
+                        for (renderingInfo.textures[0..renderingColorTextureLen], v, 0..) |value, attachment, i| {
+                            renderingImageQueueNodes[i] = try self.transLayoutHelper(
+                                pTextureSet,
+                                value,
+                                0,
+                                1,
+                                attachment.imageLayout,
+                                .graphic,
+                                commandType,
+                            );
+                        }
+                    }
+
+                    var depthImageQueueNode: twoQueueNode = .{};
+                    if (renderingInfo.depthAttachment) |v| {
+                        depthImageQueueNode = try self.transLayoutHelper(
+                            pTextureSet,
+                            renderingInfo.textures[renderingColorTextureLen],
+                            0,
+                            1,
+                            v[0].imageLayout,
+                            .graphic,
+                            commandType,
+                        );
+                    }
+
+                    var stencilImageQueueNode: twoQueueNode = .{};
+                    if (renderingInfo.stencilAttachment) |v| {
+                        stencilImageQueueNode = try self.transLayoutHelper(
+                            pTextureSet,
+                            renderingInfo.textures[renderingColorTextureLen + 1],
+                            0,
+                            1,
+                            v[0].imageLayout,
+                            .graphic,
+                            commandType,
+                        );
+                    }
+                }
+
+                // const oldSrcQueueType = self.vulkan.buffers.getBufferQueueType(copyBuffer.srcBuffer);
+                // if (oldSrcQueueType != .transfer) {
+                //     if (oldSrcQueueType != .init) {
+                //         const regions = self.stackAllocator.alloc(drawC.SizeOffset, tempRegions.len) catch unreachable;
+                //         defer self.stackAllocator.free(regions);
+                //         for (tempRegions, regions) |region, *sizeOffset| {
+                //             sizeOffset.offset = region.srcOffset;
+                //             sizeOffset.size = region.size;
+                //         }
+                //         srcBufferNode = try self.addCommand2(.changeBufferQueue, .{ .changeBufferQueue = .{
+                //             .buffer = copyBuffer.srcBuffer,
+                //             .srcQueueFamily = oldSrcQueueType,
+                //             .dstQueueFamily = .transfer,
+                //             .regions = regions,
+                //         } }, commandType);
+                //     }
+                //     self.vulkan.buffers.changeQueueType(ptr.value_ptr.command.copyBuffer.srcBuffer, .transfer);
+                // }
             },
             .copyBuffer => {
                 node.data.commandPoolType = .transfer;
 
                 const copyBuffer = ptr.value_ptr.command.copyBuffer;
                 const tempRegions = copyBuffer.regions;
-                var srcBufferNode: *QueueNode = undefined;
-                var dstBufferNode: *QueueNode = undefined;
+                var srcBufferNode: twoQueueNode = .{};
+                var dstBufferNode: twoQueueNode = .{};
 
                 const oldSrcQueueType = self.vulkan.buffers.getBufferQueueType(copyBuffer.srcBuffer);
                 if (oldSrcQueueType != .transfer) {
@@ -1642,6 +1809,16 @@ pub const oneTimeCommand = struct {
                     self.vulkan.buffers.changeQueueType(ptr.value_ptr.command.copyBuffer.dstBuffer, .transfer);
                 }
 
+                var nodes = [_]twoQueueNode{ srcBufferNode, dstBufferNode };
+                const res = try self.nodeConnect(&nodes);
+
+                if (res.a) |aa| {
+                    try res.b.?.childrenAppend(&currentNode.ID);
+                    try currentNode.parentsAppend(&res.b.?.ID);
+
+                    currentNode = aa;
+                }
+
                 ptr.value_ptr.*.command.copyBuffer.regions = try self.allocator.dupe(vk.VkBufferCopy2, tempRegions);
 
                 try self.cacheMap.put(@ptrCast(copyBuffer.dstBuffer), ID);
@@ -1654,7 +1831,7 @@ pub const oneTimeCommand = struct {
 
                 const copyBufferToImage = ptr.value_ptr.command.copyBufferToImage;
 
-                const imageQueueNode: ?*QueueNode = try self.transLayoutHelper(
+                const imageQueueNode = try self.transLayoutHelper(
                     textureSet,
                     copyBufferToImage.pTexture,
                     copyBufferToImage.baseArrayLayer,
@@ -1663,28 +1840,9 @@ pub const oneTimeCommand = struct {
                     .transfer,
                     commandType,
                 );
-                // const imageQueuType = textureSet.getImageQueueType(copyBufferToImage.pTexture);
-                // if (imageQueuType != .transfer) {
-                //     if (imageQueuType != .init) {
-                //         imageQueueNode = try self.addCommand2(
-                //             .transLayout,
-                //             .{ .transLayout = .{
-                //                 .image = textureSet.getVkImage(copyBufferToImage.pTexture),
-                //                 .oldLayout = oldLayouts[0],
-                //                 .newLayout = oldLayouts[0],
-                //                 .baseLayer = copyBufferToImage.baseArrayLayer,
-                //                 .layerCount = copyBufferToImage.layerCount,
-                //                 .srcQueueFamily = imageQueuType,
-                //                 .dstQueueFamily = .transfer,
-                //             } },
-                //             commandType,
-                //         );
-                //     }
-                //     textureSet.changeTextureQueue(copyBufferToImage.pTexture, .transfer);
-                // }
 
                 const bufferQueuqType = self.vulkan.buffers.getBufferQueueType(copyBufferToImage.buffer);
-                var bufferQueueNode: ?*QueueNode = null;
+                var bufferQueueNode: twoQueueNode = .{};
                 if (bufferQueuqType != .transfer) {
                     if (bufferQueuqType != .init) {
                         var region = [1]drawC.SizeOffset{.{
@@ -1702,60 +1860,19 @@ pub const oneTimeCommand = struct {
                     self.vulkan.buffers.changeQueueType(copyBufferToImage.buffer, .transfer);
                 }
 
-                // var currentLayout = oldLayouts[0];
-                // var currentBase = copyBufferToImage.baseArrayLayer;
-                // var count: u32 = 0;
-                // var transNode: ?*QueueNode = null;
-                // for (oldLayouts) |layout| {
-                //     if (currentLayout == vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
-                //         currentLayout = layout;
-                //         currentBase += 1;
-                //         continue;
-                //     }
+                var nodes = [_]twoQueueNode{ imageQueueNode, bufferQueueNode };
 
-                //     if (layout == currentLayout) {
-                //         count += 1;
-                //     } else {
-                //         transNode = try self.addCommand2(.transLayout, .{ .transLayout = .{
-                //             .image = copyBufferToImage.dstImage,
-                //             .oldLayout = currentLayout,
-                //             .newLayout = vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                //             .baseLayer = currentBase,
-                //             .layerCount = count,
-                //         } }, commandType);
-
-                //         currentLayout = layout;
-                //         currentBase += count;
-                //         if (currentLayout != vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
-                //             count = 1;
-                //         }
-                //     }
-                // }
-                // if (count > 0) {
-                //     transNode = try self.addCommand2(.transLayout, .{ .transLayout = .{
-                //         .image = copyBufferToImage.dstImage,
-                //         .oldLayout = currentLayout,
-                //         .newLayout = vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                //         .baseLayer = currentBase,
-                //         .layerCount = count,
-                //     } }, commandType);
-                // }
-                // textureSet.changeTextureLayout(copyBufferToImage.pTexture, copyBufferToImage.baseArrayLayer, copyBufferToImage.layerCount, vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-                // textureSet.changeTextureQueue(copyBufferToImage.pTexture, .transfer);
-
-                if (imageQueueNode) |node_| {
-                    try node_.childrenAppend(&currentNode.ID);
-                    try currentNode.parentsAppend(&node_.ID);
-
-                    currentNode = node_;
-                }
-                if (bufferQueueNode) |node_| {
-                    if (bufferQueueNode != currentNode) {
-                        try node_.childrenAppend(&currentNode.ID);
-                        try currentNode.parentsAppend(&node_.ID);
-
-                        currentNode = node_;
+                const res = try self.nodeConnect(&nodes);
+                if (res.a) |aa| {
+                    if (res.b) |bb| {
+                        try bb.childrenAppend(&currentNode.ID);
+                        try currentNode.parentsAppend(&bb.ID);
+                    } else {
+                        try aa.childrenAppend(&currentNode.ID);
+                        try currentNode.parentsAppend(&aa.ID);
                     }
+
+                    currentNode = aa;
                 }
 
                 try self.cacheMap.put(@ptrCast(copyBufferToImage.dstImage), ID);
@@ -1873,31 +1990,6 @@ pub const oneTimeCommand = struct {
                 );
             },
             .start => {},
-            // .transLayout => {
-            // const innerZone = tracy.initZone(@src(), .{ .name = "trans layout" });
-            // defer innerZone.deinit();
-
-            // const transLayout = command.command.transLayout;
-            // var imageMemoryBarrier = vk.VkImageMemoryBarrier{
-            //     .sType = vk.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-            //     .pNext = null,
-            //     .srcAccessMask = transLayout.srcAccessMask,
-            //     .dstAccessMask = transLayout.dstAccessMask,
-            //     .oldLayout = transLayout.oldLayout,
-            //     .newLayout = transLayout.newLayout,
-            //     .srcQueueFamilyIndex = vk.VK_QUEUE_FAMILY_IGNORED,
-            //     .dstQueueFamilyIndex = vk.VK_QUEUE_FAMILY_IGNORED,
-            //     .image = transLayout.pTexture.image.vkImage,
-            //     .subresourceRange = .{
-            //         .aspectMask = transLayout.aspectMask,
-            //         .baseMipLevel = transLayout.baseMipLevel,
-            //         .levelCount = transLayout.levelCount,
-            //         .baseArrayLayer = transLayout.baseLayer,
-            //         .layerCount = transLayout.layerCount,
-            //     },
-            // };
-            // vk.vkCmdPipelineBarrier(commandBuffer, transLayout.sourceStage, transLayout.destinationStage, 0, 0, null, 0, null, 1, &imageMemoryBarrier);
-            // },
             .pipelineBarrier => {
                 const innerZone = tracy.initZone(@src(), .{ .name = "pipeline barrier" });
                 defer innerZone.deinit();
@@ -2066,11 +2158,11 @@ pub const oneTimeCommand = struct {
                         comm.node.data.commandBufferID = cbb.commandBufferID;
                     }
 
-                    const rendering = com.command.beginRecoed.rendering;
+                    const renderinged = com.command.beginRecoed.rendering;
                     var flags = vk.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-                    if (rendering) flags |= vk.VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
+                    if (renderinged) flags |= vk.VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
 
-                    var InRenderingInfo = if (rendering) vk.VkCommandBufferInheritanceRenderingInfo{
+                    var InRenderingInfo = if (renderinged) vk.VkCommandBufferInheritanceRenderingInfo{
                         .sType = vk.VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_RENDERING_INFO,
                         .flags = com.command.beginRecoed.flags,
                         .pNext = null,
@@ -2083,13 +2175,13 @@ pub const oneTimeCommand = struct {
                     } else null;
                     var InInfo = vk.VkCommandBufferInheritanceInfo{
                         .sType = vk.VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO,
-                        .pNext = if (rendering) @ptrCast(&InRenderingInfo) else null,
+                        .pNext = if (renderinged) @ptrCast(&InRenderingInfo) else null,
                         .renderPass = null,
                         .framebuffer = null,
                         .subpass = 0,
-                        .occlusionQueryEnable = if (rendering) com.command.beginRecoed.occulusionQueryEnable else vk.VK_FALSE,
-                        .queryFlags = if (rendering) com.command.beginRecoed.queryFlags else vk.VK_FALSE,
-                        .pipelineStatistics = if (rendering) com.command.beginRecoed.pipelineStatistics else vk.VK_FALSE,
+                        .occlusionQueryEnable = if (renderinged) com.command.beginRecoed.occulusionQueryEnable else vk.VK_FALSE,
+                        .queryFlags = if (renderinged) com.command.beginRecoed.queryFlags else vk.VK_FALSE,
+                        .pipelineStatistics = if (renderinged) com.command.beginRecoed.pipelineStatistics else vk.VK_FALSE,
                     };
                     try VkStruct._beginCommandBuffer(commandBuffer, null, @intCast(flags), &InInfo);
                     continue;

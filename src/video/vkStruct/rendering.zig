@@ -3,7 +3,9 @@ const std = @import("std");
 const global = @import("global");
 
 const vk = @import("vulkan").vulkan;
-const Handle = @import("handle").Handle;
+const textureSet = @import("textureSet");
+const Handles = @import("handle");
+const Handle = Handles.Handle;
 const getIndex = @import("handle").getIndex;
 
 const assert = std.debug.assert;
@@ -15,6 +17,7 @@ const RenderingInfo = struct {
     renderArea: vk.VkRect2D,
     layerCount: u32,
     viewMask: u32,
+    textures: []textureSet.Texture_t,
     pColorAttachments: ?[]vk.VkRenderingAttachmentInfo,
     depthAttachment: ?[]vk.VkRenderingAttachmentInfo,
     stencilAttachment: ?[]vk.VkRenderingAttachmentInfo,
@@ -41,6 +44,8 @@ pub fn deinit(self: *Self) void {
     for (0..self.array.items.len) |i| {
         if (self.array.items[i].pColorAttachments != null or self.array.items[i].depthAttachment != null or self.array.items[i].stencilAttachment != null)
             self.allocator.free(self.constructSlice(@intCast(i)));
+
+        self.allocator.free(self.array.items[i].textures);
     }
     self.array.deinit();
 }
@@ -51,6 +56,7 @@ pub fn createRenderingInfo(
     renderArea: vk.VkRect2D,
     layerCount: u32,
     viewMask: u32,
+    textures: []textureSet.Texture_t,
     pColorAttachments: ?[]vk.VkRenderingAttachmentInfo,
     depthAttachment: ?[]vk.VkRenderingAttachmentInfo,
     stencilAttachment: ?[]vk.VkRenderingAttachmentInfo,
@@ -59,21 +65,7 @@ pub fn createRenderingInfo(
 
     const index = self.array.items.len - 1;
 
-    const count = blk: {
-        var s: u32 = 0;
-        if (pColorAttachments) |v| s += @intCast(v.len);
-
-        if (depthAttachment) |v| {
-            assert(v.len == 1);
-            s += 1;
-        }
-
-        if (stencilAttachment) |v| {
-            assert(v.len == 1);
-            s += 1;
-        }
-        break :blk s;
-    };
+    const count = textures.len;
 
     var attachments = try self.allocator.alloc(vk.VkRenderingAttachmentInfo, count);
     errdefer self.allocator.free(attachments);
@@ -100,6 +92,7 @@ pub fn createRenderingInfo(
         .renderArea = renderArea,
         .layerCount = layerCount,
         .viewMask = viewMask,
+        .textures = try self.allocator.dupe(textureSet.Texture_t, textures),
         .pColorAttachments = if (pColorAttachments) |v| attachments[0..v.len] else null,
         .depthAttachment = if (depthAttachment) |_| attachments[depth..(depth + 1)] else null,
         .stencilAttachment = if (stencilAttachment) |_| attachments[stencil..(stencil + 1)] else null,
@@ -114,6 +107,7 @@ pub fn destroyRenderingInfo(self: *Self, renderingInfo: RenderingInfo_t) void {
 
     const slice = self.constructSlice(index);
     self.allocator.free(slice);
+    self.allocator.free(self.array.items[index].textures);
 
     self.array.items[index].pColorAttachments = null;
     self.array.items[index].depthAttachment = null;
@@ -149,4 +143,16 @@ fn constructSlice(self: *Self, index: u32) []const vk.VkRenderingAttachmentInfo 
     };
 
     return slice;
+}
+
+pub fn getRenderingInfoContent(self: Self, renderingInfo: RenderingInfo_t) RenderingInfo {
+    const index = Handles.getIndex(renderingInfo);
+
+    return self.array.items[index];
+}
+
+pub fn renderingStarted(self: *Self, renderingInfo: RenderingInfo_t) bool {
+    const index = Handles.getIndex(renderingInfo);
+
+    return self.array.items[index].start;
 }
