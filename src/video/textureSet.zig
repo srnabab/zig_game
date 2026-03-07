@@ -324,7 +324,7 @@ pub fn getTexture(self: *Self, textureID: u32) ?Texture_t {
     return null;
 }
 
-fn getTextureCotent(self: *Self, texture: Texture_t) Texture {
+pub fn getTextureCotent(self: *Self, texture: Texture_t) Texture {
     mutex.lock();
     defer mutex.unlock();
 

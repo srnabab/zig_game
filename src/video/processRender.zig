@@ -991,10 +991,10 @@ pub const oneTimeCommand = struct {
                 srcAccessMask = vk.VK_ACCESS_TRANSFER_WRITE_BIT;
                 aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
             } else {
-                std.debug.panic("unsupported dst queue {s}", .{@typeName(@TypeOf(dstQueue))});
+                std.debug.panic("unsupported dst queue {s}", .{@tagName(dstQueue)});
             }
         } else {
-            std.debug.panic("unsupported src queue {s}", .{@typeName(@TypeOf(srcQueue))});
+            std.debug.panic("unsupported src queue {s}", .{@tagName(srcQueue)});
         }
 
         return .{
@@ -1092,7 +1092,7 @@ pub const oneTimeCommand = struct {
 
                 const transLayout = commandCopy.transLayout;
 
-                if (transLayout.srcQueueFamily != transLayout.dstQueueFamily) {
+                if (transLayout.srcQueueFamily != .init and transLayout.srcQueueFamily != transLayout.dstQueueFamily) {
                     const releaseFlags = inferReleasePipelineBarrierInfoByImageUsage(
                         enterCommandType,
                         transLayout.srcQueueFamily,
@@ -1492,6 +1492,69 @@ pub const oneTimeCommand = struct {
         return resNode;
     }
 
+    fn transLayoutHelper(
+        self: *Self,
+        textureSet: *texture,
+        texture_: texture.Texture_t,
+        baseArrayLayer: u32,
+        layerCount: u32,
+        newLayout: vk.VkImageLayout,
+        newQueue: VkStruct.CommandPoolType,
+        commandType: drawC.PublicCommandType,
+    ) !?*QueueNode {
+        const textureContent = textureSet.getTextureCotent(texture_);
+        const oldLayouts = textureContent.layouts;
+        const oldQueue = textureContent.image.queueIndex;
+        const dstImage = textureContent.image.vkImage;
+
+        var currentLayout = oldLayouts[0];
+        var currentBase = baseArrayLayer;
+        var count: u32 = 0;
+        var transNode: ?*QueueNode = null;
+        for (oldLayouts) |layout| {
+            if (currentLayout == newLayout) {
+                currentLayout = layout;
+                currentBase += 1;
+                continue;
+            }
+
+            if (layout == currentLayout) {
+                count += 1;
+            } else {
+                transNode = try self.addCommand2(.transLayout, .{ .transLayout = .{
+                    .image = dstImage,
+                    .oldLayout = currentLayout,
+                    .newLayout = newLayout,
+                    .baseLayer = currentBase,
+                    .layerCount = count,
+                    .srcQueueFamily = oldQueue,
+                    .dstQueueFamily = newQueue,
+                } }, commandType);
+
+                currentLayout = layout;
+                currentBase += count;
+                if (currentLayout != newLayout) {
+                    count = 1;
+                }
+            }
+        }
+        if (count > 0) {
+            transNode = try self.addCommand2(.transLayout, .{ .transLayout = .{
+                .image = dstImage,
+                .oldLayout = currentLayout,
+                .newLayout = newLayout,
+                .baseLayer = currentBase,
+                .layerCount = count,
+                .srcQueueFamily = oldQueue,
+                .dstQueueFamily = newQueue,
+            } }, commandType);
+        }
+        textureSet.changeTextureLayout(texture_, baseArrayLayer, layerCount, newLayout);
+        textureSet.changeTextureQueue(texture_, newQueue);
+
+        return transNode;
+    }
+
     pub fn addCommand(self: *Self, commandType: drawC.PublicCommandType, command: drawC.comm) !void {
         const zone = tracy.initZone(@src(), .{ .name = "add command" });
         defer zone.deinit();
@@ -1528,7 +1591,9 @@ pub const oneTimeCommand = struct {
                 node.data.commandPoolType = .graphic;
 
                 const draw2D = ptr.value_ptr.command.draw2d;
-                _ = draw2D;
+                const textureSet = draw2D.pTextureSet;
+                const drawImageQueueType = textureSet.getVkImageView(draw2D.pTexture);
+                _ = drawImageQueueType;
             },
             .copyBuffer => {
                 node.data.commandPoolType = .transfer;
@@ -1588,28 +1653,35 @@ pub const oneTimeCommand = struct {
                 ptr.value_ptr.command.copyBufferToImage.dstImage = textureSet.getVkImage(ptr.value_ptr.command.copyBufferToImage.pTexture);
 
                 const copyBufferToImage = ptr.value_ptr.command.copyBufferToImage;
-                const oldLayouts = textureSet.getCurrentLayouts(copyBufferToImage.pTexture);
 
-                const imageQueuType = textureSet.getImageQueueType(copyBufferToImage.pTexture);
-                var imageQueueNode: ?*QueueNode = null;
-                if (imageQueuType != .transfer) {
-                    if (imageQueuType != .init) {
-                        imageQueueNode = try self.addCommand2(
-                            .transLayout,
-                            .{ .transLayout = .{
-                                .image = textureSet.getVkImage(copyBufferToImage.pTexture),
-                                .oldLayout = oldLayouts[0],
-                                .newLayout = oldLayouts[0],
-                                .baseLayer = copyBufferToImage.baseArrayLayer,
-                                .layerCount = copyBufferToImage.layerCount,
-                                .srcQueueFamily = imageQueuType,
-                                .dstQueueFamily = .transfer,
-                            } },
-                            commandType,
-                        );
-                    }
-                    textureSet.changeTextureQueue(copyBufferToImage.pTexture, .transfer);
-                }
+                const imageQueueNode: ?*QueueNode = try self.transLayoutHelper(
+                    textureSet,
+                    copyBufferToImage.pTexture,
+                    copyBufferToImage.baseArrayLayer,
+                    copyBufferToImage.layerCount,
+                    vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    .transfer,
+                    commandType,
+                );
+                // const imageQueuType = textureSet.getImageQueueType(copyBufferToImage.pTexture);
+                // if (imageQueuType != .transfer) {
+                //     if (imageQueuType != .init) {
+                //         imageQueueNode = try self.addCommand2(
+                //             .transLayout,
+                //             .{ .transLayout = .{
+                //                 .image = textureSet.getVkImage(copyBufferToImage.pTexture),
+                //                 .oldLayout = oldLayouts[0],
+                //                 .newLayout = oldLayouts[0],
+                //                 .baseLayer = copyBufferToImage.baseArrayLayer,
+                //                 .layerCount = copyBufferToImage.layerCount,
+                //                 .srcQueueFamily = imageQueuType,
+                //                 .dstQueueFamily = .transfer,
+                //             } },
+                //             commandType,
+                //         );
+                //     }
+                //     textureSet.changeTextureQueue(copyBufferToImage.pTexture, .transfer);
+                // }
 
                 const bufferQueuqType = self.vulkan.buffers.getBufferQueueType(copyBufferToImage.buffer);
                 var bufferQueueNode: ?*QueueNode = null;
@@ -1630,64 +1702,60 @@ pub const oneTimeCommand = struct {
                     self.vulkan.buffers.changeQueueType(copyBufferToImage.buffer, .transfer);
                 }
 
-                var currentLayout = oldLayouts[0];
-                var currentBase = copyBufferToImage.baseArrayLayer;
-                var count: u32 = 0;
-                var transNode: ?*QueueNode = null;
-                for (oldLayouts) |layout| {
-                    if (currentLayout == vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
-                        currentLayout = layout;
-                        currentBase += 1;
-                        continue;
-                    }
+                // var currentLayout = oldLayouts[0];
+                // var currentBase = copyBufferToImage.baseArrayLayer;
+                // var count: u32 = 0;
+                // var transNode: ?*QueueNode = null;
+                // for (oldLayouts) |layout| {
+                //     if (currentLayout == vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+                //         currentLayout = layout;
+                //         currentBase += 1;
+                //         continue;
+                //     }
 
-                    if (layout == currentLayout) {
-                        count += 1;
-                    } else {
-                        transNode = try self.addCommand2(.transLayout, .{ .transLayout = .{
-                            .image = copyBufferToImage.dstImage,
-                            .oldLayout = currentLayout,
-                            .newLayout = vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                            .baseLayer = currentBase,
-                            .layerCount = count,
-                        } }, commandType);
+                //     if (layout == currentLayout) {
+                //         count += 1;
+                //     } else {
+                //         transNode = try self.addCommand2(.transLayout, .{ .transLayout = .{
+                //             .image = copyBufferToImage.dstImage,
+                //             .oldLayout = currentLayout,
+                //             .newLayout = vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                //             .baseLayer = currentBase,
+                //             .layerCount = count,
+                //         } }, commandType);
 
-                        currentLayout = layout;
-                        currentBase += count;
-                        if (currentLayout != vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
-                            count = 1;
-                        }
-                    }
-                }
-                if (count > 0) {
-                    transNode = try self.addCommand2(.transLayout, .{ .transLayout = .{
-                        .image = copyBufferToImage.dstImage,
-                        .oldLayout = currentLayout,
-                        .newLayout = vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                        .baseLayer = currentBase,
-                        .layerCount = count,
-                    } }, commandType);
-                }
-                textureSet.changeTextureLayout(copyBufferToImage.pTexture, copyBufferToImage.baseArrayLayer, copyBufferToImage.layerCount, vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+                //         currentLayout = layout;
+                //         currentBase += count;
+                //         if (currentLayout != vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+                //             count = 1;
+                //         }
+                //     }
+                // }
+                // if (count > 0) {
+                //     transNode = try self.addCommand2(.transLayout, .{ .transLayout = .{
+                //         .image = copyBufferToImage.dstImage,
+                //         .oldLayout = currentLayout,
+                //         .newLayout = vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                //         .baseLayer = currentBase,
+                //         .layerCount = count,
+                //     } }, commandType);
+                // }
+                // textureSet.changeTextureLayout(copyBufferToImage.pTexture, copyBufferToImage.baseArrayLayer, copyBufferToImage.layerCount, vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
                 // textureSet.changeTextureQueue(copyBufferToImage.pTexture, .transfer);
 
-                if (transNode) |node_| {
+                if (imageQueueNode) |node_| {
                     try node_.childrenAppend(&currentNode.ID);
                     try currentNode.parentsAppend(&node_.ID);
 
                     currentNode = node_;
                 }
                 if (bufferQueueNode) |node_| {
-                    try node_.childrenAppend(&currentNode.ID);
-                    try currentNode.parentsAppend(&node_.ID);
+                    if (bufferQueueNode != currentNode) {
+                        try node_.childrenAppend(&currentNode.ID);
+                        try currentNode.parentsAppend(&node_.ID);
 
-                    currentNode = node_;
-                }
-                if (imageQueueNode) |node_| {
-                    try node_.childrenAppend(&currentNode.ID);
-                    try currentNode.parentsAppend(&node_.ID);
-
-                    currentNode = node_;
+                        currentNode = node_;
+                    }
                 }
 
                 try self.cacheMap.put(@ptrCast(copyBufferToImage.dstImage), ID);
@@ -1736,8 +1804,9 @@ pub const oneTimeCommand = struct {
                     try currentNode.parentsAppend(&root.ID);
                 }
             },
+            .draw2D => {},
             else => {
-                std.debug.panic("not supported", .{});
+                std.debug.panic("not supported command type {s}", .{@tagName(comm.commandType)});
             },
         }
         zone3.deinit();

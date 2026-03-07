@@ -238,6 +238,7 @@ const Draw2D = struct {
     vertexBuffer: VkStruct.Buffer_t,
     indexBuffer: VkStruct.Buffer_t,
     pTexture: texture.Texture_t,
+    pTextureSet: *texture,
 };
 
 const CopyBuffer = struct {
