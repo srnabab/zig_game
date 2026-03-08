@@ -1029,8 +1029,6 @@ pub const oneTimeCommand = struct {
         const zone = tracy.initZone(@src(), .{ .name = "infer acquire pipelin barrier info" });
         defer zone.deinit();
 
-        _ = commandType;
-        _ = layout;
         const srcAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_2_NONE;
         var dstAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_2_NONE;
         var aspectMask: vk.VkImageAspectFlags = vk.VK_IMAGE_ASPECT_COLOR_BIT;
@@ -1043,14 +1041,24 @@ pub const oneTimeCommand = struct {
         if (srcQueue == .transfer) {
             if (dstQueue == .graphic) {
                 aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
-                // switch (imageUsage) {
-                //     .color => {
-                //         destinationStage = vk.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-                //         dstAccessMask = vk.VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
-                //     },
-                //     else => std.debug.panic("unsupported image usage {s}", .{@tagName(imageUsage))}),
-                // }
-                std.debug.panic("unsupported dst queue {s}", .{@tagName(dstQueue)});
+
+                switch (layout) {
+                    vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL => {
+                        dstAccessMask = vk.VK_ACCESS_SHADER_READ_BIT;
+                    },
+                    else => {
+                        std.debug.panic("unsupported layout {d}", .{layout});
+                    },
+                }
+
+                switch (commandType) {
+                    .draw2D => {
+                        destinationStage = vk.VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+                    },
+                    else => {
+                        std.debug.panic("unsupported command type {s}", .{@tagName(commandType)});
+                    },
+                }
             } else {
                 std.debug.panic("unsupported dst queue {s}", .{@tagName(dstQueue)});
             }
@@ -1105,7 +1113,7 @@ pub const oneTimeCommand = struct {
                         enterCommandType,
                         transLayout.srcQueueFamily,
                         transLayout.dstQueueFamily,
-                        0,
+                        transLayout.newLayout,
                     );
 
                     const releaseHash: u64 = releaseFlags.sourceStage + releaseFlags.destinationStage;
@@ -1171,7 +1179,7 @@ pub const oneTimeCommand = struct {
                         enterCommandType,
                         transLayout.srcQueueFamily,
                         transLayout.dstQueueFamily,
-                        0,
+                        transLayout.newLayout,
                     );
 
                     const acquireHash =
@@ -1502,6 +1510,37 @@ pub const oneTimeCommand = struct {
         };
     }
 
+    fn changeBufferQueueHelper(
+        self: *Self,
+        pBuffer: VkStruct.Buffer_t,
+        newQueue: VkStruct.CommandPoolType,
+        bufferCopies: []vk.VkBufferCopy2,
+        commandType: drawC.PublicCommandType,
+    ) !twoQueueNode {
+        var resNode = twoQueueNode{};
+
+        const oldSrcQueueType = self.vulkan.buffers.getBufferQueueType(pBuffer);
+        if (oldSrcQueueType != newQueue) {
+            if (oldSrcQueueType != .init) {
+                const regions = self.stackAllocator.alloc(drawC.SizeOffset, bufferCopies.len) catch unreachable;
+                defer self.stackAllocator.free(regions);
+                for (bufferCopies, regions) |region, *sizeOffset| {
+                    sizeOffset.offset = region.srcOffset;
+                    sizeOffset.size = region.size;
+                }
+                resNode = try self.addCommand2(.changeBufferQueue, .{ .changeBufferQueue = .{
+                    .buffer = pBuffer,
+                    .srcQueueFamily = oldSrcQueueType,
+                    .dstQueueFamily = newQueue,
+                    .regions = regions,
+                } }, commandType);
+            }
+            self.vulkan.buffers.changeQueueType(pBuffer, newQueue);
+        }
+
+        return resNode;
+    }
+
     fn transLayoutHelper(
         self: *Self,
         textureSet: *texture,
@@ -1743,7 +1782,7 @@ pub const oneTimeCommand = struct {
                     }
                 }
 
-                // const oldSrcQueueType = self.vulkan.buffers.getBufferQueueType(copyBuffer.srcBuffer);
+                // const oldSrcQueueType = self.vulkan.buffers.getBufferQueueType(draw2D.vertexBuffer);
                 // if (oldSrcQueueType != .transfer) {
                 //     if (oldSrcQueueType != .init) {
                 //         const regions = self.stackAllocator.alloc(drawC.SizeOffset, tempRegions.len) catch unreachable;
@@ -1770,44 +1809,46 @@ pub const oneTimeCommand = struct {
                 var srcBufferNode: twoQueueNode = .{};
                 var dstBufferNode: twoQueueNode = .{};
 
-                const oldSrcQueueType = self.vulkan.buffers.getBufferQueueType(copyBuffer.srcBuffer);
-                if (oldSrcQueueType != .transfer) {
-                    if (oldSrcQueueType != .init) {
-                        const regions = self.stackAllocator.alloc(drawC.SizeOffset, tempRegions.len) catch unreachable;
-                        defer self.stackAllocator.free(regions);
-                        for (tempRegions, regions) |region, *sizeOffset| {
-                            sizeOffset.offset = region.srcOffset;
-                            sizeOffset.size = region.size;
-                        }
-                        srcBufferNode = try self.addCommand2(.changeBufferQueue, .{ .changeBufferQueue = .{
-                            .buffer = copyBuffer.srcBuffer,
-                            .srcQueueFamily = oldSrcQueueType,
-                            .dstQueueFamily = .transfer,
-                            .regions = regions,
-                        } }, commandType);
-                    }
-                    self.vulkan.buffers.changeQueueType(ptr.value_ptr.command.copyBuffer.srcBuffer, .transfer);
-                }
+                srcBufferNode = try self.changeBufferQueueHelper(copyBuffer.srcBuffer, .transfer, tempRegions, commandType);
+                // const oldSrcQueueType = self.vulkan.buffers.getBufferQueueType(copyBuffer.srcBuffer);
+                // if (oldSrcQueueType != .transfer) {
+                //     if (oldSrcQueueType != .init) {
+                //         const regions = self.stackAllocator.alloc(drawC.SizeOffset, tempRegions.len) catch unreachable;
+                //         defer self.stackAllocator.free(regions);
+                //         for (tempRegions, regions) |bufferCopy, *sizeOffset| {
+                //             sizeOffset.offset = bufferCopy.srcOffset;
+                //             sizeOffset.size = bufferCopy.size;
+                //         }
+                //         srcBufferNode = try self.addCommand2(.changeBufferQueue, .{ .changeBufferQueue = .{
+                //             .buffer = copyBuffer.srcBuffer,
+                //             .srcQueueFamily = oldSrcQueueType,
+                //             .dstQueueFamily = .transfer,
+                //             .regions = regions,
+                //         } }, commandType);
+                //     }
+                //     self.vulkan.buffers.changeQueueType(ptr.value_ptr.command.copyBuffer.srcBuffer, .transfer);
+                // }
 
-                const oldDstQueueType = self.vulkan.buffers.getBufferQueueType(copyBuffer.dstBuffer);
-                if (oldDstQueueType != .transfer) {
-                    if (oldDstQueueType != .init) {
-                        const regions = self.stackAllocator.alloc(drawC.SizeOffset, tempRegions.len) catch unreachable;
-                        defer self.stackAllocator.free(regions);
-                        for (tempRegions, regions) |region, *sizeOffset| {
-                            sizeOffset.offset = region.dstOffset;
-                            sizeOffset.size = region.size;
-                        }
+                dstBufferNode = try self.changeBufferQueueHelper(copyBuffer.dstBuffer, .transfer, tempRegions, commandType);
+                // const oldDstQueueType = self.vulkan.buffers.getBufferQueueType(copyBuffer.dstBuffer);
+                // if (oldDstQueueType != .transfer) {
+                //     if (oldDstQueueType != .init) {
+                //         const regions = self.stackAllocator.alloc(drawC.SizeOffset, tempRegions.len) catch unreachable;
+                //         defer self.stackAllocator.free(regions);
+                //         for (tempRegions, regions) |region, *sizeOffset| {
+                //             sizeOffset.offset = region.dstOffset;
+                //             sizeOffset.size = region.size;
+                //         }
 
-                        dstBufferNode = try self.addCommand2(.changeBufferQueue, .{ .changeBufferQueue = .{
-                            .buffer = copyBuffer.dstBuffer,
-                            .srcQueueFamily = oldDstQueueType,
-                            .dstQueueFamily = .transfer,
-                            .regions = regions,
-                        } }, commandType);
-                    }
-                    self.vulkan.buffers.changeQueueType(ptr.value_ptr.command.copyBuffer.dstBuffer, .transfer);
-                }
+                //         dstBufferNode = try self.addCommand2(.changeBufferQueue, .{ .changeBufferQueue = .{
+                //             .buffer = copyBuffer.dstBuffer,
+                //             .srcQueueFamily = oldDstQueueType,
+                //             .dstQueueFamily = .transfer,
+                //             .regions = regions,
+                //         } }, commandType);
+                //     }
+                //     self.vulkan.buffers.changeQueueType(ptr.value_ptr.command.copyBuffer.dstBuffer, .transfer);
+                // }
 
                 var nodes = [_]twoQueueNode{ srcBufferNode, dstBufferNode };
                 const res = try self.nodeConnect(&nodes);
