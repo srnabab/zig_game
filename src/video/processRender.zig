@@ -1514,7 +1514,7 @@ pub const oneTimeCommand = struct {
         self: *Self,
         pBuffer: VkStruct.Buffer_t,
         newQueue: VkStruct.CommandPoolType,
-        bufferCopies: []vk.VkBufferCopy2,
+        regions: []drawC.SizeOffset,
         commandType: drawC.PublicCommandType,
     ) !twoQueueNode {
         var resNode = twoQueueNode{};
@@ -1522,12 +1522,6 @@ pub const oneTimeCommand = struct {
         const oldSrcQueueType = self.vulkan.buffers.getBufferQueueType(pBuffer);
         if (oldSrcQueueType != newQueue) {
             if (oldSrcQueueType != .init) {
-                const regions = self.stackAllocator.alloc(drawC.SizeOffset, bufferCopies.len) catch unreachable;
-                defer self.stackAllocator.free(regions);
-                for (bufferCopies, regions) |region, *sizeOffset| {
-                    sizeOffset.offset = region.srcOffset;
-                    sizeOffset.size = region.size;
-                }
                 resNode = try self.addCommand2(.changeBufferQueue, .{ .changeBufferQueue = .{
                     .buffer = pBuffer,
                     .srcQueueFamily = oldSrcQueueType,
@@ -1809,46 +1803,22 @@ pub const oneTimeCommand = struct {
                 var srcBufferNode: twoQueueNode = .{};
                 var dstBufferNode: twoQueueNode = .{};
 
-                srcBufferNode = try self.changeBufferQueueHelper(copyBuffer.srcBuffer, .transfer, tempRegions, commandType);
-                // const oldSrcQueueType = self.vulkan.buffers.getBufferQueueType(copyBuffer.srcBuffer);
-                // if (oldSrcQueueType != .transfer) {
-                //     if (oldSrcQueueType != .init) {
-                //         const regions = self.stackAllocator.alloc(drawC.SizeOffset, tempRegions.len) catch unreachable;
-                //         defer self.stackAllocator.free(regions);
-                //         for (tempRegions, regions) |bufferCopy, *sizeOffset| {
-                //             sizeOffset.offset = bufferCopy.srcOffset;
-                //             sizeOffset.size = bufferCopy.size;
-                //         }
-                //         srcBufferNode = try self.addCommand2(.changeBufferQueue, .{ .changeBufferQueue = .{
-                //             .buffer = copyBuffer.srcBuffer,
-                //             .srcQueueFamily = oldSrcQueueType,
-                //             .dstQueueFamily = .transfer,
-                //             .regions = regions,
-                //         } }, commandType);
-                //     }
-                //     self.vulkan.buffers.changeQueueType(ptr.value_ptr.command.copyBuffer.srcBuffer, .transfer);
-                // }
+                const srcOffsets = try self.stackAllocator.alloc(drawC.SizeOffset, tempRegions.len);
+                defer self.stackAllocator.free(srcOffsets);
+                for (tempRegions, srcOffsets) |region, *srcOffset| {
+                    srcOffset.offset = region.srcOffset;
+                    srcOffset.size = region.size;
+                }
 
-                dstBufferNode = try self.changeBufferQueueHelper(copyBuffer.dstBuffer, .transfer, tempRegions, commandType);
-                // const oldDstQueueType = self.vulkan.buffers.getBufferQueueType(copyBuffer.dstBuffer);
-                // if (oldDstQueueType != .transfer) {
-                //     if (oldDstQueueType != .init) {
-                //         const regions = self.stackAllocator.alloc(drawC.SizeOffset, tempRegions.len) catch unreachable;
-                //         defer self.stackAllocator.free(regions);
-                //         for (tempRegions, regions) |region, *sizeOffset| {
-                //             sizeOffset.offset = region.dstOffset;
-                //             sizeOffset.size = region.size;
-                //         }
+                srcBufferNode = try self.changeBufferQueueHelper(copyBuffer.srcBuffer, .transfer, srcOffsets, commandType);
 
-                //         dstBufferNode = try self.addCommand2(.changeBufferQueue, .{ .changeBufferQueue = .{
-                //             .buffer = copyBuffer.dstBuffer,
-                //             .srcQueueFamily = oldDstQueueType,
-                //             .dstQueueFamily = .transfer,
-                //             .regions = regions,
-                //         } }, commandType);
-                //     }
-                //     self.vulkan.buffers.changeQueueType(ptr.value_ptr.command.copyBuffer.dstBuffer, .transfer);
-                // }
+                const dstOffsets = try self.stackAllocator.alloc(drawC.SizeOffset, tempRegions.len);
+                defer self.stackAllocator.free(dstOffsets);
+                for (tempRegions, dstOffsets) |region, *dstOffset| {
+                    dstOffset.offset = region.dstOffset;
+                    dstOffset.size = region.size;
+                }
+                dstBufferNode = try self.changeBufferQueueHelper(copyBuffer.dstBuffer, .transfer, dstOffsets, commandType);
 
                 var nodes = [_]twoQueueNode{ srcBufferNode, dstBufferNode };
                 const res = try self.nodeConnect(&nodes);
@@ -1882,24 +1852,25 @@ pub const oneTimeCommand = struct {
                     commandType,
                 );
 
-                const bufferQueuqType = self.vulkan.buffers.getBufferQueueType(copyBufferToImage.buffer);
-                var bufferQueueNode: twoQueueNode = .{};
-                if (bufferQueuqType != .transfer) {
-                    if (bufferQueuqType != .init) {
-                        var region = [1]drawC.SizeOffset{.{
-                            .offset = 0,
-                            .size = self.vulkan.buffers.getBufferSize(copyBufferToImage.buffer),
-                        }};
+                var region = [1]drawC.SizeOffset{.{
+                    .offset = 0,
+                    .size = self.vulkan.buffers.getBufferSize(copyBufferToImage.buffer),
+                }};
 
-                        bufferQueueNode = try self.addCommand2(.changeBufferQueue, .{ .changeBufferQueue = .{
-                            .buffer = copyBufferToImage.buffer,
-                            .srcQueueFamily = bufferQueuqType,
-                            .dstQueueFamily = .transfer,
-                            .regions = &region,
-                        } }, commandType);
-                    }
-                    self.vulkan.buffers.changeQueueType(copyBufferToImage.buffer, .transfer);
-                }
+                const bufferQueueNode = try self.changeBufferQueueHelper(copyBufferToImage.buffer, .transfer, &region, commandType);
+                // const bufferQueuqType = self.vulkan.buffers.getBufferQueueType(copyBufferToImage.buffer);
+                // var bufferQueueNode: twoQueueNode = .{};
+                // if (bufferQueuqType != .transfer) {
+                //     if (bufferQueuqType != .init) {
+                //         bufferQueueNode = try self.addCommand2(.changeBufferQueue, .{ .changeBufferQueue = .{
+                //             .buffer = copyBufferToImage.buffer,
+                //             .srcQueueFamily = bufferQueuqType,
+                //             .dstQueueFamily = .transfer,
+                //             .regions = &region,
+                //         } }, commandType);
+                //     }
+                //     self.vulkan.buffers.changeQueueType(copyBufferToImage.buffer, .transfer);
+                // }
 
                 var nodes = [_]twoQueueNode{ imageQueueNode, bufferQueueNode };
 
