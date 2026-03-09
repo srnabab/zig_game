@@ -29,6 +29,8 @@ const Self = @This();
 
 pub const RenderingInfo_t = Handle;
 
+var mutex: std.Thread.Mutex = .{};
+
 allocator: std.mem.Allocator,
 
 array: std.array_list.Managed(RenderingInfo),
@@ -65,6 +67,9 @@ pub fn createRenderingInfo(
 ) !RenderingInfo_t {
     const zone = tracy.initZone(@src(), .{ .name = "create rendering info" });
     defer zone.deinit();
+
+    mutex.lock();
+    defer mutex.unlock();
 
     const ptr = try self.array.addOne();
 
@@ -154,16 +159,33 @@ pub fn getRenderingInfoContent(self: Self, renderingInfo: RenderingInfo_t) Rende
     const zone = tracy.initZone(@src(), .{ .name = "get rendering info content" });
     defer zone.deinit();
 
+    mutex.lock();
+    defer mutex.unlock();
+
     const index = Handles.getIndex(renderingInfo);
 
     return self.array.items[index];
 }
 
-pub fn renderingStarted(self: *Self, renderingInfo: RenderingInfo_t) bool {
+pub fn renderingIsStart(self: *Self, renderingInfo: RenderingInfo_t) bool {
     const zone = tracy.initZone(@src(), .{ .name = "rendering started" });
     defer zone.deinit();
+
+    mutex.lock();
+    defer mutex.unlock();
 
     const index = Handles.getIndex(renderingInfo);
 
     return self.array.items[index].start;
+}
+
+pub fn renderingStart(self: *Self, renderingInfo: RenderingInfo_t) void {
+    const zone = tracy.initZone(@src(), .{ .name = "rendering start" });
+    defer zone.deinit();
+
+    mutex.lock();
+    defer mutex.unlock();
+
+    const index = Handles.getIndex(renderingInfo);
+    self.array.items[index].start = true;
 }

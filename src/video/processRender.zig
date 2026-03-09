@@ -1794,7 +1794,7 @@ pub const oneTimeCommand = struct {
                     std.log.debug("ID: {d} image", .{aa.ID});
                 }
 
-                if (!self.pRendering.renderingStarted(draw2D.rendering)) {
+                if (!self.pRendering.renderingIsStart(draw2D.rendering)) {
                     const renderingInfo = self.pRendering.getRenderingInfoContent(draw2D.rendering);
                     const renderingColorTextureLen = bl: {
                         var count: u32 = 0;
@@ -1888,6 +1888,8 @@ pub const oneTimeCommand = struct {
                         } },
                         commandType,
                     );
+                    self.pRendering.renderingStart(draw2D.rendering);
+
                     try beginRenderingQueueNode.a.?.childrenAppend(&currentNode.ID);
                     try currentNode.parentsAppend(&beginRenderingQueueNode.a.?.ID);
 
@@ -2061,6 +2063,10 @@ pub const oneTimeCommand = struct {
         defer zone.deinit();
 
         switch (command.commandType) {
+            .draw2D => {
+                const innerZone = tracy.initZone(@src(), .{ .name = "draw 2D" });
+                defer innerZone.deinit();
+            },
             .beginRendering => {
                 const innerZone = tracy.initZone(@src(), .{ .name = "begin rendering" });
                 defer innerZone.deinit();
