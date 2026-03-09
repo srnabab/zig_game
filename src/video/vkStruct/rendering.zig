@@ -2,6 +2,8 @@ const std = @import("std");
 
 const global = @import("global");
 
+const tracy = @import("tracy");
+
 const vk = @import("vulkan").vulkan;
 const textureSet = @import("textureSet");
 const Handles = @import("handle");
@@ -61,6 +63,9 @@ pub fn createRenderingInfo(
     depthAttachment: ?[]vk.VkRenderingAttachmentInfo,
     stencilAttachment: ?[]vk.VkRenderingAttachmentInfo,
 ) !RenderingInfo_t {
+    const zone = tracy.initZone(@src(), .{ .name = "create rendering info" });
+    defer zone.deinit();
+
     const ptr = try self.array.addOne();
 
     const index = self.array.items.len - 1;
@@ -146,12 +151,18 @@ fn constructSlice(self: *Self, index: u32) []const vk.VkRenderingAttachmentInfo 
 }
 
 pub fn getRenderingInfoContent(self: Self, renderingInfo: RenderingInfo_t) RenderingInfo {
+    const zone = tracy.initZone(@src(), .{ .name = "get rendering info content" });
+    defer zone.deinit();
+
     const index = Handles.getIndex(renderingInfo);
 
     return self.array.items[index];
 }
 
 pub fn renderingStarted(self: *Self, renderingInfo: RenderingInfo_t) bool {
+    const zone = tracy.initZone(@src(), .{ .name = "rendering started" });
+    defer zone.deinit();
+
     const index = Handles.getIndex(renderingInfo);
 
     return self.array.items[index].start;

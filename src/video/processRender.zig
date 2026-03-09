@@ -2345,6 +2345,7 @@ pub const oneTimeCommand = struct {
                 }
             },
             .start => null,
+            .beginRendering => null,
             else => {
                 std.debug.panic("not support {s}", .{@tagName(command.commandType)});
             },

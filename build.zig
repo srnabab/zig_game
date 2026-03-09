@@ -243,6 +243,7 @@ pub fn build(b: *std.Build) void {
     rendering_mod.addImport("global", global_mod);
     rendering_mod.addImport("handle", handle_mod);
     rendering_mod.addImport("textureSet", textureSet_mod);
+    rendering_mod.addImport("tracy", tracy.module("tracy"));
 
     error_mod.addImport("sdl", sdl_mod);
 
