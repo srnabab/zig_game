@@ -2061,6 +2061,25 @@ pub const oneTimeCommand = struct {
         defer zone.deinit();
 
         switch (command.commandType) {
+            .beginRendering => {
+                const innerZone = tracy.initZone(@src(), .{ .name = "begin rendering" });
+                defer innerZone.deinit();
+
+                const beginRendering = command.command.beginRendering;
+                var renderingInfo = vk.VkRenderingInfo{
+                    .sType = vk.VK_STRUCTURE_TYPE_RENDERING_INFO,
+                    .pNext = null,
+                    .flags = beginRendering.flags,
+                    .renderArea = beginRendering.renderArea,
+                    .viewMask = beginRendering.viewMask,
+                    .layerCount = beginRendering.layerCount,
+                    .colorAttachmentCount = @intCast(beginRendering.pColorAttachments.len),
+                    .pColorAttachments = beginRendering.pColorAttachments.ptr,
+                    .pDepthAttachment = beginRendering.depthAttachment,
+                    .pStencilAttachment = beginRendering.stencilAttachment,
+                };
+                vk.vkCmdBeginRendering(commandBuffer, &renderingInfo);
+            },
             .copyBufferToImage => {
                 const innerZone = tracy.initZone(@src(), .{ .name = "copy buffer to image" });
                 defer innerZone.deinit();
@@ -2346,6 +2365,7 @@ pub const oneTimeCommand = struct {
             },
             .start => null,
             .beginRendering => null,
+            .draw2D => null,
             else => {
                 std.debug.panic("not support {s}", .{@tagName(command.commandType)});
             },
