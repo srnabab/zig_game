@@ -225,7 +225,7 @@ fn judgeImageLoadParameter(fileName: []const u8) !struct {
     // var properties: vk.VkMemoryPropertyFlags = 0;
 
     // return .{ format, tiling, usage, properties };
-    return .{ vk.VK_FORMAT_R8G8B8A8_SRGB, vk.VK_IMAGE_TILING_OPTIMAL, vk.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | vk.VK_IMAGE_USAGE_TRANSFER_DST_BIT | vk.VK_IMAGE_USAGE_SAMPLED_BIT, vk.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT };
+    return .{ vk.VK_FORMAT_R8G8B8A8_SRGB, vk.VK_IMAGE_TILING_OPTIMAL, vk.VK_IMAGE_USAGE_TRANSFER_DST_BIT | vk.VK_IMAGE_USAGE_SAMPLED_BIT, vk.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT };
 }
 
 fn updateLoadParameter(tp: FileType, cc: std.fs.File.Stat, content: []const u8, fileName: []const u8) !void {
