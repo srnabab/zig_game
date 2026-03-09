@@ -1517,7 +1517,25 @@ pub const oneTimeCommand = struct {
                 //     try p.parentsAppend(&resNode.ID);
                 // }
             },
-            // .changeTextureQueue => {},
+            .beginRendering => {
+                const zone2 = tracy.initZone(@src(), .{ .name = "beginRendering" });
+                defer zone2.deinit();
+
+                const beginRendering = command.beginRendering;
+
+                const rootNode = try self.nodeDag.create();
+                const ptr = try self.queue.getOrPut(rootNode.ID);
+                ptr.value_ptr.* = drawC{
+                    .ID = rootNode.ID,
+                    .timestamp = std.time.nanoTimestamp(),
+                    .command = .{ .beginRendering = beginRendering },
+                    .commandType = .beginRendering,
+                    .output = .{ .empty = void{} },
+                };
+                rootNode.data.commandPoolType = .graphic;
+
+                resNode = rootNode;
+            },
             else => {
                 std.debug.panic("not supported commandType {s}", .{@tagName(commandType)});
             },
@@ -1684,6 +1702,9 @@ pub const oneTimeCommand = struct {
         for (newNodesA, newNodesB) |a, b| {
             if (a) |aa| {
                 const srcStageMask = self.queue.getPtr(aa.ID).?.command.pipelineBarrier.lastSrcStageMask;
+
+                // may need type check
+
                 lastSrcStageMask = @min(lastSrcStageMask, srcStageMask);
                 if (lastA == null) {
                     lastA = aa;
@@ -1836,13 +1857,39 @@ pub const oneTimeCommand = struct {
                         .offset = 0,
                         .size = self.vulkan.buffers.getBufferSize(draw2D.indexBuffer),
                     }};
-                    const indexBufferQueueNode = try self.changeBufferQueueHelper(draw2D.indexBuffer, .graphic, &indexBufferOffset, commandType);
+                    const indexBufferQueueNode = try self.changeBufferQueueHelper(
+                        draw2D.indexBuffer,
+                        .graphic,
+                        &indexBufferOffset,
+                        commandType,
+                    );
 
                     var vertexBufferOffset = [_]drawC.SizeOffset{.{
                         .offset = 0,
                         .size = self.vulkan.buffers.getBufferSize(draw2D.vertexBuffer),
                     }};
-                    const vertexBufferQueueNode = try self.changeBufferQueueHelper(draw2D.vertexBuffer, .graphic, &vertexBufferOffset, commandType);
+                    const vertexBufferQueueNode = try self.changeBufferQueueHelper(
+                        draw2D.vertexBuffer,
+                        .graphic,
+                        &vertexBufferOffset,
+                        commandType,
+                    );
+
+                    const beginRenderingQueueNode = try self.addCommand2(
+                        .beginRendering,
+                        .{ .beginRendering = .{
+                            .flags = renderingInfo.flags,
+                            .renderArea = renderingInfo.renderArea,
+                            .layerCount = renderingInfo.layerCount,
+                            .viewMask = renderingInfo.viewMask,
+                            .pColorAttachments = if (renderingInfo.pColorAttachments) |v| v else &.{},
+                            .depthAttachment = if (renderingInfo.depthAttachment) |v| @ptrCast(v.ptr) else null,
+                            .stencilAttachment = if (renderingInfo.stencilAttachment) |v| @ptrCast(v.ptr) else null,
+                        } },
+                        commandType,
+                    );
+                    try beginRenderingQueueNode.a.?.childrenAppend(&currentNode.ID);
+                    try currentNode.parentsAppend(&beginRenderingQueueNode.a.?.ID);
 
                     renderingImageQueueNodes[renderingImageQueueNodes.len - 5] = imageQueueNode;
                     renderingImageQueueNodes[renderingImageQueueNodes.len - 4] = indexBufferQueueNode;
@@ -1853,11 +1900,11 @@ pub const oneTimeCommand = struct {
                     const res = try self.pipelineBarrierNodeConnect(renderingImageQueueNodes);
                     if (res.a) |aa| {
                         if (res.b) |bb| {
-                            try bb.childrenAppend(&currentNode.ID);
-                            try currentNode.parentsAppend(&bb.ID);
+                            try bb.childrenAppend(&beginRenderingQueueNode.a.?.ID);
+                            try beginRenderingQueueNode.a.?.parentsAppend(&bb.ID);
                         } else {
-                            try aa.childrenAppend(&currentNode.ID);
-                            try currentNode.parentsAppend(&aa.ID);
+                            try aa.childrenAppend(&beginRenderingQueueNode.a.?.ID);
+                            try beginRenderingQueueNode.a.?.parentsAppend(&aa.ID);
                         }
 
                         currentNode = aa;

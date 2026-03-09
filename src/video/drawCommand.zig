@@ -175,8 +175,8 @@ pub const BeginRendering = struct {
     layerCount: u32,
     viewMask: u32,
     pColorAttachments: []vk.VkRenderingAttachmentInfo,
-    depthAttachment: vk.VkRenderingAttachmentInfo,
-    stencilAttachment: vk.VkRenderingAttachmentInfo,
+    depthAttachment: ?*vk.VkRenderingAttachmentInfo,
+    stencilAttachment: ?*vk.VkRenderingAttachmentInfo,
 };
 
 pub const Start = struct {
