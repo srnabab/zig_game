@@ -19,6 +19,7 @@ pub fn build(b: *std.Build) void {
         .tracy_manual_lifetime = true,
     });
 
+    const force_update = b.option(bool, "force_update", "force contentManager update all resources") orelse false;
     const contentManagerModule = b.dependency("contentManager", .{});
     const contenManager = contentManagerModule.artifact("ContentManager");
     const contenManager_install = b.addInstallArtifact(contenManager, .{ .dest_dir = .default });
@@ -526,6 +527,8 @@ pub fn build(b: *std.Build) void {
 
     const runContenManager = b.step("run content manager", "collect resources");
     const runContenManager_cmd = b.addRunArtifact(contenManager);
+    if (force_update)
+        runContenManager_cmd.addArg("-f");
     // runContenManager_cmd.addArg(b.getInstallPath(.bin, "ContentManager"));
 
     const runGenFileNameIdExe = b.step("create hash map", "create filename id static string hash map");

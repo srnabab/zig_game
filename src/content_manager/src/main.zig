@@ -8,6 +8,7 @@ const reflect = @import("reflect");
 const vk = reflect.vk;
 const tables = @import("tables");
 const tracy = @import("tracy");
+const options = @import("options");
 
 const assert = std.debug.assert;
 
@@ -466,7 +467,7 @@ fn iterateFolderUpdate(dir: std.fs.Dir, dirName: []const u8, parentID: []const u
 var ContentPathT: ContentPath = undefined;
 var ImageLoadParameterT: ImageLoadParameter = undefined;
 
-var forceUpdate = false;
+var forceUpdate = options.force_update;
 
 var gpa: std.mem.Allocator = undefined;
 var debug_allocator: std.heap.DebugAllocator(.{}) = .init;

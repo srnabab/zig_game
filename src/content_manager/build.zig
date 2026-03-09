@@ -5,6 +5,11 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{ .default_target = .{} });
     const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .Debug });
 
+    const force_update = b.option(bool, "force_update", "force contentManager update all resources") orelse false;
+
+    const options = b.addOptions();
+    options.addOption(bool, "force_update", force_update);
+
     const tracy_enable = b.option(bool, "tracy_enable", "Enable profiling") orelse false;
     const tracy = b.dependency("tracy", .{
         .target = target,
@@ -48,6 +53,7 @@ pub fn build(b: *std.Build) void {
     const blake3_dep = b.dependency("blake3", .{});
     const blake3_lib = blake3_dep.artifact("blake3");
 
+    contentManagerModule.addImport("options", options.createModule());
     contentManagerModule.addImport("reflect", spReflectModule);
     contentManagerModule.addImport("sqlDb", sqliteModule);
     contentManagerModule.addImport("tables", tables_mod);
