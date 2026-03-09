@@ -21,7 +21,29 @@ pub const VkError: type = blk: {
     break :blk @Type(.{ .error_set = error_names[0..count] });
 };
 
-pub const VkPhysicalDeviceType: type = cEnum.generateEnumFromC(vk, vk.VkPhysicalDeviceType, "VK_PHYSICAL_DEVICE_TYPE_OTHER", "VK_PHYSICAL_DEVICE_TYPE_MAX_ENUM");
+pub const VkPhysicalDeviceType: type = cEnum.generateEnumFromC(
+    vk,
+    vk.VkPhysicalDeviceType,
+    "VK_PHYSICAL_DEVICE_TYPE_OTHER",
+    "VK_PHYSICAL_DEVICE_TYPE_MAX_ENUM",
+);
 
-pub const VkFormat: type = cEnum.generateEnumFromC(vk, vk.VkFormat, "VK_FORMAT_UNDEFINED", "VK_FORMAT_MAX_ENUM");
-pub const VkColorSpaceKHR: type = cEnum.generateEnumFromC(vk, vk.VkColorSpaceKHR, "VK_COLOR_SPACE_SRGB_NONLINEAR_KHR", "VK_COLOR_SPACE_MAX_ENUM_KHR");
+pub const VkFormat: type = cEnum.generateEnumFromC(
+    vk,
+    vk.VkFormat,
+    "VK_FORMAT_UNDEFINED",
+    "VK_FORMAT_MAX_ENUM",
+);
+pub const VkColorSpaceKHR: type = cEnum.generateEnumFromC(
+    vk,
+    vk.VkColorSpaceKHR,
+    "VK_COLOR_SPACE_SRGB_NONLINEAR_KHR",
+    "VK_COLOR_SPACE_MAX_ENUM_KHR",
+);
+
+pub const VkPipelineStageFlagBits2: type = cEnum.generateEnumFromC(
+    vk,
+    vk.VkPipelineStageFlagBits2,
+    "VK_PIPELINE_STAGE_2_NONE",
+    "VK_PIPELINE_STAGE_2_OPTICAL_FLOW_BIT_NV",
+);
