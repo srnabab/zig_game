@@ -160,7 +160,7 @@ pub fn main() !void {
         vulkan.windowsHeight,
         vk.VK_FORMAT_R8G8B8A8_SRGB,
         vk.VK_IMAGE_TILING_OPTIMAL,
-        vk.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        vk.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | vk.VK_IMAGE_USAGE_SAMPLED_BIT,
         "texture_test",
     );
 
@@ -196,19 +196,19 @@ pub fn main() !void {
         null,
         null,
     );
-    _ = rendering_test;
+    // _ = rendering_test;
 
     const renderStart = std.time.milliTimestamp();
     while (true) {
         try graphic.startCommand();
-        // try graphic.addCommand(.draw2D, .{ .draw2d = .{
-        //     .pipeline = vulkan.getPipeline("flat2d").?,
-        //     .pTexture = textureSett.getTexture(@intCast(file.getID("circle.png"))).?,
-        //     .rendering = rendering_test,
-        //     .vertexBuffer = vertices.vertexBuffer2D,
-        //     .indexBuffer = vertices.indexBuffer2D,
-        //     .pTextureSet = &textureSett,
-        // } });
+        try graphic.addCommand(.draw2D, .{ .draw2d = .{
+            .pipeline = vulkan.getPipeline("flat2d").?,
+            .pTexture = textureSett.getTexture(@intCast(file.getID("circle.png"))).?,
+            .rendering = rendering_test,
+            .vertexBuffer = vertices.vertexBuffer2D,
+            .indexBuffer = vertices.indexBuffer2D,
+            .pTextureSet = &textureSett,
+        } });
         try graphic.addCommandEnd();
         try graphic.executeCommands();
         vulkan.nextFrame();

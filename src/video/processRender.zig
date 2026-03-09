@@ -13,6 +13,8 @@ const math = @import("math");
 const uniqueArrayList = @import("uniqueArrayList").UniqueArrayList;
 const rendering = @import("rendering");
 
+const logParam = true;
+
 var mutex = Thread.Mutex{};
 
 const twoQueueNode = struct {
@@ -355,13 +357,19 @@ fn Graph(T: type) type {
         data: T = undefined,
 
         pub fn parentsAppend(self: *Self, ID: *u32) !void {
-            if (!(try self.parents.append(ID)))
+            if (!(try self.parents.append(ID))) {
                 self.parentsLen += 1;
+
+                // if (logParam) std.log.debug("{d} parents append: {d}\n", .{ self.ID, ID.* });
+            }
         }
 
         pub fn childrenAppend(self: *Self, ID: *u32) !void {
-            if (!(try self.children.append(ID)))
+            if (!(try self.children.append(ID))) {
                 self.childrenLen += 1;
+
+                // if (logParam) std.log.debug("{d} children append: {d}\n", .{ self.ID, ID.* });
+            }
         }
 
         pub fn clearParents(self: *Self) void {
@@ -585,7 +593,7 @@ fn DAG(T: type) type {
     };
 }
 
-fn nodeDagPrint(self: *QueueNodes) void {
+fn nodeDagPrint(self: *QueueNodes, self2: *oneTimeCommand) void {
     const zone = tracy.initZone(@src(), .{ .name = "dag print" });
     defer zone.deinit();
 
@@ -599,7 +607,10 @@ fn nodeDagPrint(self: *QueueNodes) void {
             for (n.parents.list.items) |ID| {
                 const ll: *QueueNode = @alignCast(@fieldParentPtr("ID", ID));
 
-                writer.print("{d} {s} ", .{ ll.ID, @tagName(self.map.get(ID.*).?.data.commandPoolType) }) catch |err| {
+                writer.print("{d} {s} {s} ", .{
+                    ll.ID,                                             @tagName(self.map.get(ID.*).?.data.commandPoolType),
+                    @tagName(self2.queue.getPtr(ll.ID).?.commandType),
+                }) catch |err| {
                     std.log.err("write err: {s}", .{@errorName(err)});
                 };
             }
@@ -607,7 +618,10 @@ fn nodeDagPrint(self: *QueueNodes) void {
             for (n.children.list.items) |ID| {
                 const ll: *QueueNode = @alignCast(@fieldParentPtr("ID", ID));
 
-                writer2.print("{d} {s} ", .{ ll.ID, @tagName(self.map.get(ID.*).?.data.commandPoolType) }) catch |err| {
+                writer2.print("{d} {s} {s} ", .{
+                    ll.ID,                                             @tagName(self.map.get(ID.*).?.data.commandPoolType),
+                    @tagName(self2.queue.getPtr(ll.ID).?.commandType),
+                }) catch |err| {
                     std.log.err("write err: {s}", .{@errorName(err)});
                 };
             }
@@ -952,13 +966,17 @@ pub const oneTimeCommand = struct {
                         destinationStage = vk.VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
                         dstAccessMask = vk.VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
                     },
-                    else => std.debug.panic("unsupported buffer usage {s}", .{@typeName(@TypeOf(bufferUsage))}),
+                    .index => {
+                        destinationStage = vk.VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+                        dstAccessMask = vk.VK_ACCESS_INDEX_READ_BIT;
+                    },
+                    else => std.debug.panic("unsupported buffer usage {s}", .{@tagName(bufferUsage)}),
                 }
             } else {
-                std.debug.panic("unsupported dst queue {s}", .{@typeName(@TypeOf(dstQueue))});
+                std.debug.panic("unsupported dst queue {s}", .{@tagName(dstQueue)});
             }
         } else {
-            std.debug.panic("unsupported src queue {s}", .{@typeName(@TypeOf(srcQueue))});
+            std.debug.panic("unsupported src queue {s}", .{@tagName(srcQueue)});
         }
 
         return .{
@@ -1157,6 +1175,7 @@ pub const oneTimeCommand = struct {
                                 .command = .{
                                     .pipelineBarrier = .{
                                         .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
+                                        .lastSrcStageMask = releaseFlags.sourceStage,
                                     },
                                 },
                                 .commandType = .pipelineBarrier,
@@ -1174,6 +1193,10 @@ pub const oneTimeCommand = struct {
                     ) |*barrier| {
                         barrier.* = release_barrier;
                     }
+                    releasePipelineBarrier.lastSrcStageMask = @min(releasePipelineBarrier.lastSrcStageMask, releaseFlags.sourceStage);
+                    // std.log.debug("image release last src stageMask {s}", .{
+                    //     @tagName(@as(VkStruct.vulkanType.VkPipelineStageFlagBits2, @enumFromInt(releasePipelineBarrier.lastSrcStageMask))),
+                    // });
 
                     const acquireFlags = inferAcquirePipelineBarrierInfoByImageUsage(
                         enterCommandType,
@@ -1223,6 +1246,7 @@ pub const oneTimeCommand = struct {
                                 .command = .{
                                     .pipelineBarrier = .{
                                         .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
+                                        .lastSrcStageMask = acquireFlags.sourceStage,
                                     },
                                 },
                                 .commandType = .pipelineBarrier,
@@ -1240,6 +1264,10 @@ pub const oneTimeCommand = struct {
                     ) |*barrier| {
                         barrier.* = acquire_barrier;
                     }
+                    acquirePipelineBarrier.lastSrcStageMask = @min(acquirePipelineBarrier.lastSrcStageMask, acquireFlags.sourceStage);
+                    // std.log.debug("image acquire last src stageMask {s}", .{
+                    //     @tagName(@as(VkStruct.vulkanType.VkPipelineStageFlagBits2, @enumFromInt(acquirePipelineBarrier.lastSrcStageMask))),
+                    // });
 
                     resNode = releaseNode;
                     resNode2 = acquireNode;
@@ -1306,6 +1334,11 @@ pub const oneTimeCommand = struct {
                     pipelineBarrier.barriers = try self.allocator.realloc(pipelineBarrier.barriers, new_len);
                     pipelineBarrier.barriers[new_len - 1] = new_barrier;
                     pipelineBarrier.lastSrcStageMask = @min(pipelineBarrier.lastSrcStageMask, flags.sourceStage);
+
+                    rootNode.data.commandPoolType = transLayout.dstQueueFamily;
+                    // std.log.debug("image trans last src stageMask {s}", .{
+                    //     @tagName(@as(VkStruct.vulkanType.VkPipelineStageFlagBits2, @enumFromInt(pipelineBarrier.lastSrcStageMask))),
+                    // });
 
                     // if (prev) |n| {
                     //     if (!res.found_existing) rootNode.data.commandPoolType = n.data.commandPoolType;
@@ -1374,6 +1407,7 @@ pub const oneTimeCommand = struct {
                             .command = .{
                                 .pipelineBarrier = .{
                                     .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
+                                    .lastSrcStageMask = releaseFlags.sourceStage,
                                 },
                             },
                             .commandType = .pipelineBarrier,
@@ -1394,6 +1428,10 @@ pub const oneTimeCommand = struct {
                     barrier.bufferMemory.offset = region.offset;
                     barrier.bufferMemory.size = region.size;
                 }
+                releasePipelineBarrier.lastSrcStageMask = @min(releasePipelineBarrier.lastSrcStageMask, releaseFlags.sourceStage);
+                // std.log.debug("buffer release last src stageMask {s}", .{
+                //     @tagName(@as(VkStruct.vulkanType.VkPipelineStageFlagBits2, @enumFromInt(releasePipelineBarrier.lastSrcStageMask))),
+                // });
 
                 const acquireFlags = inferAcquirePipelinBarrierInfoByCommandTypeAndBufferUsage(
                     enterCommandType,
@@ -1437,6 +1475,7 @@ pub const oneTimeCommand = struct {
                             .command = .{
                                 .pipelineBarrier = .{
                                     .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
+                                    .lastSrcStageMask = acquireFlags.sourceStage,
                                 },
                             },
                             .commandType = .pipelineBarrier,
@@ -1457,9 +1496,10 @@ pub const oneTimeCommand = struct {
                     barrier.bufferMemory.offset = region.offset;
                     barrier.bufferMemory.size = region.size;
                 }
-
-                try releaseNode.childrenAppend(&acquireNode.ID);
-                try acquireNode.parentsAppend(&releaseNode.ID);
+                acquirePipelineBarrier.lastSrcStageMask = @min(acquirePipelineBarrier.lastSrcStageMask, acquireFlags.sourceStage);
+                // std.log.debug("buffer acquire last src stageMask {s}", .{
+                //     @tagName(@as(VkStruct.vulkanType.VkPipelineStageFlagBits2, @enumFromInt(acquirePipelineBarrier.lastSrcStageMask))),
+                // });
 
                 resNode = releaseNode;
                 resNode2 = acquireNode;
@@ -1596,15 +1636,19 @@ pub const oneTimeCommand = struct {
         textureSet.changeTextureLayout(texture_, baseArrayLayer, layerCount, newLayout);
         textureSet.changeTextureQueue(texture_, newQueue);
 
+        // std.log.debug("", .{transNode.a.?});
+
         return transNode;
     }
 
-    fn nodeConnect(self: *Self, nodes: []twoQueueNode) !twoQueueNode {
+    fn pipelineBarrierNodeConnect(self: *Self, nodes: []twoQueueNode) !twoQueueNode {
         const newNodesA = self.stackAllocator.alloc(?*QueueNode, nodes.len) catch unreachable;
         defer self.stackAllocator.free(newNodesA);
 
         const newNodesB = self.stackAllocator.alloc(?*QueueNode, nodes.len) catch unreachable;
         defer self.stackAllocator.free(newNodesB);
+
+        var lastSrcStageMask: vk.VkPipelineStageFlags2 = std.math.maxInt(u64);
 
         for (newNodesA, newNodesB) |*a, *b| {
             a.* = null;
@@ -1639,6 +1683,8 @@ pub const oneTimeCommand = struct {
         var midB: ?*QueueNode = null;
         for (newNodesA, newNodesB) |a, b| {
             if (a) |aa| {
+                const srcStageMask = self.queue.getPtr(aa.ID).?.command.pipelineBarrier.lastSrcStageMask;
+                lastSrcStageMask = @min(lastSrcStageMask, srcStageMask);
                 if (lastA == null) {
                     lastA = aa;
                     midA = aa;
@@ -1654,8 +1700,6 @@ pub const oneTimeCommand = struct {
                 if (lastB == null) {
                     lastB = bb;
                     midB = bb;
-                    try midA.?.childrenAppend(&midB.?.ID);
-                    try midB.?.parentsAppend(&midA.?.ID);
                 } else {
                     try bb.parentsAppend(&lastB.?.ID);
                     try lastB.?.childrenAppend(&bb.ID);
@@ -1665,9 +1709,15 @@ pub const oneTimeCommand = struct {
             }
         }
 
-        // try midA.?.childrenAppend(&midB.?.ID);
-        // try midB.?.parentsAppend(&midA.?.ID);
+        if (midA != null and midB != null and midA != lastA and midB != lastB) {
+            try midA.?.childrenAppend(&midB.?.ID);
+            try midB.?.parentsAppend(&midA.?.ID);
+        }
 
+        if (lastA != null) {
+            const srcStageMask = &self.queue.getPtr(lastA.?.ID).?.command.pipelineBarrier.lastSrcStageMask;
+            srcStageMask.* = lastSrcStageMask;
+        }
         return .{ .a = lastA, .b = if (lastB == null) midA else lastB };
     }
 
@@ -1718,7 +1768,10 @@ pub const oneTimeCommand = struct {
                     .graphic,
                     commandType,
                 );
-                _ = imageQueueNode;
+
+                if (imageQueueNode.a) |aa| {
+                    std.log.debug("ID: {d} image", .{aa.ID});
+                }
 
                 if (!self.pRendering.renderingStarted(draw2D.rendering)) {
                     const renderingInfo = self.pRendering.getRenderingInfoContent(draw2D.rendering);
@@ -1733,7 +1786,7 @@ pub const oneTimeCommand = struct {
                         break :bl renderingInfo.textures.len - count;
                     };
 
-                    var renderingImageQueueNodes = try self.stackAllocator.alloc(twoQueueNode, renderingInfo.textures.len);
+                    var renderingImageQueueNodes = try self.stackAllocator.alloc(twoQueueNode, renderingInfo.textures.len + 5);
                     defer self.stackAllocator.free(renderingImageQueueNodes);
                     if (renderingInfo.pColorAttachments) |v| {
                         for (renderingInfo.textures[0..renderingColorTextureLen], v, 0..) |value, attachment, i| {
@@ -1746,6 +1799,10 @@ pub const oneTimeCommand = struct {
                                 .graphic,
                                 commandType,
                             );
+
+                            if (renderingImageQueueNodes[i].a) |aa| {
+                                std.log.debug("ID: {d} rendering image {d}", .{ aa.ID, i });
+                            }
                         }
                     }
 
@@ -1774,26 +1831,38 @@ pub const oneTimeCommand = struct {
                             commandType,
                         );
                     }
-                }
 
-                // const oldSrcQueueType = self.vulkan.buffers.getBufferQueueType(draw2D.vertexBuffer);
-                // if (oldSrcQueueType != .transfer) {
-                //     if (oldSrcQueueType != .init) {
-                //         const regions = self.stackAllocator.alloc(drawC.SizeOffset, tempRegions.len) catch unreachable;
-                //         defer self.stackAllocator.free(regions);
-                //         for (tempRegions, regions) |region, *sizeOffset| {
-                //             sizeOffset.offset = region.srcOffset;
-                //             sizeOffset.size = region.size;
-                //         }
-                //         srcBufferNode = try self.addCommand2(.changeBufferQueue, .{ .changeBufferQueue = .{
-                //             .buffer = copyBuffer.srcBuffer,
-                //             .srcQueueFamily = oldSrcQueueType,
-                //             .dstQueueFamily = .transfer,
-                //             .regions = regions,
-                //         } }, commandType);
-                //     }
-                //     self.vulkan.buffers.changeQueueType(ptr.value_ptr.command.copyBuffer.srcBuffer, .transfer);
-                // }
+                    var indexBufferOffset = [_]drawC.SizeOffset{.{
+                        .offset = 0,
+                        .size = self.vulkan.buffers.getBufferSize(draw2D.indexBuffer),
+                    }};
+                    const indexBufferQueueNode = try self.changeBufferQueueHelper(draw2D.indexBuffer, .graphic, &indexBufferOffset, commandType);
+
+                    var vertexBufferOffset = [_]drawC.SizeOffset{.{
+                        .offset = 0,
+                        .size = self.vulkan.buffers.getBufferSize(draw2D.vertexBuffer),
+                    }};
+                    const vertexBufferQueueNode = try self.changeBufferQueueHelper(draw2D.vertexBuffer, .graphic, &vertexBufferOffset, commandType);
+
+                    renderingImageQueueNodes[renderingImageQueueNodes.len - 5] = imageQueueNode;
+                    renderingImageQueueNodes[renderingImageQueueNodes.len - 4] = indexBufferQueueNode;
+                    renderingImageQueueNodes[renderingImageQueueNodes.len - 3] = vertexBufferQueueNode;
+                    renderingImageQueueNodes[renderingImageQueueNodes.len - 2] = depthImageQueueNode;
+                    renderingImageQueueNodes[renderingImageQueueNodes.len - 1] = stencilImageQueueNode;
+
+                    const res = try self.pipelineBarrierNodeConnect(renderingImageQueueNodes);
+                    if (res.a) |aa| {
+                        if (res.b) |bb| {
+                            try bb.childrenAppend(&currentNode.ID);
+                            try currentNode.parentsAppend(&bb.ID);
+                        } else {
+                            try aa.childrenAppend(&currentNode.ID);
+                            try currentNode.parentsAppend(&aa.ID);
+                        }
+
+                        currentNode = aa;
+                    }
+                }
             },
             .copyBuffer => {
                 node.data.commandPoolType = .transfer;
@@ -1809,7 +1878,6 @@ pub const oneTimeCommand = struct {
                     srcOffset.offset = region.srcOffset;
                     srcOffset.size = region.size;
                 }
-
                 srcBufferNode = try self.changeBufferQueueHelper(copyBuffer.srcBuffer, .transfer, srcOffsets, commandType);
 
                 const dstOffsets = try self.stackAllocator.alloc(drawC.SizeOffset, tempRegions.len);
@@ -1821,7 +1889,7 @@ pub const oneTimeCommand = struct {
                 dstBufferNode = try self.changeBufferQueueHelper(copyBuffer.dstBuffer, .transfer, dstOffsets, commandType);
 
                 var nodes = [_]twoQueueNode{ srcBufferNode, dstBufferNode };
-                const res = try self.nodeConnect(&nodes);
+                const res = try self.pipelineBarrierNodeConnect(&nodes);
 
                 if (res.a) |aa| {
                     try res.b.?.childrenAppend(&currentNode.ID);
@@ -1856,25 +1924,11 @@ pub const oneTimeCommand = struct {
                     .offset = 0,
                     .size = self.vulkan.buffers.getBufferSize(copyBufferToImage.buffer),
                 }};
-
                 const bufferQueueNode = try self.changeBufferQueueHelper(copyBufferToImage.buffer, .transfer, &region, commandType);
-                // const bufferQueuqType = self.vulkan.buffers.getBufferQueueType(copyBufferToImage.buffer);
-                // var bufferQueueNode: twoQueueNode = .{};
-                // if (bufferQueuqType != .transfer) {
-                //     if (bufferQueuqType != .init) {
-                //         bufferQueueNode = try self.addCommand2(.changeBufferQueue, .{ .changeBufferQueue = .{
-                //             .buffer = copyBufferToImage.buffer,
-                //             .srcQueueFamily = bufferQueuqType,
-                //             .dstQueueFamily = .transfer,
-                //             .regions = &region,
-                //         } }, commandType);
-                //     }
-                //     self.vulkan.buffers.changeQueueType(copyBufferToImage.buffer, .transfer);
-                // }
 
                 var nodes = [_]twoQueueNode{ imageQueueNode, bufferQueueNode };
 
-                const res = try self.nodeConnect(&nodes);
+                const res = try self.pipelineBarrierNodeConnect(&nodes);
                 if (res.a) |aa| {
                     if (res.b) |bb| {
                         try bb.childrenAppend(&currentNode.ID);
@@ -1910,7 +1964,9 @@ pub const oneTimeCommand = struct {
                     try root.childrenAppend(&currentNode.ID);
                     try currentNode.parentsAppend(&root.ID);
                 } else {
-                    std.debug.panic("not supported", .{});
+                    std.debug.panic("not supported pipeline barrier srcStageMask {s} ", .{
+                        @tagName(@as(VkStruct.vulkanType.VkPipelineStageFlagBits2, @enumFromInt(pipelineBarrier.lastSrcStageMask))),
+                    });
                 }
             },
             .copyBuffer => {
@@ -1945,7 +2001,7 @@ pub const oneTimeCommand = struct {
 
     /// complete dependency
     pub fn addCommandEnd(self: *Self) !void {
-        nodeDagPrint(&self.nodeDag);
+        nodeDagPrint(&self.nodeDag, self);
 
         const zone = tracy.initZone(@src(), .{ .name = "add command end" });
         defer zone.deinit();
@@ -2010,6 +2066,8 @@ pub const oneTimeCommand = struct {
                 var imageMemoryBarrierCount: u32 = 0;
                 var bufferMemoryBarrierCount: u32 = 0;
                 var memoryBarrierCount: u32 = 0;
+
+                std.log.debug("pipeline barrier (ID: {d})", .{command.ID});
 
                 for (pipelineBarrier.barriers) |barrier| {
                     switch (barrier) {
@@ -2552,6 +2610,7 @@ pub const oneTimeCommand = struct {
                         temp.stageMask = firstStage;
                     }
                     temp.value = timelinewaitValue;
+                    std.log.debug("wait timeline semaphore value {d}", .{temp.value});
 
                     const temp2 = try signalSemaphoreSubmitInfos.addOne();
                     temp2.sType = vk.VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
@@ -2559,7 +2618,9 @@ pub const oneTimeCommand = struct {
                     temp2.deviceIndex = 0;
                     temp2.semaphore = self.vulkan.globalTimelineSemaphore;
                     temp2.stageMask = vk.VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
+                    currentSemaphoreValue += 1;
                     temp2.value = currentSemaphoreValue;
+                    std.log.debug("signal timeline semaphore value {d}", .{temp2.value});
 
                     var temp3 = vk.VkCommandBufferSubmitInfo{
                         .sType = vk.VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
