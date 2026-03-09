@@ -2595,6 +2595,8 @@ pub const oneTimeCommand = struct {
         var cbs = std.array_list.Managed(vk.VkCommandBuffer).init(self.allocator);
         defer cbs.deinit();
 
+        var renderingIsStart = false;
+
         // std.log.debug("2\n\n\n\n", .{});
         {
             mutex.lock();
@@ -2670,7 +2672,12 @@ pub const oneTimeCommand = struct {
                     defer signalSemaphoreSubmitInfos.clearRetainingCapacity();
                     defer waitSemaphoreSubmitInfos.clearRetainingCapacity();
 
+                    if (currentType == .graphic and renderingIsStart) {
+                        vk.vkCmdEndRendering(currentCommandBuffer);
+                        renderingIsStart = false;
+                    }
                     try VkStruct.endCommandBuffer(currentCommandBuffer);
+
                     const temp = try waitSemaphoreSubmitInfos.addOne();
                     // const temp = try waitSemaphores.addOne();
                     temp.sType = vk.VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
@@ -2793,6 +2800,9 @@ pub const oneTimeCommand = struct {
                             vk.vkCmdExecuteCommands(currentCommandBuffer, @intCast(cbs.items.len), @ptrCast(cbs.items.ptr));
 
                         record(self.queue.getPtr(nn.ID).?, currentCommandBuffer, self.stackAllocator, self.vulkan);
+                        if (self.queue.getPtr(nn.ID).?.commandType == .beginRendering) {
+                            renderingIsStart = true;
+                        }
                     }
                     firstNode = nn.getFirstUndoneChild();
                     if (firstNode == null) {
@@ -2833,6 +2843,10 @@ pub const oneTimeCommand = struct {
             // std.log.debug("\n\n", .{});
 
             if (begin) {
+                if (currentType == .graphic and renderingIsStart) {
+                    vk.vkCmdEndRendering(currentCommandBuffer);
+                    renderingIsStart = false;
+                }
                 try VkStruct.endCommandBuffer(currentCommandBuffer);
 
                 const temp = try waitSemaphoreSubmitInfos.addOne();
