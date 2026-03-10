@@ -363,6 +363,7 @@ pub fn build(b: *std.Build) void {
     processRender_mod.addImport("math", math_mod);
     processRender_mod.addImport("uniqueArrayList", uniqueArrayList_mod);
     processRender_mod.addImport("rendering", rendering_mod);
+    processRender_mod.addImport("handle", handle_mod);
 
     uniqueArrayList_mod.addImport("tracy", tracy.module("tracy"));
 

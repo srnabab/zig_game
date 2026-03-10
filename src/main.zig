@@ -215,7 +215,7 @@ pub fn main() !void {
         try graphic.addCommandEnd();
         try graphic.executeCommands();
         vulkan.nextFrame();
-        if (std.time.milliTimestamp() - renderStart > 2 * std.time.ms_per_s) {
+        if (std.time.milliTimestamp() - renderStart > 1 * std.time.ms_per_s) {
             // _ = renderStart;
             break;
         }

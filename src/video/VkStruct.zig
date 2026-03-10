@@ -228,6 +228,7 @@ pub fn init(allocator: Allocator, handles: *global.HandlesType) Self {
         .shaderModules = .init(allocator),
         .entryNames = .init(allocator),
         .pipelineMap = .init(allocator),
+        .pipelines = .init(allocator),
         // .textureSets = .init(allocator, handles),
         .writeDescriptorSets = .init(allocator),
         .descriptorImageInfos = .init(allocator),
@@ -413,6 +414,7 @@ pub fn deinit(self: *Self) void {
         vk.vkDestroyPipeline(self.device, pipe.pipeline, self.pAllocCallBacks);
         vk.vkDestroyPipelineLayout(self.device, pipe.pipelineLayout, self.pAllocCallBacks);
         self.allocator.free(val.key_ptr.*);
+        self.allocator.free(pipe.outputs);
         // for (0..val.setCount) |i| {
         //     vk.vkDestroyDescriptorSetLayout(
         //         self.device,
@@ -674,7 +676,7 @@ pub fn createAllPipelinesAdded(self: *Self) !void {
             .outputs = try self.allocator.alloc(Out, self.preGraphicInfoPtrs[i].outputCount),
         };
         const index = self.pipelines.items.len - 1;
-        const handle = self.handles.createHandle(index);
+        const handle = self.handles.createHandle(@intCast(index));
 
         const len = std.mem.len(@as([*c]u8, @ptrCast(&self.preGraphicInfoPtrs[i].name)));
         const name = try self.allocator.alloc(u8, len);
@@ -710,7 +712,7 @@ pub fn destroyPipeline(self: *Self, name: []const u8) !void {
 pub fn getPipelineOut(self: *Self, name: []const u8) ![]const Out {
     const kv = self.pipelineMap.get(name);
     if (kv) |val| {
-        return val.outputs;
+        return self.pipelines.items[Handles.getIndex(val)].outputs;
     }
     return error.NotFound;
 }

@@ -779,6 +779,7 @@ pub const oneTimeCommand = struct {
         self.combineMap.deinit();
         self.garbageData.deinit();
         self.cacheMap.deinit();
+        self.pipelineBufferLastNodeMap.deinit();
         for (0..2) |i| {
             self.waitSemaphoreSubmitInfos[i].deinit();
             self.signalSemaphoreSubmitInfos[i].deinit();
@@ -1814,7 +1815,7 @@ pub const oneTimeCommand = struct {
                     var n: ?*QueueNode = null;
                     var lastTimestamp: i128 = 0;
                     if (pipelineRes.found_existing) {
-                        const timestamp = self.queue.getPtr(pipelineRes.value_ptr.*).?.timestamp;
+                        const timestamp = self.queue.getPtr(pipelineRes.value_ptr.*.ID).?.timestamp;
                         if (timestamp > lastTimestamp) {
                             n = pipelineRes.value_ptr.*;
                             lastTimestamp = timestamp;
@@ -1823,7 +1824,7 @@ pub const oneTimeCommand = struct {
                     pipelineRes.value_ptr.* = node;
 
                     if (indexBufferRes.found_existing) {
-                        const timestamp = self.queue.getPtr(indexBufferRes.value_ptr.*).?.timestamp;
+                        const timestamp = self.queue.getPtr(indexBufferRes.value_ptr.*.ID).?.timestamp;
                         if (timestamp > lastTimestamp) {
                             n = indexBufferRes.value_ptr.*;
                             lastTimestamp = timestamp;
@@ -1832,7 +1833,7 @@ pub const oneTimeCommand = struct {
                     indexBufferRes.value_ptr.* = node;
 
                     if (vertexBufferRes.found_existing) {
-                        const timestamp = self.queue.getPtr(vertexBufferRes.value_ptr.*).?.timestamp;
+                        const timestamp = self.queue.getPtr(vertexBufferRes.value_ptr.*.ID).?.timestamp;
                         if (timestamp > lastTimestamp) {
                             n = vertexBufferRes.value_ptr.*;
                             lastTimestamp = timestamp;
