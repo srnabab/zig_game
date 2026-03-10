@@ -189,3 +189,14 @@ pub fn renderingStart(self: *Self, renderingInfo: RenderingInfo_t) void {
     const index = Handles.getIndex(renderingInfo);
     self.array.items[index].start = true;
 }
+
+pub fn renderingEnd(self: *Self, renderingInfo: RenderingInfo_t) void {
+    const zone = tracy.initZone(@src(), .{ .name = "rendering end" });
+    defer zone.deinit();
+
+    mutex.lock();
+    defer mutex.unlock();
+
+    const index = Handles.getIndex(renderingInfo);
+    self.array.items[index].start = false;
+}

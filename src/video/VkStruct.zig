@@ -31,9 +31,12 @@ const Swapchain = @import("vkStruct/swapchain.zig");
 const Debug = @import("debug");
 const Types = @import("types");
 const Descriptor = @import("vkStruct/descriptor.zig");
+const Handles = @import("handle");
+const Handle = Handles.Handle;
 
 const bufferStruct = @import("vkStruct/buffer.zig");
 pub const Buffer_t = bufferStruct.Buffer_t;
+pub const Pipeline_t = Handle;
 
 const globalDescriptorPoolSizes = [_]vk.VkDescriptorPoolSize{
     .{ .type = vk.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 2048 },
@@ -187,7 +190,8 @@ graphicPipelineCreateInfo: [10]vk.VkGraphicsPipelineCreateInfo = undefined,
 preGraphicInfoPtrs: [10]VulkanPipelineInfo = undefined,
 graphicInfoCount: u32 = 0,
 
-pipelines: std.StringHashMap(Pipeline),
+pipelineMap: std.StringHashMap(Pipeline_t),
+pipelines: std.array_list.Managed(Pipeline),
 
 /// binary semaphore
 imageAvailableSemaphore: [2]vk.VkSemaphore = undefined,
@@ -223,7 +227,7 @@ pub fn init(allocator: Allocator, handles: *global.HandlesType) Self {
         .allocator = allocator,
         .shaderModules = .init(allocator),
         .entryNames = .init(allocator),
-        .pipelines = .init(allocator),
+        .pipelineMap = .init(allocator),
         // .textureSets = .init(allocator, handles),
         .writeDescriptorSets = .init(allocator),
         .descriptorImageInfos = .init(allocator),
@@ -402,11 +406,12 @@ pub fn deinit(self: *Self) void {
 
     Descriptor.destroyDescriptorPool(self.device, self.pAllocCallBacks, self.globalDescriptorPool);
 
-    var pipelines = self.pipelines.iterator();
+    var pipelines = self.pipelineMap.iterator();
     while (pipelines.next()) |val| {
-        vk.vkDestroyPipeline(self.device, val.value_ptr.pipeline, self.pAllocCallBacks);
-        vk.vkDestroyPipelineLayout(self.device, val.value_ptr.pipelineLayout, self.pAllocCallBacks);
-        self.allocator.free(val.value_ptr.outputs);
+        const pipe = &self.pipelines.items[Handles.getIndex(val.value_ptr.*)];
+
+        vk.vkDestroyPipeline(self.device, pipe.pipeline, self.pAllocCallBacks);
+        vk.vkDestroyPipelineLayout(self.device, pipe.pipelineLayout, self.pAllocCallBacks);
         self.allocator.free(val.key_ptr.*);
         // for (0..val.setCount) |i| {
         //     vk.vkDestroyDescriptorSetLayout(
@@ -416,6 +421,8 @@ pub fn deinit(self: *Self) void {
         //     );
         // }
     }
+    self.pipelineMap.deinit();
+
     self.pipelines.deinit();
 
     var entryNames = self.entryNames.iterator();
@@ -656,15 +663,19 @@ pub fn createAllPipelinesAdded(self: *Self) !void {
         @ptrCast(&temp),
     ));
 
-    var pp: Pipeline = undefined;
+    var pp: *Pipeline = undefined;
     for (0..self.graphicInfoCount) |i| {
-        pp = Pipeline{
+        pp = try self.pipelines.addOne();
+        pp.* = Pipeline{
             .vertexBindingCount = self.preGraphicInfoPtrs[i].vertexInputInfo.bindingCount,
             .setCount = self.preGraphicInfoPtrs[i].pipelineCreateInfoInfo.setLayoutCount,
             .pipelineLayout = self.preGraphicInfoPtrs[i].pipelineLayout.layout,
             .pipeline = temp[i],
             .outputs = try self.allocator.alloc(Out, self.preGraphicInfoPtrs[i].outputCount),
         };
+        const index = self.pipelines.items.len - 1;
+        const handle = self.handles.createHandle(index);
+
         const len = std.mem.len(@as([*c]u8, @ptrCast(&self.preGraphicInfoPtrs[i].name)));
         const name = try self.allocator.alloc(u8, len);
         @memcpy(name, self.preGraphicInfoPtrs[i].name[0..len]);
@@ -674,14 +685,14 @@ pub fn createAllPipelinesAdded(self: *Self) !void {
             v.var_type = self.preGraphicInfoPtrs[i].outputs[j].var_type;
         }
 
-        try self.pipelines.put(name, pp);
+        try self.pipelineMap.put(name, handle);
         std.log.debug("{s}", .{self.preGraphicInfoPtrs[i].name});
     }
     self.graphicInfoCount = 0;
 }
 
 pub fn destroyPipeline(self: *Self, name: []const u8) !void {
-    const kv = self.pipelines.fetchRemove(name);
+    const kv = self.pipelineMap.fetchRemove(name);
     if (kv) |val| {
         self.allocator.free(val.value.outputs);
         try checkVkResult(vk.vkDestroyPipeline(self.device, val.value.pipeline, self.pAllocCallBacks));
@@ -697,7 +708,7 @@ pub fn destroyPipeline(self: *Self, name: []const u8) !void {
 }
 
 pub fn getPipelineOut(self: *Self, name: []const u8) ![]const Out {
-    const kv = self.pipelines.get(name);
+    const kv = self.pipelineMap.get(name);
     if (kv) |val| {
         return val.outputs;
     }
@@ -1094,8 +1105,8 @@ pub fn createImageView2D(self: *Self, image: vk.VkImage, format: vk.VkFormat) Vk
     );
 }
 
-pub fn getPipeline(self: *Self, pipelineName: []const u8) ?Pipeline {
-    return self.pipelines.get(pipelineName);
+pub fn getPipeline(self: *Self, pipelineName: []const u8) ?Handle {
+    return self.pipelineMap.get(pipelineName);
 }
 
 pub fn destroyImageView(self: *Self, imageView: vk.VkImageView) void {

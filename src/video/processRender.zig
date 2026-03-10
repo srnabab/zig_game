@@ -12,8 +12,7 @@ const tracy = @import("tracy");
 const math = @import("math");
 const uniqueArrayList = @import("uniqueArrayList").UniqueArrayList;
 const rendering = @import("rendering");
-
-const logParam = true;
+const Handle = @import("handle").Handle;
 
 var mutex = Thread.Mutex{};
 
@@ -678,6 +677,7 @@ pub const QueueNode = QueueNodes.Inner;
 const commandBufferDAG = DAG(CommandBufferBelong);
 
 const garbageDataTag = enum {
+    renderingInfo,
     buffer,
     bufferAndRegion,
     regions,
@@ -685,6 +685,7 @@ const garbageDataTag = enum {
     empty,
 };
 const garbageData = union(garbageDataTag) {
+    renderingInfo: rendering.RenderingInfo_t,
     buffer: VkStruct.Buffer_t,
     bufferAndRegion: struct {
         buffer: VkStruct.Buffer_t,
@@ -714,6 +715,8 @@ pub const oneTimeCommand = struct {
     nodeDag: QueueNodes,
     combineMap: std.AutoHashMap(u64, *QueueNode),
 
+    pipelineBufferLastNodeMap: std.AutoHashMap(Handle, *QueueNode),
+
     primaryCommandPool: CommandPools,
 
     allocator: std.mem.Allocator,
@@ -725,6 +728,10 @@ pub const oneTimeCommand = struct {
 
     cacheMap: std.AutoHashMap(*anyopaque, u32),
     garbageData: std.array_list.Managed(GarbageData),
+
+    waitSemaphoreSubmitInfos: [global.FrameInFlight]std.array_list.Managed(vk.VkSemaphoreSubmitInfo),
+    signalSemaphoreSubmitInfos: [global.FrameInFlight]std.array_list.Managed(vk.VkSemaphoreSubmitInfo),
+    sumbitInfos: [global.FrameInFlight]std.array_list.Managed(vk.VkSubmitInfo2),
 
     // commandPools: std.array_list.Managed(vk.VkCommandPool),
 
@@ -741,7 +748,11 @@ pub const oneTimeCommand = struct {
             .stackAllocator = stackAllocator,
             .combineMap = .init(allocator),
             .cacheMap = .init(allocator),
+            .pipelineBufferLastNodeMap = .init(allocator),
             .vulkan = vulkan,
+            .waitSemaphoreSubmitInfos = [_]std.array_list.Managed(vk.VkSemaphoreSubmitInfo){.init(allocator)} ** global.FrameInFlight,
+            .signalSemaphoreSubmitInfos = [_]std.array_list.Managed(vk.VkSemaphoreSubmitInfo){.init(allocator)} ** global.FrameInFlight,
+            .sumbitInfos = [_]std.array_list.Managed(vk.VkSubmitInfo2){.init(allocator)} ** global.FrameInFlight,
             .pRendering = pRendering,
         };
     }
@@ -768,6 +779,11 @@ pub const oneTimeCommand = struct {
         self.combineMap.deinit();
         self.garbageData.deinit();
         self.cacheMap.deinit();
+        for (0..2) |i| {
+            self.waitSemaphoreSubmitInfos[i].deinit();
+            self.signalSemaphoreSubmitInfos[i].deinit();
+            self.sumbitInfos[i].deinit();
+        }
     }
 
     fn getOuput(commandType: drawC.CommandType, command: drawC.comm) drawC.Output {
@@ -1790,6 +1806,43 @@ pub const oneTimeCommand = struct {
                     commandType,
                 );
 
+                const pipelineRes = try self.pipelineBufferLastNodeMap.getOrPut(draw2D.pipeline);
+                const indexBufferRes = try self.pipelineBufferLastNodeMap.getOrPut(draw2D.indexBuffer);
+                const vertexBufferRes = try self.pipelineBufferLastNodeMap.getOrPut(draw2D.vertexBuffer);
+
+                const lastNode = blk: {
+                    var n: ?*QueueNode = null;
+                    var lastTimestamp: i128 = 0;
+                    if (pipelineRes.found_existing) {
+                        const timestamp = self.queue.getPtr(pipelineRes.value_ptr.*).?.timestamp;
+                        if (timestamp > lastTimestamp) {
+                            n = pipelineRes.value_ptr.*;
+                            lastTimestamp = timestamp;
+                        }
+                    }
+                    pipelineRes.value_ptr.* = node;
+
+                    if (indexBufferRes.found_existing) {
+                        const timestamp = self.queue.getPtr(indexBufferRes.value_ptr.*).?.timestamp;
+                        if (timestamp > lastTimestamp) {
+                            n = indexBufferRes.value_ptr.*;
+                            lastTimestamp = timestamp;
+                        }
+                    }
+                    indexBufferRes.value_ptr.* = node;
+
+                    if (vertexBufferRes.found_existing) {
+                        const timestamp = self.queue.getPtr(vertexBufferRes.value_ptr.*).?.timestamp;
+                        if (timestamp > lastTimestamp) {
+                            n = vertexBufferRes.value_ptr.*;
+                            lastTimestamp = timestamp;
+                        }
+                    }
+                    vertexBufferRes.value_ptr.* = node;
+
+                    break :blk n;
+                };
+
                 if (imageQueueNode.a) |aa| {
                     std.log.debug("ID: {d} image", .{aa.ID});
                 }
@@ -1910,6 +1963,13 @@ pub const oneTimeCommand = struct {
                         }
 
                         currentNode = aa;
+                    }
+
+                    if (lastNode) |a| {
+                        try currentNode.parentsAppend(&a.ID);
+                        try a.childrenAppend(&currentNode.ID);
+
+                        currentNode = a;
                     }
                 }
             },
@@ -2066,6 +2126,8 @@ pub const oneTimeCommand = struct {
             .draw2D => {
                 const innerZone = tracy.initZone(@src(), .{ .name = "draw 2D" });
                 defer innerZone.deinit();
+
+                // const draw2D = command.command.draw2D;
             },
             .beginRendering => {
                 const innerZone = tracy.initZone(@src(), .{ .name = "begin rendering" });
@@ -2371,7 +2433,9 @@ pub const oneTimeCommand = struct {
             },
             .start => null,
             .beginRendering => null,
-            .draw2D => null,
+            .draw2D => {
+                break :rs garbageData{ .renderingInfo = command.command.draw2d.rendering };
+            },
             else => {
                 std.debug.panic("not support {s}", .{@tagName(command.commandType)});
             },
@@ -2415,6 +2479,9 @@ pub const oneTimeCommand = struct {
                     self.allocator.free(g.data.regions);
                     self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
                 },
+                .renderingInfo => {
+                    self.pRendering.renderingEnd(g.data.renderingInfo);
+                },
                 .empty => {},
             }
         }
@@ -2443,6 +2510,8 @@ pub const oneTimeCommand = struct {
 
         self.mutex.lock();
         defer self.mutex.unlock();
+
+        const currentFrame = self.vulkan.currentFrame.load(.seq_cst);
 
         // self.nodeDag.print();
 
@@ -2625,13 +2694,13 @@ pub const oneTimeCommand = struct {
                     break :va .{ value, value, value, value };
                 };
 
-            var waitSemaphoreSubmitInfos =
-                std.array_list.Managed(vk.VkSemaphoreSubmitInfo).init(self.allocator);
-            defer waitSemaphoreSubmitInfos.deinit();
+            const waitSemaphoreSubmitInfos = &self.waitSemaphoreSubmitInfos[currentFrame];
+            const signalSemaphoreSubmitInfos = &self.signalSemaphoreSubmitInfos[currentFrame];
+            const sumbitInfos = &self.sumbitInfos[currentFrame];
 
-            var signalSemaphoreSubmitInfos =
-                std.array_list.Managed(vk.VkSemaphoreSubmitInfo).init(self.allocator);
-            defer signalSemaphoreSubmitInfos.deinit();
+            waitSemaphoreSubmitInfos.clearRetainingCapacity();
+            signalSemaphoreSubmitInfos.clearRetainingCapacity();
+            sumbitInfos.clearRetainingCapacity();
 
             var firstStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
             var lastStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
@@ -2646,12 +2715,6 @@ pub const oneTimeCommand = struct {
             var firstNode = self.nodeDag.get(0);
             const startComm = self.queue.get(0).?;
             const present = startComm.command.start.present;
-
-            var submitInfo = vk.VkSubmitInfo2{
-                .sType = vk.VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
-                .pNext = null,
-                .flags = 0,
-            };
 
             var timelinewaitValue: u64 = currentSemaphoreValue;
             while (firstNode) |nn| {
@@ -2703,11 +2766,20 @@ pub const oneTimeCommand = struct {
                     temp2.value = currentSemaphoreValue;
                     std.log.debug("signal timeline semaphore value {d}", .{temp2.value});
 
+                    _ = self.vulkan.globalTimelineValue.store(currentSemaphoreValue, .seq_cst);
+
                     var temp3 = vk.VkCommandBufferSubmitInfo{
                         .sType = vk.VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
                         .pNext = null,
                         .commandBuffer = currentCommandBuffer,
                         .deviceMask = 0,
+                    };
+
+                    var submitInfo = try sumbitInfos.addOne();
+                    submitInfo.* = vk.VkSubmitInfo2{
+                        .sType = vk.VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+                        .pNext = null,
+                        .flags = 0,
                     };
 
                     submitInfo.waitSemaphoreInfoCount = @intCast(waitSemaphoreSubmitInfos.items.len);
@@ -2717,9 +2789,16 @@ pub const oneTimeCommand = struct {
                     submitInfo.signalSemaphoreInfoCount = @intCast(signalSemaphoreSubmitInfos.items.len);
                     submitInfo.pSignalSemaphoreInfos = @ptrCast(signalSemaphoreSubmitInfos.items.ptr);
 
-                    try self.vulkan.queueSubmit(currentType, 1, &submitInfo, null);
+                    try self.vulkan.queueSubmit(currentType, 1, submitInfo, null);
 
                     switch (currentType) {
+                        .graphic => graphicSemaphoreValue = currentSemaphoreValue,
+                        .transfer => transferSemaphoreValue = currentSemaphoreValue,
+                        .compute => computeSemaphoreValue = currentSemaphoreValue,
+                        .present, .init => unreachable,
+                    }
+
+                    switch (nn.data.commandPoolType) {
                         .graphic => graphicSemaphoreValue = currentSemaphoreValue,
                         .transfer => transferSemaphoreValue = currentSemaphoreValue,
                         .compute => computeSemaphoreValue = currentSemaphoreValue,
@@ -2860,7 +2939,9 @@ pub const oneTimeCommand = struct {
                 } else {
                     temp.stageMask = vk.VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
                 }
-                temp.value = timelinewaitValue;
+                temp.value = graphicSemaphoreValue;
+                std.log.debug("wait timeline semaphore value {d}", .{temp.value});
+                // std.log.debug("semaphores len {d}", .{waitSemaphoreSubmitInfos.items.len});
 
                 const temp2 = try signalSemaphoreSubmitInfos.addOne();
                 temp2.sType = vk.VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
@@ -2870,6 +2951,11 @@ pub const oneTimeCommand = struct {
                 temp2.stageMask = vk.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
                 currentSemaphoreValue += 1;
                 temp2.value = currentSemaphoreValue;
+
+                std.log.debug("signal timeline semaphore value {d}", .{temp2.value});
+                // std.log.debug("semaphores len {d}", .{signalSemaphoreSubmitInfos.items.len});
+
+                _ = self.vulkan.globalTimelineValue.store(currentSemaphoreValue, .seq_cst);
 
                 if (present) {
                     const temp3 = try signalSemaphoreSubmitInfos.addOne();
@@ -2888,6 +2974,13 @@ pub const oneTimeCommand = struct {
                     .deviceMask = 0,
                 };
 
+                var submitInfo = try sumbitInfos.addOne();
+                submitInfo.* = vk.VkSubmitInfo2{
+                    .sType = vk.VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+                    .pNext = null,
+                    .flags = 0,
+                };
+
                 submitInfo.waitSemaphoreInfoCount = @intCast(waitSemaphoreSubmitInfos.items.len);
                 submitInfo.pWaitSemaphoreInfos = @ptrCast(waitSemaphoreSubmitInfos.items.ptr);
                 submitInfo.commandBufferInfoCount = 1;
@@ -2895,7 +2988,15 @@ pub const oneTimeCommand = struct {
                 submitInfo.signalSemaphoreInfoCount = @intCast(signalSemaphoreSubmitInfos.items.len);
                 submitInfo.pSignalSemaphoreInfos = @ptrCast(signalSemaphoreSubmitInfos.items.ptr);
 
-                try self.vulkan.queueSubmit(currentType, 1, &submitInfo, null);
+                for (signalSemaphoreSubmitInfos.items) |value| {
+                    std.log.debug("value {d}", .{value.value});
+                }
+
+                // std.Thread.sleep(5 * std.time.ns_per_s);
+
+                std.log.debug("semaphore {*}", .{submitInfo.pSignalSemaphoreInfos[0].semaphore});
+
+                try self.vulkan.queueSubmit(currentType, 1, submitInfo, null);
             }
 
             if (present) {

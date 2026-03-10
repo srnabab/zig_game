@@ -233,7 +233,7 @@ const PipelineBarrier = struct {
 };
 
 const Draw2D = struct {
-    pipeline: VkStruct.Pipeline,
+    pipeline: VkStruct.Pipeline_t,
     rendering: rendering.RenderingInfo_t,
     vertexBuffer: VkStruct.Buffer_t,
     indexBuffer: VkStruct.Buffer_t,

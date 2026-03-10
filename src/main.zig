@@ -115,6 +115,9 @@ pub fn main() !void {
     var textureSett = textureSet.init(allocator_t.*, &handles);
     defer textureSett.deinit(&vulkan);
 
+    // var tt = try std.Thread.spawn(.{}, testSemaphore, .{&vulkan});
+    // defer tt.join();
+
     try graphic.startCommand();
 
     try vertices.init(&vulkan, &graphic);
@@ -212,7 +215,8 @@ pub fn main() !void {
         try graphic.addCommandEnd();
         try graphic.executeCommands();
         vulkan.nextFrame();
-        if (std.time.milliTimestamp() - renderStart > 2) {
+        if (std.time.milliTimestamp() - renderStart > 2 * std.time.ms_per_s) {
+            // _ = renderStart;
             break;
         }
     }
@@ -264,4 +268,16 @@ pub fn main() !void {
     defer render_t.join();
 
     endSemaphore.post();
+}
+
+fn testSemaphore(vulkan: *VkStruct) void {
+    const time = std.time.milliTimestamp();
+
+    while (std.time.milliTimestamp() - time < 15) {
+        var value: u64 = undefined;
+        _ = vk.vkGetSemaphoreCounterValue(vulkan.device, vulkan.globalTimelineSemaphore, &value);
+        std.log.debug("semaphore value {d}", .{value});
+
+        std.Thread.sleep(comptime 0.5 * std.time.ns_per_ms);
+    }
 }

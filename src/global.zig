@@ -24,3 +24,5 @@ pub const EngineName = "Engine";
 pub const EngineVersionMajor = 0;
 pub const EngineVersionMinor = 1;
 pub const EngineVersionPatch = 125;
+
+pub const FrameInFlight = 2;
