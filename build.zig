@@ -379,6 +379,7 @@ pub fn build(b: *std.Build) void {
     fileSystem_mod.addIncludePath(b.path("include"));
 
     exe_mod.addImport("ECS", ecs_mod);
+    exe_mod.addImport("cglm", cglm_mod);
     exe_mod.addImport("video", video_mod);
     exe_mod.addImport("enumFromC", enum_c_mod);
     exe_mod.addImport("output", output_mod);

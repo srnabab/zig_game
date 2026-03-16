@@ -96,7 +96,6 @@ const set1SetLayoutCreateInfos = descriptorSetLayoutCreateInfo{
         0,
     },
 };
-const globalTextureBinding = 0;
 
 pub const Out = struct {
     location: u32,
@@ -1004,7 +1003,16 @@ pub fn readPipelineFileAndAdd(self: *Self, fileID: i32) !void {
     try self.addPipelineCreateInfo(pipelineInfo);
 }
 
-pub fn addWriteDescriptorSetImage(self: *Self, dstArrayElement: u32, imageView: vk.VkImageView, sampler: vk.VkSampler) !void {
+pub fn addWriteDescriptorSetImage(
+    self: *Self,
+    dstArrayElement: u32,
+    imageView: vk.VkImageView,
+    sampler: vk.VkSampler,
+    imageLayout: vk.VkImageLayout,
+    dstSet: vk.VkDescriptorSet,
+    dstBinding: u32,
+    descriptorType: vk.VkDescriptorType,
+) !void {
     const zone = tracy.initZone(@src(), .{ .name = "add descriptor write sets" });
     defer zone.deinit();
 
@@ -1013,20 +1021,56 @@ pub fn addWriteDescriptorSetImage(self: *Self, dstArrayElement: u32, imageView: 
     imagePtr.* = vk.VkDescriptorImageInfo{
         .imageView = imageView,
         .sampler = sampler,
-        .imageLayout = vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        .imageLayout = imageLayout,
     };
 
     const writePtr = try self.writeDescriptorSets.addOne();
     writePtr.* = vk.VkWriteDescriptorSet{
         .sType = vk.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
         .pNext = null,
-        .dstSet = self.globalTextureDescriptorSet,
-        .dstBinding = globalTextureBinding,
+        .dstSet = dstSet,
+        .dstBinding = dstBinding,
         .dstArrayElement = dstArrayElement,
         .descriptorCount = 1,
-        .descriptorType = vk.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .descriptorType = descriptorType,
         .pImageInfo = @ptrCast(imagePtr),
         .pBufferInfo = null,
+        .pTexelBufferView = null,
+    };
+}
+
+pub fn addWriteDescriptorSetBuffer(
+    self: *Self,
+    dstArrayElement: u32,
+    buffer: vk.VkBuffer,
+    offset: vk.VkDeviceSize,
+    range: vk.VkDeviceSize,
+    dstSet: vk.VkDescriptorSet,
+    dstBinding: u32,
+    descriptorType: vk.VkDescriptorType,
+) !void {
+    const zone = tracy.initZone(@src(), .{ .name = "add descriptor write sets" });
+    defer zone.deinit();
+
+    const bufferPtr = try self.descriptorBufferInfos.addOne();
+    errdefer _ = self.descriptorBufferInfos.pop();
+    bufferPtr.* = vk.VkDescriptorBufferInfo{
+        .buffer = buffer,
+        .offset = offset,
+        .range = range,
+    };
+
+    const writePtr = try self.writeDescriptorSets.addOne();
+    writePtr.* = vk.VkWriteDescriptorSet{
+        .sType = vk.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .pNext = null,
+        .dstSet = dstSet,
+        .dstBinding = dstBinding,
+        .dstArrayElement = dstArrayElement,
+        .descriptorCount = 1,
+        .descriptorType = descriptorType,
+        .pImageInfo = null,
+        .pBufferInfo = @ptrCast(bufferPtr),
         .pTexelBufferView = null,
     };
 }
@@ -1111,6 +1155,10 @@ pub fn getPipeline(self: *Self, pipelineName: []const u8) ?Handle {
     return self.pipelineMap.get(pipelineName);
 }
 
+pub fn getPipelineContent(self: *Self, pipeline: Pipeline_t) Pipeline {
+    return self.pipelines.items[Handles.getIndex(pipeline)];
+}
+
 pub fn destroyImageView(self: *Self, imageView: vk.VkImageView) void {
     vk.vkDestroyImageView(self.device, imageView, self.pAllocCallBacks);
 }
@@ -1148,6 +1196,10 @@ pub fn createVertexBuffer(self: *Self, bufferSize: vk.VkDeviceSize) !Buffer_t {
 
 pub fn createIndexBuffer(self: *Self, bufferSize: vk.VkDeviceSize) !Buffer_t {
     return self.buffers.createIndexBuffer(&self.vmaS, bufferSize, self.handles);
+}
+
+pub fn createUniformBuffer(self: *Self, bufferSize: vk.VkDeviceSize) !Buffer_t {
+    return self.buffers.createUniformBuffer(&self.vmaS, bufferSize, self.handles);
 }
 
 pub fn destroyBuffer(self: *Self, buffer: Buffer_t) void {
