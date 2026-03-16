@@ -22,6 +22,14 @@ pub fn UniqueArrayList(comptime T: type) type {
             self.list.deinit();
         }
 
+        pub fn clear(self: *Self) void {
+            self.list.clearRetainingCapacity();
+            if (self.bitMap.len == 0) return;
+
+            self.list.allocator.free(self.bitMap);
+            self.bitMap = &.{};
+        }
+
         pub fn append(self: *Self, item: T) !bool {
             const zone = tracy.initZone(@src(), .{ .name = "unique array list append" });
             defer zone.deinit();
@@ -42,6 +50,34 @@ pub fn UniqueArrayList(comptime T: type) type {
             self.bitMap[index] = true;
 
             return false;
+        }
+
+        pub fn remove(self: *Self, item: T) void {
+            const zone = tracy.initZone(@src(), .{ .name = "unique array list remove" });
+            defer zone.deinit();
+
+            const index = switch (typeType) {
+                .int => item,
+                .pointer => item.*,
+                else => unreachable,
+            };
+
+            if (index < self.bitMap.len) {
+                self.bitMap[index] = false;
+            } else {
+                return;
+            }
+
+            for (self.list.items, 0..) |value, i| {
+                if (switch (typeType) {
+                    .int => value,
+                    .pointer => value.*,
+                    else => unreachable,
+                } == index) {
+                    _ = self.list.swapRemove(i);
+                    return;
+                }
+            }
         }
 
         pub fn have(self: *Self, item: T) bool {
