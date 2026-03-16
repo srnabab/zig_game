@@ -21,6 +21,8 @@ const VkStruct = @import("video");
 const OneTimeCommand = @import("processRender").oneTimeCommand;
 const vertices = @import("vertices");
 
+const shaderStruct = @import("video/shaderStruct.zig");
+
 const file = @import("fileSystem");
 
 const tracy = @import("tracy");
@@ -201,6 +203,24 @@ pub fn main() !void {
     );
     // _ = rendering_test;
 
+    const ubo_test = try vulkan.createUniformBuffer(@sizeOf(shaderStruct.UniformBufferObject));
+    try vulkan.addWriteDescriptorSetBuffer(
+        0,
+        vulkan.buffers.getVkBuffer(ubo_test),
+        0,
+        vulkan.buffers.getBufferSize(ubo_test),
+        vulkan.globalFixed2dMVPMatrixDescriptorSet,
+        0,
+        vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+    );
+    vulkan.writeCachedDescriptorSetResources();
+
+    var testBuffers = [_]VkStruct.Buffer_t{
+        vertices.vertexBuffer2D,
+    };
+    var testDescriptorSets = [_]vk.VkDescriptorSet{
+        vulkan.globalTextureDescriptorSet, vulkan.globalFixed2dMVPMatrixDescriptorSet,
+    };
     const renderStart = std.time.milliTimestamp();
     while (true) {
         try graphic.startCommand();
@@ -208,9 +228,10 @@ pub fn main() !void {
             .pipeline = vulkan.getPipeline("flat2d").?,
             .pTexture = textureSett.getTexture(@intCast(file.getID("circle.png"))).?,
             .rendering = rendering_test,
-            .vertexBuffer = vertices.vertexBuffer2D,
+            .vertexBuffer = &testBuffers,
             .indexBuffer = vertices.indexBuffer2D,
             .pTextureSet = &textureSett,
+            .descriptorSets = &testDescriptorSets,
         } });
         try graphic.addCommandEnd();
         try graphic.executeCommands();

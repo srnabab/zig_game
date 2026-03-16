@@ -12,9 +12,12 @@ pub const CommandType = enum {
     pipelineBarrier,
     copyBufferToImage,
     copyBuffer,
-    bindVertexBuffer,
+    bindVertexBuffers,
     beginPrimaryRecord,
     beginRendering,
+    bindPipeline,
+    bindIndexBuffer,
+    bindDescriptorSets,
     beginSecondaryRecord,
     endRendering,
     endRecord,
@@ -22,16 +25,20 @@ pub const CommandType = enum {
     graphicTransfer,
     transfer,
     end,
+    empty,
 };
 
 const privateEnum = [_]CommandType{
     .start,
     .transLayout,
     .changeBufferQueue,
-    .bindVertexBuffer,
+    .bindVertexBuffers,
     .beginPrimaryRecord,
     .beginRendering,
     .beginSecondaryRecord,
+    .bindDescriptorSets,
+    .bindIndexBuffer,
+    .bindPipeline,
     .endRecord,
     .endRendering,
     .end,
@@ -235,8 +242,9 @@ const PipelineBarrier = struct {
 const Draw2D = struct {
     pipeline: VkStruct.Pipeline_t,
     rendering: rendering.RenderingInfo_t,
-    vertexBuffer: VkStruct.Buffer_t,
+    vertexBuffer: []VkStruct.Buffer_t,
     indexBuffer: VkStruct.Buffer_t,
+    descriptorSets: []vk.VkDescriptorSet,
     pTexture: texture.Texture_t,
     pTextureSet: *texture,
 };
@@ -248,9 +256,10 @@ const CopyBuffer = struct {
     clean: bool = true,
 };
 
-const BindVertexBuffer = struct {
+const BindVertexBuffers = struct {
     firstBinding: u32,
-    buffers: []VkStruct.Buffer_t,
+    buffers: []vk.VkBuffer,
+    offsets: []vk.VkDeviceSize,
 };
 
 pub const SizeOffset = struct {
@@ -265,17 +274,41 @@ const ChangeBufferQueue = struct {
     regions: []SizeOffset,
 };
 
+const BindPipeline = struct {
+    bindPoint: vk.VkPipelineBindPoint,
+    pipeline: vk.VkPipeline,
+};
+
+const BindIndexBuffer = struct {
+    buffer: vk.VkBuffer,
+    offset: vk.VkDeviceSize,
+    size: vk.VkDeviceSize,
+    indexType: vk.VkIndexType,
+};
+
+const BindDescriptorSets = struct {
+    stageFlags: vk.VkShaderStageFlags,
+    layout: vk.VkPipelineLayout,
+    firstSet: u32,
+    descriptorSets: []vk.VkDescriptorSet,
+    dynamicOffsets: []u32,
+};
+
 pub const comm = union {
     start: Start,
     draw2d: Draw2D,
     copyBuffer: CopyBuffer,
     transLayout: TransLayout,
     changeBufferQueue: ChangeBufferQueue,
-    bindVertexBuffer: BindVertexBuffer,
+    bindVertexBuffers: BindVertexBuffers,
     copyBufferToImage: CopyBufferToImage,
     beginRecoed: BeginSecondaryRecord,
     beginRendering: BeginRendering,
+    bindPipeline: BindPipeline,
+    bindIndexBuffer: BindIndexBuffer,
+    bindDescriptorSets: BindDescriptorSets,
     pipelineBarrier: PipelineBarrier,
+    endRendering: void,
     empty: void,
 };
 

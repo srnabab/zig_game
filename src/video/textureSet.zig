@@ -232,6 +232,10 @@ pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Sample
         dstArrayElement,
         texture.imageView,
         vulkan.samplers.getDefaultSampler(samplerType),
+        vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        vulkan.globalTextureDescriptorSet,
+        0,
+        vk.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
     );
 
     return texture_t;
