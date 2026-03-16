@@ -187,6 +187,24 @@ pub fn createIndexBuffer(
         handles,
     );
 }
+pub fn createUniformBuffer(
+    self: *Self,
+    vmaa: *vmaStruct,
+    size: vk.VkDeviceSize,
+    handles: *global.HandlesType,
+) !Buffer_t {
+    return self._createBuffer(
+        vmaa,
+        0,
+        null,
+        vk.VK_SHARING_MODE_EXCLUSIVE,
+        @intCast(math.round(BufferAlign, size)),
+        vk.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | vk.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+        vma.VMA_MEMORY_USAGE_CPU_ONLY,
+        handles,
+    );
+}
 
 pub fn copyDataToMapped(self: *Self, buffer: Buffer_t, srcType: type, src: []const srcType) void {
     const index = getIndex(buffer);
@@ -234,4 +252,11 @@ pub fn getBufferUsage(self: *Self, buffer: Buffer_t) Usage {
     const ptr = self.buffers.get(index);
 
     return ptr.usage;
+}
+
+pub fn getBufferContent(self: *Self, buffer: Buffer_t) Buffer {
+    const index = getIndex(buffer);
+    const ptr = self.buffers.get(index);
+
+    return ptr.*;
 }
