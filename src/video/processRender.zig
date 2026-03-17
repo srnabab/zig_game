@@ -1676,6 +1676,40 @@ pub const oneTimeCommand = struct {
 
                 resNode = rootNode;
             },
+            .setScissor => {
+                const zone2 = tracy.initZone(@src(), .{ .name = "setScissor" });
+                defer zone2.deinit();
+
+                const rootNode = try self.nodeDag.create();
+                const ptr = try self.queue.getOrPut(rootNode.ID);
+                ptr.value_ptr.* = drawC{
+                    .ID = rootNode.ID,
+                    .timestamp = std.time.nanoTimestamp(),
+                    .command = .{ .setScissor = command.setScissor },
+                    .commandType = .setScissor,
+                    .output = .{ .empty = void{} },
+                };
+                rootNode.data.commandPoolType = .graphic;
+
+                resNode = rootNode;
+            },
+            .setViewport => {
+                const zone2 = tracy.initZone(@src(), .{ .name = "setViewport" });
+                defer zone2.deinit();
+
+                const rootNode = try self.nodeDag.create();
+                const ptr = try self.queue.getOrPut(rootNode.ID);
+                ptr.value_ptr.* = drawC{
+                    .ID = rootNode.ID,
+                    .timestamp = std.time.nanoTimestamp(),
+                    .command = .{ .setViewport = command.setViewport },
+                    .commandType = .setViewport,
+                    .output = .{ .empty = void{} },
+                };
+                rootNode.data.commandPoolType = .graphic;
+
+                resNode = rootNode;
+            },
             else => {
                 std.debug.panic("not supported commandType {s}", .{@tagName(commandType)});
             },
@@ -2135,6 +2169,7 @@ pub const oneTimeCommand = struct {
                 }
 
                 var renderingPack_ = try self.renderingMap.getOrPut(draw2D.rendering);
+                // std.log.debug("rendering {*}", .{renderingPack_.key_ptr.*});
                 if (!renderingPack_.found_existing) {
                     renderingPack_.value_ptr.* = .{
                         .drawResourceMap = .init(self.allocator),
@@ -2145,11 +2180,14 @@ pub const oneTimeCommand = struct {
                 var rendering_drawResourceMap = &renderingPack_.value_ptr.drawResourceMap;
                 var rendering_resourceMap = &renderingPack_.value_ptr.resourceMap;
 
+                const otherResources = 4;
                 const resPack = try self.stackAllocator.alloc(
                     @TypeOf(rendering_drawResourceMap.*).GetOrPutResult,
-                    draw2D.vertexBuffer.len + draw2D.descriptorSets.len + 2,
+                    draw2D.vertexBuffer.len + draw2D.descriptorSets.len + otherResources,
                 );
                 defer self.stackAllocator.free(resPack);
+
+                try rendering_drawResourceMap.ensureUnusedCapacity(@intCast(resPack.len));
 
                 for (draw2D.vertexBuffer, 0..) |value, i| {
                     resPack[i] = try rendering_drawResourceMap.getOrPut(value);
@@ -2161,6 +2199,9 @@ pub const oneTimeCommand = struct {
 
                 resPack[draw2D.vertexBuffer.len + draw2D.descriptorSets.len] = try rendering_drawResourceMap.getOrPut(draw2D.indexBuffer);
                 resPack[draw2D.vertexBuffer.len + draw2D.descriptorSets.len + 1] = try rendering_drawResourceMap.getOrPut(draw2D.pipeline);
+
+                resPack[draw2D.vertexBuffer.len + draw2D.descriptorSets.len + 2] = try rendering_drawResourceMap.getOrPut(draw2D.pScissor);
+                resPack[draw2D.vertexBuffer.len + draw2D.descriptorSets.len + 3] = try rendering_drawResourceMap.getOrPut(draw2D.pViewport);
 
                 var hasher = std.hash.XxHash3.init(0);
                 for (resPack) |value| {
@@ -2194,7 +2235,11 @@ pub const oneTimeCommand = struct {
                 var descriptorSetIndex: u32 = 0;
                 var descriptorSetCount: u32 = 0;
 
+                // std.log.debug("res len {d}", .{resPack.len});
+
                 for (resPack, 0..) |value, i| {
+                    // std.log.debug("key {*}", .{@as(Handle, @ptrCast(value.key_ptr.*))});
+
                     if (value.found_existing) {} else {
                         if (i < draw2D.vertexBuffer.len) {
                             if (vertexCount == 0) {
@@ -2232,18 +2277,29 @@ pub const oneTimeCommand = struct {
                                 continue;
                             }
 
-                            if (descriptorSetIndex + descriptorSetCount == i) {
+                            // std.log.debug("#count {d}", .{descriptorSetCount});
+                            // std.log.debug("sum {d}", .{descriptorSetCount + descriptorSetIndex});
+
+                            if (descriptorSetIndex + descriptorSetCount + draw2D.vertexBuffer.len == i) {
                                 descriptorSetCount += 1;
+
                                 continue;
                             }
 
+                            const descriptorSets = draw2D.descriptorSets[descriptorSetIndex .. descriptorSetIndex + descriptorSetCount];
                             const tempNode = try self.addCommand2(.bindDescriptorSets, .{
                                 .bindDescriptorSets = .{
-                                    .stageFlags = vk.VK_SHADER_STAGE_VERTEX_BIT | vk.VK_SHADER_STAGE_FRAGMENT_BIT,
-                                    .layout = self.vulkan.getPipelineContent(draw2D.pipeline).pipelineLayout,
-                                    .firstSet = descriptorSetIndex,
-                                    .descriptorSets = draw2D.descriptorSets[descriptorSetIndex .. descriptorSetIndex + descriptorSetCount],
-                                    .dynamicOffsets = &.{},
+                                    .bindDescriptorSetsInfo = .{
+                                        .sType = vk.VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO,
+                                        .pNext = null,
+                                        .stageFlags = vk.VK_SHADER_STAGE_VERTEX_BIT | vk.VK_SHADER_STAGE_FRAGMENT_BIT,
+                                        .layout = self.vulkan.getPipelineContent(draw2D.pipeline).pipelineLayout,
+                                        .firstSet = descriptorSetIndex,
+                                        .descriptorSetCount = @intCast(descriptorSets.len),
+                                        .pDescriptorSets = descriptorSets.ptr,
+                                        .dynamicOffsetCount = 0,
+                                        .pDynamicOffsets = null,
+                                    },
                                 },
                             }, commandType);
 
@@ -2258,10 +2314,15 @@ pub const oneTimeCommand = struct {
 
                                 linkNodeEnd = tempNode.a.?;
                             }
-                        } else if (i < draw2D.vertexBuffer.len + draw2D.descriptorSets.len + 2) {
+                        } else if (i < draw2D.vertexBuffer.len + draw2D.descriptorSets.len + otherResources) {
                             var tempNode: *QueueNode = undefined;
 
+                            // std.log.debug("{*}\n{*}\n{*}\n{*}\n", .{ draw2D.indexBuffer, draw2D.pipeline, draw2D.pViewport, draw2D.pScissor });
+                            // std.log.debug("i {d} {*}", .{ i, value.key_ptr.* });
+
                             if (draw2D.indexBuffer == @as(Handle, @ptrCast(value.key_ptr.*))) {
+                                // std.log.debug("xxx 5", .{});
+
                                 const indexBuffer = self.vulkan.buffers.getBufferContent(draw2D.indexBuffer);
 
                                 const tempTwoNode = try self.addCommand2(.bindIndexBuffer, .{ .bindIndexBuffer = .{
@@ -2273,6 +2334,8 @@ pub const oneTimeCommand = struct {
 
                                 tempNode = tempTwoNode.a.?;
                             } else if (draw2D.pipeline == @as(Handle, @ptrCast(value.key_ptr.*))) {
+                                // std.log.debug("xxx 6", .{});
+
                                 const pipeline = self.vulkan.getPipelineContent(draw2D.pipeline);
 
                                 const tempTwoNode = try self.addCommand2(
@@ -2285,8 +2348,41 @@ pub const oneTimeCommand = struct {
                                 );
 
                                 tempNode = tempTwoNode.a.?;
+                            } else if (draw2D.pScissor == @as(Handle, @ptrCast(value.key_ptr.*))) {
+                                // std.log.debug("xxx 1", .{});
+
+                                const scissor = self.vulkan.scissors.getScissorContent(draw2D.pScissor);
+
+                                const tempTwoNode = try self.addCommand2(
+                                    .setScissor,
+                                    .{
+                                        .setScissor = scissor,
+                                    },
+                                    commandType,
+                                );
+
+                                tempNode = tempTwoNode.a.?;
+
+                                // std.log.debug("xxx 2", .{});
+                            } else if (draw2D.pViewport == @as(Handle, @ptrCast(value.key_ptr.*))) {
+                                // std.log.debug("xxx 3", .{});
+
+                                const viewport = self.vulkan.viewports.getViewportContent(draw2D.pViewport);
+
+                                const tempTwoNode = try self.addCommand2(
+                                    .setViewport,
+                                    .{
+                                        .setViewport = viewport,
+                                    },
+                                    commandType,
+                                );
+
+                                tempNode = tempTwoNode.a.?;
+
+                                // std.log.debug("xxx 4", .{});
                             }
 
+                            // std.log.debug("xxx 7", .{});
                             if (linkNodeEnd == null) {
                                 linkNodeEnd = tempNode;
                                 linkNodeStart = linkNodeEnd;
@@ -2320,15 +2416,32 @@ pub const oneTimeCommand = struct {
                 }
 
                 if (descriptorSetCount > 0) {
+                    const descriptorSets = draw2D.descriptorSets[descriptorSetIndex .. descriptorSetIndex + descriptorSetCount];
                     const tempNode = try self.addCommand2(.bindDescriptorSets, .{
                         .bindDescriptorSets = .{
-                            .stageFlags = vk.VK_SHADER_STAGE_VERTEX_BIT | vk.VK_SHADER_STAGE_FRAGMENT_BIT,
-                            .layout = self.vulkan.getPipelineContent(draw2D.pipeline).pipelineLayout,
-                            .firstSet = descriptorSetIndex,
-                            .descriptorSets = draw2D.descriptorSets[descriptorSetIndex .. descriptorSetIndex + descriptorSetCount],
-                            .dynamicOffsets = &.{},
+                            .bindDescriptorSetsInfo = .{
+                                .sType = vk.VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO,
+                                .pNext = null,
+                                .stageFlags = vk.VK_SHADER_STAGE_VERTEX_BIT | vk.VK_SHADER_STAGE_FRAGMENT_BIT,
+                                .layout = self.vulkan.getPipelineContent(draw2D.pipeline).pipelineLayout,
+                                .firstSet = descriptorSetIndex,
+                                .descriptorSetCount = @intCast(descriptorSets.len),
+                                .pDescriptorSets = descriptorSets.ptr,
+                                .dynamicOffsetCount = 0,
+                                .pDynamicOffsets = null,
+                            },
                         },
                     }, commandType);
+
+                    // const tempNode = try self.addCommand2(.bindDescriptorSets, .{
+                    //     .bindDescriptorSets = .{
+                    //         .stageFlags = vk.VK_SHADER_STAGE_VERTEX_BIT | vk.VK_SHADER_STAGE_FRAGMENT_BIT,
+                    //         .layout = self.vulkan.getPipelineContent(draw2D.pipeline).pipelineLayout,
+                    //         .firstSet = descriptorSetIndex,
+                    //         .descriptorSets = draw2D.descriptorSets[descriptorSetIndex .. descriptorSetIndex + descriptorSetCount],
+                    //         .dynamicOffsets = &.{},
+                    //     },
+                    // }, commandType);
 
                     if (linkNodeEnd == null) {
                         linkNodeEnd = tempNode.a.?;
@@ -2639,7 +2752,22 @@ pub const oneTimeCommand = struct {
                 const innerZone = tracy.initZone(@src(), .{ .name = "draw 2D" });
                 defer innerZone.deinit();
 
-                // const draw2D = command.command.draw2D;
+                const draw2D = command.command.draw2d;
+
+                const offsets = try draw2D.pTextureSet.getTextureOffsets(draw2D.pTexture);
+
+                std.log.debug("{}", .{offsets[0]});
+
+                for (offsets) |offset| {
+                    vk.vkCmdDrawIndexed(
+                        commandBuffer,
+                        offset.count * global.indexCount,
+                        1,
+                        0,
+                        @intCast(offset.offset),
+                        0,
+                    );
+                }
             },
             .beginRendering => {
                 const innerZone = tracy.initZone(@src(), .{ .name = "begin rendering" });
@@ -2870,25 +2998,30 @@ pub const oneTimeCommand = struct {
                 const innerZone = tracy.initZone(@src(), .{ .name = "bind descriptor sets" });
                 defer innerZone.deinit();
 
-                const bindDescriptorSets = command.command.bindDescriptorSets;
-                var bindDescriptorSetsInfo = vk.VkBindDescriptorSetsInfo{
-                    .sType = vk.VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO,
-                    .pNext = null,
-                    .stageFlags = bindDescriptorSets.stageFlags,
-                    .layout = bindDescriptorSets.layout,
-                    .firstSet = bindDescriptorSets.firstSet,
-                    .descriptorSetCount = @intCast(bindDescriptorSets.descriptorSets.len),
-                    .pDescriptorSets = bindDescriptorSets.descriptorSets.ptr,
-                    .dynamicOffsetCount = @intCast(bindDescriptorSets.dynamicOffsets.len),
-                    .pDynamicOffsets = bindDescriptorSets.dynamicOffsets.ptr,
-                };
-                vk.vkCmdBindDescriptorSets2(commandBuffer, &bindDescriptorSetsInfo);
+                var bindDescriptorSets = &command.command.bindDescriptorSets;
+
+                // std.log.debug("count: {d}", .{bindDescriptorSets.descriptorSets.len});
+                // std.log.debug("first set {d}", .{bindDescriptorSets.firstSet});
+
+                vk.vkCmdBindDescriptorSets2(commandBuffer, &bindDescriptorSets.bindDescriptorSetsInfo);
             },
             .endRendering => {
                 const innerZone = tracy.initZone(@src(), .{ .name = "end rendering" });
                 defer innerZone.deinit();
 
                 vk.vkCmdEndRendering(commandBuffer);
+            },
+            .setViewport => {
+                const innerZone = tracy.initZone(@src(), .{ .name = "set viewport" });
+                defer innerZone.deinit();
+
+                vk.vkCmdSetViewport(commandBuffer, 0, 1, &command.command.setViewport);
+            },
+            .setScissor => {
+                const innerZone = tracy.initZone(@src(), .{ .name = "set scissor" });
+                defer innerZone.deinit();
+
+                vk.vkCmdSetScissor(commandBuffer, 0, 1, &command.command.setScissor);
             },
             else => {
                 std.debug.panic("unsupported command type {s}", .{@tagName(command.commandType)});
@@ -3017,12 +3150,7 @@ pub const oneTimeCommand = struct {
                     .sizes = command.command.bindVertexBuffers.sizes,
                 } };
             },
-            .bindDescriptorSets => {
-                break :rs garbageData{ .descriptorSets = .{
-                    .offsets = command.command.bindDescriptorSets.dynamicOffsets,
-                } };
-            },
-            .bindIndexBuffer, .bindPipeline, .start, .beginRendering, .endRendering => null,
+            .bindDescriptorSets, .setViewport, .setScissor, .bindIndexBuffer, .bindPipeline, .start, .beginRendering, .endRendering => null,
             else => {
                 std.debug.panic("not support {s}", .{@tagName(command.commandType)});
             },

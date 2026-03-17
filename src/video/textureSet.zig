@@ -365,6 +365,18 @@ pub fn offsetsAdd(self: *Self, texture: Texture_t, offset: u32) !void {
     }
 }
 
+pub fn getTextureOffsets(self: *Self, texture: Texture_t) ![]Offsets {
+    const zone = tracy.initZone(@src(), .{ .name = "texture offsets get" });
+    defer zone.deinit();
+
+    mutex.lock();
+    defer mutex.unlock();
+
+    const index = Handles.getIndex(texture);
+
+    return self.offsetsPool.items[self.offsetRange.items[index].offset..][0..self.offsetRange.items[index].count];
+}
+
 pub fn changeTextureLayout(self: *Self, texture: Texture_t, baseLayer: u32, layerCount: u32, layout: vk.VkImageLayout) void {
     mutex.lock();
     defer mutex.unlock();

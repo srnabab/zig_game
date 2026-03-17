@@ -204,6 +204,7 @@ pub fn main() !void {
     // _ = rendering_test;
 
     const ubo_test = try vulkan.createUniformBuffer(@sizeOf(shaderStruct.UniformBufferObject));
+    defer vulkan.destroyBuffer(ubo_test);
     try vulkan.addWriteDescriptorSetBuffer(
         0,
         vulkan.buffers.getVkBuffer(ubo_test),
@@ -214,6 +215,23 @@ pub fn main() !void {
         vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
     );
     vulkan.writeCachedDescriptorSetResources();
+
+    const viewport_test = try vulkan.viewports.createViewport(.{
+        .x = 0,
+        .y = 0,
+        .width = @floatFromInt(vulkan.windowWidth),
+        .height = @floatFromInt(vulkan.windowsHeight),
+        .maxDepth = 1.0,
+        .minDepth = 0.0,
+    });
+
+    const scissor_test = try vulkan.scissors.createScissor(.{
+        .extent = .{
+            .height = vulkan.windowWidth,
+            .width = vulkan.windowsHeight,
+        },
+        .offset = .{ .x = 0, .y = 0 },
+    });
 
     var testBuffers = [_]VkStruct.Buffer_t{
         vertices.vertexBuffer2D,
@@ -232,6 +250,8 @@ pub fn main() !void {
             .indexBuffer = vertices.indexBuffer2D,
             .pTextureSet = &textureSett,
             .descriptorSets = &testDescriptorSets,
+            .pViewport = viewport_test,
+            .pScissor = scissor_test,
         } });
         try graphic.addCommandEnd();
         try graphic.executeCommands();

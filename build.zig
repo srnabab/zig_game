@@ -561,10 +561,13 @@ pub fn build(b: *std.Build) void {
     const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
 
     // run task dependency
+    preKillContentManagerProcessCmd.step.dependOn(&preKillGameProcessCmd.step);
+
     shader_compile.dependOn(&preKillContentManagerProcessCmd.step);
     shader_compile.dependOn(&preKillPipelineParseProcessCmd.step);
-    shader_compile.dependOn(&preKillGameProcessCmd.step);
     shader_compile.dependOn(&script_cmd.step);
+    shader_compile.dependOn(&compile_txt_pipeline_cmd.step);
+    shader_compile.dependOn(&compile_txt_sampler_cmd.step);
     script_cmd.step.dependOn(&compile_txt_shaders_cmd.step);
 
     pipeline_script_cmd.step.dependOn(shader_compile);

@@ -1,4 +1,4 @@
- const vk = @import("vulkan").vulkan; const VkError = @import("vulkanType.zig").VkError;
+ const std = @import("std"); const vk = @import("vulkan").vulkan; const VkError = @import("vulkanType.zig").VkError;
 pub const vulkanType= @import("vulkanType.zig");
  const VkResult = vulkanType.VkResult;
  pub fn VkResultToError(result: VkResult) VkError!void {
@@ -41,5 +41,5 @@ return switch(result) {
 else => {},
 };
 }
- pub fn checkVkResult(result: vk.VkResult) VkError!void { VkResultToError(@enumFromInt(result)) catch |err| { return err; };  
+ pub fn checkVkResult(result: vk.VkResult) VkError!void { VkResultToError(@enumFromInt(result)) catch |err| { std.debug.dumpCurrentStackTrace(null); std.log.err("error: {s}", .{@errorName(err)}); return err; };  
 }

@@ -20,6 +20,8 @@ pub const CommandType = enum {
     bindDescriptorSets,
     beginSecondaryRecord,
     endRendering,
+    setViewport,
+    setScissor,
     endRecord,
     present,
     graphicTransfer,
@@ -43,6 +45,8 @@ const privateEnum = [_]CommandType{
     .endRendering,
     .end,
     .pipelineBarrier,
+    .setScissor,
+    .setViewport,
 };
 
 pub const PrivateCommandType: type = blk: {
@@ -247,6 +251,8 @@ const Draw2D = struct {
     descriptorSets: []vk.VkDescriptorSet,
     pTexture: texture.Texture_t,
     pTextureSet: *texture,
+    pViewport: VkStruct.Viewport_t,
+    pScissor: VkStruct.Scissor_t,
 };
 
 const CopyBuffer = struct {
@@ -289,11 +295,12 @@ const BindIndexBuffer = struct {
 };
 
 const BindDescriptorSets = struct {
-    stageFlags: vk.VkShaderStageFlags,
-    layout: vk.VkPipelineLayout,
-    firstSet: u32,
-    descriptorSets: []vk.VkDescriptorSet,
-    dynamicOffsets: []u32,
+    bindDescriptorSetsInfo: vk.VkBindDescriptorSetsInfo,
+    // stageFlags: vk.VkShaderStageFlags,
+    // layout: vk.VkPipelineLayout,
+    // firstSet: u32,
+    // descriptorSets: []vk.VkDescriptorSet,
+    // dynamicOffsets: []u32,
 };
 
 pub const comm = union {
@@ -311,6 +318,8 @@ pub const comm = union {
     bindDescriptorSets: BindDescriptorSets,
     pipelineBarrier: PipelineBarrier,
     endRendering: void,
+    setViewport: vk.VkViewport,
+    setScissor: vk.VkRect2D,
     empty: void,
 };
 

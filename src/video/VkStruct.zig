@@ -31,12 +31,16 @@ const Swapchain = @import("vkStruct/swapchain.zig");
 const Debug = @import("debug");
 const Types = @import("types");
 const Descriptor = @import("vkStruct/descriptor.zig");
+const viewportStruct = @import("vkStruct/viewport.zig");
+const scissorStruct = @import("vkStruct/scissor.zig");
 const Handles = @import("handle");
 const Handle = Handles.Handle;
 
 const bufferStruct = @import("vkStruct/buffer.zig");
 pub const Buffer_t = bufferStruct.Buffer_t;
 pub const Pipeline_t = Handle;
+pub const Viewport_t = viewportStruct.Viewport_t;
+pub const Scissor_t = scissorStruct.Scissor_t;
 
 const globalDescriptorPoolSizes = [_]vk.VkDescriptorPoolSize{
     .{ .type = vk.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 2048 },
@@ -218,6 +222,8 @@ descriptorBufferViewInfos: std.array_list.Managed(vk.VkBufferView) = undefined,
 samplers: Samplers = .{},
 
 buffers: bufferStruct,
+viewports: viewportStruct,
+scissors: scissorStruct,
 
 handles: *global.HandlesType,
 
@@ -234,6 +240,8 @@ pub fn init(allocator: Allocator, handles: *global.HandlesType) Self {
         .descriptorBufferInfos = .init(allocator),
         .descriptorBufferViewInfos = .init(allocator),
         .buffers = .init(allocator),
+        .viewports = .init(allocator, handles),
+        .scissors = .init(allocator, handles),
         .handles = handles,
     };
 }
@@ -390,6 +398,8 @@ pub fn deinit(self: *Self) void {
 
     self.samplers.destroySamplers(self.device, self.pAllocCallBacks);
     self.buffers.deinit();
+    self.viewports.deinit();
+    self.scissors.deinit();
 
     self.writeDescriptorSets.deinit();
     self.descriptorImageInfos.deinit();
@@ -887,6 +897,14 @@ pub fn queueSubmit(self: *Self, kind: CommandPoolType, submitCount: u32, pSubmit
     defer queue.mutex.unlock();
 
     try checkVkResult(vk.vkQueueSubmit2(queue.queue, submitCount, @ptrCast(pSubmits), fence));
+    checkVkResult(vk.vkQueueWaitIdle(queue.queue)) catch |err| {
+        std.log.err("queue type {s}", .{@tagName(kind)});
+
+        // @breakpoint();
+        std.Thread.sleep(std.time.ns_per_s * 1);
+
+        return err;
+    };
 }
 
 pub fn presentSubmit(self: *Self, pPresentInfo: [*c]vk.VkPresentInfoKHR) !void {
@@ -1213,4 +1231,28 @@ pub fn getQueueIndex(self: *Self, queueType: CommandPoolType) u32 {
         .transfer => self.transferQueueFamily.familyIndice,
         .present, .init => unreachable,
     });
+}
+
+pub fn createViewport(self: *Self, viewport: vk.VkViewport) !Viewport_t {
+    return self.viewports.createViewport(viewport);
+}
+
+pub fn getViewportContent(self: *Self, viewport: Viewport_t) vk.VkViewport {
+    return self.viewports.getViewportContent(viewport);
+}
+
+pub fn destroyViewport(self: *Self, viewport: Viewport_t) void {
+    self.viewports.destroyViewport(viewport);
+}
+
+pub fn createScissor(self: *Self, scissor: vk.VkRect2D) !Scissor_t {
+    return self.scissors.createScissor(scissor);
+}
+
+pub fn getScissorContent(self: *Self, scissor: Scissor_t) vk.VkRect2D {
+    return self.scissors.getScissorContent(scissor);
+}
+
+pub fn destroyScissor(self: *Self, scissor: Scissor_t) void {
+    self.scissors.destroyScissor(scissor);
 }
