@@ -688,7 +688,8 @@ const garbageDataTag = enum {
     bufferAndRegion,
     regions,
     barriers,
-    buffersAndOffsets,
+    vertexBuffer,
+    descriptorSets,
     empty,
 };
 const garbageData = union(garbageDataTag) {
@@ -700,9 +701,14 @@ const garbageData = union(garbageDataTag) {
     },
     regions: []vk.VkBufferCopy2,
     barriers: []drawC.Barrier,
-    buffersAndOffsets: struct {
+    vertexBuffer: struct {
         buffers: []vk.VkBuffer,
         offsets: []vk.VkDeviceSize,
+        sizes: []vk.VkDeviceSize,
+        strides: []vk.VkDeviceSize,
+    },
+    descriptorSets: struct {
+        offsets: []u32,
     },
     empty: void,
 };
@@ -789,7 +795,7 @@ pub const oneTimeCommand = struct {
         self.nodeDag.deinit();
         self.threadPool.waitThread(self.vulkan);
         self.primaryCommandPool.deinit(self.vulkan);
-        self.cleanGarbage(false) catch |err| {
+        self.cleanGarbage() catch |err| {
             std.log.err("clean garbage error {s}\n", .{@errorName(err)});
         };
         self.combineMap.deinit();
@@ -1148,8 +1154,6 @@ pub const oneTimeCommand = struct {
             .command = .{ .start = .{} },
             .output = .{ .empty = void{} },
         };
-
-        try self.cleanGarbage(true);
     }
 
     fn addCommand2(self: *Self, commandType: drawC.PrivateCommandType, command: drawC.comm, enterCommandType: drawC.PublicCommandType) !twoQueueNode {
@@ -1884,9 +1888,14 @@ pub const oneTimeCommand = struct {
 
         const buffers = try self.stackAllocator.alloc(vk.VkBuffer, bufferCount);
         const offsets = try self.stackAllocator.alloc(vk.VkDeviceSize, bufferCount);
+        const sizes = try self.stackAllocator.alloc(vk.VkDeviceSize, bufferCount);
+        const strides = try self.stackAllocator.alloc(vk.VkDeviceSize, bufferCount);
 
-        for (buffers, offsets, startIndex..) |*b, *o, j| {
-            b.* = self.vulkan.buffers.getBufferContent(bufferHandles[j]).vkBuffer;
+        for (buffers, offsets, sizes, strides, startIndex..) |*b, *o, *s, *st, j| {
+            const buffer = self.vulkan.buffers.getBufferContent(bufferHandles[j]);
+            b.* = buffer.vkBuffer;
+            s.* = buffer.size;
+            st.* = buffer.stride;
             o.* = 0;
         }
 
@@ -1896,7 +1905,9 @@ pub const oneTimeCommand = struct {
                 .bindVertexBuffers = .{
                     .firstBinding = startIndex,
                     .buffers = buffers,
+                    .sizes = sizes,
                     .offsets = offsets,
+                    .strides = strides,
                 },
             },
             commandType,
@@ -2098,6 +2109,8 @@ pub const oneTimeCommand = struct {
                         }
 
                         currentNode = aa;
+                    } else {
+                        currentNode = renderingNode.?;
                     }
                 } else {
                     const renderingRes = try self.cacheMap.getOrPut(draw2D.rendering);
@@ -2521,6 +2534,50 @@ pub const oneTimeCommand = struct {
                     try currentNode.parentsAppend(&root.ID);
                 }
             },
+            .beginRendering => {
+                const beginRendering = comm.command.beginRendering;
+
+                var linked = false;
+
+                for (beginRendering.pColorAttachments) |value| {
+                    const index_ = self.cacheMap.get(@ptrCast(value.imageView));
+                    if (index_) |idnex| {
+                        const prev = self.nodeDag.get(idnex).?;
+                        try prev.childrenAppend(&currentNode.ID);
+                        try currentNode.parentsAppend(&prev.ID);
+
+                        linked = true;
+                    }
+                }
+
+                if (beginRendering.depthAttachment) |value| {
+                    const index_ = self.cacheMap.get(@ptrCast(value.imageView));
+                    if (index_) |idnex| {
+                        const prev = self.nodeDag.get(idnex).?;
+                        try prev.childrenAppend(&currentNode.ID);
+                        try currentNode.parentsAppend(&prev.ID);
+
+                        linked = true;
+                    }
+                }
+
+                if (beginRendering.stencilAttachment) |value| {
+                    const index_ = self.cacheMap.get(@ptrCast(value.imageView));
+                    if (index_) |idnex| {
+                        const prev = self.nodeDag.get(idnex).?;
+                        try prev.childrenAppend(&currentNode.ID);
+                        try currentNode.parentsAppend(&prev.ID);
+
+                        linked = true;
+                    }
+                }
+
+                if (!linked) {
+                    const root = self.nodeDag.get(0).?;
+                    try root.childrenAppend(&currentNode.ID);
+                    try currentNode.parentsAppend(&root.ID);
+                }
+            },
             .draw2D => {},
             else => {
                 std.debug.panic("not supported command type {s}", .{@tagName(comm.commandType)});
@@ -2564,6 +2621,8 @@ pub const oneTimeCommand = struct {
 
             try lastNode.childrenAppend(&endRenderingNode.ID);
             try endRenderingNode.parentsAppend(&lastNode.ID);
+
+            self.pRendering.renderingEnd(entry.key_ptr.*);
         }
 
         nodeDagPrint(&self.nodeDag, self);
@@ -2768,23 +2827,69 @@ pub const oneTimeCommand = struct {
                     &bufferCopyInfo,
                 );
             },
-            // .bindVertexBuffers => {
-            //     const innerZone = tracy.initZone(@src(), .{ .name = "bind vertex buffers" });
-            //     defer innerZone.deinit();
+            .bindVertexBuffers => {
+                const innerZone = tracy.initZone(@src(), .{ .name = "bind vertex buffers" });
+                defer innerZone.deinit();
 
-            //     const bindVertexBuffers = command.command.bindVertexBuffers;
-            //     vk.vkCmdBindVertexBuffers2(
-            //         commandBuffer,
-            //         bindVertexBuffers.firstBinding,
-            //         @intCast(bindVertexBuffers.buffers.len),
-            //         bindVertexBuffers.buffers.ptr,
-            //         @ptrCast(bindVertexBuffers.offsets.ptr),
-            //         @ptrCast(bindVertexBuffers.pStrides),
-            //         // use whole size
-            //         @ptrCast(bindVertexBuffers.pVertexOffsets),
-            //         // put stride in buffer
-            //     );
-            // },
+                const bindVertexBuffers = command.command.bindVertexBuffers;
+                vk.vkCmdBindVertexBuffers2(
+                    commandBuffer,
+                    bindVertexBuffers.firstBinding,
+                    @intCast(bindVertexBuffers.buffers.len),
+                    bindVertexBuffers.buffers.ptr,
+                    @ptrCast(bindVertexBuffers.offsets.ptr),
+                    @ptrCast(bindVertexBuffers.sizes.ptr),
+                    @ptrCast(bindVertexBuffers.strides.ptr),
+                );
+            },
+            .bindPipeline => {
+                const innerZone = tracy.initZone(@src(), .{ .name = "bind pipeline" });
+                defer innerZone.deinit();
+
+                const bindPipeline = command.command.bindPipeline;
+                vk.vkCmdBindPipeline(
+                    commandBuffer,
+                    bindPipeline.bindPoint,
+                    bindPipeline.pipeline,
+                );
+            },
+            .bindIndexBuffer => {
+                const innerZone = tracy.initZone(@src(), .{ .name = "bind index buffer" });
+                defer innerZone.deinit();
+
+                const bindIndexBuffer = command.command.bindIndexBuffer;
+                vk.vkCmdBindIndexBuffer2(
+                    commandBuffer,
+                    bindIndexBuffer.buffer,
+                    bindIndexBuffer.offset,
+                    bindIndexBuffer.size,
+                    bindIndexBuffer.indexType,
+                );
+            },
+            .bindDescriptorSets => {
+                const innerZone = tracy.initZone(@src(), .{ .name = "bind descriptor sets" });
+                defer innerZone.deinit();
+
+                const bindDescriptorSets = command.command.bindDescriptorSets;
+                var bindDescriptorSetsInfo = vk.VkBindDescriptorSetsInfo{
+                    .sType = vk.VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO,
+                    .pNext = null,
+                    .stageFlags = bindDescriptorSets.stageFlags,
+                    .layout = bindDescriptorSets.layout,
+                    .firstSet = bindDescriptorSets.firstSet,
+                    .descriptorSetCount = @intCast(bindDescriptorSets.descriptorSets.len),
+                    .pDescriptorSets = bindDescriptorSets.descriptorSets.ptr,
+                    .dynamicOffsetCount = @intCast(bindDescriptorSets.dynamicOffsets.len),
+                    .pDynamicOffsets = bindDescriptorSets.dynamicOffsets.ptr,
+                };
+                vk.vkCmdBindDescriptorSets2(commandBuffer, &bindDescriptorSetsInfo);
+            },
+            .endRendering => {
+                const innerZone = tracy.initZone(@src(), .{ .name = "end rendering" });
+                defer innerZone.deinit();
+
+                vk.vkCmdEndRendering(commandBuffer);
+            },
             else => {
                 std.debug.panic("unsupported command type {s}", .{@tagName(command.commandType)});
             },
@@ -2901,17 +3006,23 @@ pub const oneTimeCommand = struct {
                     break :rs garbageData{ .regions = command.command.copyBuffer.regions };
                 }
             },
-            .start => null,
-            .beginRendering => null,
             .draw2D => {
                 break :rs garbageData{ .renderingInfo = command.command.draw2d.rendering };
             },
             .bindVertexBuffers => {
-                break :rs garbageData{ .buffersAndOffsets = .{
+                break :rs garbageData{ .vertexBuffer = .{
                     .buffers = command.command.bindVertexBuffers.buffers,
                     .offsets = command.command.bindVertexBuffers.offsets,
+                    .strides = command.command.bindVertexBuffers.strides,
+                    .sizes = command.command.bindVertexBuffers.sizes,
                 } };
             },
+            .bindDescriptorSets => {
+                break :rs garbageData{ .descriptorSets = .{
+                    .offsets = command.command.bindDescriptorSets.dynamicOffsets,
+                } };
+            },
+            .bindIndexBuffer, .bindPipeline, .start, .beginRendering, .endRendering => null,
             else => {
                 std.debug.panic("not support {s}", .{@tagName(command.commandType)});
             },
@@ -2928,68 +3039,63 @@ pub const oneTimeCommand = struct {
         }
     }
 
-    pub fn cleanGarbage(self: *Self, end: bool) !void {
+    pub fn cleanGarbage(self: *Self) !void {
         const zone = tracy.initZone(@src(), .{ .name = "clean garbage" });
         defer zone.deinit();
 
         const currentSemaphoreValue = try self.vulkan.getSemaphoreCounterValue(self.vulkan.globalTimelineSemaphore);
 
-        if (end) {
-            for (self.garbageData.items, 0..) |g, i| {
-                switch (g.data) {
-                    .renderingInfo => {
-                        self.pRendering.renderingEnd(g.data.renderingInfo);
-                        self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
-                        std.log.debug("end rendering", .{});
-                    },
-                    else => {},
-                }
-            }
-        } else {
-            for (self.garbageData.items, 0..) |g, i| {
-                switch (g.data) {
-                    .buffer => {
-                        if (currentSemaphoreValue < g.semaphoreValue) continue;
-                        self.vulkan.destroyBuffer(g.data.buffer);
-                        self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
-                    },
-                    .barriers => {
-                        self.allocator.free(g.data.barriers);
-                        self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
-                    },
-                    .bufferAndRegion => {
-                        if (currentSemaphoreValue < g.semaphoreValue) continue;
-                        self.vulkan.destroyBuffer(g.data.bufferAndRegion.buffer);
-                        self.allocator.free(g.data.bufferAndRegion.region);
-                        self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
-                    },
-                    .regions => {
-                        self.allocator.free(g.data.regions);
-                        self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
-                    },
-                    .buffersAndOffsets => {
-                        self.stackAllocator.free(g.data.buffersAndOffsets.buffers);
-                        self.stackAllocator.free(g.data.buffersAndOffsets.offsets);
-                        self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
-                    },
-                    .renderingInfo => {},
-                    .empty => {},
-                }
-            }
+        for (self.garbageData.items, 0..) |g, i| {
+            switch (g.data) {
+                .buffer => {
+                    if (currentSemaphoreValue < g.semaphoreValue) continue;
+                    self.vulkan.destroyBuffer(g.data.buffer);
+                    self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
+                },
+                .barriers => {
+                    self.allocator.free(g.data.barriers);
+                    self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
+                },
+                .bufferAndRegion => {
+                    if (currentSemaphoreValue < g.semaphoreValue) continue;
+                    self.vulkan.destroyBuffer(g.data.bufferAndRegion.buffer);
+                    self.allocator.free(g.data.bufferAndRegion.region);
+                    self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
+                },
+                .regions => {
+                    self.allocator.free(g.data.regions);
+                    self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
+                },
+                .vertexBuffer => {
+                    self.stackAllocator.free(g.data.vertexBuffer.buffers);
+                    self.stackAllocator.free(g.data.vertexBuffer.offsets);
+                    self.stackAllocator.free(g.data.vertexBuffer.sizes);
+                    self.stackAllocator.free(g.data.vertexBuffer.strides);
+                    self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
+                },
+                .descriptorSets => {
+                    if (g.data.descriptorSets.offsets.len > 0)
+                        self.stackAllocator.free(g.data.descriptorSets.offsets);
 
-            var saveLen: usize = 0;
-            for (self.garbageData.items, 0..) |g, i| {
-                if (g.data != .empty) {
-                    if (saveLen != i) {
-                        self.garbageData.items[saveLen] = g;
-                    }
-                    saveLen += 1;
-                }
+                    self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
+                },
+                .renderingInfo => {},
+                .empty => {},
             }
-
-            // self.garbageData.clearRetainingCapacity();
-            self.garbageData.items.len = saveLen;
         }
+
+        var saveLen: usize = 0;
+        for (self.garbageData.items, 0..) |g, i| {
+            if (g.data != .empty) {
+                if (saveLen != i) {
+                    self.garbageData.items[saveLen] = g;
+                }
+                saveLen += 1;
+            }
+        }
+
+        // self.garbageData.clearRetainingCapacity();
+        self.garbageData.items.len = saveLen;
     }
 
     // a thread pool specialy for render
@@ -3007,7 +3113,7 @@ pub const oneTimeCommand = struct {
 
         // self.nodeDag.print();
 
-        try self.cleanGarbage(false);
+        try self.cleanGarbage();
 
         defer {
             self.nodeDag.clearRetainCapacity();
@@ -3163,8 +3269,6 @@ pub const oneTimeCommand = struct {
         var cbs = std.array_list.Managed(vk.VkCommandBuffer).init(self.allocator);
         defer cbs.deinit();
 
-        var renderingIsStart = false;
-
         // std.log.debug("2\n\n\n\n", .{});
         {
             mutex.lock();
@@ -3234,10 +3338,6 @@ pub const oneTimeCommand = struct {
                     defer signalSemaphoreSubmitInfos.clearRetainingCapacity();
                     defer waitSemaphoreSubmitInfos.clearRetainingCapacity();
 
-                    if (currentType == .graphic and renderingIsStart) {
-                        vk.vkCmdEndRendering(currentCommandBuffer);
-                        renderingIsStart = false;
-                    }
                     try VkStruct.endCommandBuffer(currentCommandBuffer);
 
                     const temp = try waitSemaphoreSubmitInfos.addOne();
@@ -3378,9 +3478,6 @@ pub const oneTimeCommand = struct {
                             vk.vkCmdExecuteCommands(currentCommandBuffer, @intCast(cbs.items.len), @ptrCast(cbs.items.ptr));
 
                         record(self.queue.getPtr(nn.ID).?, currentCommandBuffer, self.stackAllocator, self.vulkan);
-                        if (self.queue.getPtr(nn.ID).?.commandType == .beginRendering) {
-                            renderingIsStart = true;
-                        }
                     }
                     firstNode = nn.getFirstUndoneChild();
                     if (firstNode == null) {
@@ -3421,10 +3518,6 @@ pub const oneTimeCommand = struct {
             // std.log.debug("\n\n", .{});
 
             if (begin) {
-                if (currentType == .graphic and renderingIsStart) {
-                    vk.vkCmdEndRendering(currentCommandBuffer);
-                    renderingIsStart = false;
-                }
                 try VkStruct.endCommandBuffer(currentCommandBuffer);
 
                 const temp = try waitSemaphoreSubmitInfos.addOne();

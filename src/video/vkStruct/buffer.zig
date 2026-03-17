@@ -21,6 +21,7 @@ pub const Buffer = struct {
     allocation: vma.VmaAllocation,
     // info: vma.VmaAllocationInfo,
     size: vk.VkDeviceSize,
+    stride: vk.VkDeviceSize = 0,
     pMappedData: ?*anyopaque = @import("std").mem.zeroes(?*anyopaque),
     queueIndex: QueueType = .init,
     usage: Usage = .none,
@@ -72,6 +73,7 @@ pub fn _createBuffer(
     pNext: ?*anyopaque,
     sharingMode: vk.VkSharingMode,
     bufferSize: vk.VkDeviceSize,
+    stride: vk.VkDeviceSize,
     usage: vk.VkBufferUsageFlags,
     vmaFlags: u32,
     vmaUsage: vma.VmaMemoryUsage,
@@ -109,6 +111,7 @@ pub fn _createBuffer(
         .pMappedData = allocationInfo.pMappedData,
         .queueIndex = .init,
         .usage = inferUsage(usage),
+        .stride = stride,
     };
 
     const handle = handles.createHandle(@intCast(pack.index));
@@ -143,6 +146,7 @@ pub fn createStagingBuffer(
         null,
         vk.VK_SHARING_MODE_EXCLUSIVE,
         @intCast(math.round(BufferAlign, @intCast(bufferSize))),
+        0,
         vk.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | vma.VMA_ALLOCATION_CREATE_MAPPED_BIT,
         vma.VMA_MEMORY_USAGE_CPU_TO_GPU,
@@ -154,6 +158,7 @@ pub fn createVertexBuffer(
     self: *Self,
     vmaa: *vmaStruct,
     bufferSize: vk.VkDeviceSize,
+    stride: vk.VkDeviceSize,
     handles: *global.HandlesType,
 ) !Buffer_t {
     return self._createBuffer(
@@ -162,6 +167,7 @@ pub fn createVertexBuffer(
         null,
         vk.VK_SHARING_MODE_EXCLUSIVE,
         @intCast(math.round(BufferAlign, bufferSize)),
+        stride,
         vk.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | vk.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
         vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT,
         vma.VMA_MEMORY_USAGE_GPU_ONLY,
@@ -181,6 +187,7 @@ pub fn createIndexBuffer(
         null,
         vk.VK_SHARING_MODE_EXCLUSIVE,
         @intCast(math.round(BufferAlign, size)),
+        0,
         vk.VK_BUFFER_USAGE_INDEX_BUFFER_BIT | vk.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
         vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
         vma.VMA_MEMORY_USAGE_GPU_ONLY,
@@ -199,6 +206,7 @@ pub fn createUniformBuffer(
         null,
         vk.VK_SHARING_MODE_EXCLUSIVE,
         @intCast(math.round(BufferAlign, size)),
+        0,
         vk.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | vk.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
         vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
         vma.VMA_MEMORY_USAGE_CPU_ONLY,

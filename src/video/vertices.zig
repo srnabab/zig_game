@@ -36,7 +36,7 @@ pub fn init(vulkan_t: *vkStruct, graphic: *OneTimeCommand) !void {
 
     vulkan = vulkan_t;
 
-    vertexBuffer2D = try vulkan.createVertexBuffer(vertex2DinitCount * @sizeOf(Vertex2D));
+    vertexBuffer2D = try vulkan.createVertexBuffer(vertex2DinitCount * @sizeOf(Vertex2D), @sizeOf(Vertex2D));
     indexBuffer2D = try vulkan.createIndexBuffer(index2DinitCount * 6 * @sizeOf(u16));
     vertices2D = try vulkan.allocator.alloc(Vertex2D, vertex2DinitCount);
 

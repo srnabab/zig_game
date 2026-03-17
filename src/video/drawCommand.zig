@@ -260,6 +260,8 @@ const BindVertexBuffers = struct {
     firstBinding: u32,
     buffers: []vk.VkBuffer,
     offsets: []vk.VkDeviceSize,
+    sizes: []vk.VkDeviceSize,
+    strides: []vk.VkDeviceSize,
 };
 
 pub const SizeOffset = struct {

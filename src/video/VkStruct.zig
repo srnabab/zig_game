@@ -1190,8 +1190,8 @@ pub fn createStagingBuffer(self: *Self, bufferSize: vk.VkDeviceSize) !Buffer_t {
     return self.buffers.createStagingBuffer(&self.vmaS, bufferSize, self.handles);
 }
 
-pub fn createVertexBuffer(self: *Self, bufferSize: vk.VkDeviceSize) !Buffer_t {
-    return self.buffers.createVertexBuffer(&self.vmaS, bufferSize, self.handles);
+pub fn createVertexBuffer(self: *Self, bufferSize: vk.VkDeviceSize, stride: vk.VkDeviceSize) !Buffer_t {
+    return self.buffers.createVertexBuffer(&self.vmaS, bufferSize, stride, self.handles);
 }
 
 pub fn createIndexBuffer(self: *Self, bufferSize: vk.VkDeviceSize) !Buffer_t {

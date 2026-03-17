@@ -219,7 +219,7 @@ pub fn main() !void {
         vertices.vertexBuffer2D,
     };
     var testDescriptorSets = [_]vk.VkDescriptorSet{
-        vulkan.globalTextureDescriptorSet, vulkan.globalFixed2dMVPMatrixDescriptorSet,
+        vulkan.globalFixed2dMVPMatrixDescriptorSet, vulkan.globalTextureDescriptorSet,
     };
     const renderStart = std.time.milliTimestamp();
     while (true) {
