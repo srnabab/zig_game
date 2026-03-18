@@ -204,7 +204,6 @@ pub fn main() !void {
     // _ = rendering_test;
 
     const ubo_test = try vulkan.createUniformBuffer(@sizeOf(shaderStruct.UniformBufferObject));
-    defer vulkan.destroyBuffer(ubo_test);
     try vulkan.addWriteDescriptorSetBuffer(
         0,
         vulkan.buffers.getVkBuffer(ubo_test),
@@ -239,8 +238,15 @@ pub fn main() !void {
     var testDescriptorSets = [_]vk.VkDescriptorSet{
         vulkan.globalFixed2dMVPMatrixDescriptorSet, vulkan.globalTextureDescriptorSet,
     };
+
+    // std.Thread.sleep(std.time.ns_per_s);
+
+    global.stopPrint = true;
+
     const renderStart = std.time.milliTimestamp();
     while (true) {
+        // log.info("frame {d}", .{vulkan.totalFrame.load(.seq_cst)});
+
         try graphic.startCommand();
         try graphic.addCommand(.draw2D, .{ .draw2d = .{
             .pipeline = vulkan.getPipeline("flat2d").?,
@@ -256,8 +262,10 @@ pub fn main() !void {
         try graphic.addCommandEnd();
         try graphic.executeCommands();
         vulkan.nextFrame();
-        if (std.time.milliTimestamp() - renderStart > 1 * std.time.ms_per_s) {
-            // _ = renderStart;
+
+        // if (std.time.milliTimestamp() - renderStart > 1 * std.time.ms_per_s) {
+        if (vulkan.totalFrame.load(.seq_cst) > 20) {
+            _ = renderStart;
             break;
         }
     }
@@ -309,6 +317,10 @@ pub fn main() !void {
     defer render_t.join();
 
     endSemaphore.post();
+
+    vulkan.logBufferPtr();
+
+    textureSett.logImagePtr();
 }
 
 fn testSemaphore(vulkan: *VkStruct) void {

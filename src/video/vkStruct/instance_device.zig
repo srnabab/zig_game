@@ -27,10 +27,12 @@ const deviceExtensionNeeded = [_][*c]const u8{
     "VK_KHR_swapchain",
     "VK_EXT_descriptor_indexing",
     "VK_KHR_maintenance3",
+    "VK_KHR_maintenance5",
     "VK_KHR_synchronization2",
     "VK_KHR_timeline_semaphore",
     "VK_KHR_dynamic_rendering",
     "VK_EXT_extended_dynamic_state",
+    "VK_EXT_robustness2",
 };
 const featureNeed = [_][]const u8{
     "geometryShader",
@@ -40,6 +42,7 @@ const featureNeed = [_][]const u8{
     "depthClamp",
     "depthBiasClamp",
     "wideLines",
+    "robustBufferAccess",
 };
 const featureIndexingNeed = [_][]const u8{
     "shaderUniformBufferArrayNonUniformIndexing",
@@ -53,6 +56,12 @@ const featureIndexingNeed = [_][]const u8{
 const featureTimelineSemaphoreNeed = [_][]const u8{"timelineSemaphore"};
 const featureDynamicRenderingNeed = [_][]const u8{"dynamicRendering"};
 const featureSynchronization2Need = [_][]const u8{"synchronization2"};
+const featureMaintenance5Need = [_][]const u8{"maintenance5"};
+const featureRobustness2Need = [_][]const u8{
+    "robustBufferAccess2",
+    "robustImageAccess2",
+    "nullDescriptor",
+};
 
 const VkQueueFamily = types.VkQueueFamily;
 
@@ -87,6 +96,18 @@ fn featureNeededCheck(comptime featureType: type, featurePack: anytype) bool {
         vk.VkPhysicalDeviceSynchronization2Features => {
             len = featureSynchronization2Need.len;
             inline for (featureSynchronization2Need) |feature| {
+                count += @field(featurePack, feature);
+            }
+        },
+        vk.VkPhysicalDeviceMaintenance5Features => {
+            len = featureMaintenance5Need.len;
+            inline for (featureMaintenance5Need) |feature| {
+                count += @field(featurePack, feature);
+            }
+        },
+        vk.VkPhysicalDeviceRobustness2FeaturesEXT => {
+            len = featureRobustness2Need.len;
+            inline for (featureRobustness2Need) |feature| {
                 count += @field(featurePack, feature);
             }
         },
@@ -210,6 +231,7 @@ fn chooseEnabledLayers(comptime fields: type, comptime field_name: []const u8, n
 pub fn pickPhysicalDevice(instance: vk.VkInstance, allocator: std.mem.Allocator, physicalDeviceMemory: *vk.VkDeviceSize) !struct {
     count: u32,
     physicalDevices: [32]vk.VkPhysicalDevice,
+    gpuType: vk.VkPhysicalDeviceType,
 } {
     const zone = tracy.initZone(@src(), .{ .name = "pick physical device" });
     defer zone.deinit();
@@ -239,6 +261,7 @@ pub fn pickPhysicalDevice(instance: vk.VkInstance, allocator: std.mem.Allocator,
 
     var biggestMemory: u64 = 0;
     var resIndex: u32 = 0;
+    var gpuType: vk.VkPhysicalDeviceType = vk.VK_PHYSICAL_DEVICE_TYPE_OTHER;
     for (physicalDeviceGroups, 0..) |deviceGroup, i| {
         const array = try chooseEnabledLayers(
             vk.VkExtensionProperties,
@@ -260,9 +283,17 @@ pub fn pickPhysicalDevice(instance: vk.VkInstance, allocator: std.mem.Allocator,
             .pNext = null,
         };
 
+        var robustness2 = vk.VkPhysicalDeviceRobustness2FeaturesEXT{
+            .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT,
+            .pNext = null,
+        };
+        var maintenance5Feature = vk.VkPhysicalDeviceMaintenance5Features{
+            .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_FEATURES,
+            .pNext = &robustness2,
+        };
         var renderingFeature = vk.VkPhysicalDeviceDynamicRenderingFeatures{
             .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
-            .pNext = null,
+            .pNext = &maintenance5Feature,
         };
         var timelineFeature = vk.VkPhysicalDeviceTimelineSemaphoreFeatures{
             .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES,
@@ -296,12 +327,16 @@ pub fn pickPhysicalDevice(instance: vk.VkInstance, allocator: std.mem.Allocator,
         const featureTimelineSemaphoreSupported = featureNeededCheck(vk.VkPhysicalDeviceTimelineSemaphoreFeatures, timelineFeature);
         const featureDynamicRenderingSupported = featureNeededCheck(vk.VkPhysicalDeviceDynamicRenderingFeatures, renderingFeature);
         const featureSynchronization2Supported = featureNeededCheck(vk.VkPhysicalDeviceSynchronization2Features, synchronization2Feature);
+        const featureMaintenance5Supported = featureNeededCheck(vk.VkPhysicalDeviceMaintenance5Features, maintenance5Feature);
+        const featureRobustnessSupported = featureNeededCheck(vk.VkPhysicalDeviceRobustness2FeaturesEXT, robustness2);
 
-        if (featureSupported and featureIndexingSupported and featureTimelineSemaphoreSupported and featureDynamicRenderingSupported and featureSynchronization2Supported) {
+        if (featureSupported and featureIndexingSupported and featureTimelineSemaphoreSupported and featureDynamicRenderingSupported and featureSynchronization2Supported and featureMaintenance5Supported and featureRobustnessSupported) {
             switch (deviceProperty2.properties.deviceType) {
                 vk.VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU => {
                     resIndex = @intCast(i + 1);
                     biggestMemory = @max(biggestMemory, memoryCount);
+
+                    gpuType = deviceProperty2.properties.deviceType;
 
                     std.log.debug("device: choosed {s}", .{@tagName(@as(VkPhysicalType, @enumFromInt(deviceProperty2.properties.deviceType)))});
                 },
@@ -309,6 +344,8 @@ pub fn pickPhysicalDevice(instance: vk.VkInstance, allocator: std.mem.Allocator,
                     if (resIndex == 0) {
                         resIndex = @intCast(i + 1);
                         biggestMemory = @max(biggestMemory, memoryCount);
+
+                        gpuType = deviceProperty2.properties.deviceType;
 
                         std.log.debug("device: choosed {s}", .{@tagName(@as(VkPhysicalType, @enumFromInt(deviceProperty2.properties.deviceType)))});
                     }
@@ -329,6 +366,7 @@ pub fn pickPhysicalDevice(instance: vk.VkInstance, allocator: std.mem.Allocator,
     return .{
         .count = physicalDeviceGroups[resIndex - 1].physicalDeviceCount,
         .physicalDevices = physicalDeviceGroups[resIndex - 1].physicalDevices,
+        .gpuType = gpuType,
     };
 }
 
@@ -350,9 +388,23 @@ pub fn createDevice(
         .pPhysicalDevices = physicalDevices,
     };
 
+    var maintenance5Feature = vk.VkPhysicalDeviceMaintenance5Features{
+        .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_FEATURES,
+        .pNext = &groupCreateInfo,
+    };
+    inline for (featureMaintenance5Need) |feature| {
+        @field(maintenance5Feature, feature) = 1;
+    }
+    var robustness2 = vk.VkPhysicalDeviceRobustness2FeaturesEXT{
+        .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT,
+        .pNext = &maintenance5Feature,
+    };
+    inline for (featureRobustness2Need) |feature| {
+        @field(robustness2, feature) = 1;
+    }
     var synchronization2Feature = vk.VkPhysicalDeviceSynchronization2Features{
         .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES,
-        .pNext = &groupCreateInfo,
+        .pNext = &robustness2,
     };
     inline for (featureSynchronization2Need) |feature| {
         @field(synchronization2Feature, feature) = 1;

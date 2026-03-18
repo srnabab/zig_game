@@ -26,3 +26,5 @@ pub const EngineVersionMinor = 1;
 pub const EngineVersionPatch = 125;
 
 pub const FrameInFlight = 2;
+
+pub var stopPrint = false;

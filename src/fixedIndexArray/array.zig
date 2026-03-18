@@ -9,7 +9,8 @@ pub fn FixedIndexArray(T: type) type {
             next: ?*freeListNode,
         };
 
-        const Item = union {
+        const ItemTag = enum { data, free };
+        const Item = union(ItemTag) {
             data: T,
             free: freeListNode,
         };

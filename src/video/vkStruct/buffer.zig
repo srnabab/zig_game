@@ -46,7 +46,12 @@ pub fn init(allocator: std.mem.Allocator) Self {
     };
 }
 
-pub fn deinit(self: *Self) void {
+pub fn deinit(self: *Self, vmaa: *vmaStruct) void {
+    for (self.buffers.items.items) |value| {
+        if (value == .data) {
+            vma.vmaDestroyBuffer(vmaa.vmaAllocator, @ptrCast(value.data.vkBuffer), value.data.allocation);
+        }
+    }
     self.buffers.deinit();
 }
 

@@ -82,14 +82,14 @@ pub fn init(vulkan_t: *vkStruct, graphic: *OneTimeCommand) !void {
 }
 
 pub fn deinit() void {
-    vulkan.waitDevice() catch |err| {
-        std.log.err("wait device error {s}\n", .{@errorName(err)});
-        return;
-    };
+    // vulkan.waitDevice() catch |err| {
+    //     std.log.err("wait device error {s}\n", .{@errorName(err)});
+    //     return;
+    // };
 
     vulkan.allocator.free(vertices2D);
-    vulkan.destroyBuffer(vertexBuffer2D);
-    vulkan.destroyBuffer(indexBuffer2D);
+    // vulkan.destroyBuffer(vertexBuffer2D);
+    // vulkan.destroyBuffer(indexBuffer2D);
 }
 
 pub fn vertexInitialize2D(width: u32, height: u32, x: u32, y: u32, depth: f32, textureIndex: u32) !u32 {

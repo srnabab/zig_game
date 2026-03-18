@@ -6,6 +6,7 @@ pub const drawC = @import("drawCommand.zig");
 const texture = @import("textureSet");
 const vk = @import("vulkan").vulkan;
 const VkStruct = @import("video");
+const vulkanType = VkStruct.vulkanType;
 const Queue = @import("queue").Queue;
 const global = @import("global");
 const tracy = @import("tracy");
@@ -602,6 +603,8 @@ fn nodeDagPrint(self: *QueueNodes, self2: *oneTimeCommand) void {
     const zone = tracy.initZone(@src(), .{ .name = "dag print" });
     defer zone.deinit();
 
+    if (global.stopPrint) return;
+
     var buffer = [_]u8{0} ** 1024;
     var buffer2 = [_]u8{0} ** 1024;
     var writer = std.Io.Writer.fixed(&buffer);
@@ -1166,14 +1169,14 @@ pub const oneTimeCommand = struct {
         var resNode: ?*QueueNode = null;
         var resNode2: ?*QueueNode = null;
 
-        switch (commandType) {
+        s: switch (commandType) {
             .transLayout => {
                 const zone2 = tracy.initZone(@src(), .{ .name = "transLayout" });
                 defer zone2.deinit();
 
                 const transLayout = commandCopy.transLayout;
 
-                if (transLayout.srcQueueFamily != .init and transLayout.srcQueueFamily != transLayout.dstQueueFamily) {
+                if (transLayout.srcQueueFamily != .init and transLayout.srcQueueFamily != transLayout.dstQueueFamily and self.vulkan.queueTypeCount > 1) {
                     const releaseFlags = inferReleasePipelineBarrierInfoByImageUsage(
                         enterCommandType,
                         transLayout.srcQueueFamily,
@@ -1382,7 +1385,12 @@ pub const oneTimeCommand = struct {
                     pipelineBarrier.barriers[new_len - 1] = new_barrier;
                     pipelineBarrier.lastSrcStageMask = @min(pipelineBarrier.lastSrcStageMask, flags.sourceStage);
 
-                    rootNode.data.commandPoolType = transLayout.dstQueueFamily;
+                    if (self.vulkan.queueTypeCount == 1) {
+                        rootNode.data.commandPoolType = .graphic;
+                    } else {
+                        rootNode.data.commandPoolType = transLayout.dstQueueFamily;
+                    }
+
                     // std.log.debug("image trans last src stageMask {s}", .{
                     //     @tagName(@as(VkStruct.vulkanType.VkPipelineStageFlagBits2, @enumFromInt(pipelineBarrier.lastSrcStageMask))),
                     // });
@@ -1406,6 +1414,10 @@ pub const oneTimeCommand = struct {
             .changeBufferQueue => {
                 const zone2 = tracy.initZone(@src(), .{ .name = "changeBufferQueue" });
                 defer zone2.deinit();
+
+                if (self.vulkan.queueTypeCount == 1) {
+                    break :s;
+                }
 
                 const changeBufferQueue = command.changeBufferQueue;
                 const bufferUsage = self.vulkan.buffers.getBufferUsage(changeBufferQueue.buffer);
@@ -1782,6 +1794,8 @@ pub const oneTimeCommand = struct {
         const oldQueue = textureContent.image.queueIndex;
         const dstImage = textureContent.image.vkImage;
 
+        // std.log.debug("old layouts {s}", .{@tagName(@as(vulkanType.VkImageLayout, @enumFromInt(oldLayouts[0])))});
+
         var currentLayout = oldLayouts[0];
         var currentBase = baseArrayLayer;
         var count: u32 = 0;
@@ -1998,9 +2012,9 @@ pub const oneTimeCommand = struct {
                     commandType,
                 );
 
-                if (imageQueueNode.a) |aa| {
-                    std.log.debug("ID: {d} image", .{aa.ID});
-                }
+                // if (imageQueueNode.a) |aa| {
+                //     std.log.debug("ID: {d} image", .{aa.ID});
+                // }
 
                 var renderingNode: ?*QueueNode = null;
 
@@ -2032,9 +2046,9 @@ pub const oneTimeCommand = struct {
                                 commandType,
                             );
 
-                            if (totalQueueNodes[i].a) |aa| {
-                                std.log.debug("ID: {d} rendering image {d}", .{ aa.ID, i });
-                            }
+                            // if (totalQueueNodes[i].a) |aa| {
+                            //     std.log.debug("ID: {d} rendering image {d}", .{ aa.ID, i });
+                            // }
                         }
                     }
 
@@ -2325,6 +2339,8 @@ pub const oneTimeCommand = struct {
 
                                 const indexBuffer = self.vulkan.buffers.getBufferContent(draw2D.indexBuffer);
 
+                                // std.log.debug("index buffer size {d}", .{indexBuffer.size});
+
                                 const tempTwoNode = try self.addCommand2(.bindIndexBuffer, .{ .bindIndexBuffer = .{
                                     .buffer = indexBuffer.vkBuffer,
                                     .offset = 0,
@@ -2523,7 +2539,11 @@ pub const oneTimeCommand = struct {
                 }
             },
             .copyBuffer => {
-                node.data.commandPoolType = .transfer;
+                if (self.vulkan.queueTypeCount != 1) {
+                    node.data.commandPoolType = .transfer;
+                } else {
+                    node.data.commandPoolType = .graphic;
+                }
 
                 const copyBuffer = ptr.value_ptr.command.copyBuffer;
                 const tempRegions = copyBuffer.regions;
@@ -2561,7 +2581,11 @@ pub const oneTimeCommand = struct {
                 try self.cacheMap.put(@ptrCast(copyBuffer.dstBuffer), ID);
             },
             .copyBufferToImage => {
-                node.data.commandPoolType = .transfer;
+                if (self.vulkan.queueTypeCount != 1) {
+                    node.data.commandPoolType = .transfer;
+                } else {
+                    node.data.commandPoolType = .graphic;
+                }
 
                 const textureSet = ptr.value_ptr.command.copyBufferToImage.pTextureSet;
                 ptr.value_ptr.command.copyBufferToImage.dstImage = textureSet.getVkImage(ptr.value_ptr.command.copyBufferToImage.pTexture);
@@ -2738,6 +2762,11 @@ pub const oneTimeCommand = struct {
             self.pRendering.renderingEnd(entry.key_ptr.*);
         }
 
+        const root = self.nodeDag.get(0).?;
+        const child = root.children.list.items[0];
+
+        root.data.commandPoolType = self.nodeDag.get(child.*).?.data.commandPoolType;
+
         nodeDagPrint(&self.nodeDag, self);
 
         self.executeSemaphore.post();
@@ -2756,7 +2785,7 @@ pub const oneTimeCommand = struct {
 
                 const offsets = try draw2D.pTextureSet.getTextureOffsets(draw2D.pTexture);
 
-                std.log.debug("{}", .{offsets[0]});
+                // std.log.debug("{}", .{offsets[0]});
 
                 for (offsets) |offset| {
                     vk.vkCmdDrawIndexed(
@@ -2813,9 +2842,9 @@ pub const oneTimeCommand = struct {
                     },
                 };
 
-                std.log.debug("buffer usage {s}", .{
-                    @tagName(vulkan.buffers.getBufferUsage(copyBufferToImage.buffer)),
-                });
+                // std.log.debug("buffer usage {s}", .{
+                //     @tagName(vulkan.buffers.getBufferUsage(copyBufferToImage.buffer)),
+                // });
                 var copyBufferToImageInfo2 = vk.VkCopyBufferToImageInfo2{
                     .sType = vk.VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2,
                     .pNext = null,
@@ -2841,7 +2870,7 @@ pub const oneTimeCommand = struct {
                 var bufferMemoryBarrierCount: u32 = 0;
                 var memoryBarrierCount: u32 = 0;
 
-                std.log.debug("pipeline barrier (ID: {d})", .{command.ID});
+                // std.log.debug("pipeline barrier (ID: {d})", .{command.ID});
 
                 for (pipelineBarrier.barriers) |barrier| {
                     switch (barrier) {
@@ -2891,6 +2920,15 @@ pub const oneTimeCommand = struct {
                                 .image = barrier.imageMemory.image,
                                 .subresourceRange = barrier.imageMemory.subresourceRange,
                             };
+
+                            // std.log.debug("\nold layout {s} \nnew layout {s} \nold queue {d} \nnew queue {d}", .{
+                            //     @tagName(@as(vulkanType.VkImageLayout, @enumFromInt(ptr.oldLayout))),
+                            //     @tagName(@as(vulkanType.VkImageLayout, @enumFromInt(ptr.newLayout))),
+                            //     // @tagName(@as(VkStruct.CommandPoolType, @enumFromInt(ptr.srcQueueFamilyIndex))),
+                            //     // @tagName(@as(VkStruct.CommandPoolType, @enumFromInt(ptr.dstQueueFamilyIndex))),
+                            //     ptr.srcQueueFamilyIndex,
+                            //     ptr.dstQueueFamilyIndex,
+                            // });
                         },
                         .bufferMemory => {
                             const ptr = bufferMemoryBarriers.addOneAssumeCapacity();
@@ -2986,11 +3024,23 @@ pub const oneTimeCommand = struct {
                 defer innerZone.deinit();
 
                 const bindIndexBuffer = command.command.bindIndexBuffer;
-                vk.vkCmdBindIndexBuffer2(
+
+                // std.log.debug("index buffer size {d}", .{bindIndexBuffer.size});
+                // std.log.debug("index buffer offset {d}", .{bindIndexBuffer.offset});
+
+                // vk.vkCmdBindIndexBuffer2(
+                //     commandBuffer,
+                //     bindIndexBuffer.buffer,
+                //     bindIndexBuffer.offset,
+                //     // bindIndexBuffer.size - 131008,
+                //     vk.VK_WHOLE_SIZE,
+                //     bindIndexBuffer.indexType,
+                // );
+
+                vk.vkCmdBindIndexBuffer(
                     commandBuffer,
                     bindIndexBuffer.buffer,
                     bindIndexBuffer.offset,
-                    bindIndexBuffer.size,
                     bindIndexBuffer.indexType,
                 );
             },
@@ -2998,10 +3048,21 @@ pub const oneTimeCommand = struct {
                 const innerZone = tracy.initZone(@src(), .{ .name = "bind descriptor sets" });
                 defer innerZone.deinit();
 
-                var bindDescriptorSets = &command.command.bindDescriptorSets;
+                const bindDescriptorSets = &command.command.bindDescriptorSets;
 
                 // std.log.debug("count: {d}", .{bindDescriptorSets.descriptorSets.len});
                 // std.log.debug("first set {d}", .{bindDescriptorSets.firstSet});
+
+                // vk.vkCmdBindDescriptorSets(
+                //     commandBuffer,
+                //     vk.VK_PIPELINE_BIND_POINT_GRAPHICS,
+                //     bindDescriptorSets.bindDescriptorSetsInfo.layout,
+                //     0,
+                //     2,
+                //     bindDescriptorSets.bindDescriptorSetsInfo.pDescriptorSets,
+                //     0,
+                //     null,
+                // );
 
                 vk.vkCmdBindDescriptorSets2(commandBuffer, &bindDescriptorSets.bindDescriptorSetsInfo);
             },
@@ -3481,7 +3542,7 @@ pub const oneTimeCommand = struct {
                         temp.stageMask = firstStage;
                     }
                     temp.value = timelinewaitValue;
-                    std.log.debug("wait timeline semaphore value {d}", .{temp.value});
+                    // std.log.debug("wait timeline semaphore value {d}", .{temp.value});
 
                     const temp2 = try signalSemaphoreSubmitInfos.addOne();
                     temp2.sType = vk.VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
@@ -3491,7 +3552,7 @@ pub const oneTimeCommand = struct {
                     temp2.stageMask = vk.VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
                     currentSemaphoreValue += 1;
                     temp2.value = currentSemaphoreValue;
-                    std.log.debug("signal timeline semaphore value {d}", .{temp2.value});
+                    // std.log.debug("signal timeline semaphore value {d}", .{temp2.value});
 
                     _ = self.vulkan.globalTimelineValue.store(currentSemaphoreValue, .seq_cst);
 
@@ -3540,13 +3601,13 @@ pub const oneTimeCommand = struct {
                         .graphic => {
                             currentCommandBuffer = graphicCommandBuffer;
                             currentType = .graphic;
-                            if (firstSubmit) {
+                            if (firstSubmit and present) {
                                 try self.vulkan.acquireNextImage(&currentIndex);
                                 const temp = try waitSemaphoreSubmitInfos.addOne();
                                 temp.sType = vk.VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
                                 temp.pNext = null;
                                 temp.deviceIndex = 0;
-                                temp.semaphore = self.vulkan.imageAvailableSemaphore[currentIndex];
+                                temp.semaphore = self.vulkan.imageAvailableSemaphore[currentFrame];
                                 temp.stageMask = vk.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
                                 temp.value = 0;
                             }
@@ -3660,7 +3721,7 @@ pub const oneTimeCommand = struct {
                     temp.stageMask = vk.VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
                 }
                 temp.value = graphicSemaphoreValue;
-                std.log.debug("wait timeline semaphore value {d}", .{temp.value});
+                // std.log.debug("wait timeline semaphore value {d}", .{temp.value});
                 // std.log.debug("semaphores len {d}", .{waitSemaphoreSubmitInfos.items.len});
 
                 const temp2 = try signalSemaphoreSubmitInfos.addOne();
@@ -3672,7 +3733,7 @@ pub const oneTimeCommand = struct {
                 currentSemaphoreValue += 1;
                 temp2.value = currentSemaphoreValue;
 
-                std.log.debug("signal timeline semaphore value {d}", .{temp2.value});
+                // std.log.debug("signal timeline semaphore value {d}", .{temp2.value});
                 // std.log.debug("semaphores len {d}", .{signalSemaphoreSubmitInfos.items.len});
 
                 _ = self.vulkan.globalTimelineValue.store(currentSemaphoreValue, .seq_cst);
@@ -3708,13 +3769,13 @@ pub const oneTimeCommand = struct {
                 submitInfo.signalSemaphoreInfoCount = @intCast(signalSemaphoreSubmitInfos.items.len);
                 submitInfo.pSignalSemaphoreInfos = @ptrCast(signalSemaphoreSubmitInfos.items.ptr);
 
-                for (signalSemaphoreSubmitInfos.items) |value| {
-                    std.log.debug("value {d}", .{value.value});
-                }
+                // for (signalSemaphoreSubmitInfos.items) |value| {
+                // std.log.debug("value {d}", .{value.value});
+                // }
 
                 // std.Thread.sleep(5 * std.time.ns_per_s);
 
-                std.log.debug("semaphore {*}", .{submitInfo.pSignalSemaphoreInfos[0].semaphore});
+                // std.log.debug("semaphore {*}", .{submitInfo.pSignalSemaphoreInfos[0].semaphore});
 
                 try self.vulkan.queueSubmit(currentType, 1, submitInfo, null);
             }

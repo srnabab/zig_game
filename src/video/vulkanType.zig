@@ -47,3 +47,10 @@ pub const VkPipelineStageFlagBits2: type = cEnum.generateEnumFromC(
     "VK_PIPELINE_STAGE_2_NONE",
     "VK_PIPELINE_STAGE_2_OPTICAL_FLOW_BIT_NV",
 );
+
+pub const VkImageLayout: type = cEnum.generateEnumFromC(
+    vk,
+    vk.VkImageLayout,
+    "VK_IMAGE_LAYOUT_UNDEFINED",
+    "VK_IMAGE_LAYOUT_MAX_ENUM",
+);

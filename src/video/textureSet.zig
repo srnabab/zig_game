@@ -447,3 +447,9 @@ pub fn updateTexture(self: *Self, args: anytype, texture: Texture_t) void {
         @field(temp, field.name) = @field(args, field.name);
     }
 }
+
+pub fn logImagePtr(self: *Self) void {
+    for (self.array.items) |value| {
+        std.log.debug("{*} {*} {d}", .{ value.image.vkImage, value.imageView, value.ID });
+    }
+}

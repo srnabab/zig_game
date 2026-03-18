@@ -156,6 +156,7 @@ const Self = @This();
 
 currentFrame: std.atomic.Value(u32) = .init(0),
 
+totalFrame: std.atomic.Value(u32) = .init(0),
 allocator: Allocator,
 allocCallBacks: vk.VkAllocationCallbacks = undefined,
 pAllocCallBacks: [*c]vk.VkAllocationCallbacks = null,
@@ -225,6 +226,9 @@ buffers: bufferStruct,
 viewports: viewportStruct,
 scissors: scissorStruct,
 
+gpuType: vk.VkPhysicalDeviceType = vk.VK_PHYSICAL_DEVICE_TYPE_OTHER,
+queueTypeCount: u32 = 0,
+
 handles: *global.HandlesType,
 
 pub fn init(allocator: Allocator, handles: *global.HandlesType) Self {
@@ -264,6 +268,7 @@ pub fn initVulkan(self: *Self) !void {
         &self.physicalDeviceMemoryCount,
     );
     self.physicalDevice = deviceGroup.physicalDevices[0];
+    self.gpuType = deviceGroup.gpuType;
 
     self.graphicQueueFamily, self.computeQueueFamily, self.transferQueueFamily = kl: {
         const res = try Queue.setQueueFamilies(self.physicalDevice, self.allocator, self.surface);
@@ -278,6 +283,20 @@ pub fn initVulkan(self: *Self) !void {
         self.computeQueueFamily,
         self.transferQueueFamily,
     );
+
+    var queueTypeArray = [_]i32{100} ** 3;
+    queueTypeArray[0] = self.graphicQueueFamily.familyIndice;
+    queueTypeArray[1] = self.computeQueueFamily.familyIndice;
+    queueTypeArray[2] = self.transferQueueFamily.familyIndice;
+    self.queueTypeCount = @intCast(queueTypeArray.len);
+
+    for (queueTypeArray) |value| {
+        if (value == -1) {
+            self.queueTypeCount -= 1;
+        }
+    }
+
+    std.log.debug("queue type count: {d}", .{self.queueTypeCount});
 
     Queue.createQueues(
         &self.graphicQueueFamily,
@@ -391,13 +410,17 @@ pub fn deinit(self: *Self) void {
         std.log.err("wait device error {s}\n", .{@errorName(err)});
     };
 
+    self.waitDevice() catch |err| {
+        std.log.err("wait device error {s}\n", .{@errorName(err)});
+    };
+
     // self.vmaStatistics();
 
     const zone = tracy.initZone(@src(), .{ .name = "deinit vulkan resources" });
     defer zone.deinit();
 
     self.samplers.destroySamplers(self.device, self.pAllocCallBacks);
-    self.buffers.deinit();
+    self.buffers.deinit(&self.vmaS);
     self.viewports.deinit();
     self.scissors.deinit();
 
@@ -879,6 +902,8 @@ pub fn nextFrame(self: *Self) void {
     var val = self.currentFrame.load(.seq_cst);
     val = (val + 1) % 2;
     self.currentFrame.store(val, .seq_cst);
+
+    _ = self.totalFrame.fetchAdd(1, .seq_cst);
 }
 
 pub fn queueSubmit(self: *Self, kind: CommandPoolType, submitCount: u32, pSubmits: *vk.VkSubmitInfo2, fence: vk.VkFence) VkError!void {
@@ -897,14 +922,16 @@ pub fn queueSubmit(self: *Self, kind: CommandPoolType, submitCount: u32, pSubmit
     defer queue.mutex.unlock();
 
     try checkVkResult(vk.vkQueueSubmit2(queue.queue, submitCount, @ptrCast(pSubmits), fence));
-    checkVkResult(vk.vkQueueWaitIdle(queue.queue)) catch |err| {
-        std.log.err("queue type {s}", .{@tagName(kind)});
+    // checkVkResult(vk.vkQueueWaitIdle(queue.queue)) catch |err| {
+    //     std.log.err("queue type {s}", .{@tagName(kind)});
 
-        // @breakpoint();
-        std.Thread.sleep(std.time.ns_per_s * 1);
+    //     // @breakpoint();
+    //     std.Thread.sleep(std.time.ns_per_s * 1);
 
-        return err;
-    };
+    //     return err;
+    // };
+
+    // std.log.debug("submit {s}", .{@tagName(kind)});
 }
 
 pub fn presentSubmit(self: *Self, pPresentInfo: [*c]vk.VkPresentInfoKHR) !void {
@@ -1255,4 +1282,12 @@ pub fn getScissorContent(self: *Self, scissor: Scissor_t) vk.VkRect2D {
 
 pub fn destroyScissor(self: *Self, scissor: Scissor_t) void {
     self.scissors.destroyScissor(scissor);
+}
+
+pub fn logBufferPtr(self: *Self) void {
+    for (self.buffers.buffers.items.items) |v| {
+        if (v == .data) {
+            std.log.debug("{*} {s}", .{ v.data.vkBuffer, @tagName(v.data.usage) });
+        }
+    }
 }
