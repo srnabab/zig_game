@@ -260,12 +260,13 @@ pub fn main() !void {
             .pViewport = viewport_test,
             .pScissor = scissor_test,
         } });
+        // try graphic.addCommand(.present);
         try graphic.addCommandEnd();
         try graphic.executeCommands();
         vulkan.nextFrame();
 
         // if (std.time.milliTimestamp() - renderStart > 1 * std.time.ms_per_s) {
-        if (vulkan.totalFrame.load(.seq_cst) > 20000) {
+        if (vulkan.totalFrame.load(.seq_cst) > 20) {
             _ = renderStart;
             break;
         }

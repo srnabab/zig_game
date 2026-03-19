@@ -177,6 +177,8 @@ physicalDevice: vk.VkPhysicalDevice = null,
 device: vk.VkDevice = null,
 
 swapchain: vk.VkSwapchainKHR = null,
+swapchainImages: []vk.VkImage = undefined,
+swapchainImageViews: []vk.VkImageView = undefined,
 
 graphicQueueFamily: Queue.VkQueueFamily = .{},
 graphicQueue: Queue.VkTheadQueue = .{},
@@ -334,8 +336,16 @@ pub fn initVulkan(self: *Self) !void {
     );
     self.globalTimelineSemaphore = semaphores2[0];
 
-    self.surfaceFormats = try Swapchain.getSurfaceFormat(self.physicalDevice, self.surface, self.allocator);
-    self.presentModes = try Swapchain.getPresentMode(self.physicalDevice, self.surface, self.allocator);
+    self.surfaceFormats = try Swapchain.getSurfaceFormat(
+        self.physicalDevice,
+        self.surface,
+        self.allocator,
+    );
+    self.presentModes = try Swapchain.getPresentMode(
+        self.physicalDevice,
+        self.surface,
+        self.allocator,
+    );
 
     self.swapchain = try Swapchain.createSwapchain(
         self.physicalDevice,
@@ -348,6 +358,35 @@ pub fn initVulkan(self: *Self) !void {
         null,
         self.pAllocCallBacks,
     );
+
+    self.swapchainImages = try Swapchain.createSwapchainImages(
+        self.device,
+        self.swapchain,
+        self.allocator,
+    );
+
+    self.swapchainImageViews = try self.allocator.alloc(vk.VkImageView, self.swapchainImages.len);
+
+    for (self.swapchainImages, self.swapchainImageViews) |image, *imageView| {
+        imageView.* = try self._createImageView(
+            null,
+            0,
+            image,
+            vk.VK_IMAGE_VIEW_TYPE_2D,
+            self.surfaceFormats.formats[@intCast(self.surfaceFormats.sdr)].format,
+            .{
+                .r = vk.VK_COMPONENT_SWIZZLE_IDENTITY,
+                .g = vk.VK_COMPONENT_SWIZZLE_IDENTITY,
+                .b = vk.VK_COMPONENT_SWIZZLE_IDENTITY,
+                .a = vk.VK_COMPONENT_SWIZZLE_IDENTITY,
+            },
+            vk.VK_IMAGE_ASPECT_COLOR_BIT,
+            0,
+            1,
+            0,
+            1,
+        );
+    }
 
     self.globalDescriptorPool = try Descriptor._createDescriptorPool(
         self.device,
@@ -473,6 +512,13 @@ pub fn deinit(self: *Self) void {
         vk.vkDestroyShaderModule(self.device, code.value_ptr.*, self.pAllocCallBacks);
     }
     self.shaderModules.deinit();
+
+    for (self.swapchainImageViews) |value| {
+        vk.vkDestroyImageView(self.device, value, self.pAllocCallBacks);
+    }
+    self.allocator.free(self.swapchainImageViews);
+
+    self.allocator.free(self.swapchainImages);
 
     self.allocator.free(self.surfaceFormats.formats);
     self.allocator.free(self.presentModes.modes);

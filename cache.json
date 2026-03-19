@@ -52,23 +52,23 @@
 		"hash": "e98cfd7c1e104899"
 	},
 	{
-		"path": "Shaders\\flat2d.vert",
-		"hash": "c07ce4a2f83c0354"
+		"path": "Shaders\\shape.frag",
+		"hash": "d566d14d53f7aa42"
 	},
 	{
 		"path": "Shaders\\SSGI.comp",
 		"hash": "101815da1a4219ec"
 	},
 	{
-		"path": "Shaders\\shape.frag",
-		"hash": "d566d14d53f7aa42"
-	},
-	{
-		"path": "Pipeline\\model3d.pipe",
-		"hash": "cf5c67a6fb96e13e"
+		"path": "Shaders\\flat2d.vert",
+		"hash": "c07ce4a2f83c0354"
 	},
 	{
 		"path": "Shaders\\model3d.vert",
 		"hash": "0098506810222e4e"
+	},
+	{
+		"path": "Pipeline\\model3d.pipe",
+		"hash": "cf5c67a6fb96e13e"
 	}
 ]
