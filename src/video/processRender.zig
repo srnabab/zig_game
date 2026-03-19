@@ -100,12 +100,12 @@ const CommandPool = struct {
     const Self = @This();
 
     commandPool: vk.VkCommandPool,
-    primaryCommandBuffer: [2]vk.VkCommandBuffer,
+    primaryCommandBuffer: [global.MaxFrameInFlight]vk.VkCommandBuffer,
     secondaryCommandBuffers: ?SecondaryCommandBuffers = null,
 
     pub fn initPrimary(commandPooll: vk.VkCommandPool, vulkan: *VkStruct) !Self {
-        var cbs: [2]vk.VkCommandBuffer = undefined;
-        try vulkan._createCommandBuffers(null, commandPooll, vk.VK_COMMAND_BUFFER_LEVEL_PRIMARY, 2, @ptrCast(&cbs));
+        var cbs: [global.MaxFrameInFlight]vk.VkCommandBuffer = undefined;
+        try vulkan._createCommandBuffers(null, commandPooll, vk.VK_COMMAND_BUFFER_LEVEL_PRIMARY, global.MaxFrameInFlight, @ptrCast(&cbs));
 
         return .{
             .commandPool = commandPooll,
@@ -113,9 +113,9 @@ const CommandPool = struct {
         };
     }
 
-    pub fn initWithSecondary(allocator: std.mem.Allocator, commandPooll: vk.VkCommandPool, secondarySize: usize, vulkan: *VkStruct) !Self {
-        var cbs: [2]vk.VkCommandBuffer = undefined;
-        try vulkan._createCommandBuffers(null, commandPooll, vk.VK_COMMAND_BUFFER_LEVEL_PRIMARY, 2, @ptrCast(&cbs));
+    pub fn initPrimaryWithSecondary(allocator: std.mem.Allocator, commandPooll: vk.VkCommandPool, secondarySize: usize, vulkan: *VkStruct) !Self {
+        var cbs: [global.MaxFrameInFlight]vk.VkCommandBuffer = undefined;
+        try vulkan._createCommandBuffers(null, commandPooll, vk.VK_COMMAND_BUFFER_LEVEL_PRIMARY, global.MaxFrameInFlight, @ptrCast(&cbs));
         return .{
             .commandPool = commandPooll,
             .primaryCommandBuffer = cbs,
@@ -160,7 +160,7 @@ const CommandPools = struct {
             var commandPool: vk.VkCommandPool = null;
             try vulkan._createCommandPool(null, kind, vk.VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | vk.VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, @ptrCast(&commandPool));
             self.commandPools[idx] = if (self.secondarySizes[idx] > 0)
-                try .initWithSecondary(self.allocator, commandPool, self.secondarySizes[idx], vulkan)
+                try .initPrimaryWithSecondary(self.allocator, commandPool, self.secondarySizes[idx], vulkan)
             else
                 try .initPrimary(commandPool, vulkan);
 
@@ -186,7 +186,7 @@ const CommandPools = struct {
             var commandPool: vk.VkCommandPool = null;
             try vulkan._createCommandPool(null, kind, vk.VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, @ptrCast(&commandPool));
             self.commandPools[idx] = if (self.secondarySizes[idx] > 0)
-                try .initWithSecondary(self.allocator, commandPool, self.secondarySizes[idx], vulkan)
+                try .initPrimaryWithSecondary(self.allocator, commandPool, self.secondarySizes[idx], vulkan)
             else
                 try .initPrimary(commandPool, vulkan);
 
@@ -743,7 +743,8 @@ pub const oneTimeCommand = struct {
     primaryCommandPool: CommandPools,
 
     allocator: std.mem.Allocator,
-    stackAllocator: std.mem.Allocator,
+    stackAllocators: [global.MaxFrameInFlight * 2]std.heap.FixedBufferAllocator,
+    stackAllocatorsIndex: u32 = 0,
 
     threadPool: SpecialThreadPool(MaxThreads),
     mutex: Thread.Mutex = .{},
@@ -753,15 +754,25 @@ pub const oneTimeCommand = struct {
     renderingMap: std.AutoHashMap(rendering.RenderingInfo_t, RenderingPack),
     garbageData: std.array_list.Managed(GarbageData),
 
-    waitSemaphoreSubmitInfos: [global.FrameInFlight]std.array_list.Managed(vk.VkSemaphoreSubmitInfo),
-    signalSemaphoreSubmitInfos: [global.FrameInFlight]std.array_list.Managed(vk.VkSemaphoreSubmitInfo),
-    sumbitInfos: [global.FrameInFlight]std.array_list.Managed(vk.VkSubmitInfo2),
+    waitSemaphoreSubmitInfos: [global.MaxFrameInFlight]std.array_list.Managed(vk.VkSemaphoreSubmitInfo),
+    signalSemaphoreSubmitInfos: [global.MaxFrameInFlight]std.array_list.Managed(vk.VkSemaphoreSubmitInfo),
+    sumbitInfos: [global.MaxFrameInFlight]std.array_list.Managed(vk.VkSubmitInfo2),
 
     // commandPools: std.array_list.Managed(vk.VkCommandPool),
 
-    pub fn init(allocator: std.mem.Allocator, stackAllocator: std.mem.Allocator, vulkan: *VkStruct, pRendering: *rendering) Self {
+    pub fn init(allocator: std.mem.Allocator, buffers: []u8, vulkan: *VkStruct, pRendering: *rendering) Self {
         std.log.info("command size: {d}", .{@sizeOf(drawC.comm)});
         std.log.info("vk struct Buffer size: {d}", .{@sizeOf(VkStruct.Buffer_t)});
+
+        var stackAllocators: [global.MaxFrameInFlight * 2]std.heap.FixedBufferAllocator = undefined;
+        const averageSize = global.StackMemorySize / (global.MaxFrameInFlight * 2);
+
+        std.log.debug("average size {d}", .{averageSize});
+
+        for (0..stackAllocators.len) |i| {
+            stackAllocators[i] = .init(buffers[i * averageSize ..][0..averageSize]);
+        }
+
         return Self{
             .queue = .init(allocator),
             .allocator = allocator,
@@ -769,15 +780,15 @@ pub const oneTimeCommand = struct {
             .threadPool = .init(allocator),
             .primaryCommandPool = .init(allocator, 0, 0, 0),
             .garbageData = .init(allocator),
-            .stackAllocator = stackAllocator,
+            .stackAllocators = stackAllocators,
             .combineMap = .init(allocator),
             .cacheMap = .init(allocator),
             // .drawResourceMap = .init(allocator),
             .renderingMap = .init(allocator),
             .vulkan = vulkan,
-            .waitSemaphoreSubmitInfos = [_]std.array_list.Managed(vk.VkSemaphoreSubmitInfo){.init(allocator)} ** global.FrameInFlight,
-            .signalSemaphoreSubmitInfos = [_]std.array_list.Managed(vk.VkSemaphoreSubmitInfo){.init(allocator)} ** global.FrameInFlight,
-            .sumbitInfos = [_]std.array_list.Managed(vk.VkSubmitInfo2){.init(allocator)} ** global.FrameInFlight,
+            .waitSemaphoreSubmitInfos = [_]std.array_list.Managed(vk.VkSemaphoreSubmitInfo){.init(allocator)} ** global.MaxFrameInFlight,
+            .signalSemaphoreSubmitInfos = [_]std.array_list.Managed(vk.VkSemaphoreSubmitInfo){.init(allocator)} ** global.MaxFrameInFlight,
+            .sumbitInfos = [_]std.array_list.Managed(vk.VkSubmitInfo2){.init(allocator)} ** global.MaxFrameInFlight,
             .pRendering = pRendering,
         };
     }
@@ -1146,6 +1157,8 @@ pub const oneTimeCommand = struct {
     pub fn startCommand(self: *Self) !void {
         const zone = tracy.initZone(@src(), .{ .name = "start vulkan commands" });
         defer zone.deinit();
+
+        self.stackAllocators[self.stackAllocatorsIndex].reset();
 
         const node = try self.nodeDag.create();
 
@@ -1848,11 +1861,16 @@ pub const oneTimeCommand = struct {
     }
 
     fn pipelineBarrierNodeConnect(self: *Self, nodes: []twoQueueNode) !twoQueueNode {
-        const newNodesA = self.stackAllocator.alloc(?*QueueNode, nodes.len) catch unreachable;
-        defer self.stackAllocator.free(newNodesA);
+        const zone = tracy.initZone(@src(), .{ .name = "pipeline barrier node connect" });
+        defer zone.deinit();
 
-        const newNodesB = self.stackAllocator.alloc(?*QueueNode, nodes.len) catch unreachable;
-        defer self.stackAllocator.free(newNodesB);
+        const allocator = self.stackAllocators[self.stackAllocatorsIndex].allocator();
+
+        const newNodesA = allocator.alloc(?*QueueNode, nodes.len) catch unreachable;
+        defer allocator.free(newNodesA);
+
+        const newNodesB = allocator.alloc(?*QueueNode, nodes.len) catch unreachable;
+        defer allocator.free(newNodesB);
 
         var lastSrcStageMask: vk.VkPipelineStageFlags2 = std.math.maxInt(u64);
 
@@ -1934,10 +1952,12 @@ pub const oneTimeCommand = struct {
         const zone = tracy.initZone(@src(), .{ .name = "bind vertex buffer" });
         defer zone.deinit();
 
-        const buffers = try self.stackAllocator.alloc(vk.VkBuffer, bufferCount);
-        const offsets = try self.stackAllocator.alloc(vk.VkDeviceSize, bufferCount);
-        const sizes = try self.stackAllocator.alloc(vk.VkDeviceSize, bufferCount);
-        const strides = try self.stackAllocator.alloc(vk.VkDeviceSize, bufferCount);
+        const allocator = self.stackAllocators[self.stackAllocatorsIndex].allocator();
+
+        const buffers = try allocator.alloc(vk.VkBuffer, bufferCount);
+        const offsets = try allocator.alloc(vk.VkDeviceSize, bufferCount);
+        const sizes = try allocator.alloc(vk.VkDeviceSize, bufferCount);
+        const strides = try allocator.alloc(vk.VkDeviceSize, bufferCount);
 
         for (buffers, offsets, sizes, strides, startIndex..) |*b, *o, *s, *st, j| {
             const buffer = self.vulkan.buffers.getBufferContent(bufferHandles[j]);
@@ -1970,6 +1990,8 @@ pub const oneTimeCommand = struct {
 
         self.mutex.lock();
         defer self.mutex.unlock();
+
+        const allocator = self.stackAllocators[self.stackAllocatorsIndex].allocator();
 
         const allCommandType = drawC.PublicCommandTypeToCommandType(commandType);
 
@@ -2031,8 +2053,8 @@ pub const oneTimeCommand = struct {
                         break :bl renderingInfo.textures.len - count;
                     };
 
-                    var totalQueueNodes = try self.stackAllocator.alloc(twoQueueNode, renderingInfo.textures.len + draw2D.vertexBuffer.len + 4);
-                    defer self.stackAllocator.free(totalQueueNodes);
+                    var totalQueueNodes = try allocator.alloc(twoQueueNode, renderingInfo.textures.len + draw2D.vertexBuffer.len + 4);
+                    defer allocator.free(totalQueueNodes);
 
                     if (renderingInfo.pColorAttachments) |v| {
                         for (renderingInfo.textures[0..renderingColorTextureLen], v, 0..) |value, attachment, i| {
@@ -2195,11 +2217,11 @@ pub const oneTimeCommand = struct {
                 var rendering_resourceMap = &renderingPack_.value_ptr.resourceMap;
 
                 const otherResources = 4;
-                const resPack = try self.stackAllocator.alloc(
+                const resPack = try allocator.alloc(
                     @TypeOf(rendering_drawResourceMap.*).GetOrPutResult,
                     draw2D.vertexBuffer.len + draw2D.descriptorSets.len + otherResources,
                 );
-                defer self.stackAllocator.free(resPack);
+                defer allocator.free(resPack);
 
                 try rendering_drawResourceMap.ensureUnusedCapacity(@intCast(resPack.len));
 
@@ -2550,16 +2572,16 @@ pub const oneTimeCommand = struct {
                 var srcBufferNode: twoQueueNode = .{};
                 var dstBufferNode: twoQueueNode = .{};
 
-                const srcOffsets = try self.stackAllocator.alloc(drawC.SizeOffset, tempRegions.len);
-                defer self.stackAllocator.free(srcOffsets);
+                const srcOffsets = try allocator.alloc(drawC.SizeOffset, tempRegions.len);
+                defer allocator.free(srcOffsets);
                 for (tempRegions, srcOffsets) |region, *srcOffset| {
                     srcOffset.offset = region.srcOffset;
                     srcOffset.size = region.size;
                 }
                 srcBufferNode = try self.changeBufferQueueHelper(copyBuffer.srcBuffer, .transfer, srcOffsets, commandType);
 
-                const dstOffsets = try self.stackAllocator.alloc(drawC.SizeOffset, tempRegions.len);
-                defer self.stackAllocator.free(dstOffsets);
+                const dstOffsets = try allocator.alloc(drawC.SizeOffset, tempRegions.len);
+                defer allocator.free(dstOffsets);
                 for (tempRegions, dstOffsets) |region, *dstOffset| {
                     dstOffset.offset = region.dstOffset;
                     dstOffset.size = region.size;
@@ -2766,6 +2788,8 @@ pub const oneTimeCommand = struct {
         const child = root.children.list.items[0];
 
         root.data.commandPoolType = self.nodeDag.get(child.*).?.data.commandPoolType;
+
+        self.stackAllocatorsIndex = (self.stackAllocatorsIndex + 1) % @as(u32, @intCast(self.stackAllocators.len));
 
         nodeDagPrint(&self.nodeDag, self);
 
@@ -3102,7 +3126,7 @@ pub const oneTimeCommand = struct {
         tracy.setThreadName("record command");
         defer tracy.message("record command exit");
 
-        var stackMemory = [_]u8{0} ** global.StackMemorySize;
+        var stackMemory = [_]u8{0} ** global.OneStackMemorySize;
         var stackAllocator = std.heap.FixedBufferAllocator.init(stackMemory[0..]);
         const sma = stackAllocator.allocator();
 
@@ -3203,15 +3227,7 @@ pub const oneTimeCommand = struct {
             .draw2D => {
                 break :rs garbageData{ .renderingInfo = command.command.draw2d.rendering };
             },
-            .bindVertexBuffers => {
-                break :rs garbageData{ .vertexBuffer = .{
-                    .buffers = command.command.bindVertexBuffers.buffers,
-                    .offsets = command.command.bindVertexBuffers.offsets,
-                    .strides = command.command.bindVertexBuffers.strides,
-                    .sizes = command.command.bindVertexBuffers.sizes,
-                } };
-            },
-            .bindDescriptorSets, .setViewport, .setScissor, .bindIndexBuffer, .bindPipeline, .start, .beginRendering, .endRendering => null,
+            .bindVertexBuffers, .bindDescriptorSets, .setViewport, .setScissor, .bindIndexBuffer, .bindPipeline, .start, .beginRendering, .endRendering => null,
             else => {
                 std.debug.panic("not support {s}", .{@tagName(command.commandType)});
             },
@@ -3255,21 +3271,7 @@ pub const oneTimeCommand = struct {
                     self.allocator.free(g.data.regions);
                     self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
                 },
-                .vertexBuffer => {
-                    self.stackAllocator.free(g.data.vertexBuffer.buffers);
-                    self.stackAllocator.free(g.data.vertexBuffer.offsets);
-                    self.stackAllocator.free(g.data.vertexBuffer.sizes);
-                    self.stackAllocator.free(g.data.vertexBuffer.strides);
-                    self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
-                },
-                .descriptorSets => {
-                    if (g.data.descriptorSets.offsets.len > 0)
-                        self.stackAllocator.free(g.data.descriptorSets.offsets);
-
-                    self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
-                },
-                .renderingInfo => {},
-                .empty => {},
+                .descriptorSets, .vertexBuffer, .renderingInfo, .empty => {},
             }
         }
 
@@ -3299,6 +3301,8 @@ pub const oneTimeCommand = struct {
         defer self.mutex.unlock();
 
         const currentFrame = self.vulkan.currentFrame.load(.seq_cst);
+
+        const allocator = self.stackAllocators[self.stackAllocatorsIndex].allocator();
 
         // self.nodeDag.print();
 
@@ -3666,7 +3670,7 @@ pub const oneTimeCommand = struct {
                         if (cbs.items.len > 0)
                             vk.vkCmdExecuteCommands(currentCommandBuffer, @intCast(cbs.items.len), @ptrCast(cbs.items.ptr));
 
-                        record(self.queue.getPtr(nn.ID).?, currentCommandBuffer, self.stackAllocator, self.vulkan);
+                        record(self.queue.getPtr(nn.ID).?, currentCommandBuffer, allocator, self.vulkan);
                     }
                     firstNode = nn.getFirstUndoneChild();
                     if (firstNode == null) {

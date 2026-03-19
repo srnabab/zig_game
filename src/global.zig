@@ -7,7 +7,8 @@ const Handles = @import("handle");
 
 pub const databaseName = "Content.db";
 
-pub const StackMemorySize = 512 * 1024;
+pub const OneStackMemorySize = 128 * 1024;
+pub const StackMemorySize = OneStackMemorySize * 6;
 pub const vertexCount = 4;
 pub const indexCount = 6;
 pub const LOGICAL_HEIGHT = 600;
@@ -25,6 +26,8 @@ pub const EngineVersionMajor = 0;
 pub const EngineVersionMinor = 1;
 pub const EngineVersionPatch = 125;
 
-pub const FrameInFlight = 2;
+pub const MaxFrameInFlight = 3;
+
+pub var FrameInFlight: u32 = 2;
 
 pub var stopPrint = false;

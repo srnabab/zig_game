@@ -63,8 +63,9 @@ pub fn main() !void {
     defer mainZone.deinit();
 
     var stackMemory = [_]u8{0} ** global.StackMemorySize;
-    var stackAllocator = std.heap.FixedBufferAllocator.init(stackMemory[0..]);
-    const sma = stackAllocator.allocator();
+
+    // var tracyStackAllocator = tracy.TracingAllocator.initNamed("stack", stackAllocator.allocator());
+    // defer tracyStackAllocator.deinit();
 
     output.init();
 
@@ -111,7 +112,7 @@ pub fn main() !void {
     var renderingInfo = rendering.init(allocator_t.*, &handles);
     defer renderingInfo.deinit();
 
-    var graphic = OneTimeCommand.init(allocator_t.*, sma, &vulkan, &renderingInfo);
+    var graphic = OneTimeCommand.init(allocator_t.*, &stackMemory, &vulkan, &renderingInfo);
     defer graphic.deinit();
 
     var textureSett = textureSet.init(allocator_t.*, &handles);
@@ -264,7 +265,7 @@ pub fn main() !void {
         vulkan.nextFrame();
 
         // if (std.time.milliTimestamp() - renderStart > 1 * std.time.ms_per_s) {
-        if (vulkan.totalFrame.load(.seq_cst) > 20) {
+        if (vulkan.totalFrame.load(.seq_cst) > 20000) {
             _ = renderStart;
             break;
         }

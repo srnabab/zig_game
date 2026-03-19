@@ -198,9 +198,9 @@ pipelineMap: std.StringHashMap(Pipeline_t),
 pipelines: std.array_list.Managed(Pipeline),
 
 /// binary semaphore
-imageAvailableSemaphore: [2]vk.VkSemaphore = undefined,
+imageAvailableSemaphore: [global.MaxFrameInFlight]vk.VkSemaphore = undefined,
 /// binary semaphore
-renderFinishSemaphore: [2]vk.VkSemaphore = undefined,
+renderFinishSemaphore: [global.MaxFrameInFlight]vk.VkSemaphore = undefined,
 globalTimelineSemaphore: vk.VkSemaphore = null,
 globalTimelineValue: std.atomic.Value(u64) = .init(0),
 
@@ -315,12 +315,14 @@ pub fn initVulkan(self: *Self) !void {
         self.pAllocCallBacks,
     );
 
-    var semaphores: [4]vk.VkSemaphore = undefined;
+    var semaphores: [global.MaxFrameInFlight * 2]vk.VkSemaphore = undefined;
     try Semaphore.createBinarySemaphore(self.device, self.pAllocCallBacks, 0, &semaphores);
     self.imageAvailableSemaphore[0] = semaphores[0];
     self.imageAvailableSemaphore[1] = semaphores[1];
+    self.imageAvailableSemaphore[2] = semaphores[4];
     self.renderFinishSemaphore[0] = semaphores[2];
     self.renderFinishSemaphore[1] = semaphores[3];
+    self.renderFinishSemaphore[2] = semaphores[5];
 
     var semaphores2: [1]vk.VkSemaphore = undefined;
     try Semaphore.createTimelineSemaphore(
@@ -900,7 +902,7 @@ pub fn acquireNextImage(self: *Self, pIndex: *u32) !void {
 
 pub fn nextFrame(self: *Self) void {
     var val = self.currentFrame.load(.seq_cst);
-    val = (val + 1) % 2;
+    val = (val + 1) % global.FrameInFlight;
     self.currentFrame.store(val, .seq_cst);
 
     _ = self.totalFrame.fetchAdd(1, .seq_cst);
