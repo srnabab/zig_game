@@ -288,6 +288,48 @@ pub fn create2DTexture(
     return texture_t;
 }
 
+pub fn createTexturePackVkImage(
+    self: *Self,
+    width: u32,
+    height: u32,
+    format: vk.VkFormat,
+    vkImage: vk.VkImage,
+    vkImageView: vk.VkImageView,
+    name: []const u8,
+) !Texture_t {
+    mutex.lock();
+    defer mutex.unlock();
+
+    var texture = try self.array.addOne();
+    const index: u32 = @intCast(self.array.items.len - 1);
+
+    const ID = hash.CityHash32.hash(name);
+
+    texture.* = .{
+        .image = .{
+            .vkImage = vkImage,
+            .allocation = null,
+            .queueIndex = .init,
+        },
+        .ID = ID,
+        .source_width = width,
+        .source_height = height,
+        .layouts = try self.layoutMemory.create(1),
+        .imageView = vkImageView,
+        .format = format,
+        // .usage = .shader,
+    };
+    for (0..texture.layouts.len) |i| {
+        texture.layouts[i] = vk.VK_IMAGE_LAYOUT_UNDEFINED;
+    }
+
+    const texture_t = self.handles.createHandle(index);
+
+    try self.map.put(ID, texture_t);
+
+    return texture_t;
+}
+
 fn acquireDescriptorSetIndex(self: *Self, ID: u32) !u32 {
     mutex.lock();
     defer mutex.unlock();

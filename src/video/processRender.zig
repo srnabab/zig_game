@@ -2315,6 +2315,19 @@ pub const oneTimeCommand = struct {
         return resPack;
     }
 
+    fn getDescriptorSetsShaderStage(
+        self: *Self,
+        pDescriptorSets: []vk.VkDescriptorSet,
+    ) vk.VkShaderStageFlags {
+        var shaderStage: vk.VkShaderStageFlags = 0;
+
+        for (pDescriptorSets) |value| {
+            shaderStage |= self.vulkan.descriptorSetShaderStages.get(value).?;
+        }
+
+        return shaderStage;
+    }
+
     fn resPackNodeProcess(
         self: *Self,
         resPack: []drawResourceMapGetOrPutResult,
@@ -2400,7 +2413,7 @@ pub const oneTimeCommand = struct {
                             .bindDescriptorSetsInfo = .{
                                 .sType = vk.VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO,
                                 .pNext = null,
-                                .stageFlags = vk.VK_SHADER_STAGE_VERTEX_BIT | vk.VK_SHADER_STAGE_FRAGMENT_BIT,
+                                .stageFlags = self.getDescriptorSetsShaderStage(descriptorSets),
                                 .layout = self.vulkan.getPipelineContent(pipeline).pipelineLayout,
                                 .firstSet = descriptorSetIndex,
                                 .descriptorSetCount = @intCast(descriptorSets.len),
@@ -2556,7 +2569,7 @@ pub const oneTimeCommand = struct {
                     .bindDescriptorSetsInfo = .{
                         .sType = vk.VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO,
                         .pNext = null,
-                        .stageFlags = vk.VK_SHADER_STAGE_VERTEX_BIT | vk.VK_SHADER_STAGE_FRAGMENT_BIT,
+                        .stageFlags = self.getDescriptorSetsShaderStage(descriptorSets),
                         .layout = self.vulkan.getPipelineContent(pipeline).pipelineLayout,
                         .firstSet = descriptorSetIndex,
                         .descriptorSetCount = @intCast(descriptorSets.len),

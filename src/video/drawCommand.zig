@@ -195,6 +195,7 @@ pub const Start = struct {
     transfer: bool = false,
     compute: bool = false,
     present: bool = false,
+    currentIndex: u32 = std.math.maxInt(u32),
 };
 
 const MemoryBarrier = struct {
@@ -303,6 +304,16 @@ const BindDescriptorSets = struct {
     // dynamicOffsets: []u32,
 };
 
+const Present = struct {
+    pipeline: VkStruct.Pipeline_t,
+    rendering: rendering.RenderingInfo_t,
+    descriptorSets: []vk.VkDescriptorSet,
+    pTextures: []texture.Texture_t,
+    pTextureSet: *texture,
+    pViewport: VkStruct.Viewport_t,
+    pScissor: VkStruct.Scissor_t,
+};
+
 pub const comm = union {
     start: Start,
     draw2d: Draw2D,
@@ -320,6 +331,7 @@ pub const comm = union {
     endRendering: void,
     setViewport: vk.VkViewport,
     setScissor: vk.VkRect2D,
+    present: Present,
     empty: void,
 };
 

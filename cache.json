@@ -4,6 +4,14 @@
 		"hash": "0d3a195222fce337"
 	},
 	{
+		"path": "Pipeline\\directOut.pipe",
+		"hash": "277b3b6a2965c6c3"
+	},
+	{
+		"path": "Shaders\\direct.frag",
+		"hash": "359263610cf3820b"
+	},
+	{
 		"path": "Shaders\\shape.vert",
 		"hash": "e4ddc48566406634"
 	},
@@ -40,35 +48,35 @@
 		"hash": "f7e21d14205e7965"
 	},
 	{
-		"path": "Shaders\\combine.vert",
-		"hash": "de8e2a25996cc8b0"
-	},
-	{
 		"path": "Shaders\\combine.frag",
-		"hash": "3dcbe8308c2971aa"
+		"hash": "54752e836292d94d"
 	},
 	{
 		"path": "Shaders\\empty.frag",
 		"hash": "e98cfd7c1e104899"
 	},
 	{
-		"path": "Shaders\\shape.frag",
-		"hash": "d566d14d53f7aa42"
-	},
-	{
-		"path": "Shaders\\SSGI.comp",
-		"hash": "101815da1a4219ec"
+		"path": "Shaders\\sixVertices.vert",
+		"hash": "02ccc3dd9a061bea"
 	},
 	{
 		"path": "Shaders\\flat2d.vert",
 		"hash": "c07ce4a2f83c0354"
 	},
 	{
-		"path": "Shaders\\model3d.vert",
-		"hash": "0098506810222e4e"
+		"path": "Shaders\\SSGI.comp",
+		"hash": "101815da1a4219ec"
+	},
+	{
+		"path": "Shaders\\shape.frag",
+		"hash": "d566d14d53f7aa42"
 	},
 	{
 		"path": "Pipeline\\model3d.pipe",
 		"hash": "cf5c67a6fb96e13e"
+	},
+	{
+		"path": "Shaders\\model3d.vert",
+		"hash": "0098506810222e4e"
 	}
 ]

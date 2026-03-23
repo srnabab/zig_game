@@ -200,3 +200,55 @@ pub fn renderingEnd(self: *Self, renderingInfo: RenderingInfo_t) void {
     const index = Handles.getIndex(renderingInfo);
     self.array.items[index].start = false;
 }
+
+pub fn updateRendering(self: *Self, args: anytype, rendering: RenderingInfo_t) void {
+    const zone = tracy.initZone(@src(), .{ .name = "update texture" });
+    defer zone.deinit();
+
+    const args_type = @TypeOf(args);
+    const args_info = @typeInfo(args_type);
+
+    // std.log.debug("{s}", .{@typeName(args_type)});
+
+    if (args_info != .@"struct") {
+        @compileError("argument must be a struct");
+    }
+
+    mutex.lock();
+    defer mutex.unlock();
+
+    const index = Handles.getIndex(rendering);
+    const temp = &self.array.items[index];
+
+    inline for (args_info.@"struct".fields) |field| {
+        if (!@hasField(RenderingInfo, field.name)) {
+            @compileError("struct has no field named '" ++ field.name ++ "'");
+        }
+
+        @field(temp, field.name) = @field(args, field.name);
+    }
+}
+
+pub fn changeRenderingImageView(self: *Self, startIndex: u32, count: u32, imageViews: []vk.VkImageView, rendering: RenderingInfo_t) !void {
+    const zone = tracy.initZone(@src(), .{ .name = "change rendering image view" });
+    defer zone.deinit();
+
+    mutex.lock();
+    defer mutex.unlock();
+
+    const index = Handles.getIndex(rendering);
+    const temp = &self.array.items[index];
+
+    const len = temp.textures.len;
+
+    if (startIndex >= len or startIndex + count > len) {
+        return error.InvalidIndex;
+    }
+
+    const slice = self.constructSlice(index);
+
+    for (imageViews, startIndex..startIndex + count) |v, i| {
+        temp.textures[i] = v;
+        slice[i].imageView = v;
+    }
+}

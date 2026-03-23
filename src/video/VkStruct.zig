@@ -41,6 +41,7 @@ pub const Buffer_t = bufferStruct.Buffer_t;
 pub const Pipeline_t = Handle;
 pub const Viewport_t = viewportStruct.Viewport_t;
 pub const Scissor_t = scissorStruct.Scissor_t;
+pub const Descriptor_t = Handle;
 
 const globalDescriptorPoolSizes = [_]vk.VkDescriptorPoolSize{
     .{ .type = vk.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 2048 },
@@ -101,6 +102,30 @@ const set1SetLayoutCreateInfos = descriptorSetLayoutCreateInfo{
     },
 };
 
+const set0OutSetlayoutCreateInfos = descriptorSetLayoutCreateInfo{
+    .flag = 0,
+    .bindingCount = 1,
+    .bindings = [5]vk.VkDescriptorSetLayoutBinding{
+        .{
+            .binding = 0,
+            .stageFlags = vk.VK_SHADER_STAGE_FRAGMENT_BIT,
+            .descriptorType = vk.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .descriptorCount = 1,
+        },
+        .{},
+        .{},
+        .{},
+        .{},
+    },
+    .bindingFlags = [5]vk.VkDescriptorBindingFlags{
+        0,
+        0,
+        0,
+        0,
+        0,
+    },
+};
+
 pub const Out = struct {
     location: u32,
     var_type: vk.VkFormat,
@@ -129,6 +154,11 @@ const CommandPool = struct {
 const InitLayout = enum {
     VK_IMAGE_LAYOUT_UNDEFINED,
     VK_IMAGE_LAYOUT_PREINITIALIZED,
+};
+
+const descriptorSetsType = enum {
+    present,
+    draw,
 };
 
 const AllocationCount = struct {
@@ -177,8 +207,9 @@ physicalDevice: vk.VkPhysicalDevice = null,
 device: vk.VkDevice = null,
 
 swapchain: vk.VkSwapchainKHR = null,
-swapchainImages: []vk.VkImage = undefined,
-swapchainImageViews: []vk.VkImageView = undefined,
+swapchainTextures: []textureSet.Texture_t = undefined,
+// swapchainImages: []vk.VkImage = undefined,
+// swapchainImageViews: []vk.VkImageView = undefined,
 
 graphicQueueFamily: Queue.VkQueueFamily = .{},
 graphicQueue: Queue.VkTheadQueue = .{},
@@ -210,12 +241,20 @@ globalTimelineValue: std.atomic.Value(u64) = .init(0),
 
 globalDescriptorPool: vk.VkDescriptorPool = null,
 
-descriptorSetLayout: [2]vk.VkDescriptorSetLayout = undefined,
+drawDescriptorSetLayout: [2]vk.VkDescriptorSetLayout = undefined,
 
 globalFixed2dMVPMatrixDescriptorSet: vk.VkDescriptorSet = null,
 global2dMVPMatrixDescriptorSet: vk.VkDescriptorSet = null,
 global3dMVPMatrixDescriptorSet: vk.VkDescriptorSet = null,
 globalTextureDescriptorSet: vk.VkDescriptorSet = null,
+
+presentDescriptorSetLayout: [1]vk.VkDescriptorSetLayout = undefined,
+
+presentSamplerDescriptorSet: vk.VkDescriptorSet = null,
+
+allDescriptorSetLayouts: std.array_list.Managed(vk.VkDescriptorSetLayout),
+
+descriptorSetShaderStages: std.AutoHashMap(vk.VkDescriptorSet, vk.VkShaderStageFlags),
 
 writeDescriptorSets: std.array_list.Managed(vk.VkWriteDescriptorSet) = undefined,
 descriptorImageInfos: std.array_list.Managed(vk.VkDescriptorImageInfo) = undefined,
@@ -249,10 +288,12 @@ pub fn init(allocator: Allocator, handles: *global.HandlesType) Self {
         .viewports = .init(allocator, handles),
         .scissors = .init(allocator, handles),
         .handles = handles,
+        .allDescriptorSetLayouts = .init(allocator),
+        .descriptorSetShaderStages = .init(allocator),
     };
 }
 
-pub fn initVulkan(self: *Self) !void {
+pub fn initVulkan(self: *Self, textureSets: *textureSet) !void {
     const zone = tracy.initZone(@src(), .{ .name = "init vulkan resources" });
     defer zone.deinit();
 
@@ -359,16 +400,25 @@ pub fn initVulkan(self: *Self) !void {
         self.pAllocCallBacks,
     );
 
-    self.swapchainImages = try Swapchain.createSwapchainImages(
+    const swapchainImages = try Swapchain.createSwapchainImages(
         self.device,
         self.swapchain,
         self.allocator,
     );
+    defer self.allocator.free(swapchainImages);
 
-    self.swapchainImageViews = try self.allocator.alloc(vk.VkImageView, self.swapchainImages.len);
+    self.swapchainTextures = try self.allocator.alloc(textureSet.Texture_t, swapchainImages.len);
 
-    for (self.swapchainImages, self.swapchainImageViews) |image, *imageView| {
-        imageView.* = try self._createImageView(
+    var name = [_]u8{ 's', 'w', 'a', 'p', 'c', 'h', 'a', 'i', 'n', 'T', 'e', 'x', 't', 'u', 'r', 'e', '0' };
+
+    for (swapchainImages, self.swapchainTextures, 0..) |
+        image,
+        *texture,
+        i,
+    | {
+        name[16] = @intCast('0' + i);
+
+        const imageView = try self._createImageView(
             null,
             0,
             image,
@@ -386,6 +436,15 @@ pub fn initVulkan(self: *Self) !void {
             0,
             1,
         );
+
+        texture.* = try textureSets.createTexturePackVkImage(
+            0,
+            0,
+            self.surfaceFormats.formats[@intCast(self.surfaceFormats.sdr)].format,
+            image,
+            imageView,
+            &name,
+        );
     }
 
     self.globalDescriptorPool = try Descriptor._createDescriptorPool(
@@ -396,7 +455,7 @@ pub fn initVulkan(self: *Self) !void {
         globalDescriptorMaxSets,
     );
 
-    self.descriptorSetLayout[0] = try Descriptor.createDescriptorSetLayout(
+    self.drawDescriptorSetLayout[0] = try Descriptor.createDescriptorSetLayout(
         self.device,
         self.pAllocCallBacks,
         null,
@@ -404,13 +463,16 @@ pub fn initVulkan(self: *Self) !void {
         set0SetLayoutCreateInfos.bindingCount,
         @constCast(&set0SetLayoutCreateInfos.bindings),
     );
+    var ptr = try self.allDescriptorSetLayouts.addOne();
+    ptr.* = self.drawDescriptorSetLayout[0];
+
     var bindingFlagsInfo = vk.VkDescriptorSetLayoutBindingFlagsCreateInfo{
         .sType = vk.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
         .pNext = null,
         .bindingCount = set1SetLayoutCreateInfos.bindingCount,
         .pBindingFlags = &set1SetLayoutCreateInfos.bindingFlags,
     };
-    self.descriptorSetLayout[1] = try Descriptor.createDescriptorSetLayout(
+    self.drawDescriptorSetLayout[1] = try Descriptor.createDescriptorSetLayout(
         self.device,
         self.pAllocCallBacks,
         &bindingFlagsInfo,
@@ -418,9 +480,11 @@ pub fn initVulkan(self: *Self) !void {
         set1SetLayoutCreateInfos.bindingCount,
         @constCast(&set1SetLayoutCreateInfos.bindings),
     );
+    ptr = try self.allDescriptorSetLayouts.addOne();
+    ptr.* = self.drawDescriptorSetLayout[1];
 
     var set0Sets: [3]vk.VkDescriptorSet = undefined;
-    var set0Setlayout = [_]vk.VkDescriptorSetLayout{ self.descriptorSetLayout[0], self.descriptorSetLayout[0], self.descriptorSetLayout[0] };
+    var set0Setlayout = [_]vk.VkDescriptorSetLayout{ self.drawDescriptorSetLayout[0], self.drawDescriptorSetLayout[0], self.drawDescriptorSetLayout[0] };
     try Descriptor.allocateDescriptorSets(
         self.device,
         self.globalDescriptorPool,
@@ -432,8 +496,12 @@ pub fn initVulkan(self: *Self) !void {
     self.global2dMVPMatrixDescriptorSet = set0Sets[1];
     self.global3dMVPMatrixDescriptorSet = set0Sets[2];
 
+    try self.descriptorSetShaderStages.put(self.globalFixed2dMVPMatrixDescriptorSet, vk.VK_SHADER_STAGE_VERTEX_BIT);
+    try self.descriptorSetShaderStages.put(self.global2dMVPMatrixDescriptorSet, vk.VK_SHADER_STAGE_VERTEX_BIT);
+    try self.descriptorSetShaderStages.put(self.global3dMVPMatrixDescriptorSet, vk.VK_SHADER_STAGE_VERTEX_BIT);
+
     var set1Sets: [1]vk.VkDescriptorSet = undefined;
-    var set1Setlayout = [_]vk.VkDescriptorSetLayout{self.descriptorSetLayout[1]};
+    var set1Setlayout = [_]vk.VkDescriptorSetLayout{self.drawDescriptorSetLayout[1]};
     try Descriptor.allocateDescriptorSets(
         self.device,
         self.globalDescriptorPool,
@@ -442,6 +510,30 @@ pub fn initVulkan(self: *Self) !void {
     );
 
     self.globalTextureDescriptorSet = set1Sets[0];
+    try self.descriptorSetShaderStages.put(self.globalTextureDescriptorSet, vk.VK_SHADER_STAGE_FRAGMENT_BIT);
+
+    self.presentDescriptorSetLayout[0] = try Descriptor.createDescriptorSetLayout(
+        self.device,
+        self.pAllocCallBacks,
+        null,
+        set0OutSetlayoutCreateInfos.flag,
+        set0OutSetlayoutCreateInfos.bindingCount,
+        @constCast(&set0OutSetlayoutCreateInfos.bindings),
+    );
+    ptr = try self.allDescriptorSetLayouts.addOne();
+    ptr.* = self.presentDescriptorSetLayout[0];
+
+    var presentSets: [1]vk.VkDescriptorSet = undefined;
+    var presentSetlayout = [_]vk.VkDescriptorSetLayout{self.presentDescriptorSetLayout[0]};
+    try Descriptor.allocateDescriptorSets(
+        self.device,
+        self.globalDescriptorPool,
+        &presentSetlayout,
+        &presentSets,
+    );
+
+    self.presentSamplerDescriptorSet = presentSets[0];
+    try self.descriptorSetShaderStages.put(self.presentSamplerDescriptorSet, vk.VK_SHADER_STAGE_FRAGMENT_BIT);
 
     try self.samplers.initSamplers(self.device, self.pAllocCallBacks, self.allocator);
 }
@@ -470,13 +562,15 @@ pub fn deinit(self: *Self) void {
     self.descriptorBufferInfos.deinit();
     self.descriptorBufferViewInfos.deinit();
 
-    for (self.descriptorSetLayout) |value| {
+    for (self.allDescriptorSetLayouts.items) |value| {
         Descriptor.destroyDescriptorSetLayout(
             self.device,
             self.pAllocCallBacks,
             value,
         );
     }
+    self.descriptorSetShaderStages.deinit();
+    self.allDescriptorSetLayouts.deinit();
 
     Descriptor.destroyDescriptorPool(self.device, self.pAllocCallBacks, self.globalDescriptorPool);
 
@@ -513,12 +607,7 @@ pub fn deinit(self: *Self) void {
     }
     self.shaderModules.deinit();
 
-    for (self.swapchainImageViews) |value| {
-        vk.vkDestroyImageView(self.device, value, self.pAllocCallBacks);
-    }
-    self.allocator.free(self.swapchainImageViews);
-
-    self.allocator.free(self.swapchainImages);
+    self.allocator.free(self.swapchainTextures);
 
     self.allocator.free(self.surfaceFormats.formats);
     self.allocator.free(self.presentModes.modes);
@@ -1056,10 +1145,12 @@ pub fn destroyImage(self: *Self, image: Image) void {
     const zone = tracy.initZone(@src(), .{ .name = "destroy image" });
     defer zone.deinit();
 
+    if (image.allocation == null) return;
+
     self.vmaS.destroyImage(@ptrCast(image.vkImage), image.allocation);
 }
 
-pub fn readPipelineFileAndAdd(self: *Self, fileID: i32) !void {
+pub fn readPipelineFileAndAdd(self: *Self, fileID: i32, setsType: descriptorSetsType) !void {
     const zone = tracy.initZone(@src(), .{ .name = "read pipeline file and add" });
     defer zone.deinit();
 
@@ -1091,7 +1182,10 @@ pub fn readPipelineFileAndAdd(self: *Self, fileID: i32) !void {
     }
     zone3.deinit();
 
-    try translate.toVulkan(pipelineInfo, shaderCodes, @constCast(&self.descriptorSetLayout), self);
+    try translate.toVulkan(pipelineInfo, shaderCodes, blk: switch (setsType) {
+        .draw => break :blk @constCast(&self.drawDescriptorSetLayout),
+        .present => break :blk @constCast(&self.presentDescriptorSetLayout),
+    }, self);
 
     try self.addPipelineCreateInfo(pipelineInfo);
 }

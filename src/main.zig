@@ -105,18 +105,17 @@ pub fn main() !void {
         sdl.SDL_MICRO_VERSION,
     });
 
+    var textureSett = textureSet.init(allocator_t.*, &handles);
     var vulkan = VkStruct.init(allocator_t.*, &handles);
-    try vulkan.initVulkan();
+    try vulkan.initVulkan(&textureSett);
     defer vulkan.deinit();
+    defer textureSett.deinit(&vulkan);
 
     var renderingInfo = rendering.init(allocator_t.*, &handles);
     defer renderingInfo.deinit();
 
     var graphic = OneTimeCommand.init(allocator_t.*, &stackMemory, &vulkan, &renderingInfo);
     defer graphic.deinit();
-
-    var textureSett = textureSet.init(allocator_t.*, &handles);
-    defer textureSett.deinit(&vulkan);
 
     // var tt = try std.Thread.spawn(.{}, testSemaphore, .{&vulkan});
     // defer tt.join();
@@ -151,7 +150,8 @@ pub fn main() !void {
     try graphic.executeCommands();
     vulkan.nextFrame();
 
-    try vulkan.readPipelineFileAndAdd(comptime file.comptimeGetID("flat2d.pipeb"));
+    try vulkan.readPipelineFileAndAdd(comptime file.comptimeGetID("flat2d.pipeb"), .draw);
+    try vulkan.readPipelineFileAndAdd(comptime file.comptimeGetID("directOut.pipeb"), .present);
 
     try vulkan.createAllPipelinesAdded();
 
@@ -204,6 +204,21 @@ pub fn main() !void {
     );
     // _ = rendering_test;
 
+    var present_texture_test_array = [_]textureSet.Texture_t{undefined};
+    const presetn_rendering_test = try renderingInfo.createRenderingInfo(
+        0,
+        vk.VkRect2D{ .extent = .{
+            .width = vulkan.windowWidth,
+            .height = vulkan.windowsHeight,
+        }, .offset = .{ .x = 0, .y = 0 } },
+        1,
+        0,
+        &present_texture_test_array,
+        &colorAttachment,
+        null,
+        null,
+    );
+
     const ubo_test = try vulkan.createUniformBuffer(@sizeOf(shaderStruct.UniformBufferObject));
     try vulkan.addWriteDescriptorSetBuffer(
         0,
@@ -214,6 +229,17 @@ pub fn main() !void {
         0,
         vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
     );
+
+    try vulkan.addWriteDescriptorSetImage(
+        0,
+        textureSett.getVkImageView(texture_test),
+        vulkan.samplers.getDefaultSampler(.pixel2d),
+        vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        vulkan.presentSamplerDescriptorSet,
+        0,
+        vk.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+    );
+
     vulkan.writeCachedDescriptorSetResources();
 
     const viewport_test = try vulkan.viewports.createViewport(.{
@@ -242,7 +268,11 @@ pub fn main() !void {
 
     // std.Thread.sleep(std.time.ns_per_s);
 
-    global.stopPrint = true;
+    // var presentTextures = [_]textureSet.Texture_t{texture_test};
+    // var presentDescriptorSets = [_]vk.VkDescriptorSet{vulkan.presentSamplerDescriptorSet};
+    _ = presetn_rendering_test;
+
+    global.stopPrint = false;
 
     const renderStart = std.time.milliTimestamp();
     while (true) {
@@ -260,7 +290,15 @@ pub fn main() !void {
             .pViewport = viewport_test,
             .pScissor = scissor_test,
         } });
-        // try graphic.addCommand(.present);
+        // try graphic.addCommand(.present, .{ .present = .{
+        //     .pipeline = vulkan.getPipeline("directOut"),
+        //     .pTextures = &presentTextures,
+        //     .rendering = presetn_rendering_test,
+        //     .pTextureSet = &textureSett,
+        //     .descriptorSets = &presentDescriptorSets,
+        //     .pViewport = viewport_test,
+        //     .pScissor = scissor_test,
+        // } });
         try graphic.addCommandEnd();
         try graphic.executeCommands();
         vulkan.nextFrame();
