@@ -2607,6 +2607,70 @@ pub const oneTimeCommand = struct {
         };
     }
 
+    fn lastNodeLinkNodeRenderingNodeConnect(
+        lastNode: ?*QueueNode,
+        linkNode: twoQueueNode,
+        node: *QueueNode,
+        renderingNode: ?*QueueNode,
+    ) !void {
+        const linkNodeStart = linkNode.a;
+        const linkNodeEnd = linkNode.b;
+
+        if (lastNode) |a| {
+            const a_children = a.children;
+
+            if (linkNodeEnd) |b| {
+                if (linkNodeEnd != linkNodeStart) {
+                    try linkNodeStart.?.childrenAppend(&node.ID);
+                    try node.parentsAppend(&linkNodeStart.?.ID);
+                } else {
+                    try b.childrenAppend(&node.ID);
+                    try node.parentsAppend(&b.ID);
+                }
+
+                for (a_children.list.items) |value| {
+                    const childrenNode: *QueueNode = @alignCast(@fieldParentPtr("ID", value));
+                    childrenNode.parentsRemove(&a.ID);
+
+                    try childrenNode.parentsAppend(&node.ID);
+                }
+
+                a.clearChildren();
+
+                try a.childrenAppend(&b.ID);
+                try b.parentsAppend(&a.ID);
+            } else {
+                for (a_children.list.items) |value| {
+                    const childrenNode: *QueueNode = @alignCast(@fieldParentPtr("ID", value));
+                    childrenNode.parentsRemove(&a.ID);
+
+                    try childrenNode.parentsAppend(&node.ID);
+                }
+
+                a.clearChildren();
+
+                try a.childrenAppend(&node.ID);
+                try node.parentsAppend(&a.ID);
+            }
+        } else {
+            if (linkNodeEnd) |b| {
+                try renderingNode.?.childrenAppend(&b.ID);
+                try b.parentsAppend(&renderingNode.?.ID);
+
+                if (linkNodeEnd != linkNodeStart) {
+                    try linkNodeStart.?.childrenAppend(&node.ID);
+                    try node.parentsAppend(&linkNodeStart.?.ID);
+                } else {
+                    try linkNodeEnd.?.childrenAppend(&node.ID);
+                    try node.parentsAppend(&linkNodeEnd.?.ID);
+                }
+            } else {
+                try renderingNode.?.childrenAppend(&node.ID);
+                try node.parentsAppend(&renderingNode.?.ID);
+            }
+        }
+    }
+
     pub fn addCommand(self: *Self, commandType: drawC.PublicCommandType, command: drawC.comm) !void {
         const zone = tracy.initZone(@src(), .{ .name = "add command" });
         defer zone.deinit();
@@ -2655,8 +2719,6 @@ pub const oneTimeCommand = struct {
                 // rootCommand.command.start.present = true;
                 // rootCommand.command.start.currentIndex = currentIndex;
 
-                // self.nodeDag.destroy(node);
-
                 // // currentNode = self.nodeDag.get(0).?;
 
                 // var renderingNode: ?*QueueNode = null;
@@ -2688,6 +2750,39 @@ pub const oneTimeCommand = struct {
                 //     allocator,
                 //     commandType,
                 // );
+
+                // for (present.pTextures) |value| {
+                //     const dependencyPtr = try dependenciesArray.addOne();
+                //     dependencyPtr.* = value;
+                // }
+
+                // var lastNode: ?*QueueNode = null;
+                // const resPack = try self.getResPack(
+                //     present.rendering,
+                //     null,
+                //     null,
+                //     present.descriptorSets,
+                //     present.pViewport,
+                //     present.pScissor,
+                //     present.pipeline,
+                //     allocator,
+                //     node,
+                //     &lastNode,
+                // );
+
+                // const linkNode = try self.resPackNodeProcess(
+                //     resPack,
+                //     null,
+                //     null,
+                //     present.descriptorSets,
+                //     present.pViewport,
+                //     present.pScissor,
+                //     present.pipeline,
+                //     commandType,
+                // );
+
+                // const linkNodeStart = linkNode.a;
+                // const linkNodeEnd = linkNode.b;
             },
             .draw2D => {
                 node.data.commandPoolType = .graphic;
@@ -2758,9 +2853,6 @@ pub const oneTimeCommand = struct {
                     commandType,
                 );
 
-                const linkNodeStart = linkNode.a;
-                const linkNodeEnd = linkNode.b;
-
                 // std.log.debug("linkNode end {d} {s} ", .{
                 //     linkNodeEnd.?.ID,
                 //     @tagName(self.queue.getPtr(linkNodeEnd.?.ID).?.commandType),
@@ -2771,59 +2863,12 @@ pub const oneTimeCommand = struct {
                 //     @tagName(self.queue.getPtr(linkNodeStart.?.ID).?.commandType),
                 // });
 
-                if (lastNode) |a| {
-                    const a_children = a.children;
-
-                    if (linkNodeEnd) |b| {
-                        if (linkNodeEnd != linkNodeStart) {
-                            try linkNodeStart.?.childrenAppend(&node.ID);
-                            try node.parentsAppend(&linkNodeStart.?.ID);
-                        } else {
-                            try b.childrenAppend(&node.ID);
-                            try node.parentsAppend(&b.ID);
-                        }
-
-                        for (a_children.list.items) |value| {
-                            const childrenNode: *QueueNode = @alignCast(@fieldParentPtr("ID", value));
-                            childrenNode.parentsRemove(&a.ID);
-
-                            try childrenNode.parentsAppend(&node.ID);
-                        }
-
-                        a.clearChildren();
-
-                        try a.childrenAppend(&b.ID);
-                        try b.parentsAppend(&a.ID);
-                    } else {
-                        for (a_children.list.items) |value| {
-                            const childrenNode: *QueueNode = @alignCast(@fieldParentPtr("ID", value));
-                            childrenNode.parentsRemove(&a.ID);
-
-                            try childrenNode.parentsAppend(&node.ID);
-                        }
-
-                        a.clearChildren();
-
-                        try a.childrenAppend(&node.ID);
-                        try node.parentsAppend(&a.ID);
-                    }
-                } else {
-                    if (linkNodeEnd) |b| {
-                        try renderingNode.?.childrenAppend(&b.ID);
-                        try b.parentsAppend(&renderingNode.?.ID);
-
-                        if (linkNodeEnd != linkNodeStart) {
-                            try linkNodeStart.?.childrenAppend(&node.ID);
-                            try node.parentsAppend(&linkNodeStart.?.ID);
-                        } else {
-                            try linkNodeEnd.?.childrenAppend(&node.ID);
-                            try node.parentsAppend(&linkNodeEnd.?.ID);
-                        }
-                    } else {
-                        try renderingNode.?.childrenAppend(&node.ID);
-                        try node.parentsAppend(&renderingNode.?.ID);
-                    }
-                }
+                try lastNodeLinkNodeRenderingNodeConnect(
+                    lastNode,
+                    linkNode,
+                    node,
+                    renderingNode,
+                );
 
                 if (currentNode == node) {
                     currentNode = self.nodeDag.get(0).?;
