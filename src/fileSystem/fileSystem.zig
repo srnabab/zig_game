@@ -37,6 +37,9 @@ pub fn getImageLoadParam(id: i32) !imageLoad {
     const res = try base.getImageLoadParam(id);
     const ptr = @as([*c]u8, @constCast(&res.relativePath));
     const len = std.mem.len(ptr);
+
+    std.log.debug("file {s}", .{res.relativePath});
+
     return imageLoad{
         .file = try std.fs.cwd().openFile(res.relativePath[0..len], .{}),
         .format = res.format,

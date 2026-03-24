@@ -271,6 +271,7 @@ pub fn build(b: *std.Build) void {
     vk_mod.addIncludePath(b.path("include"));
 
     math_mod.addImport("tracy", tracy.module("tracy"));
+    math_mod.addImport("cglm", cglm_mod);
 
     steam_mod.addImport("tracy", tracy.module("tracy"));
     steam_mod.addIncludePath(b.path("include"));
@@ -396,6 +397,7 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("sdl", sdl_mod);
     exe_mod.addImport("rendering", rendering_mod);
     exe_mod.addImport("vulkan", vk_mod);
+    exe_mod.addImport("math", math_mod);
     exe_mod.addIncludePath(b.path("include/"));
 
     exe_mod.addLibraryPath(b.path("lib/"));

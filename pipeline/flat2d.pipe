@@ -25,13 +25,13 @@
         "location": 1,
         "binding": 0,
         "format": "R32G32_SFLOAT",
-        "offset": 16 
+        "offset": 12 
       },
       {
         "location": 2,
         "binding": 0,
         "format": "R32_UINT",
-        "offset": 12
+        "offset": 20 
       }
     ]
   },

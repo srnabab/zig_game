@@ -20,6 +20,7 @@ const render = @import("render.zig");
 const VkStruct = @import("video");
 const OneTimeCommand = @import("processRender").oneTimeCommand;
 const vertices = @import("vertices");
+const math = @import("math");
 
 const shaderStruct = @import("video/shaderStruct.zig");
 
@@ -138,7 +139,7 @@ pub fn main() !void {
             &vulkan,
             &graphic,
         );
-        const ix = try vertices.vertexInitialize2D(800, 600, 400, 300, 0.1, try textureSett.getDescriptorSetIndex(temp));
+        const ix = try vertices.vertexInitialize2D(48, 48, 0, 0, 0.1, try textureSett.getDescriptorSetIndex(temp));
         try textureSett.offsetsAdd(temp, ix);
         try vertices.upload(&graphic);
     }
@@ -220,6 +221,26 @@ pub fn main() !void {
     );
 
     const ubo_test = try vulkan.createUniformBuffer(@sizeOf(shaderStruct.UniformBufferObject));
+    var pUIUbo: shaderStruct.UniformBufferObject = undefined;
+    const ubo = vulkan.buffers.getBufferContent(ubo_test);
+
+    const aspect2: f32 = 1.0 * (@as(f32, @floatFromInt(vulkan.windowsHeight)) / 600.0);
+    const aspect: f32 = (@as(f32, @floatFromInt(vulkan.windowWidth)) / @as(f32, @floatFromInt(vulkan.windowsHeight))) * aspect2;
+    const VIEW_SCALE = 1.0;
+
+    var eye = vertices.cglm.vec3{ 0.0, 0.0, 100.0 };
+    var center = vertices.cglm.vec3{ 0.0, 0.0, 0.0 };
+    var up = vertices.cglm.vec3{ 0.0, 1.0, 0.0 };
+    vertices.cglm.glm_lookat(
+        &eye,
+        &center,
+        &up,
+        &pUIUbo.view,
+    );
+    math.glm_ortho_vulkan(-aspect * VIEW_SCALE, aspect * VIEW_SCALE, -aspect2 * VIEW_SCALE, aspect2 * VIEW_SCALE, -0.001, -100.0, &pUIUbo.proj);
+    const pData = @as(*shaderStruct.UniformBufferObject, @ptrCast(@alignCast(ubo.pMappedData)));
+    pData.* = pUIUbo;
+
     try vulkan.addWriteDescriptorSetBuffer(
         0,
         vulkan.buffers.getVkBuffer(ubo_test),
@@ -253,8 +274,8 @@ pub fn main() !void {
 
     const scissor_test = try vulkan.scissors.createScissor(.{
         .extent = .{
-            .height = vulkan.windowWidth,
-            .width = vulkan.windowsHeight,
+            .width = vulkan.windowWidth,
+            .height = vulkan.windowsHeight,
         },
         .offset = .{ .x = 0, .y = 0 },
     });
@@ -272,7 +293,7 @@ pub fn main() !void {
     var presentDescriptorSets = [_]vk.VkDescriptorSet{vulkan.presentSamplerDescriptorSet};
     // _ = presetn_rendering_test;
 
-    global.stopNodeDagPrint = false;
+    // global.stopNodeDagPrint = false;
     // global.stopExecuteNodePrint = false;
 
     const renderStart = std.time.milliTimestamp();
@@ -308,7 +329,7 @@ pub fn main() !void {
         vulkan.nextFrame();
 
         // if (std.time.milliTimestamp() - renderStart > 1 * std.time.ms_per_s) {
-        if (vulkan.totalFrame.load(.seq_cst) > 2000) {
+        if (vulkan.totalFrame.load(.seq_cst) > 20000) {
             _ = renderStart;
             break;
         }
@@ -362,9 +383,9 @@ pub fn main() !void {
 
     endSemaphore.post();
 
-    vulkan.logBufferPtr();
+    // vulkan.logBufferPtr();
 
-    textureSett.logImagePtr();
+    // textureSett.logImagePtr();
 }
 
 fn testSemaphore(vulkan: *VkStruct) void {

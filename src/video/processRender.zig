@@ -2519,7 +2519,7 @@ pub const oneTimeCommand = struct {
                                 .layout = self.vulkan.getPipelineContent(pipeline).pipelineLayout,
                                 .firstSet = descriptorSetIndex,
                                 .descriptorSetCount = @intCast(descriptorSets.len),
-                                .pDescriptorSets = descriptorSets.ptr,
+                                .pDescriptorSets = @ptrCast(descriptorSets.ptr),
                                 .dynamicOffsetCount = 0,
                                 .pDynamicOffsets = null,
                             },
@@ -3583,18 +3583,18 @@ pub const oneTimeCommand = struct {
                 // std.log.debug("count: {d}", .{bindDescriptorSets.descriptorSets.len});
                 // std.log.debug("first set {d}", .{bindDescriptorSets.firstSet});
 
-                // vk.vkCmdBindDescriptorSets(
-                //     commandBuffer,
-                //     vk.VK_PIPELINE_BIND_POINT_GRAPHICS,
-                //     bindDescriptorSets.bindDescriptorSetsInfo.layout,
-                //     0,
-                //     2,
-                //     bindDescriptorSets.bindDescriptorSetsInfo.pDescriptorSets,
-                //     0,
-                //     null,
-                // );
+                vk.vkCmdBindDescriptorSets(
+                    commandBuffer,
+                    vk.VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    bindDescriptorSets.bindDescriptorSetsInfo.layout,
+                    bindDescriptorSets.bindDescriptorSetsInfo.firstSet,
+                    bindDescriptorSets.bindDescriptorSetsInfo.descriptorSetCount,
+                    bindDescriptorSets.bindDescriptorSetsInfo.pDescriptorSets,
+                    0,
+                    null,
+                );
 
-                vk.vkCmdBindDescriptorSets2(commandBuffer, &bindDescriptorSets.bindDescriptorSetsInfo);
+                // vk.vkCmdBindDescriptorSets2(commandBuffer, &bindDescriptorSets.bindDescriptorSetsInfo);
             },
             .endRendering => {
                 const innerZone = tracy.initZone(@src(), .{ .name = "end rendering" });

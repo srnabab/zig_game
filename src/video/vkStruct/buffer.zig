@@ -155,7 +155,7 @@ pub fn createStagingBuffer(
         0,
         vk.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | vma.VMA_ALLOCATION_CREATE_MAPPED_BIT,
-        vma.VMA_MEMORY_USAGE_CPU_TO_GPU,
+        vma.VMA_MEMORY_USAGE_AUTO,
         handles,
     );
 }
@@ -176,7 +176,7 @@ pub fn createVertexBuffer(
         stride,
         vk.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | vk.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
         vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT,
-        vma.VMA_MEMORY_USAGE_GPU_ONLY,
+        vma.VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
         handles,
     );
 }
@@ -196,7 +196,7 @@ pub fn createIndexBuffer(
         0,
         vk.VK_BUFFER_USAGE_INDEX_BUFFER_BIT | vk.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
         vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-        vma.VMA_MEMORY_USAGE_GPU_ONLY,
+        vma.VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
         handles,
     );
 }
@@ -213,9 +213,9 @@ pub fn createUniformBuffer(
         vk.VK_SHARING_MODE_EXCLUSIVE,
         @intCast(math.round(BufferAlign, size)),
         0,
-        vk.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | vk.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-        vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-        vma.VMA_MEMORY_USAGE_CPU_ONLY,
+        vk.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | vma.VMA_ALLOCATION_CREATE_MAPPED_BIT,
+        vma.VMA_MEMORY_USAGE_AUTO_PREFER_HOST,
         handles,
     );
 }

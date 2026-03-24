@@ -1,6 +1,6 @@
 const std = @import("std");
 const tracy = @import("tracy");
-const cglm = @import("cglm").cglm;
+pub const cglm = @import("cglm").cglm;
 
 const vkStruct = @import("video");
 const vk = @import("vulkan").vulkan;
@@ -95,6 +95,7 @@ pub fn deinit() void {
 pub fn vertexInitialize2D(width: u32, height: u32, x: u32, y: u32, depth: f32, textureIndex: u32) !u32 {
     mutex.lock();
     defer mutex.unlock();
+    std.log.debug("idx {d}", .{textureIndex});
 
     if (vertices2D.len <= vertexCount2D) {
         vertices2D = try vulkan.allocator.realloc(vertices2D, vertexCount2D * 2);
