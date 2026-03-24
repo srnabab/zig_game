@@ -268,15 +268,19 @@ pub fn main() !void {
 
     // std.Thread.sleep(std.time.ns_per_s);
 
-    // var presentTextures = [_]textureSet.Texture_t{texture_test};
-    // var presentDescriptorSets = [_]vk.VkDescriptorSet{vulkan.presentSamplerDescriptorSet};
-    _ = presetn_rendering_test;
+    var presentTextures = [_]textureSet.Texture_t{texture_test};
+    var presentDescriptorSets = [_]vk.VkDescriptorSet{vulkan.presentSamplerDescriptorSet};
+    // _ = presetn_rendering_test;
 
-    global.stopPrint = false;
+    global.stopNodeDagPrint = false;
+    // global.stopExecuteNodePrint = false;
 
     const renderStart = std.time.milliTimestamp();
     while (true) {
         // log.info("frame {d}", .{vulkan.totalFrame.load(.seq_cst)});
+        const frame = vulkan.totalFrame.load(.seq_cst);
+
+        if (frame == 3) global.stopNodeDagPrint = true;
 
         try graphic.startCommand();
         try graphic.addCommand(.draw2D, .{ .draw2d = .{
@@ -290,21 +294,21 @@ pub fn main() !void {
             .pViewport = viewport_test,
             .pScissor = scissor_test,
         } });
-        // try graphic.addCommand(.present, .{ .present = .{
-        //     .pipeline = vulkan.getPipeline("directOut"),
-        //     .pTextures = &presentTextures,
-        //     .rendering = presetn_rendering_test,
-        //     .pTextureSet = &textureSett,
-        //     .descriptorSets = &presentDescriptorSets,
-        //     .pViewport = viewport_test,
-        //     .pScissor = scissor_test,
-        // } });
+        try graphic.addCommand(.present, .{ .present = .{
+            .pipeline = vulkan.getPipeline("directOut").?,
+            .pTextures = &presentTextures,
+            .rendering = presetn_rendering_test,
+            .pTextureSet = &textureSett,
+            .descriptorSets = &presentDescriptorSets,
+            .pViewport = viewport_test,
+            .pScissor = scissor_test,
+        } });
         try graphic.addCommandEnd();
         try graphic.executeCommands();
         vulkan.nextFrame();
 
         // if (std.time.milliTimestamp() - renderStart > 1 * std.time.ms_per_s) {
-        if (vulkan.totalFrame.load(.seq_cst) > 20) {
+        if (vulkan.totalFrame.load(.seq_cst) > 2000) {
             _ = renderStart;
             break;
         }

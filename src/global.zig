@@ -30,4 +30,6 @@ pub const MaxFrameInFlight = 3;
 
 pub var FrameInFlight: u32 = 2;
 
-pub var stopPrint = false;
+pub var stopNodeDagPrint = true;
+pub var stopNodeDagDetailPrint = true;
+pub var stopExecuteNodePrint = true;

@@ -72,6 +72,7 @@ array: std.array_list.Managed(Texture),
 offsetsPool: objectPool(Offsets),
 offsetRange: std.array_list.Managed(Offsets),
 
+imageViewToTexture: std.hash_map.AutoHashMap(vk.VkImageView, Texture_t),
 map: std.hash_map.AutoHashMap(u32, Texture_t),
 layoutMemory: MemoryPool(vk.VkImageLayout),
 descriptorSetIndices: std.AutoHashMap(u32, u32),
@@ -97,6 +98,7 @@ pub fn init(allocator: std.mem.Allocator, handles: *global.HandlesType) Self {
         .descriptorSetIndices = .init(allocator),
         .offsetsPool = .init(allocator),
         .offsetRange = .init(allocator),
+        .imageViewToTexture = .init(allocator),
         .handles = handles,
         // .vulkan = vulkan,
         // .graphic = graphic,
@@ -125,6 +127,7 @@ pub fn deinit(self: *Self, vulkan: *VkStruct) void {
     self.array.deinit();
     self.layoutMemory.deinit();
     self.descriptorSetIndices.deinit();
+    self.imageViewToTexture.deinit();
 }
 
 pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Samplers.SamplerType, vulkan: *VkStruct, graphic: *OneTimeCommand) !Texture_t {
@@ -238,6 +241,8 @@ pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Sample
         vk.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
     );
 
+    try self.imageViewToTexture.put(texture.imageView, texture_t);
+
     return texture_t;
 }
 
@@ -285,6 +290,8 @@ pub fn create2DTexture(
 
     texture.imageView = try vulkan.createImageView2D(texture.image.vkImage, texture.format);
 
+    try self.imageViewToTexture.put(texture.imageView, texture_t);
+
     return texture_t;
 }
 
@@ -326,6 +333,8 @@ pub fn createTexturePackVkImage(
     const texture_t = self.handles.createHandle(index);
 
     try self.map.put(ID, texture_t);
+
+    try self.imageViewToTexture.put(texture.imageView, texture_t);
 
     return texture_t;
 }

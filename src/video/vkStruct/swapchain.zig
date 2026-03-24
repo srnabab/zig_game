@@ -12,7 +12,8 @@ const checkVkResult = VkResultToError.checkVkResult;
 const tracy = @import("tracy");
 
 const SDR_SurfaceFormat = vk.VkSurfaceFormatKHR{
-    .format = vk.VK_FORMAT_R8G8B8A8_UNORM,
+    // .format = vk.VK_FORMAT_R8G8B8A8_UNORM,
+    .format = vk.VK_FORMAT_R8G8B8A8_SRGB,
     .colorSpace = vk.VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
 };
 

@@ -124,7 +124,7 @@ pub fn destroyRenderingInfo(self: *Self, renderingInfo: RenderingInfo_t) void {
     self.array.items[index].stencilAttachment = null;
 }
 
-fn constructSlice(self: *Self, index: u32) []const vk.VkRenderingAttachmentInfo {
+fn constructSlice(self: *Self, index: u32) []vk.VkRenderingAttachmentInfo {
     const slice = bk: {
         var count: u32 = 0;
         var ptr: ?[*]vk.VkRenderingAttachmentInfo = null;
@@ -229,7 +229,7 @@ pub fn updateRendering(self: *Self, args: anytype, rendering: RenderingInfo_t) v
     }
 }
 
-pub fn changeRenderingImageView(self: *Self, startIndex: u32, count: u32, imageViews: []vk.VkImageView, rendering: RenderingInfo_t) !void {
+pub fn changeRenderingImageView(self: *Self, startIndex: u32, count: u32, imageViews: []vk.VkImageView, rendering: RenderingInfo_t, pTextureSet: *textureSet) void {
     const zone = tracy.initZone(@src(), .{ .name = "change rendering image view" });
     defer zone.deinit();
 
@@ -239,16 +239,16 @@ pub fn changeRenderingImageView(self: *Self, startIndex: u32, count: u32, imageV
     const index = Handles.getIndex(rendering);
     const temp = &self.array.items[index];
 
-    const len = temp.textures.len;
+    // const len = temp.textures.len;
 
-    if (startIndex >= len or startIndex + count > len) {
-        return error.InvalidIndex;
-    }
+    // if (startIndex >= len or startIndex + count > len) {
+    //     return error.InvalidIndex;
+    // }
 
-    const slice = self.constructSlice(index);
+    var slice = self.constructSlice(index);
 
     for (imageViews, startIndex..startIndex + count) |v, i| {
-        temp.textures[i] = v;
+        temp.textures[i] = pTextureSet.imageViewToTexture.get(v).?;
         slice[i].imageView = v;
     }
 }
