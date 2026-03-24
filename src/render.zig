@@ -18,8 +18,6 @@ const Semaphore = std.Thread.Semaphore;
 
 const file = @import("fileSystem");
 
-// const drawCommandProcess = @import("video/drawCommandProcess.zig");
-
 var debug_allocator: std.heap.DebugAllocator(.{ .stack_trace_frames = 10 }) = .init;
 
 pub fn render_thread_func(
@@ -227,11 +225,8 @@ pub fn render_thread_func(
         vulkan.globalFixed2dMVPMatrixDescriptorSet, vulkan.globalTextureDescriptorSet,
     };
 
-    // std.Thread.sleep(std.time.ns_per_s);
-
     var presentTextures = [_]textureSet.Texture_t{texture_test};
     var presentDescriptorSets = [_]vk.VkDescriptorSet{vulkan.presentSamplerDescriptorSet};
-    // _ = presetn_rendering_test;
 
     // global.stopNodeDagPrint = false;
     // global.stopExecuteNodePrint = false;
@@ -239,11 +234,6 @@ pub fn render_thread_func(
     const renderStart = std.time.milliTimestamp();
 
     while (true) {
-        // endSemaphore.timedWait(1) catch |err| switch (err) {
-        //     error.Timeout => continue,
-        // };
-        // break;
-        // log.info("frame {d}", .{vulkan.totalFrame.load(.seq_cst)});
         const frame = vulkan.totalFrame.load(.seq_cst);
 
         if (frame == 3) global.stopNodeDagPrint = true;
@@ -279,6 +269,10 @@ pub fn render_thread_func(
             break;
         }
     }
+
+    // vulkan.logBufferPtr();
+
+    // textureSett.logImagePtr();
 
     _ = endSemaphore;
     _ = thread_count;

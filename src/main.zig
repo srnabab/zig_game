@@ -1,7 +1,6 @@
 const std = @import("std");
 const process = std.process;
 
-const vk = @import("vulkan").vulkan;
 const sdl = @cImport(@cInclude("SDL3/SDL.h"));
 const SDL_CheckResult = @import("sdl").SDL_CheckResult;
 
@@ -12,17 +11,10 @@ const log = std.log;
 const ECS = @import("ECS");
 const steam = @import("steam");
 const steamInner = steam.steamInner;
-const textureSet = @import("textureSet");
-const rendering = @import("rendering");
 
 const update = @import("update.zig");
 const render = @import("render.zig");
-const VkStruct = @import("video");
-const OneTimeCommand = @import("processRender").oneTimeCommand;
-const vertices = @import("vertices");
 const math = @import("math");
-
-const shaderStruct = @import("video/shaderStruct.zig");
 
 const file = @import("fileSystem");
 
@@ -63,29 +55,18 @@ pub fn main() !void {
     const mainZone = tracy.initZone(@src(), .{ .name = "main" });
     defer mainZone.deinit();
 
-    // var stackMemory = [_]u8{0} ** global.StackMemorySize;
-
-    // var tracyStackAllocator = tracy.TracingAllocator.initNamed("stack", stackAllocator.allocator());
-    // defer tracyStackAllocator.deinit();
-
     output.init();
 
     const args = try process.argsAlloc(allocator_t.*);
     defer process.argsFree(allocator_t.*, args);
 
     for (args) |arg| {
-        // try output.out.print("arg: {s}\n", .{arg});
         std.log.info("arg: {s}", .{arg});
     }
 
-    {
-        const zone = tracy.initZone(@src(), .{ .name = "set cwd" });
-        defer zone.deinit();
-
-        const index = std.mem.lastIndexOf(u8, args[0], "\\").?;
-        var temp = try std.fs.openDirAbsolute(args[0][0..index], .{});
-        try temp.setAsCwd();
-    }
+    const index = std.mem.lastIndexOf(u8, args[0], "\\").?;
+    var temp = try std.fs.openDirAbsolute(args[0][0..index], .{});
+    try temp.setAsCwd();
 
     handles = try .init(gpa);
     defer handles.deinit(gpa);
@@ -107,7 +88,6 @@ pub fn main() !void {
     });
 
     thread_count = try Thread.getCpuCount();
-    // const thread_count: u32 = 1023;
     const thread_used_count = cot: {
         var count = thread_count;
         if (thread_count < 8) {
@@ -157,8 +137,4 @@ pub fn main() !void {
     defer render_t.join();
 
     endSemaphore.post();
-
-    // vulkan.logBufferPtr();
-
-    // textureSett.logImagePtr();
 }
