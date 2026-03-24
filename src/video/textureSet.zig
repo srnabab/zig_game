@@ -12,7 +12,7 @@ const objectPool = @import("objectPool").ObjectPool;
 const Handles = @import("handle");
 const Handle = Handles.Handle;
 const processRender = @import("processRender");
-const OneTimeCommand = processRender.oneTimeCommand;
+const Commands = processRender.commands;
 const hash = std.hash;
 
 const Self = @This();
@@ -130,7 +130,7 @@ pub fn deinit(self: *Self, vulkan: *VkStruct) void {
     self.imageViewToTexture.deinit();
 }
 
-pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Samplers.SamplerType, vulkan: *VkStruct, graphic: *OneTimeCommand) !Texture_t {
+pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Samplers.SamplerType, vulkan: *VkStruct, graphic: *Commands) !Texture_t {
     const zone = tracy.initZone(@src(), .{ .name = "create image texutre from file" });
     defer zone.deinit();
 
@@ -367,7 +367,7 @@ pub fn getDescriptorSetIndex(self: *Self, texture: Texture_t) !u32 {
     return index;
 }
 
-pub fn createImageTextureEnsureWithErrorImage(self: *Self, fileID: u32, samplerType: VkStruct.Samplers.SamplerType, vulkan: *VkStruct, graphic: *OneTimeCommand) Texture_t {
+pub fn createImageTextureEnsureWithErrorImage(self: *Self, fileID: u32, samplerType: VkStruct.Samplers.SamplerType, vulkan: *VkStruct, graphic: *Commands) Texture_t {
     return self.createImageTexture(fileID, samplerType, vulkan, graphic) catch |err| {
         std.log.err("create image {d} texture error {s} {d}", .{ fileID, @errorName(err), @sizeOf(Texture) });
         return self.createImageTexture(comptime file.comptimeGetID("non_exist.png"), .pixel2d, vulkan, graphic) catch unreachable;

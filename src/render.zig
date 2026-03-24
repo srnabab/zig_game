@@ -7,6 +7,7 @@ const tracy = @import("tracy");
 const vk = @import("vulkan").vulkan;
 const VkStruct = @import("video");
 const OneTimeCommand = @import("processRender").oneTimeCommand;
+const Commands = @import("processRender").commands;
 const textureSet = @import("textureSet");
 const rendering = @import("rendering");
 const vertices = @import("vertices");
@@ -56,37 +57,45 @@ pub fn render_thread_func(
     var pRendering = rendering.init(allocator_t.*, handles);
     defer pRendering.deinit();
 
-    var graphic = OneTimeCommand.init(allocator_t.*, &stackMemory, &vulkan, &pRendering);
+    var commands = Commands.init(
+        allocator_t.*,
+        stackMemory[0 .. global.StackMemorySize / 2],
+        &vulkan,
+        &pRendering,
+    );
+    defer commands.deinit();
+
+    var graphic = OneTimeCommand.init(allocator_t.*, &vulkan, &pRendering);
     defer graphic.deinit();
 
-    try graphic.startCommand();
+    try commands.startCommand();
 
-    try vertices.init(&vulkan, &graphic);
+    try vertices.init(&vulkan, &commands);
     defer vertices.deinit();
 
     _ = try pTextureSet.createImageTexture(
         comptime file.comptimeGetID("non_exist.png"),
         .pixel2d,
         &vulkan,
-        &graphic,
+        &commands,
     );
     {
         const temp = pTextureSet.createImageTextureEnsureWithErrorImage(
             comptime file.comptimeGetID("circle.png"),
             .pixel2d,
             &vulkan,
-            &graphic,
+            &commands,
         );
         const ix = try vertices.vertexInitialize2D(48, 48, 0, 0, 0.1, try pTextureSet.getDescriptorSetIndex(temp));
         try pTextureSet.offsetsAdd(temp, ix);
-        try vertices.upload(&graphic);
+        try vertices.upload(&commands);
     }
 
-    try graphic.addCommandEnd();
+    try commands.addCommandEnd();
 
     vulkan.writeCachedDescriptorSetResources();
 
-    try graphic.executeCommands();
+    try graphic.executeCommands(&commands);
     vulkan.nextFrame();
 
     try vulkan.readPipelineFileAndAdd(comptime file.comptimeGetID("flat2d.pipeb"), .draw);
@@ -238,8 +247,8 @@ pub fn render_thread_func(
 
         if (frame == 3) global.stopNodeDagPrint = true;
 
-        try graphic.startCommand();
-        try graphic.addCommand(.draw2D, .{ .draw2d = .{
+        try commands.startCommand();
+        try commands.addCommand(.draw2D, .{ .draw2d = .{
             .pipeline = vulkan.getPipeline("flat2d").?,
             .pTexture = pTextureSet.getTexture(@intCast(file.getID("circle.png"))).?,
             .rendering = rendering_test,
@@ -250,7 +259,7 @@ pub fn render_thread_func(
             .pViewport = viewport_test,
             .pScissor = scissor_test,
         } });
-        try graphic.addCommand(.present, .{ .present = .{
+        try commands.addCommand(.present, .{ .present = .{
             .pipeline = vulkan.getPipeline("directOut").?,
             .pTextures = &presentTextures,
             .rendering = presetn_rendering_test,
@@ -259,12 +268,12 @@ pub fn render_thread_func(
             .pViewport = viewport_test,
             .pScissor = scissor_test,
         } });
-        try graphic.addCommandEnd();
-        try graphic.executeCommands();
+        try commands.addCommandEnd();
+        try graphic.executeCommands(&commands);
         vulkan.nextFrame();
 
         // if (std.time.milliTimestamp() - renderStart > 1 * std.time.ms_per_s) {
-        if (vulkan.totalFrame.load(.seq_cst) > 20) {
+        if (vulkan.totalFrame.load(.seq_cst) > 40) {
             _ = renderStart;
             break;
         }

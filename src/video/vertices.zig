@@ -6,7 +6,7 @@ const vkStruct = @import("video");
 const vk = @import("vulkan").vulkan;
 const global = @import("global");
 
-const OneTimeCommand = @import("processRender").oneTimeCommand;
+const Commands = @import("processRender").commands;
 
 pub const vec3 = cglm.vec3;
 pub const vec2 = cglm.vec2;
@@ -30,7 +30,7 @@ var updated2D = false;
 var vulkan: *vkStruct = undefined;
 var mutex = std.Thread.Mutex{};
 
-pub fn init(vulkan_t: *vkStruct, graphic: *OneTimeCommand) !void {
+pub fn init(vulkan_t: *vkStruct, graphic: *Commands) !void {
     const zone = tracy.initZone(@src(), .{ .name = "vertices initialization" });
     defer zone.deinit();
 
@@ -167,7 +167,7 @@ pub fn vertexInitialize2D(width: u32, height: u32, x: u32, y: u32, depth: f32, t
     return vertexCount2D - 4;
 }
 
-pub fn upload(graphic: *OneTimeCommand) !void {
+pub fn upload(graphic: *Commands) !void {
     const zone = tracy.initZone(@src(), .{ .name = "vertices upload" });
     defer zone.deinit();
 

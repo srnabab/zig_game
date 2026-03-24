@@ -621,7 +621,7 @@ fn DAG(T: type) type {
     };
 }
 
-fn nodeDagPrint(self: *QueueNodes, self2: *oneTimeCommand) void {
+fn nodeDagPrint(self: *QueueNodes, self2: *commands) void {
     const zone = tracy.initZone(@src(), .{ .name = "dag print" });
     defer zone.deinit();
 
@@ -783,48 +783,34 @@ const RenderingPack = struct {
 };
 const drawResourceMapGetOrPutResult = drawResourceMapType.GetOrPutResult;
 
-pub const oneTimeCommand = struct {
+pub const commands = struct {
     const Self = @This();
 
-    // pub const TaskCallback = *const fn (ctx: *anyopaque) VkStruct.VkError!void;
-    // const EnqueueTaskCallback = *const fn (taskCallback: TaskCallback, taskCtx: *anyopaque, userCtx: *anyopaque) *anyopaque;
-    // const FinishTaskCallback = *const fn (userTask: *anyopaque, userCtx: *anyopaque) void;
+    mutex: Thread.Mutex = .{},
+
     vulkan: *VkStruct,
     pRendering: *rendering,
 
-    innerID: u32 = 0,
-    innerCommandBufferID: u32 = 0,
     queue: std.hash_map.AutoHashMap(u32, drawC),
     nodeDag: QueueNodes,
     combineMap: std.AutoHashMap(u64, *QueueNode),
 
-    primaryCommandPool: CommandPools,
-
-    allocator: std.mem.Allocator,
-    stackAllocators: [global.MaxFrameInFlight * 2]std.heap.FixedBufferAllocator,
-    stackAllocatorsIndex: u32 = 0,
-
-    threadPool: SpecialThreadPool(MaxThreads),
-    mutex: Thread.Mutex = .{},
-    executeSemaphore: Thread.Semaphore = .{},
-
     cacheMap: std.AutoHashMap(*anyopaque, u32),
     renderingMap: std.AutoHashMap(rendering.RenderingInfo_t, RenderingPack),
-    garbageData: std.array_list.Managed(GarbageData),
     u32Mem: std.heap.MemoryPoolExtra(u32, .{}),
 
-    waitSemaphoreSubmitInfos: [global.MaxFrameInFlight]std.array_list.Managed(vk.VkSemaphoreSubmitInfo),
-    signalSemaphoreSubmitInfos: [global.MaxFrameInFlight]std.array_list.Managed(vk.VkSemaphoreSubmitInfo),
-    sumbitInfos: [global.MaxFrameInFlight]std.array_list.Managed(vk.VkSubmitInfo2),
+    allocator: std.mem.Allocator,
+    stackAllocators: [global.MaxFrameInFlight]std.heap.FixedBufferAllocator,
+    stackAllocatorsIndex: u32 = 0,
 
-    // commandPools: std.array_list.Managed(vk.VkCommandPool),
+    end: bool = false,
 
     pub fn init(allocator: std.mem.Allocator, buffers: []u8, vulkan: *VkStruct, pRendering: *rendering) Self {
         std.log.info("command size: {d}", .{@sizeOf(drawC.comm)});
         std.log.info("vk struct Buffer size: {d}", .{@sizeOf(VkStruct.Buffer_t)});
 
-        var stackAllocators: [global.MaxFrameInFlight * 2]std.heap.FixedBufferAllocator = undefined;
-        const averageSize = global.StackMemorySize / (global.MaxFrameInFlight * 2);
+        var stackAllocators: [global.MaxFrameInFlight]std.heap.FixedBufferAllocator = undefined;
+        const averageSize = buffers.len / (global.MaxFrameInFlight);
 
         std.log.debug("average size {d}", .{averageSize});
 
@@ -834,62 +820,63 @@ pub const oneTimeCommand = struct {
 
         return Self{
             .queue = .init(allocator),
-            .allocator = allocator,
             .nodeDag = .init(allocator),
-            .threadPool = .init(allocator),
-            .primaryCommandPool = .init(allocator, 0, 0, 0),
-            .garbageData = .init(allocator),
             .stackAllocators = stackAllocators,
             .combineMap = .init(allocator),
             .cacheMap = .init(allocator),
-            // .drawResourceMap = .init(allocator),
             .renderingMap = .init(allocator),
             .vulkan = vulkan,
-            .waitSemaphoreSubmitInfos = [_]std.array_list.Managed(vk.VkSemaphoreSubmitInfo){.init(allocator)} ** global.MaxFrameInFlight,
-            .signalSemaphoreSubmitInfos = [_]std.array_list.Managed(vk.VkSemaphoreSubmitInfo){.init(allocator)} ** global.MaxFrameInFlight,
-            .sumbitInfos = [_]std.array_list.Managed(vk.VkSubmitInfo2){.init(allocator)} ** global.MaxFrameInFlight,
             .pRendering = pRendering,
             .u32Mem = .init(allocator),
+            .allocator = allocator,
         };
     }
 
     pub fn deinit(self: *Self) void {
-        const zone = tracy.initZone(@src(), .{ .name = "deinit OnetimeCommand" });
-        defer zone.deinit();
-
-        var waitValue = self.vulkan.globalTimelineValue.load(.seq_cst);
-        self.vulkan.waitSemaphore(
-            1,
-            &self.vulkan.globalTimelineSemaphore,
-            &waitValue,
-        ) catch |err| {
-            std.log.err("wait semaphore error {s}\n", .{@errorName(err)});
-        };
         self.queue.deinit();
         self.nodeDag.deinit();
-        self.u32Mem.deinit();
-        self.threadPool.waitThread(self.vulkan);
-        self.primaryCommandPool.deinit(self.vulkan);
-        self.cleanGarbage() catch |err| {
-            std.log.err("clean garbage error {s}\n", .{@errorName(err)});
-        };
         self.combineMap.deinit();
-        self.garbageData.deinit();
         self.cacheMap.deinit();
-
-        var renderingIt = self.renderingMap.iterator();
-        while (renderingIt.next()) |value| {
-            value.value_ptr.drawResourceMap.deinit();
-            value.value_ptr.drawResourceMap.deinit();
-        }
         self.renderingMap.deinit();
+        self.u32Mem.deinit();
+    }
 
-        // self.drawResourceMap.deinit();
-        for (0..2) |i| {
-            self.waitSemaphoreSubmitInfos[i].deinit();
-            self.signalSemaphoreSubmitInfos[i].deinit();
-            self.sumbitInfos[i].deinit();
+    pub fn clearRetainCapacity(self: *Self) void {
+        self.queue.clearRetainingCapacity();
+        self.nodeDag.clearRetainCapacity();
+        self.combineMap.clearRetainingCapacity();
+        self.cacheMap.clearRetainingCapacity();
+
+        var it = self.renderingMap.iterator();
+        while (it.next()) |entry| {
+            entry.value_ptr.drawResourceMap.deinit();
+            entry.value_ptr.resourceMap.deinit();
         }
+        self.renderingMap.clearRetainingCapacity();
+
+        _ = self.u32Mem.reset(.retain_capacity);
+    }
+
+    pub fn startCommand(self: *Self) !void {
+        const zone = tracy.initZone(@src(), .{ .name = "start vulkan commands" });
+        defer zone.deinit();
+
+        self.stackAllocatorsIndex = (self.stackAllocatorsIndex + 1) % @as(u32, @intCast(self.stackAllocators.len));
+
+        self.stackAllocators[self.stackAllocatorsIndex].reset();
+
+        _ = self.u32Mem.reset(.retain_capacity);
+
+        const node = try self.nodeDag.create();
+
+        const ptr = try self.queue.getOrPut(node.ID);
+        ptr.value_ptr.* = drawC{
+            .ID = node.ID,
+            .timestamp = std.time.nanoTimestamp(),
+            .commandType = .start,
+            .command = .{ .start = .{} },
+            .output = .{ .empty = void{} },
+        };
     }
 
     fn getOuput(commandType: drawC.CommandType, command: drawC.comm) drawC.Output {
@@ -923,6 +910,54 @@ pub const oneTimeCommand = struct {
             .graphic => 100,
             .copyBufferToImage => 100,
             .transLayout => 100,
+        };
+    }
+
+    fn inferAcquirePipelinBarrierInfoByCommandTypeAndBufferUsage(
+        commandType: drawC.PublicCommandType,
+        bufferUsage: drawC.BufferUsage,
+        srcQueue: VkStruct.CommandPoolType,
+        dstQueue: VkStruct.CommandPoolType,
+    ) struct {
+        srcAccessMask: vk.VkAccessFlags2,
+        dstAccessMask: vk.VkAccessFlags2,
+        sourceStage: vk.VkPipelineStageFlags2,
+        destinationStage: vk.VkPipelineStageFlags2,
+    } {
+        const zone = tracy.initZone(@src(), .{ .name = "infer acquire pipelin barrier info" });
+        defer zone.deinit();
+
+        _ = commandType;
+        const srcAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_2_NONE;
+        var dstAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_2_NONE;
+        const sourceStage: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+        var destinationStage: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_NONE;
+
+        if (srcQueue == .transfer) {
+            if (dstQueue == .graphic) {
+                switch (bufferUsage) {
+                    .vertex => {
+                        destinationStage = vk.VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+                        dstAccessMask = vk.VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+                    },
+                    .index => {
+                        destinationStage = vk.VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+                        dstAccessMask = vk.VK_ACCESS_INDEX_READ_BIT;
+                    },
+                    else => std.debug.panic("unsupported buffer usage {s}", .{@tagName(bufferUsage)}),
+                }
+            } else {
+                std.debug.panic("unsupported dst queue {s}", .{@tagName(dstQueue)});
+            }
+        } else {
+            std.debug.panic("unsupported src queue {s}", .{@tagName(srcQueue)});
+        }
+
+        return .{
+            .srcAccessMask = srcAccessMask,
+            .dstAccessMask = dstAccessMask,
+            .sourceStage = sourceStage,
+            .destinationStage = destinationStage,
         };
     }
 
@@ -1028,94 +1063,6 @@ pub const oneTimeCommand = struct {
             .srcAccessMask = srcAccessMask,
             .dstAccessMask = dstAccessMask,
             .aspectMask = aspectMask,
-            .sourceStage = sourceStage,
-            .destinationStage = destinationStage,
-        };
-    }
-
-    fn inferReleasePipelinBarrierInfoByCommandTypeAndBufferUsage(
-        commandType: drawC.PublicCommandType,
-        bufferUsage: drawC.BufferUsage,
-        srcQueue: VkStruct.CommandPoolType,
-        dstQueue: VkStruct.CommandPoolType,
-    ) struct {
-        srcAccessMask: vk.VkAccessFlags2,
-        dstAccessMask: vk.VkAccessFlags2,
-        sourceStage: vk.VkPipelineStageFlags2,
-        destinationStage: vk.VkPipelineStageFlags2,
-    } {
-        const zone = tracy.initZone(@src(), .{ .name = "infer release pipelin barrier info" });
-        defer zone.deinit();
-
-        _ = commandType;
-        _ = bufferUsage;
-        var srcAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_2_NONE;
-        const dstAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_2_NONE;
-        var sourceStage: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_NONE;
-        const destinationStage: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-
-        if (srcQueue == .transfer) {
-            if (dstQueue == .graphic) {
-                sourceStage = vk.VK_PIPELINE_STAGE_TRANSFER_BIT;
-                srcAccessMask = vk.VK_ACCESS_TRANSFER_WRITE_BIT;
-            } else {
-                std.debug.panic("unsupported dst queue {s}", .{@typeName(@TypeOf(dstQueue))});
-            }
-        } else {
-            std.debug.panic("unsupported src queue {s}", .{@typeName(@TypeOf(srcQueue))});
-        }
-
-        return .{
-            .srcAccessMask = srcAccessMask,
-            .dstAccessMask = dstAccessMask,
-            .sourceStage = sourceStage,
-            .destinationStage = destinationStage,
-        };
-    }
-
-    fn inferAcquirePipelinBarrierInfoByCommandTypeAndBufferUsage(
-        commandType: drawC.PublicCommandType,
-        bufferUsage: drawC.BufferUsage,
-        srcQueue: VkStruct.CommandPoolType,
-        dstQueue: VkStruct.CommandPoolType,
-    ) struct {
-        srcAccessMask: vk.VkAccessFlags2,
-        dstAccessMask: vk.VkAccessFlags2,
-        sourceStage: vk.VkPipelineStageFlags2,
-        destinationStage: vk.VkPipelineStageFlags2,
-    } {
-        const zone = tracy.initZone(@src(), .{ .name = "infer acquire pipelin barrier info" });
-        defer zone.deinit();
-
-        _ = commandType;
-        const srcAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_2_NONE;
-        var dstAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_2_NONE;
-        const sourceStage: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
-        var destinationStage: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_NONE;
-
-        if (srcQueue == .transfer) {
-            if (dstQueue == .graphic) {
-                switch (bufferUsage) {
-                    .vertex => {
-                        destinationStage = vk.VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
-                        dstAccessMask = vk.VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
-                    },
-                    .index => {
-                        destinationStage = vk.VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
-                        dstAccessMask = vk.VK_ACCESS_INDEX_READ_BIT;
-                    },
-                    else => std.debug.panic("unsupported buffer usage {s}", .{@tagName(bufferUsage)}),
-                }
-            } else {
-                std.debug.panic("unsupported dst queue {s}", .{@tagName(dstQueue)});
-            }
-        } else {
-            std.debug.panic("unsupported src queue {s}", .{@tagName(srcQueue)});
-        }
-
-        return .{
-            .srcAccessMask = srcAccessMask,
-            .dstAccessMask = dstAccessMask,
             .sourceStage = sourceStage,
             .destinationStage = destinationStage,
         };
@@ -1227,22 +1174,43 @@ pub const oneTimeCommand = struct {
         };
     }
 
-    pub fn startCommand(self: *Self) !void {
-        const zone = tracy.initZone(@src(), .{ .name = "start vulkan commands" });
+    fn inferReleasePipelinBarrierInfoByCommandTypeAndBufferUsage(
+        commandType: drawC.PublicCommandType,
+        bufferUsage: drawC.BufferUsage,
+        srcQueue: VkStruct.CommandPoolType,
+        dstQueue: VkStruct.CommandPoolType,
+    ) struct {
+        srcAccessMask: vk.VkAccessFlags2,
+        dstAccessMask: vk.VkAccessFlags2,
+        sourceStage: vk.VkPipelineStageFlags2,
+        destinationStage: vk.VkPipelineStageFlags2,
+    } {
+        const zone = tracy.initZone(@src(), .{ .name = "infer release pipelin barrier info" });
         defer zone.deinit();
 
-        self.stackAllocators[self.stackAllocatorsIndex].reset();
-        _ = self.u32Mem.reset(.retain_capacity);
+        _ = commandType;
+        _ = bufferUsage;
+        var srcAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_2_NONE;
+        const dstAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_2_NONE;
+        var sourceStage: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_NONE;
+        const destinationStage: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
 
-        const node = try self.nodeDag.create();
+        if (srcQueue == .transfer) {
+            if (dstQueue == .graphic) {
+                sourceStage = vk.VK_PIPELINE_STAGE_TRANSFER_BIT;
+                srcAccessMask = vk.VK_ACCESS_TRANSFER_WRITE_BIT;
+            } else {
+                std.debug.panic("unsupported dst queue {s}", .{@typeName(@TypeOf(dstQueue))});
+            }
+        } else {
+            std.debug.panic("unsupported src queue {s}", .{@typeName(@TypeOf(srcQueue))});
+        }
 
-        const ptr = try self.queue.getOrPut(node.ID);
-        ptr.value_ptr.* = drawC{
-            .ID = node.ID,
-            .timestamp = std.time.nanoTimestamp(),
-            .commandType = .start,
-            .command = .{ .start = .{} },
-            .output = .{ .empty = void{} },
+        return .{
+            .srcAccessMask = srcAccessMask,
+            .dstAccessMask = dstAccessMask,
+            .sourceStage = sourceStage,
+            .destinationStage = destinationStage,
         };
     }
 
@@ -1262,6 +1230,8 @@ pub const oneTimeCommand = struct {
                 defer zone2.deinit();
 
                 const transLayout = commandCopy.transLayout;
+
+                const allocator = self.stackAllocators[self.stackAllocatorsIndex].allocator();
 
                 if (transLayout.srcQueueFamily != .init and transLayout.srcQueueFamily != transLayout.dstQueueFamily and self.vulkan.queueTypeCount > 1) {
                     const releaseFlags = inferReleasePipelineBarrierInfoByImageUsage(
@@ -1331,7 +1301,8 @@ pub const oneTimeCommand = struct {
 
                     var releasePipelineBarrier = &self.queue.getPtr(releaseNode.ID).?.command.pipelineBarrier;
                     const new_len = releasePipelineBarrier.barriers.len + 1;
-                    releasePipelineBarrier.barriers = try self.allocator.realloc(releasePipelineBarrier.barriers, new_len);
+
+                    releasePipelineBarrier.barriers = try allocator.realloc(releasePipelineBarrier.barriers, new_len);
                     for (
                         releasePipelineBarrier.barriers[new_len - 1 ..],
                     ) |*barrier| {
@@ -1413,7 +1384,7 @@ pub const oneTimeCommand = struct {
 
                     var acquirePipelineBarrier = &self.queue.getPtr(acquireNode.ID).?.command.pipelineBarrier;
                     const new_len_2 = acquirePipelineBarrier.barriers.len + 1;
-                    acquirePipelineBarrier.barriers = try self.allocator.realloc(acquirePipelineBarrier.barriers, new_len_2);
+                    acquirePipelineBarrier.barriers = try allocator.realloc(acquirePipelineBarrier.barriers, new_len_2);
                     for (
                         acquirePipelineBarrier.barriers[new_len_2 - 1 ..],
                     ) |*barrier| {
@@ -1498,7 +1469,7 @@ pub const oneTimeCommand = struct {
                     // 3. 统一的 Barrier 添加逻辑 (利用 realloc 自动处理空切片情况)
                     var pipelineBarrier = &self.queue.getPtr(rootNode.ID).?.command.pipelineBarrier;
                     const new_len = pipelineBarrier.barriers.len + 1;
-                    pipelineBarrier.barriers = try self.allocator.realloc(pipelineBarrier.barriers, new_len);
+                    pipelineBarrier.barriers = try allocator.realloc(pipelineBarrier.barriers, new_len);
                     pipelineBarrier.barriers[new_len - 1] = new_barrier;
                     pipelineBarrier.lastSrcStageMask = @min(pipelineBarrier.lastSrcStageMask, flags.sourceStage);
 
@@ -1518,6 +1489,8 @@ pub const oneTimeCommand = struct {
                 if (self.vulkan.queueTypeCount == 1) {
                     break :s;
                 }
+
+                const allocator = self.stackAllocators[self.stackAllocatorsIndex].allocator();
 
                 const changeBufferQueue = command.changeBufferQueue;
                 const bufferUsage = self.vulkan.buffers.getBufferUsage(changeBufferQueue.buffer);
@@ -1586,7 +1559,7 @@ pub const oneTimeCommand = struct {
 
                 var releasePipelineBarrier = &self.queue.getPtr(releaseNode.ID).?.command.pipelineBarrier;
                 const new_len = releasePipelineBarrier.barriers.len + changeBufferQueue.regions.len;
-                releasePipelineBarrier.barriers = try self.allocator.realloc(releasePipelineBarrier.barriers, new_len);
+                releasePipelineBarrier.barriers = try allocator.realloc(releasePipelineBarrier.barriers, new_len);
                 for (
                     changeBufferQueue.regions,
                     releasePipelineBarrier.barriers[new_len - changeBufferQueue.regions.len ..],
@@ -1662,7 +1635,7 @@ pub const oneTimeCommand = struct {
 
                 var acquirePipelineBarrier = &self.queue.getPtr(acquireNode.ID).?.command.pipelineBarrier;
                 const new_len_2 = acquirePipelineBarrier.barriers.len + changeBufferQueue.regions.len;
-                acquirePipelineBarrier.barriers = try self.allocator.realloc(acquirePipelineBarrier.barriers, new_len_2);
+                acquirePipelineBarrier.barriers = try allocator.realloc(acquirePipelineBarrier.barriers, new_len_2);
                 for (
                     changeBufferQueue.regions,
                     acquirePipelineBarrier.barriers[new_len_2 - changeBufferQueue.regions.len ..],
@@ -3058,7 +3031,7 @@ pub const oneTimeCommand = struct {
                     currentNode = aa;
                 }
 
-                ptr.value_ptr.*.command.copyBuffer.regions = try self.allocator.dupe(vk.VkBufferCopy2, tempRegions);
+                ptr.value_ptr.*.command.copyBuffer.regions = try allocator.dupe(vk.VkBufferCopy2, tempRegions);
 
                 try self.cacheMap.put(@ptrCast(copyBuffer.dstBuffer), ID);
             },
@@ -3295,11 +3268,75 @@ pub const oneTimeCommand = struct {
 
         root.data.commandPoolType = self.nodeDag.get(child.*).?.data.commandPoolType;
 
-        self.stackAllocatorsIndex = (self.stackAllocatorsIndex + 1) % @as(u32, @intCast(self.stackAllocators.len));
-
         nodeDagPrint(&self.nodeDag, self);
 
-        self.executeSemaphore.post();
+        self.end = true;
+    }
+};
+
+pub const oneTimeCommand = struct {
+    const Self = @This();
+
+    // single
+    vulkan: *VkStruct,
+    pRendering: *rendering,
+
+    innerID: u32 = 0,
+    innerCommandBufferID: u32 = 0,
+    primaryCommandPool: CommandPools,
+
+    allocator: std.mem.Allocator,
+
+    threadPool: SpecialThreadPool(MaxThreads),
+    mutex: Thread.Mutex = .{},
+
+    garbageData: std.array_list.Managed(GarbageData),
+
+    waitSemaphoreSubmitInfos: [global.MaxFrameInFlight]std.array_list.Managed(vk.VkSemaphoreSubmitInfo),
+    signalSemaphoreSubmitInfos: [global.MaxFrameInFlight]std.array_list.Managed(vk.VkSemaphoreSubmitInfo),
+    sumbitInfos: [global.MaxFrameInFlight]std.array_list.Managed(vk.VkSubmitInfo2),
+
+    pub fn init(allocator: std.mem.Allocator, vulkan: *VkStruct, pRendering: *rendering) Self {
+        std.log.info("command size: {d}", .{@sizeOf(drawC.comm)});
+        std.log.info("vk struct Buffer size: {d}", .{@sizeOf(VkStruct.Buffer_t)});
+
+        return Self{
+            .allocator = allocator,
+            .threadPool = .init(allocator),
+            .primaryCommandPool = .init(allocator, 0, 0, 0),
+            .vulkan = vulkan,
+            .waitSemaphoreSubmitInfos = [_]std.array_list.Managed(vk.VkSemaphoreSubmitInfo){.init(allocator)} ** global.MaxFrameInFlight,
+            .signalSemaphoreSubmitInfos = [_]std.array_list.Managed(vk.VkSemaphoreSubmitInfo){.init(allocator)} ** global.MaxFrameInFlight,
+            .sumbitInfos = [_]std.array_list.Managed(vk.VkSubmitInfo2){.init(allocator)} ** global.MaxFrameInFlight,
+            .pRendering = pRendering,
+            .garbageData = .init(allocator),
+        };
+    }
+
+    pub fn deinit(self: *Self) void {
+        const zone = tracy.initZone(@src(), .{ .name = "deinit OnetimeCommand" });
+        defer zone.deinit();
+
+        var waitValue = self.vulkan.globalTimelineValue.load(.seq_cst);
+        self.vulkan.waitSemaphore(
+            1,
+            &self.vulkan.globalTimelineSemaphore,
+            &waitValue,
+        ) catch |err| {
+            std.log.err("wait semaphore error {s}\n", .{@errorName(err)});
+        };
+        self.threadPool.waitThread(self.vulkan);
+        self.primaryCommandPool.deinit(self.vulkan);
+        self.cleanGarbage() catch |err| {
+            std.log.err("clean garbage error {s}\n", .{@errorName(err)});
+        };
+
+        // self.drawResourceMap.deinit();
+        for (0..2) |i| {
+            self.waitSemaphoreSubmitInfos[i].deinit();
+            self.signalSemaphoreSubmitInfos[i].deinit();
+            self.sumbitInfos[i].deinit();
+        }
     }
 
     fn record(command: *drawC, commandBuffer: vk.VkCommandBuffer, stackAllocator: std.mem.Allocator, vulkan: *VkStruct) void {
@@ -3626,14 +3663,6 @@ pub const oneTimeCommand = struct {
         }
     }
 
-    fn judgeStage(command: *drawC) vk.VkPipelineStageFlags {
-        const zone = tracy.initZone(@src(), .{ .name = "judge pipeline stage" });
-        defer zone.deinit();
-
-        _ = command;
-        return vk.VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-    }
-
     pub fn recordCommand(ctx: *ThreadContext) !void {
         tracy.setThreadName("record command");
         defer tracy.message("record command exit");
@@ -3768,17 +3797,14 @@ pub const oneTimeCommand = struct {
                     self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
                 },
                 .barriers => {
-                    self.allocator.free(g.data.barriers);
                     self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
                 },
                 .bufferAndRegion => {
                     if (currentSemaphoreValue < g.semaphoreValue) continue;
                     self.vulkan.destroyBuffer(g.data.bufferAndRegion.buffer);
-                    self.allocator.free(g.data.bufferAndRegion.region);
                     self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
                 },
                 .regions => {
-                    self.allocator.free(g.data.regions);
                     self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
                 },
                 .descriptorSets, .vertexBuffer, .renderingInfo, .empty => {},
@@ -3801,37 +3827,25 @@ pub const oneTimeCommand = struct {
 
     // a thread pool specialy for render
     // task queue, semaphore,
-    pub fn executeCommands(self: *Self) !void {
+    pub fn executeCommands(self: *Self, pCommands: *commands) !void {
         const zone = tracy.initZone(@src(), .{ .name = "execute all command in one time command" });
         defer zone.deinit();
 
-        self.executeSemaphore.wait();
+        if (!pCommands.end) return;
 
         self.mutex.lock();
         defer self.mutex.unlock();
 
         const currentFrame = self.vulkan.currentFrame.load(.seq_cst);
 
-        const allocator = self.stackAllocators[self.stackAllocatorsIndex].allocator();
+        const allocator = pCommands.stackAllocators[pCommands.stackAllocatorsIndex].allocator();
 
         // self.nodeDag.print();
 
         try self.cleanGarbage();
 
         defer {
-            self.nodeDag.clearRetainCapacity();
-            // self.nodeDag.m
-            self.queue.clearRetainingCapacity();
-            self.cacheMap.clearRetainingCapacity();
-            self.combineMap.clearRetainingCapacity();
-            _ = self.u32Mem.reset(.retain_capacity);
-
-            var it = self.renderingMap.iterator();
-            while (it.next()) |entry| {
-                entry.value_ptr.drawResourceMap.deinit();
-                entry.value_ptr.resourceMap.deinit();
-            }
-            self.renderingMap.clearRetainingCapacity();
+            pCommands.clearRetainCapacity();
 
             self.innerCommandBufferID = 0;
             self.innerID = 0;
@@ -3856,7 +3870,7 @@ pub const oneTimeCommand = struct {
         defer commandBufferss.deinit();
 
         // xxx
-        const root = self.nodeDag.get(0);
+        const root = pCommands.nodeDag.get(0);
         if (root) |rr| {
             try prepareToExecuteQueue.pushLast(taskQueueStruct{
                 .queueNode = rr,
@@ -3922,7 +3936,7 @@ pub const oneTimeCommand = struct {
                     defer nn.threadCtx.?.mutex.unlock();
 
                     // nn.queueNode.data.commandBufferID = nn.threadCtx.?.commandBufferID.*;
-                    try nn.threadCtx.?.taskQueue.pushLast(.{ .com = self.queue.getPtr(nn.queueNode.ID).?, .node = nn.queueNode });
+                    try nn.threadCtx.?.taskQueue.pushLast(.{ .com = pCommands.queue.getPtr(nn.queueNode.ID).?, .node = nn.queueNode });
 
                     nn.threadCtx.?.semaphore.post();
                 }
@@ -3981,7 +3995,7 @@ pub const oneTimeCommand = struct {
 
         // std.log.debug("iterateCount: {d}", .{iterateCount});
 
-        self.nodeDag.undoneAllNodes();
+        pCommands.nodeDag.undoneAllNodes();
 
         const nextNodeQueueSemaphoreValue = struct {
             node: *QueueNode,
@@ -4033,9 +4047,6 @@ pub const oneTimeCommand = struct {
             signalSemaphoreSubmitInfos.clearRetainingCapacity();
             sumbitInfos.clearRetainingCapacity();
 
-            var firstStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
-            var lastStage: vk.VkPipelineStageFlags = vk.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-
             var currentCommandBuffer: vk.VkCommandBuffer = null;
             var currentType: VkStruct.CommandPoolType = root.?.data.commandPoolType;
             var begin = false;
@@ -4043,8 +4054,8 @@ pub const oneTimeCommand = struct {
             var firstSubmit = true;
             var firstGraphicSubmit = true;
 
-            var firstNode = self.nodeDag.get(0);
-            const startComm = self.queue.get(0).?;
+            var firstNode = pCommands.nodeDag.get(0);
+            const startComm = pCommands.queue.get(0).?;
             const present = startComm.command.start.present;
             var currentIndex = startComm.command.start.currentIndex;
 
@@ -4079,7 +4090,7 @@ pub const oneTimeCommand = struct {
                         temp.stageMask = vk.VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
                         firstSubmit = false;
                     } else {
-                        temp.stageMask = firstStage;
+                        temp.stageMask = vk.VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
                     }
                     temp.value = timelinewaitValue;
                     // std.log.debug("wait timeline semaphore value {d}", .{temp.value});
@@ -4180,11 +4191,9 @@ pub const oneTimeCommand = struct {
                 if (nn.parentsDone >= nn.parentsLen) {
                     nn.nodeDone();
 
-                    const command = self.queue.getPtr(nn.ID).?;
+                    const command = pCommands.queue.getPtr(nn.ID).?;
                     try self.collectGarbage(command, currentSemaphoreValue);
-                    lastStage = judgeStage(command);
                     if (first) {
-                        firstStage = lastStage;
                         first = false;
                     }
 
@@ -4212,7 +4221,7 @@ pub const oneTimeCommand = struct {
                         if (cbs.items.len > 0)
                             vk.vkCmdExecuteCommands(currentCommandBuffer, @intCast(cbs.items.len), @ptrCast(cbs.items.ptr));
 
-                        record(self.queue.getPtr(nn.ID).?, currentCommandBuffer, allocator, self.vulkan);
+                        record(pCommands.queue.getPtr(nn.ID).?, currentCommandBuffer, allocator, self.vulkan);
                     }
                     firstNode = nn.getFirstUndoneChild();
                     if (firstNode == null) {
