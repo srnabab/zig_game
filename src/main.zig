@@ -63,7 +63,7 @@ pub fn main() !void {
     const mainZone = tracy.initZone(@src(), .{ .name = "main" });
     defer mainZone.deinit();
 
-    var stackMemory = [_]u8{0} ** global.StackMemorySize;
+    // var stackMemory = [_]u8{0} ** global.StackMemorySize;
 
     // var tracyStackAllocator = tracy.TracingAllocator.initNamed("stack", stackAllocator.allocator());
     // defer tracyStackAllocator.deinit();
@@ -105,235 +105,6 @@ pub fn main() !void {
         sdl.SDL_MINOR_VERSION,
         sdl.SDL_MICRO_VERSION,
     });
-
-    var textureSett = textureSet.init(allocator_t.*, &handles);
-    var vulkan = VkStruct.init(allocator_t.*, &handles);
-    try vulkan.initVulkan(&textureSett);
-    defer vulkan.deinit();
-    defer textureSett.deinit(&vulkan);
-
-    var renderingInfo = rendering.init(allocator_t.*, &handles);
-    defer renderingInfo.deinit();
-
-    var graphic = OneTimeCommand.init(allocator_t.*, &stackMemory, &vulkan, &renderingInfo);
-    defer graphic.deinit();
-
-    // var tt = try std.Thread.spawn(.{}, testSemaphore, .{&vulkan});
-    // defer tt.join();
-
-    try graphic.startCommand();
-
-    try vertices.init(&vulkan, &graphic);
-    defer vertices.deinit();
-
-    _ = try textureSett.createImageTexture(
-        comptime file.comptimeGetID("non_exist.png"),
-        .pixel2d,
-        &vulkan,
-        &graphic,
-    );
-    {
-        const temp = textureSett.createImageTextureEnsureWithErrorImage(
-            comptime file.comptimeGetID("circle.png"),
-            .pixel2d,
-            &vulkan,
-            &graphic,
-        );
-        const ix = try vertices.vertexInitialize2D(48, 48, 0, 0, 0.1, try textureSett.getDescriptorSetIndex(temp));
-        try textureSett.offsetsAdd(temp, ix);
-        try vertices.upload(&graphic);
-    }
-
-    try graphic.addCommandEnd();
-
-    vulkan.writeCachedDescriptorSetResources();
-
-    try graphic.executeCommands();
-    vulkan.nextFrame();
-
-    try vulkan.readPipelineFileAndAdd(comptime file.comptimeGetID("flat2d.pipeb"), .draw);
-    try vulkan.readPipelineFileAndAdd(comptime file.comptimeGetID("directOut.pipeb"), .present);
-
-    try vulkan.createAllPipelinesAdded();
-
-    const o1 = try vulkan.getPipelineOut("flat2d");
-    for (o1) |value| {
-        std.log.debug("{}", .{value});
-    }
-
-    const texture_test = try textureSett.create2DTexture(
-        &vulkan,
-        vulkan.windowWidth,
-        vulkan.windowsHeight,
-        vk.VK_FORMAT_R8G8B8A8_SRGB,
-        vk.VK_IMAGE_TILING_OPTIMAL,
-        vk.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | vk.VK_IMAGE_USAGE_SAMPLED_BIT,
-        "texture_test",
-    );
-
-    var colorAttachment: [1]vk.VkRenderingAttachmentInfo = undefined;
-    colorAttachment[0] = vk.VkRenderingAttachmentInfo{
-        .sType = vk.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-        .imageView = textureSett.getVkImageView(texture_test),
-        .imageLayout = vk.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        .loadOp = vk.VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = vk.VK_ATTACHMENT_STORE_OP_STORE,
-        .clearValue = vk.VkClearValue{
-            .color = vk.VkClearColorValue{
-                .float32 = [_]f32{ 0.0, 0.0, 0.0, 0.0 },
-            },
-        },
-    };
-
-    var texture_test_array = [_]textureSet.Texture_t{texture_test};
-    const rendering_test = try renderingInfo.createRenderingInfo(
-        0,
-        vk.VkRect2D{
-            .extent = .{
-                .width = vulkan.windowWidth,
-                .height = vulkan.windowsHeight,
-            },
-            .offset = .{ .x = 0, .y = 0 },
-        },
-
-        1,
-        0,
-        &texture_test_array,
-        &colorAttachment,
-        null,
-        null,
-    );
-    // _ = rendering_test;
-
-    var present_texture_test_array = [_]textureSet.Texture_t{undefined};
-    const presetn_rendering_test = try renderingInfo.createRenderingInfo(
-        0,
-        vk.VkRect2D{ .extent = .{
-            .width = vulkan.windowWidth,
-            .height = vulkan.windowsHeight,
-        }, .offset = .{ .x = 0, .y = 0 } },
-        1,
-        0,
-        &present_texture_test_array,
-        &colorAttachment,
-        null,
-        null,
-    );
-
-    const ubo_test = try vulkan.createUniformBuffer(@sizeOf(shaderStruct.UniformBufferObject));
-    var pUIUbo: shaderStruct.UniformBufferObject = undefined;
-    const ubo = vulkan.buffers.getBufferContent(ubo_test);
-
-    const aspect2: f32 = 1.0 * (@as(f32, @floatFromInt(vulkan.windowsHeight)) / 600.0);
-    const aspect: f32 = (@as(f32, @floatFromInt(vulkan.windowWidth)) / @as(f32, @floatFromInt(vulkan.windowsHeight))) * aspect2;
-    const VIEW_SCALE = 1.0;
-
-    var eye = vertices.cglm.vec3{ 0.0, 0.0, 100.0 };
-    var center = vertices.cglm.vec3{ 0.0, 0.0, 0.0 };
-    var up = vertices.cglm.vec3{ 0.0, 1.0, 0.0 };
-    vertices.cglm.glm_lookat(
-        &eye,
-        &center,
-        &up,
-        &pUIUbo.view,
-    );
-    math.glm_ortho_vulkan(-aspect * VIEW_SCALE, aspect * VIEW_SCALE, -aspect2 * VIEW_SCALE, aspect2 * VIEW_SCALE, -0.001, -100.0, &pUIUbo.proj);
-    const pData = @as(*shaderStruct.UniformBufferObject, @ptrCast(@alignCast(ubo.pMappedData)));
-    pData.* = pUIUbo;
-
-    try vulkan.addWriteDescriptorSetBuffer(
-        0,
-        vulkan.buffers.getVkBuffer(ubo_test),
-        0,
-        vulkan.buffers.getBufferSize(ubo_test),
-        vulkan.globalFixed2dMVPMatrixDescriptorSet,
-        0,
-        vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-    );
-
-    try vulkan.addWriteDescriptorSetImage(
-        0,
-        textureSett.getVkImageView(texture_test),
-        vulkan.samplers.getDefaultSampler(.pixel2d),
-        vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        vulkan.presentSamplerDescriptorSet,
-        0,
-        vk.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-    );
-
-    vulkan.writeCachedDescriptorSetResources();
-
-    const viewport_test = try vulkan.viewports.createViewport(.{
-        .x = 0,
-        .y = 0,
-        .width = @floatFromInt(vulkan.windowWidth),
-        .height = @floatFromInt(vulkan.windowsHeight),
-        .maxDepth = 1.0,
-        .minDepth = 0.0,
-    });
-
-    const scissor_test = try vulkan.scissors.createScissor(.{
-        .extent = .{
-            .width = vulkan.windowWidth,
-            .height = vulkan.windowsHeight,
-        },
-        .offset = .{ .x = 0, .y = 0 },
-    });
-
-    var testBuffers = [_]VkStruct.Buffer_t{
-        vertices.vertexBuffer2D,
-    };
-    var testDescriptorSets = [_]vk.VkDescriptorSet{
-        vulkan.globalFixed2dMVPMatrixDescriptorSet, vulkan.globalTextureDescriptorSet,
-    };
-
-    // std.Thread.sleep(std.time.ns_per_s);
-
-    var presentTextures = [_]textureSet.Texture_t{texture_test};
-    var presentDescriptorSets = [_]vk.VkDescriptorSet{vulkan.presentSamplerDescriptorSet};
-    // _ = presetn_rendering_test;
-
-    // global.stopNodeDagPrint = false;
-    // global.stopExecuteNodePrint = false;
-
-    const renderStart = std.time.milliTimestamp();
-    while (true) {
-        // log.info("frame {d}", .{vulkan.totalFrame.load(.seq_cst)});
-        const frame = vulkan.totalFrame.load(.seq_cst);
-
-        if (frame == 3) global.stopNodeDagPrint = true;
-
-        try graphic.startCommand();
-        try graphic.addCommand(.draw2D, .{ .draw2d = .{
-            .pipeline = vulkan.getPipeline("flat2d").?,
-            .pTexture = textureSett.getTexture(@intCast(file.getID("circle.png"))).?,
-            .rendering = rendering_test,
-            .vertexBuffer = &testBuffers,
-            .indexBuffer = vertices.indexBuffer2D,
-            .pTextureSet = &textureSett,
-            .descriptorSets = &testDescriptorSets,
-            .pViewport = viewport_test,
-            .pScissor = scissor_test,
-        } });
-        try graphic.addCommand(.present, .{ .present = .{
-            .pipeline = vulkan.getPipeline("directOut").?,
-            .pTextures = &presentTextures,
-            .rendering = presetn_rendering_test,
-            .pTextureSet = &textureSett,
-            .descriptorSets = &presentDescriptorSets,
-            .pViewport = viewport_test,
-            .pScissor = scissor_test,
-        } });
-        try graphic.addCommandEnd();
-        try graphic.executeCommands();
-        vulkan.nextFrame();
-
-        // if (std.time.milliTimestamp() - renderStart > 1 * std.time.ms_per_s) {
-        if (vulkan.totalFrame.load(.seq_cst) > 20000) {
-            _ = renderStart;
-            break;
-        }
-    }
 
     thread_count = try Thread.getCpuCount();
     // const thread_count: u32 = 1023;
@@ -377,7 +148,11 @@ pub fn main() !void {
     var render_t = try Thread.spawn(
         .{},
         render.render_thread_func,
-        .{ render_thread, &endSemaphore },
+        .{
+            render_thread,
+            &endSemaphore,
+            &handles,
+        },
     );
     defer render_t.join();
 
@@ -386,16 +161,4 @@ pub fn main() !void {
     // vulkan.logBufferPtr();
 
     // textureSett.logImagePtr();
-}
-
-fn testSemaphore(vulkan: *VkStruct) void {
-    const time = std.time.milliTimestamp();
-
-    while (std.time.milliTimestamp() - time < 15) {
-        var value: u64 = undefined;
-        _ = vk.vkGetSemaphoreCounterValue(vulkan.device, vulkan.globalTimelineSemaphore, &value);
-        std.log.debug("semaphore value {d}", .{value});
-
-        std.Thread.sleep(comptime 0.5 * std.time.ns_per_ms);
-    }
 }
