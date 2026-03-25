@@ -861,6 +861,9 @@ pub const commands = struct {
         const zone = tracy.initZone(@src(), .{ .name = "start vulkan commands" });
         defer zone.deinit();
 
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
         self.stackAllocatorsIndex = (self.stackAllocatorsIndex + 1) % @as(u32, @intCast(self.stackAllocators.len));
 
         self.stackAllocators[self.stackAllocatorsIndex].reset();
@@ -3229,6 +3232,9 @@ pub const commands = struct {
         const zone = tracy.initZone(@src(), .{ .name = "add command end" });
         defer zone.deinit();
 
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
         var it = self.renderingMap.iterator();
         while (it.next()) |entry| {
             const lastNode = self.nodeDag.get(
@@ -3330,6 +3336,8 @@ pub const oneTimeCommand = struct {
         self.cleanGarbage() catch |err| {
             std.log.err("clean garbage error {s}\n", .{@errorName(err)});
         };
+
+        self.garbageData.deinit();
 
         // self.drawResourceMap.deinit();
         for (0..2) |i| {
@@ -3832,6 +3840,9 @@ pub const oneTimeCommand = struct {
         defer zone.deinit();
 
         if (!pCommands.end) return;
+
+        pCommands.mutex.lock();
+        defer pCommands.mutex.unlock();
 
         self.mutex.lock();
         defer self.mutex.unlock();

@@ -57,45 +57,54 @@ pub fn render_thread_func(
     var pRendering = rendering.init(allocator_t.*, handles);
     defer pRendering.deinit();
 
-    var commands = Commands.init(
-        allocator_t.*,
-        stackMemory[0 .. global.StackMemorySize / 2],
-        &vulkan,
-        &pRendering,
-    );
-    defer commands.deinit();
+    var pCommands: [2]Commands = undefined;
+    var currentCommandIndex: u32 = 0;
+
+    for (0..pCommands.len) |i| {
+        pCommands[i] = Commands.init(
+            allocator_t.*,
+            stackMemory[i * global.StackMemorySize / 2 .. (i + 1) * global.StackMemorySize / 2],
+            &vulkan,
+            &pRendering,
+        );
+    }
+    defer for (0..pCommands.len) |i| {
+        pCommands[i].deinit();
+    };
+
+    var commands = &pCommands[currentCommandIndex];
 
     var graphic = OneTimeCommand.init(allocator_t.*, &vulkan, &pRendering);
     defer graphic.deinit();
 
     try commands.startCommand();
 
-    try vertices.init(&vulkan, &commands);
+    try vertices.init(&vulkan, commands);
     defer vertices.deinit();
 
     _ = try pTextureSet.createImageTexture(
         comptime file.comptimeGetID("non_exist.png"),
         .pixel2d,
         &vulkan,
-        &commands,
+        commands,
     );
     {
         const temp = pTextureSet.createImageTextureEnsureWithErrorImage(
             comptime file.comptimeGetID("circle.png"),
             .pixel2d,
             &vulkan,
-            &commands,
+            commands,
         );
         const ix = try vertices.vertexInitialize2D(48, 48, 0, 0, 0.1, try pTextureSet.getDescriptorSetIndex(temp));
         try pTextureSet.offsetsAdd(temp, ix);
-        try vertices.upload(&commands);
+        try vertices.upload(commands);
     }
 
     try commands.addCommandEnd();
 
     vulkan.writeCachedDescriptorSetResources();
 
-    try graphic.executeCommands(&commands);
+    try graphic.executeCommands(commands);
     vulkan.nextFrame();
 
     try vulkan.readPipelineFileAndAdd(comptime file.comptimeGetID("flat2d.pipeb"), .draw);
@@ -245,6 +254,8 @@ pub fn render_thread_func(
     while (true) {
         const frame = vulkan.totalFrame.load(.seq_cst);
 
+        commands = &pCommands[currentCommandIndex];
+
         if (frame == 3) global.stopNodeDagPrint = true;
 
         try commands.startCommand();
@@ -269,8 +280,10 @@ pub fn render_thread_func(
             .pScissor = scissor_test,
         } });
         try commands.addCommandEnd();
-        try graphic.executeCommands(&commands);
+        try graphic.executeCommands(commands);
+
         vulkan.nextFrame();
+        currentCommandIndex = @intCast((currentCommandIndex + 1) % pCommands.len);
 
         // if (std.time.milliTimestamp() - renderStart > 1 * std.time.ms_per_s) {
         if (vulkan.totalFrame.load(.seq_cst) > 40) {
