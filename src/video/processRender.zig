@@ -3331,6 +3331,8 @@ pub const oneTimeCommand = struct {
             std.log.err("clean garbage error {s}\n", .{@errorName(err)});
         };
 
+        self.garbageData.deinit();
+
         // self.drawResourceMap.deinit();
         for (0..2) |i| {
             self.waitSemaphoreSubmitInfos[i].deinit();
@@ -4332,7 +4334,12 @@ pub const oneTimeCommand = struct {
 
                 // std.log.debug("semaphore {*}", .{submitInfo.pSignalSemaphoreInfos[0].semaphore});
 
-                try self.vulkan.queueSubmit(currentType, 1, submitInfo, null);
+                try self.vulkan.queueSubmit(
+                    currentType,
+                    1,
+                    submitInfo,
+                    &self.vulkan.endFence[currentFrames],
+                );
             }
 
             if (present) {

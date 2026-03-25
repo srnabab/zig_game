@@ -68,6 +68,7 @@ pub fn render_thread_func(
     var graphic = OneTimeCommand.init(allocator_t.*, &vulkan, &pRendering);
     defer graphic.deinit();
 
+    try vulkan.waitEndFence();
     try commands.startCommand();
 
     try vertices.init(&vulkan, &commands);
@@ -246,6 +247,8 @@ pub fn render_thread_func(
         const frame = vulkan.totalFrame.load(.seq_cst);
 
         if (frame == 3) global.stopNodeDagPrint = true;
+
+        try vulkan.waitEndFence();
 
         try commands.startCommand();
         try commands.addCommand(.draw2D, .{ .draw2d = .{

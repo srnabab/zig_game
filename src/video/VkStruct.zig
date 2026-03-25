@@ -237,6 +237,8 @@ renderFinishSemaphore: [global.MaxFrameInFlight]vk.VkSemaphore = undefined,
 globalTimelineSemaphore: vk.VkSemaphore = null,
 globalTimelineValue: std.atomic.Value(u64) = .init(0),
 
+endFence: [global.MaxFrameInFlight]vk.VkFence = undefined,
+
 // textureSets: textureSet,
 
 globalDescriptorPool: vk.VkDescriptorPool = null,
@@ -376,6 +378,13 @@ pub fn initVulkan(self: *Self, textureSets: *textureSet) !void {
         0,
     );
     self.globalTimelineSemaphore = semaphores2[0];
+
+    try self._createFence(
+        null,
+        vk.VK_FENCE_CREATE_SIGNALED_BIT,
+        &self.endFence,
+        @intCast(self.endFence.len),
+    );
 
     self.surfaceFormats = try Swapchain.getSurfaceFormat(
         self.physicalDevice,
@@ -620,6 +629,10 @@ pub fn deinit(self: *Self) void {
         self.destroySemaphore(value);
     }
     self.destroySemaphore(self.globalTimelineSemaphore);
+
+    for (self.endFence) |value| {
+        vk.vkDestroyFence(self.device, value, self.pAllocCallBacks);
+    }
 
     std.log.debug("vma buffer allocation residue count: {d}", .{self.vmaS.vmaBufferAllocations.load(.seq_cst)});
     std.log.debug("vma image allocation residue count: {d}", .{self.vmaS.vmaImageAllocations.load(.seq_cst)});
@@ -1043,7 +1056,7 @@ pub fn nextFrame(self: *Self) void {
     _ = self.totalFrame.fetchAdd(1, .seq_cst);
 }
 
-pub fn queueSubmit(self: *Self, kind: CommandPoolType, submitCount: u32, pSubmits: *vk.VkSubmitInfo2, fence: vk.VkFence) VkError!void {
+pub fn queueSubmit(self: *Self, kind: CommandPoolType, submitCount: u32, pSubmits: *vk.VkSubmitInfo2, fence: ?*vk.VkFence) VkError!void {
     const zone = tracy.initZone(@src(), .{ .name = "queue submit" });
     defer zone.deinit();
 
@@ -1058,7 +1071,12 @@ pub fn queueSubmit(self: *Self, kind: CommandPoolType, submitCount: u32, pSubmit
     queue.mutex.lock();
     defer queue.mutex.unlock();
 
-    try checkVkResult(vk.vkQueueSubmit2(queue.queue, submitCount, @ptrCast(pSubmits), fence));
+    if (fence != null) {
+        try checkVkResult(vk.vkResetFences(self.device, 1, fence.?));
+        try checkVkResult(vk.vkQueueSubmit2(queue.queue, submitCount, @ptrCast(pSubmits), fence.?.*));
+    } else {
+        try checkVkResult(vk.vkQueueSubmit2(queue.queue, submitCount, @ptrCast(pSubmits), null));
+    }
     // checkVkResult(vk.vkQueueWaitIdle(queue.queue)) catch |err| {
     //     std.log.err("queue type {s}", .{@tagName(kind)});
 
@@ -1092,8 +1110,18 @@ pub fn _createFence(self: *Self, pNext: ?*anyopaque, flags: vk.VkFenceCreateFlag
         try checkVkResult(vk.vkCreateFence(self.device, @ptrCast(&createInfo), self.pAllocCallBacks, @ptrCast(&pFence[i])));
 }
 
-pub fn waitForFence(self: *Self, fenceCount: u32, fences: *vk.VkFence, waitAll: vk.VKBool32) !void {
-    try checkVkResult(vk.vkWaitForFences(self.device, fenceCount, @ptrCast(fences), waitAll, std.math.maxInt(u64)));
+pub fn _waitForFence(self: *Self, fences: []vk.VkFence, waitAll: vk.VkBool32) !void {
+    try checkVkResult(vk.vkWaitForFences(self.device, @intCast(fences.len), @ptrCast(fences.ptr), waitAll, std.math.maxInt(u64)));
+}
+
+pub fn waitEndFence(self: *Self) !void {
+    try checkVkResult(vk.vkWaitForFences(
+        self.device,
+        1,
+        &self.endFence[self.currentFrame.load(.seq_cst)],
+        vk.VK_TRUE,
+        std.math.maxInt(u64),
+    ));
 }
 
 pub fn resetFence(self: *Self, fenceCount: u32, fences: *vk.VkFence) !void {
