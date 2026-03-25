@@ -23,7 +23,6 @@ pub const Samplers = @import("vkStruct/sampler.zig");
 const vmaStruct = @import("vkStruct/vma.zig");
 const vma = vmaStruct.vma;
 const global = @import("global");
-const Window = @import("vkStruct/window.zig");
 const Queue = @import("vkStruct/queue.zig");
 const InstanceDevice = @import("vkStruct/instance_device.zig");
 const Semaphore = @import("vkStruct/semaphore.zig");
@@ -194,7 +193,7 @@ vmaS: vmaStruct = .{},
 
 window: *sdl.SDL_Window = undefined,
 windowWidth: u32 = 0,
-windowsHeight: u32 = 0,
+windowHeight: u32 = 0,
 
 instance: vk.VkInstance = null,
 surface: vk.VkSurfaceKHR = null,
@@ -274,7 +273,7 @@ queueTypeCount: u32 = 0,
 
 handles: *global.HandlesType,
 
-pub fn init(allocator: Allocator, handles: *global.HandlesType) Self {
+pub fn init(allocator: Allocator, handles: *global.HandlesType, window: *sdl.SDL_Window, width: u32, height: u32) Self {
     return Self{
         .allocator = allocator,
         .shaderModules = .init(allocator),
@@ -292,6 +291,9 @@ pub fn init(allocator: Allocator, handles: *global.HandlesType) Self {
         .handles = handles,
         .allDescriptorSetLayouts = .init(allocator),
         .descriptorSetShaderStages = .init(allocator),
+        .window = window,
+        .windowWidth = width,
+        .windowHeight = height,
     };
 }
 
@@ -299,7 +301,6 @@ pub fn initVulkan(self: *Self, textureSets: *textureSet) !void {
     const zone = tracy.initZone(@src(), .{ .name = "init vulkan resources" });
     defer zone.deinit();
 
-    self.window = try Window.createWindow(&self.windowWidth, &self.windowsHeight);
     const version = try getVulkanVersion();
     printVersion(version);
 
@@ -404,7 +405,7 @@ pub fn initVulkan(self: *Self, textureSets: *textureSet) !void {
         self.surfaceFormats.formats[@intCast(self.surfaceFormats.sdr)],
         self.presentModes.modes[@intCast(self.presentModes.immediate)],
         self.windowWidth,
-        self.windowsHeight,
+        self.windowHeight,
         null,
         self.pAllocCallBacks,
     );
@@ -641,7 +642,6 @@ pub fn deinit(self: *Self) void {
     vk.vkDestroyDevice(self.device, self.pAllocCallBacks);
     sdl.SDL_Vulkan_DestroySurface(@ptrCast(self.*.instance), @ptrCast(self.*.surface), @ptrCast(self.*.pAllocCallBacks));
     vk.vkDestroyInstance(self.*.instance, self.*.pAllocCallBacks);
-    sdl.SDL_DestroyWindow(self.*.window);
 }
 
 fn comptime_print(comptime format: []const u8, comptime args: anytype) void {

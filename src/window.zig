@@ -19,3 +19,7 @@ pub fn createWindow(width: *u32, height: *u32) !*sdl.SDL_Window {
     try SDL_CheckResult(temp);
     return temp.?;
 }
+
+pub fn destroyWindow(windows: ?*sdl.SDL_Window) void {
+    sdl.SDL_DestroyWindow(windows);
+}

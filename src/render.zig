@@ -1,5 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const sdl = @import("sdl").sdl;
 
 const global = @import("global");
 const tracy = @import("tracy");
@@ -25,6 +26,9 @@ pub fn render_thread_func(
     thread_count: usize,
     endSemaphore: *Semaphore,
     handles: *global.HandlesType,
+    window: *sdl.SDL_Window,
+    width: u32,
+    height: u32,
 ) !void {
     tracy.setThreadName("render");
     defer tracy.message("render exit");
@@ -49,7 +53,7 @@ pub fn render_thread_func(
     const allocator_t = &taa;
 
     var pTextureSet = textureSet.init(allocator_t.*, handles);
-    var vulkan = VkStruct.init(allocator_t.*, handles);
+    var vulkan = VkStruct.init(allocator_t.*, handles, window, width, height);
     try vulkan.initVulkan(&pTextureSet);
     defer vulkan.deinit();
     defer pTextureSet.deinit(&vulkan);
@@ -112,7 +116,7 @@ pub fn render_thread_func(
     const texture_test = try pTextureSet.create2DTexture(
         &vulkan,
         vulkan.windowWidth,
-        vulkan.windowsHeight,
+        vulkan.windowHeight,
         vk.VK_FORMAT_R8G8B8A8_SRGB,
         vk.VK_IMAGE_TILING_OPTIMAL,
         vk.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | vk.VK_IMAGE_USAGE_SAMPLED_BIT,
@@ -139,7 +143,7 @@ pub fn render_thread_func(
         vk.VkRect2D{
             .extent = .{
                 .width = vulkan.windowWidth,
-                .height = vulkan.windowsHeight,
+                .height = vulkan.windowHeight,
             },
             .offset = .{ .x = 0, .y = 0 },
         },
@@ -158,7 +162,7 @@ pub fn render_thread_func(
         0,
         vk.VkRect2D{ .extent = .{
             .width = vulkan.windowWidth,
-            .height = vulkan.windowsHeight,
+            .height = vulkan.windowHeight,
         }, .offset = .{ .x = 0, .y = 0 } },
         1,
         0,
@@ -172,8 +176,8 @@ pub fn render_thread_func(
     var pUIUbo: shaderStruct.UniformBufferObject = undefined;
     const ubo = vulkan.buffers.getBufferContent(ubo_test);
 
-    const aspect2: f32 = 1.0 * (@as(f32, @floatFromInt(vulkan.windowsHeight)) / 600.0);
-    const aspect: f32 = (@as(f32, @floatFromInt(vulkan.windowWidth)) / @as(f32, @floatFromInt(vulkan.windowsHeight))) * aspect2;
+    const aspect2: f32 = 1.0 * (@as(f32, @floatFromInt(vulkan.windowHeight)) / 600.0);
+    const aspect: f32 = (@as(f32, @floatFromInt(vulkan.windowWidth)) / @as(f32, @floatFromInt(vulkan.windowHeight))) * aspect2;
     const VIEW_SCALE = 1.0;
 
     var eye = vertices.cglm.vec3{ 0.0, 0.0, 100.0 };
@@ -185,7 +189,15 @@ pub fn render_thread_func(
         &up,
         &pUIUbo.view,
     );
-    math.glm_ortho_vulkan(-aspect * VIEW_SCALE, aspect * VIEW_SCALE, -aspect2 * VIEW_SCALE, aspect2 * VIEW_SCALE, -0.001, -100.0, &pUIUbo.proj);
+    math.glm_ortho_vulkan(
+        -aspect * VIEW_SCALE,
+        aspect * VIEW_SCALE,
+        -aspect2 * VIEW_SCALE,
+        aspect2 * VIEW_SCALE,
+        -0.001,
+        -100.0,
+        &pUIUbo.proj,
+    );
     const pData = @as(*shaderStruct.UniformBufferObject, @ptrCast(@alignCast(ubo.pMappedData)));
     pData.* = pUIUbo;
 
@@ -215,7 +227,7 @@ pub fn render_thread_func(
         .x = 0,
         .y = 0,
         .width = @floatFromInt(vulkan.windowWidth),
-        .height = @floatFromInt(vulkan.windowsHeight),
+        .height = @floatFromInt(vulkan.windowHeight),
         .maxDepth = 1.0,
         .minDepth = 0.0,
     });
@@ -223,7 +235,7 @@ pub fn render_thread_func(
     const scissor_test = try vulkan.scissors.createScissor(.{
         .extent = .{
             .width = vulkan.windowWidth,
-            .height = vulkan.windowsHeight,
+            .height = vulkan.windowHeight,
         },
         .offset = .{ .x = 0, .y = 0 },
     });
@@ -272,7 +284,9 @@ pub fn render_thread_func(
             .pScissor = scissor_test,
         } });
         try commands.addCommandEnd();
+
         try graphic.executeCommands(&commands);
+
         vulkan.nextFrame();
 
         // if (std.time.milliTimestamp() - renderStart > 1 * std.time.ms_per_s) {

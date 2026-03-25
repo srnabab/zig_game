@@ -12,6 +12,7 @@ const ECS = @import("ECS");
 const steam = @import("steam");
 const steamInner = steam.steamInner;
 
+const Window = @import("window.zig");
 const update = @import("update.zig");
 const render = @import("render.zig");
 const math = @import("math");
@@ -125,6 +126,11 @@ pub fn main() !void {
     var update_t = try Thread.spawn(.{}, update.update_thread_func, .{update_thread});
     defer update_t.join();
 
+    var width: u32 = 0;
+    var height: u32 = 0;
+    const window = try Window.createWindow(&width, &height);
+    defer Window.destroyWindow(window);
+
     var render_t = try Thread.spawn(
         .{},
         render.render_thread_func,
@@ -132,6 +138,9 @@ pub fn main() !void {
             render_thread,
             &endSemaphore,
             &handles,
+            window,
+            width,
+            height,
         },
     );
     defer render_t.join();
