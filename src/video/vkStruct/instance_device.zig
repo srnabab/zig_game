@@ -18,7 +18,9 @@ pub const VkError = vulkanType.VkError;
 
 const layerNeeded = layer: {
     break :layer switch (builtin.mode) {
-        .Debug, .ReleaseSafe => [_][*c]const u8{"VK_LAYER_KHRONOS_validation"},
+        .Debug, .ReleaseSafe => [_][*c]const u8{
+            // "VK_LAYER_KHRONOS_validation"
+        },
         .ReleaseFast, .ReleaseSmall => [_][*c]const u8{},
     };
 };

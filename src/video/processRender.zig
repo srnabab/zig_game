@@ -3835,7 +3835,7 @@ pub const oneTimeCommand = struct {
 
     // a thread pool specialy for render
     // task queue, semaphore,
-    pub fn executeCommands(self: *Self, pCommands: *commands) !void {
+    pub fn executeCommands(self: *Self, pCommands: *commands, currentFrame: u32) !void {
         const zone = tracy.initZone(@src(), .{ .name = "execute all command in one time command" });
         defer zone.deinit();
 
@@ -3847,7 +3847,7 @@ pub const oneTimeCommand = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        const currentFrame = self.vulkan.currentFrame.load(.seq_cst);
+        // const currentFrame = self.vulkan.currentFrame.load(.seq_cst);
 
         const allocator = pCommands.stackAllocators[pCommands.stackAllocatorsIndex].allocator();
 

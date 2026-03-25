@@ -178,6 +178,7 @@ pub fn createSwapchain(
 pub fn createSwapchainImages(device: vk.VkDevice, swapchain: vk.VkSwapchainKHR, allocator: std.mem.Allocator) ![]vk.VkImage {
     var count: u32 = 0;
     try checkVkResult(vk.vkGetSwapchainImagesKHR(device, swapchain, @ptrCast(&count), null));
+    std.log.debug("count {d}", .{count});
 
     const images = try allocator.alloc(vk.VkImage, count);
     try checkVkResult(vk.vkGetSwapchainImagesKHR(device, swapchain, @ptrCast(&count), @ptrCast(images.ptr)));

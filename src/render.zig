@@ -19,6 +19,10 @@ const Semaphore = std.Thread.Semaphore;
 
 const file = @import("fileSystem");
 
+var executeSemaphore: Semaphore = .{};
+var executeDoneSemaphore: Semaphore = .{ .permits = 1 };
+var executeStop = false;
+
 var debug_allocator: std.heap.DebugAllocator(.{ .stack_trace_frames = 10 }) = .init;
 
 pub fn render_thread_func(
@@ -104,7 +108,7 @@ pub fn render_thread_func(
 
     vulkan.writeCachedDescriptorSetResources();
 
-    try graphic.executeCommands(commands);
+    try graphic.executeCommands(commands, 0);
     vulkan.nextFrame();
 
     try vulkan.readPipelineFileAndAdd(comptime file.comptimeGetID("flat2d.pipeb"), .draw);
@@ -249,6 +253,18 @@ pub fn render_thread_func(
     // global.stopNodeDagPrint = false;
     // global.stopExecuteNodePrint = false;
 
+    var currentCommands: *Commands = undefined;
+    const ppCommands: **Commands = &currentCommands;
+    var currentFrame: u32 = 0;
+    const pCurrentFrame: *u32 = &currentFrame;
+
+    var executeThread = try std.Thread.spawn(.{}, commandExecuteFunc, .{
+        &graphic,
+        ppCommands,
+        pCurrentFrame,
+    });
+    defer executeThread.join();
+
     const renderStart = std.time.milliTimestamp();
 
     while (true) {
@@ -280,17 +296,30 @@ pub fn render_thread_func(
             .pScissor = scissor_test,
         } });
         try commands.addCommandEnd();
-        try graphic.executeCommands(commands);
+
+        // try graphic.executeCommands(commands);
+
+        executeDoneSemaphore.wait();
+
+        currentCommands = commands;
+        currentFrame = vulkan.currentFrame.load(.seq_cst);
+
+        std.log.debug("current Frame {d}", .{currentFrame});
 
         vulkan.nextFrame();
+
+        executeSemaphore.post();
+
         currentCommandIndex = @intCast((currentCommandIndex + 1) % pCommands.len);
 
         // if (std.time.milliTimestamp() - renderStart > 1 * std.time.ms_per_s) {
-        if (vulkan.totalFrame.load(.seq_cst) > 40) {
+        if (frame > 40) {
             _ = renderStart;
             break;
         }
     }
+
+    executeStop = true;
 
     // vulkan.logBufferPtr();
 
@@ -298,4 +327,16 @@ pub fn render_thread_func(
 
     _ = endSemaphore;
     _ = thread_count;
+}
+
+fn commandExecuteFunc(graphic: *OneTimeCommand, ppCommands: **Commands, currentFrame: *u32) !void {
+    while (true) {
+        executeSemaphore.wait();
+
+        try graphic.executeCommands(ppCommands.*, currentFrame.*);
+
+        executeDoneSemaphore.post();
+
+        if (executeStop) break;
+    }
 }
