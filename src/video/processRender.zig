@@ -811,6 +811,7 @@ pub const commands = struct {
 
     pub fn init(allocator: std.mem.Allocator, buffers: []u8, vulkan: *VkStruct, pRendering: *rendering, pTextureSet: *texture) Self {
         logStructSize(drawC);
+        std.log.debug("command size {d}", .{@sizeOf(drawC.comm)});
 
         var stackAllocators: [global.MaxFrameInFlight]std.heap.FixedBufferAllocator = undefined;
         const averageSize = buffers.len / (global.MaxFrameInFlight);
@@ -3026,8 +3027,6 @@ pub const commands = struct {
                     node.data.commandPoolType = .graphic;
                 }
 
-                ptr.value_ptr.command.copyBufferToImage.dstImage = self.pTextureSet.getVkImage(ptr.value_ptr.command.copyBufferToImage.pTexture);
-
                 const copyBufferToImage = ptr.value_ptr.command.copyBufferToImage;
 
                 const imageQueueNode = try self.transLayoutHelper(
@@ -3061,7 +3060,7 @@ pub const commands = struct {
                     currentNode = aa;
                 }
 
-                try self.cacheMap.put(@ptrCast(copyBufferToImage.dstImage), ID);
+                try self.cacheMap.put(copyBufferToImage.pTexture, ID);
             },
             else => {
                 std.debug.panic("not supported commandType {s}", .{@tagName(commandType)});
@@ -3398,7 +3397,7 @@ pub const oneTimeCommand = struct {
                     .sType = vk.VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2,
                     .pNext = null,
                     .srcBuffer = vulkan.buffers.getVkBuffer(copyBufferToImage.buffer),
-                    .dstImage = copyBufferToImage.dstImage,
+                    .dstImage = pTextureSet.getVkImage(copyBufferToImage.pTexture),
                     .dstImageLayout = copyBufferToImage.dstImageLayout,
                     .regionCount = 1,
                     .pRegions = &region,

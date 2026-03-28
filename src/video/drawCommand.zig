@@ -146,7 +146,6 @@ pub const CopyBufferToImage = struct {
     height: u32,
     depth: u32 = 1,
 
-    dstImage: vk.VkImage = null,
     dstImageLayout: vk.VkImageLayout = vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
     aspectMask: vk.VkImageAspectFlags = vk.VK_IMAGE_ASPECT_COLOR_BIT,
     mipLevel: u32 = 0,
