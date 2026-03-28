@@ -307,7 +307,6 @@ fn SpecialThreadPool(maxThreads: u32) type {
                     .timestamp = std.time.nanoTimestamp(),
                     .commandType = .end,
                     .command = .{ .empty = void{} },
-                    .output = .{ .empty = void{} },
                 };
                 var emptyQueueNode: QueueNode = .{
                     .listID = null,
@@ -875,7 +874,6 @@ pub const commands = struct {
             .timestamp = std.time.nanoTimestamp(),
             .commandType = .start,
             .command = .{ .start = .{} },
-            .output = .{ .empty = void{} },
         };
     }
 
@@ -1292,7 +1290,6 @@ pub const commands = struct {
                                     },
                                 },
                                 .commandType = .pipelineBarrier,
-                                .output = .{ .empty = void{} },
                             };
                             break :blk node;
                         }
@@ -1375,7 +1372,6 @@ pub const commands = struct {
                                     },
                                 },
                                 .commandType = .pipelineBarrier,
-                                .output = .{ .empty = void{} },
                             };
                             break :blk node;
                         }
@@ -1460,7 +1456,6 @@ pub const commands = struct {
                                     },
                                 },
                                 .commandType = .pipelineBarrier,
-                                .output = .{ .empty = void{} },
                             };
                             break :blk node;
                         }
@@ -1550,7 +1545,6 @@ pub const commands = struct {
                                 },
                             },
                             .commandType = .pipelineBarrier,
-                            .output = .{ .empty = void{} },
                         };
                         break :blk node;
                     }
@@ -1626,7 +1620,6 @@ pub const commands = struct {
                                 },
                             },
                             .commandType = .pipelineBarrier,
-                            .output = .{ .empty = void{} },
                         };
                         break :blk node;
                     }
@@ -1678,7 +1671,6 @@ pub const commands = struct {
                     .timestamp = std.time.nanoTimestamp(),
                     .command = .{ .beginRendering = beginRendering },
                     .commandType = .beginRendering,
-                    .output = .{ .empty = void{} },
                 };
                 rootNode.listID = self.nodeDag.currentListID;
                 rootNode.data.commandPoolType = .graphic;
@@ -1698,7 +1690,6 @@ pub const commands = struct {
                     .timestamp = std.time.nanoTimestamp(),
                     .command = .{ .bindPipeline = bindPipeline },
                     .commandType = .bindPipeline,
-                    .output = .{ .empty = void{} },
                 };
                 rootNode.listID = self.nodeDag.currentListID;
                 rootNode.data.commandPoolType = .graphic;
@@ -1718,7 +1709,6 @@ pub const commands = struct {
                     .timestamp = std.time.nanoTimestamp(),
                     .command = .{ .bindIndexBuffer = bindIndexBuffer },
                     .commandType = .bindIndexBuffer,
-                    .output = .{ .empty = void{} },
                 };
                 rootNode.listID = self.nodeDag.currentListID;
                 rootNode.data.commandPoolType = .graphic;
@@ -1738,7 +1728,6 @@ pub const commands = struct {
                     .timestamp = std.time.nanoTimestamp(),
                     .command = .{ .bindVertexBuffers = bindVertexBuffers },
                     .commandType = .bindVertexBuffers,
-                    .output = .{ .empty = void{} },
                 };
                 rootNode.listID = self.nodeDag.currentListID;
                 rootNode.data.commandPoolType = .graphic;
@@ -1758,7 +1747,6 @@ pub const commands = struct {
                     .timestamp = std.time.nanoTimestamp(),
                     .command = .{ .bindDescriptorSets = bindDescriptorSets },
                     .commandType = .bindDescriptorSets,
-                    .output = .{ .empty = void{} },
                 };
                 rootNode.listID = self.nodeDag.currentListID;
                 rootNode.data.commandPoolType = .graphic;
@@ -1776,7 +1764,6 @@ pub const commands = struct {
                     .timestamp = std.time.nanoTimestamp(),
                     .command = .{ .endRendering = void{} },
                     .commandType = .endRendering,
-                    .output = .{ .empty = void{} },
                 };
                 rootNode.listID = self.nodeDag.currentListID;
                 rootNode.data.commandPoolType = .graphic;
@@ -1794,7 +1781,6 @@ pub const commands = struct {
                     .timestamp = std.time.nanoTimestamp(),
                     .command = .{ .setScissor = command.setScissor },
                     .commandType = .setScissor,
-                    .output = .{ .empty = void{} },
                 };
                 rootNode.listID = self.nodeDag.currentListID;
                 rootNode.data.commandPoolType = .graphic;
@@ -1812,7 +1798,6 @@ pub const commands = struct {
                     .timestamp = std.time.nanoTimestamp(),
                     .command = .{ .setViewport = command.setViewport },
                     .commandType = .setViewport,
-                    .output = .{ .empty = void{} },
                 };
                 rootNode.listID = self.nodeDag.currentListID;
                 rootNode.data.commandPoolType = .graphic;
@@ -2775,7 +2760,6 @@ pub const commands = struct {
             .timestamp = std.time.nanoTimestamp(),
             .command = command,
             .commandType = allCommandType,
-            .output = getOuput(allCommandType, command),
         };
 
         var dependenciesArray: std.array_list.Managed(*anyopaque) = .init(allocator);
@@ -3894,9 +3878,9 @@ pub const oneTimeCommand = struct {
             var executeCount: u32 = 0;
 
             while (pNode) |nn| {
-                if (!global.stopExecuteNodePrint)
-                    if (pNode != null)
-                        std.log.debug("p ID {d}", .{pNode.?.queueNode.ID});
+                // if (!global.stopExecuteNodePrint)
+                //     if (pNode != null)
+                //         std.log.debug("p ID {d}", .{pNode.?.queueNode.ID});
 
                 const zone2 = tracy.initZone(@src(), .{ .name = "execute a" });
                 errdefer zone2.deinit(); // std.log.debug("1", .{});
@@ -3932,6 +3916,9 @@ pub const oneTimeCommand = struct {
                     if (!nn.queueNode.data.isSecondary) {
                         const temp = try finalPrimaryTaskQueue.addOne();
                         temp.* = nn.queueNode;
+
+                        // if (!global.stopExecuteNodePrint)
+                        //     std.log.debug("f ID {d}", .{temp.*.ID});
                     }
                 } else {
                     nn.threadCtx.?.mutex.lock();
@@ -3944,7 +3931,6 @@ pub const oneTimeCommand = struct {
                 }
 
                 nn.queueNode.nodeDone();
-                if (!global.stopExecuteNodePrint) std.log.debug("e ID {d}", .{nn.queueNode.ID});
 
                 executeCount += 1;
                 try inferNodeNextTaskQueue.pushLast(pNode.?);
@@ -3963,7 +3949,7 @@ pub const oneTimeCommand = struct {
 
                 const node = nn.queueNode;
 
-                if (!global.stopExecuteNodePrint) std.log.debug("i ID {d}", .{node.ID});
+                // if (!global.stopExecuteNodePrint) std.log.debug("i ID {d}", .{node.ID});
 
                 for (node.children.list.items) |ID| {
                     const zone3 = tracy.initZone(@src(), .{ .name = "execute c" });
@@ -4224,6 +4210,8 @@ pub const oneTimeCommand = struct {
                             vk.vkCmdExecuteCommands(currentCommandBuffer, @intCast(cbs.items.len), @ptrCast(cbs.items.ptr));
 
                         record(pCommands.queue.getPtr(nn.ID).?, currentCommandBuffer, allocator, self.vulkan);
+
+                        if (!global.stopExecuteNodePrint) std.log.debug("e ID {d}", .{nn.ID});
                     }
                     firstNode = nn.getFirstUndoneChild();
                     if (firstNode == null) {
@@ -4357,6 +4345,12 @@ pub const oneTimeCommand = struct {
             }
 
             self.vulkan.globalTimelineValue.store(currentSemaphoreValue, .seq_cst);
+        }
+
+        if (!global.stopExecuteNodePrint) {
+            for (finalPrimaryTaskQueue.items) |value| {
+                std.log.debug("f ID {d}", .{value.ID});
+            }
         }
 
         for (0..self.threadPool.info.len) |i| {

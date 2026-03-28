@@ -335,11 +335,11 @@ pub const comm = union {
     empty: void,
 };
 
-pub const Output = union {
-    image: vk.VkImage,
-    buffer: VkStruct.Buffer_t,
-    empty: void,
-};
+// pub const Output = union {
+//     image: vk.VkImage,
+//     buffer: VkStruct.Buffer_t,
+//     empty: void,
+// };
 
 pub const BufferUsage = enum {
     none,
@@ -362,7 +362,6 @@ timestamp: i128,
 ID: u32,
 
 command: comm,
-output: Output,
 
 fn empty() void {
     //
