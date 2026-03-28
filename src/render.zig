@@ -267,7 +267,7 @@ pub fn render_thread_func(
         try vulkan.waitEndFence();
 
         try commands.startCommand();
-        try commands.addCommand(.draw2D, .{ .draw2d = .{
+        try commands.addCommand(.draw2D, .{ .draw2D = .{
             .pipeline = vulkan.getPipeline("flat2d").?,
             .pTexture = pTextureSet.getTexture(@intCast(file.getID("circle.png"))).?,
             .rendering = rendering_test,

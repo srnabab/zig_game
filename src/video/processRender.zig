@@ -811,7 +811,7 @@ pub const commands = struct {
 
     pub fn init(allocator: std.mem.Allocator, buffers: []u8, vulkan: *VkStruct, pRendering: *rendering, pTextureSet: *texture) Self {
         logStructSize(drawC);
-        std.log.debug("command size {d}", .{@sizeOf(drawC.comm)});
+        std.log.debug("command size {d}", .{@sizeOf(drawC)});
 
         var stackAllocators: [global.MaxFrameInFlight]std.heap.FixedBufferAllocator = undefined;
         const averageSize = buffers.len / (global.MaxFrameInFlight);
@@ -883,28 +883,28 @@ pub const commands = struct {
         };
     }
 
-    fn getOuput(commandType: drawC.CommandType, command: drawC.comm) drawC.Output {
-        const zone = tracy.initZone(@src(), .{ .name = "get output OnetimeCommand" });
-        defer zone.deinit();
+    // fn getOuput(commandType: drawC.CommandType, command: drawC.comm) drawC.Output {
+    //     const zone = tracy.initZone(@src(), .{ .name = "get output OnetimeCommand" });
+    //     defer zone.deinit();
 
-        return rs: switch (commandType) {
-            .start, .beginPrimaryRecord, .beginRendering, .beginSecondaryRecord, .endRendering, .endRecord, .present, .draw2D, .graphicTransfer, .transfer, .end, .pipelineBarrier => {
-                break :rs drawC.Output{ .empty = void{} };
-            },
-            .copyBufferToImage => {
-                break :rs drawC.Output{ .image = command.copyBufferToImage.dstImage };
-            },
-            .copyBuffer => {
-                break :rs drawC.Output{ .buffer = command.copyBuffer.dstBuffer };
-            },
-            // .transLayout => {
-            //     break :rs drawC.Output{ .image = command.transLayout.pTexture.image.vkImage };
-            // },
-            else => {
-                std.debug.panic("not support {s}", .{@tagName(commandType)});
-            },
-        };
-    }
+    //     return rs: switch (commandType) {
+    //         .start, .beginPrimaryRecord, .beginRendering, .beginSecondaryRecord, .endRendering, .endRecord, .present, .draw2D, .graphicTransfer, .transfer, .end, .pipelineBarrier => {
+    //             break :rs drawC.Output{ .empty = void{} };
+    //         },
+    //         .copyBufferToImage => {
+    //             break :rs drawC.Output{ .image = command.copyBufferToImage.dstImage };
+    //         },
+    //         .copyBuffer => {
+    //             break :rs drawC.Output{ .buffer = command.copyBuffer.dstBuffer };
+    //         },
+    //         // .transLayout => {
+    //         //     break :rs drawC.Output{ .image = command.transLayout.pTexture.image.vkImage };
+    //         // },
+    //         else => {
+    //             std.debug.panic("not support {s}", .{@tagName(commandType)});
+    //         },
+    //     };
+    // }
 
     fn commandCost(commandType: drawC.CommandType) u32 {
         const zone = tracy.initZone(@src(), .{ .name = "calculate command cost" });
@@ -2883,7 +2883,7 @@ pub const commands = struct {
             .draw2D => {
                 node.data.commandPoolType = .graphic;
 
-                const draw2D = ptr.value_ptr.command.draw2d;
+                const draw2D = ptr.value_ptr.command.draw2D;
 
                 const imageQueueNode = try self.transLayoutHelper(
                     self.pTextureSet,
@@ -3329,7 +3329,7 @@ pub const oneTimeCommand = struct {
                 const innerZone = tracy.initZone(@src(), .{ .name = "draw 2D" });
                 defer innerZone.deinit();
 
-                const draw2D = command.command.draw2d;
+                const draw2D = command.command.draw2D;
 
                 const offsets = try pTextureSet.getTextureOffsets(draw2D.pTexture);
 
@@ -3677,20 +3677,20 @@ pub const oneTimeCommand = struct {
                         comm.node.data.commandBufferID = cbb.commandBufferID;
                     }
 
-                    const renderinged = com.command.beginRecoed.rendering;
+                    const renderinged = com.command.beginSecondaryRecord.rendering;
                     var flags = vk.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
                     if (renderinged) flags |= vk.VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
 
                     var InRenderingInfo = if (renderinged) vk.VkCommandBufferInheritanceRenderingInfo{
                         .sType = vk.VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_RENDERING_INFO,
-                        .flags = com.command.beginRecoed.flags,
+                        .flags = com.command.beginSecondaryRecord.flags,
                         .pNext = null,
-                        .viewMask = com.command.beginRecoed.viewMask,
-                        .colorAttachmentCount = @intCast(com.command.beginRecoed.pColorAttachmentFormats.len),
-                        .pColorAttachmentFormats = @ptrCast(com.command.beginRecoed.pColorAttachmentFormats.ptr),
-                        .depthAttachmentFormat = com.command.beginRecoed.depthAttachmentFormat,
-                        .stencilAttachmentFormat = com.command.beginRecoed.stencilAttachmentFormat,
-                        .rasterizationSamples = com.command.beginRecoed.rasterizationSamples,
+                        .viewMask = com.command.beginSecondaryRecord.viewMask,
+                        .colorAttachmentCount = @intCast(com.command.beginSecondaryRecord.pColorAttachmentFormats.len),
+                        .pColorAttachmentFormats = @ptrCast(com.command.beginSecondaryRecord.pColorAttachmentFormats.ptr),
+                        .depthAttachmentFormat = com.command.beginSecondaryRecord.depthAttachmentFormat,
+                        .stencilAttachmentFormat = com.command.beginSecondaryRecord.stencilAttachmentFormat,
+                        .rasterizationSamples = com.command.beginSecondaryRecord.rasterizationSamples,
                     } else null;
                     var InInfo = vk.VkCommandBufferInheritanceInfo{
                         .sType = vk.VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO,
@@ -3698,9 +3698,9 @@ pub const oneTimeCommand = struct {
                         .renderPass = null,
                         .framebuffer = null,
                         .subpass = 0,
-                        .occlusionQueryEnable = if (renderinged) com.command.beginRecoed.occulusionQueryEnable else vk.VK_FALSE,
-                        .queryFlags = if (renderinged) com.command.beginRecoed.queryFlags else vk.VK_FALSE,
-                        .pipelineStatistics = if (renderinged) com.command.beginRecoed.pipelineStatistics else vk.VK_FALSE,
+                        .occlusionQueryEnable = if (renderinged) com.command.beginSecondaryRecord.occulusionQueryEnable else vk.VK_FALSE,
+                        .queryFlags = if (renderinged) com.command.beginSecondaryRecord.queryFlags else vk.VK_FALSE,
+                        .pipelineStatistics = if (renderinged) com.command.beginSecondaryRecord.pipelineStatistics else vk.VK_FALSE,
                     };
                     try VkStruct._beginCommandBuffer(commandBuffer, null, @intCast(flags), &InInfo);
                     continue;
