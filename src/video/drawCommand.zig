@@ -354,12 +354,6 @@ pub const BufferUsage = enum {
 //     shader,
 // };
 
-commandType: CommandType,
 timestamp: i128,
 ID: u32,
-
 command: comm,
-
-fn empty() void {
-    //
-}

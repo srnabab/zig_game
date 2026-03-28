@@ -308,8 +308,7 @@ fn SpecialThreadPool(maxThreads: u32) type {
                 var end = drawC{
                     .ID = 1234124142,
                     .timestamp = std.time.nanoTimestamp(),
-                    .commandType = .end,
-                    .command = .{ .empty = void{} },
+                    .command = .{ .end = void{} },
                 };
                 var emptyQueueNode: QueueNode = .{
                     .listID = null,
@@ -634,10 +633,10 @@ fn nodeDagPrint(self: *QueueNodes, self2: *commands) void {
         while (it.next()) |entry| {
             const command = self2.queue.get(entry.key_ptr.*);
             if (command) |c| {
-                switch (c.commandType) {
+                switch (c.command) {
                     .pipelineBarrier => {
                         const pipelineBarrier = c.command.pipelineBarrier;
-                        std.log.debug("ID {d} {s}", .{ entry.key_ptr.*, @tagName(c.commandType) });
+                        std.log.debug("ID {d} {s}", .{ entry.key_ptr.*, @tagName(c.command) });
                         std.log.debug("lastSrcStageMask {s}", .{
                             @tagName(@as(vulkanType.VkPipelineStageFlagBits2, @enumFromInt(pipelineBarrier.lastSrcStageMask))),
                         });
@@ -672,8 +671,8 @@ fn nodeDagPrint(self: *QueueNodes, self2: *commands) void {
                 const ll: *QueueNode = @alignCast(@fieldParentPtr("ID", ID));
 
                 writer.print("{d} {s} {s} ", .{
-                    ll.ID,                                             @tagName(self.map.get(ID.*).?.data.commandPoolType),
-                    @tagName(self2.queue.getPtr(ll.ID).?.commandType),
+                    ll.ID,                                         @tagName(self.map.get(ID.*).?.data.commandPoolType),
+                    @tagName(self2.queue.getPtr(ll.ID).?.command),
                 }) catch |err| {
                     std.log.err("write err: {s}", .{@errorName(err)});
                 };
@@ -683,8 +682,8 @@ fn nodeDagPrint(self: *QueueNodes, self2: *commands) void {
                 const ll: *QueueNode = @alignCast(@fieldParentPtr("ID", ID));
 
                 writer2.print("{d} {s} {s} ", .{
-                    ll.ID,                                             @tagName(self.map.get(ID.*).?.data.commandPoolType),
-                    @tagName(self2.queue.getPtr(ll.ID).?.commandType),
+                    ll.ID,                                         @tagName(self.map.get(ID.*).?.data.commandPoolType),
+                    @tagName(self2.queue.getPtr(ll.ID).?.command),
                 }) catch |err| {
                     std.log.err("write err: {s}", .{@errorName(err)});
                 };
@@ -811,7 +810,8 @@ pub const commands = struct {
 
     pub fn init(allocator: std.mem.Allocator, buffers: []u8, vulkan: *VkStruct, pRendering: *rendering, pTextureSet: *texture) Self {
         logStructSize(drawC);
-        std.log.debug("command size {d}", .{@sizeOf(drawC)});
+        std.log.debug("command size {d}", .{@sizeOf(drawC.comm)});
+        std.log.debug("drawc size {d}", .{@sizeOf(drawC)});
 
         var stackAllocators: [global.MaxFrameInFlight]std.heap.FixedBufferAllocator = undefined;
         const averageSize = buffers.len / (global.MaxFrameInFlight);
@@ -878,7 +878,6 @@ pub const commands = struct {
         ptr.value_ptr.* = drawC{
             .ID = node.ID,
             .timestamp = std.time.nanoTimestamp(),
-            .commandType = .start,
             .command = .{ .start = .{} },
         };
     }
@@ -918,7 +917,7 @@ pub const commands = struct {
     }
 
     fn inferAcquirePipelinBarrierInfoByCommandTypeAndBufferUsage(
-        commandType: drawC.PublicCommandType,
+        commandType: drawC.CommandType,
         bufferUsage: drawC.BufferUsage,
         srcQueue: VkStruct.CommandPoolType,
         dstQueue: VkStruct.CommandPoolType,
@@ -1073,7 +1072,7 @@ pub const commands = struct {
     }
 
     fn inferReleasePipelineBarrierInfoByImageUsage(
-        commandType: drawC.PublicCommandType,
+        commandType: drawC.CommandType,
         srcQueue: VkStruct.CommandPoolType,
         dstQueue: VkStruct.CommandPoolType,
         layout: vk.VkImageLayout,
@@ -1117,7 +1116,7 @@ pub const commands = struct {
     }
 
     fn inferAcquirePipelineBarrierInfoByImageUsage(
-        commandType: drawC.PublicCommandType,
+        commandType: drawC.CommandType,
         // imageUsage: drawC.TextureUsage,
         srcQueue: VkStruct.CommandPoolType,
         dstQueue: VkStruct.CommandPoolType,
@@ -1179,7 +1178,7 @@ pub const commands = struct {
     }
 
     fn inferReleasePipelinBarrierInfoByCommandTypeAndBufferUsage(
-        commandType: drawC.PublicCommandType,
+        commandType: drawC.CommandType,
         bufferUsage: drawC.BufferUsage,
         srcQueue: VkStruct.CommandPoolType,
         dstQueue: VkStruct.CommandPoolType,
@@ -1218,7 +1217,7 @@ pub const commands = struct {
         };
     }
 
-    fn addCommand2(self: *Self, commandType: drawC.PrivateCommandType, command: drawC.comm, enterCommandType: drawC.PublicCommandType) !twoQueueNode {
+    fn addCommand2(self: *Self, command: drawC.comm, enterCommandType: drawC.CommandType) !twoQueueNode {
         const zone = tracy.initZone(@src(), .{ .name = "add command 2" });
         defer zone.deinit();
 
@@ -1228,7 +1227,7 @@ pub const commands = struct {
         var resNode: ?*QueueNode = null;
         var resNode2: ?*QueueNode = null;
 
-        s: switch (commandType) {
+        s: switch (command) {
             .transLayout => {
                 const zone2 = tracy.initZone(@src(), .{ .name = "transLayout" });
                 defer zone2.deinit();
@@ -1273,7 +1272,7 @@ pub const commands = struct {
                             const node = release.value_ptr.*;
                             const cmd = self.queue.getPtr(node.ID).?;
 
-                            if (cmd.commandType != .pipelineBarrier) std.debug.panic("not supported commandType {s}", .{@tagName(cmd.commandType)});
+                            if (cmd.command != .pipelineBarrier) std.debug.panic("not supported commandType {s}", .{@tagName(cmd.command)});
                             if (node.listID) |listID| {
                                 if (listID.* == self.nodeDag.currentListID.?.*) {
                                     break :blk node;
@@ -1295,7 +1294,6 @@ pub const commands = struct {
                                         .lastSrcStageMask = releaseFlags.sourceStage,
                                     },
                                 },
-                                .commandType = .pipelineBarrier,
                             };
                             break :blk node;
                         }
@@ -1353,7 +1351,7 @@ pub const commands = struct {
                             const node = acquire.value_ptr.*;
                             const cmd = self.queue.getPtr(node.ID).?;
 
-                            if (cmd.commandType != .pipelineBarrier) std.debug.panic("not supported commandType {s}", .{@tagName(cmd.commandType)});
+                            if (cmd.command != .pipelineBarrier) std.debug.panic("not supported commandType {s}", .{@tagName(cmd.command)});
 
                             if (node.listID) |listID| {
                                 if (listID.* == self.nodeDag.currentListID.?.*) {
@@ -1377,7 +1375,6 @@ pub const commands = struct {
                                         .lastSrcStageMask = acquireFlags.sourceStage,
                                     },
                                 },
-                                .commandType = .pipelineBarrier,
                             };
                             break :blk node;
                         }
@@ -1437,7 +1434,7 @@ pub const commands = struct {
                             const node = res.value_ptr.*;
 
                             const cmd = self.queue.getPtr(node.ID).?;
-                            if (cmd.commandType != .pipelineBarrier) std.debug.panic("not supported commandType {s}", .{@tagName(cmd.commandType)});
+                            if (cmd.command != .pipelineBarrier) std.debug.panic("not supported commandType {s}", .{@tagName(cmd.command)});
 
                             if (node.listID) |listID| {
                                 if (listID.* == self.nodeDag.currentListID.?.*) {
@@ -1461,7 +1458,6 @@ pub const commands = struct {
                                         .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
                                     },
                                 },
-                                .commandType = .pipelineBarrier,
                             };
                             break :blk node;
                         }
@@ -1527,7 +1523,7 @@ pub const commands = struct {
                         const node = release.value_ptr.*;
                         const cmd = self.queue.getPtr(node.ID).?;
 
-                        if (cmd.commandType != .pipelineBarrier) std.debug.panic("not supported commandType {s}", .{@tagName(cmd.commandType)});
+                        if (cmd.command != .pipelineBarrier) std.debug.panic("not supported commandType {s}", .{@tagName(cmd.command)});
 
                         if (node.listID) |listID| {
                             if (listID.* == self.nodeDag.currentListID.?.*) {
@@ -1550,7 +1546,6 @@ pub const commands = struct {
                                     .lastSrcStageMask = releaseFlags.sourceStage,
                                 },
                             },
-                            .commandType = .pipelineBarrier,
                         };
                         break :blk node;
                     }
@@ -1603,7 +1598,7 @@ pub const commands = struct {
                     if (acquire.found_existing) {
                         const node = acquire.value_ptr.*;
                         const cmd = self.queue.getPtr(node.ID).?;
-                        if (cmd.commandType != .pipelineBarrier) std.debug.panic("not supported commandType {s}", .{@tagName(cmd.commandType)});
+                        if (cmd.command != .pipelineBarrier) std.debug.panic("not supported commandType {s}", .{@tagName(cmd.command)});
 
                         if (node.listID) |listID| {
                             if (listID.* == self.nodeDag.currentListID.?.*) {
@@ -1625,7 +1620,6 @@ pub const commands = struct {
                                     .lastSrcStageMask = acquireFlags.sourceStage,
                                 },
                             },
-                            .commandType = .pipelineBarrier,
                         };
                         break :blk node;
                     }
@@ -1676,7 +1670,6 @@ pub const commands = struct {
                     .ID = rootNode.ID,
                     .timestamp = std.time.nanoTimestamp(),
                     .command = .{ .beginRendering = beginRendering },
-                    .commandType = .beginRendering,
                 };
                 rootNode.listID = self.nodeDag.currentListID;
                 rootNode.data.commandPoolType = .graphic;
@@ -1695,7 +1688,6 @@ pub const commands = struct {
                     .ID = rootNode.ID,
                     .timestamp = std.time.nanoTimestamp(),
                     .command = .{ .bindPipeline = bindPipeline },
-                    .commandType = .bindPipeline,
                 };
                 rootNode.listID = self.nodeDag.currentListID;
                 rootNode.data.commandPoolType = .graphic;
@@ -1714,7 +1706,6 @@ pub const commands = struct {
                     .ID = rootNode.ID,
                     .timestamp = std.time.nanoTimestamp(),
                     .command = .{ .bindIndexBuffer = bindIndexBuffer },
-                    .commandType = .bindIndexBuffer,
                 };
                 rootNode.listID = self.nodeDag.currentListID;
                 rootNode.data.commandPoolType = .graphic;
@@ -1733,7 +1724,6 @@ pub const commands = struct {
                     .ID = rootNode.ID,
                     .timestamp = std.time.nanoTimestamp(),
                     .command = .{ .bindVertexBuffers = bindVertexBuffers },
-                    .commandType = .bindVertexBuffers,
                 };
                 rootNode.listID = self.nodeDag.currentListID;
                 rootNode.data.commandPoolType = .graphic;
@@ -1752,7 +1742,6 @@ pub const commands = struct {
                     .ID = rootNode.ID,
                     .timestamp = std.time.nanoTimestamp(),
                     .command = .{ .bindDescriptorSets = bindDescriptorSets },
-                    .commandType = .bindDescriptorSets,
                 };
                 rootNode.listID = self.nodeDag.currentListID;
                 rootNode.data.commandPoolType = .graphic;
@@ -1769,7 +1758,6 @@ pub const commands = struct {
                     .ID = rootNode.ID,
                     .timestamp = std.time.nanoTimestamp(),
                     .command = .{ .endRendering = void{} },
-                    .commandType = .endRendering,
                 };
                 rootNode.listID = self.nodeDag.currentListID;
                 rootNode.data.commandPoolType = .graphic;
@@ -1786,7 +1774,6 @@ pub const commands = struct {
                     .ID = rootNode.ID,
                     .timestamp = std.time.nanoTimestamp(),
                     .command = .{ .setScissor = command.setScissor },
-                    .commandType = .setScissor,
                 };
                 rootNode.listID = self.nodeDag.currentListID;
                 rootNode.data.commandPoolType = .graphic;
@@ -1803,7 +1790,6 @@ pub const commands = struct {
                     .ID = rootNode.ID,
                     .timestamp = std.time.nanoTimestamp(),
                     .command = .{ .setViewport = command.setViewport },
-                    .commandType = .setViewport,
                 };
                 rootNode.listID = self.nodeDag.currentListID;
                 rootNode.data.commandPoolType = .graphic;
@@ -1811,7 +1797,7 @@ pub const commands = struct {
                 resNode = rootNode;
             },
             else => {
-                std.debug.panic("not supported commandType {s}", .{@tagName(commandType)});
+                std.debug.panic("not supported commandType {s}", .{@tagName(command)});
             },
         }
 
@@ -1847,14 +1833,14 @@ pub const commands = struct {
         pBuffer: VkStruct.Buffer_t,
         newQueue: VkStruct.CommandPoolType,
         regions: []drawC.SizeOffset,
-        commandType: drawC.PublicCommandType,
+        commandType: drawC.CommandType,
     ) !twoQueueNode {
         var resNode = twoQueueNode{};
 
         const oldSrcQueueType = self.vulkan.buffers.getBufferQueueType(pBuffer);
         if (oldSrcQueueType != newQueue) {
             if (oldSrcQueueType != .init) {
-                resNode = try self.addCommand2(.changeBufferQueue, .{ .changeBufferQueue = .{
+                resNode = try self.addCommand2(.{ .changeBufferQueue = .{
                     .buffer = pBuffer,
                     .srcQueueFamily = oldSrcQueueType,
                     .dstQueueFamily = newQueue,
@@ -1875,7 +1861,7 @@ pub const commands = struct {
         layerCount: u32,
         newLayout: vk.VkImageLayout,
         newQueue: VkStruct.CommandPoolType,
-        commandType: drawC.PublicCommandType,
+        commandType: drawC.CommandType,
     ) !twoQueueNode {
         const textureContent = textureSet.getTextureCotent(texture_);
         const oldLayouts = textureContent.layouts;
@@ -1899,7 +1885,7 @@ pub const commands = struct {
             if (layout == currentLayout) {
                 count += 1;
             } else {
-                transNode = try self.addCommand2(.transLayout, .{ .transLayout = .{
+                transNode = try self.addCommand2(.{ .transLayout = .{
                     .image = dstImage,
                     .oldLayout = currentLayout,
                     .newLayout = newLayout,
@@ -1917,7 +1903,7 @@ pub const commands = struct {
             }
         }
         if (count > 0) {
-            transNode = try self.addCommand2(.transLayout, .{ .transLayout = .{
+            transNode = try self.addCommand2(.{ .transLayout = .{
                 .image = dstImage,
                 .oldLayout = currentLayout,
                 .newLayout = newLayout,
@@ -2023,7 +2009,13 @@ pub const commands = struct {
         return .{ .a = lastA, .b = if (lastB == null) midA else lastB };
     }
 
-    fn bindVertexBuffer(self: *Self, bufferCount: u32, bufferHandles: []VkStruct.Buffer_t, startIndex: u32, commandType: drawC.PublicCommandType) !*QueueNode {
+    fn bindVertexBuffer(
+        self: *Self,
+        bufferCount: u32,
+        bufferHandles: []VkStruct.Buffer_t,
+        startIndex: u32,
+        commandType: drawC.CommandType,
+    ) !*QueueNode {
         const zone = tracy.initZone(@src(), .{ .name = "bind vertex buffer" });
         defer zone.deinit();
 
@@ -2043,7 +2035,6 @@ pub const commands = struct {
         }
 
         const tempTwoNode = try self.addCommand2(
-            .bindVertexBuffers,
             .{
                 .bindVertexBuffers = .{
                     .firstBinding = startIndex,
@@ -2068,7 +2059,7 @@ pub const commands = struct {
         currentNode: **QueueNode,
         renderingNode: *?*QueueNode,
         allocator: std.mem.Allocator,
-        commandType: drawC.PublicCommandType,
+        commandType: drawC.CommandType,
     ) !void {
         const zone = tracy.initZone(@src(), .{ .name = "rendering resource pre process" });
         defer zone.deinit();
@@ -2177,7 +2168,6 @@ pub const commands = struct {
             }
 
             const beginRenderingQueueNode = try self.addCommand2(
-                .beginRendering,
                 .{ .beginRendering = .{
                     .flags = renderingInfo.flags,
                     .renderArea = renderingInfo.renderArea,
@@ -2402,7 +2392,7 @@ pub const commands = struct {
         pViewport: ?VkStruct.Viewport_t,
         pScissor: ?VkStruct.Scissor_t,
         pipeline: VkStruct.Pipeline_t,
-        commandType: drawC.PublicCommandType,
+        commandType: drawC.CommandType,
     ) !twoQueueNode {
         const vertexBufferLen = if (vertexBuffers != null) vertexBuffers.?.len else 0;
         const descriptorsetLen = if (pDescriptorSets != null) pDescriptorSets.?.len else 0;
@@ -2473,7 +2463,7 @@ pub const commands = struct {
                     }
 
                     const descriptorSets = pDescriptorSets.?[descriptorSetIndex .. descriptorSetIndex + descriptorSetCount];
-                    const tempNode = try self.addCommand2(.bindDescriptorSets, .{
+                    const tempNode = try self.addCommand2(.{
                         .bindDescriptorSets = .{
                             .bindDescriptorSetsInfo = .{
                                 .sType = vk.VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO,
@@ -2513,7 +2503,7 @@ pub const commands = struct {
 
                                 const indexBufferContent = self.vulkan.buffers.getBufferContent(bufer);
 
-                                const tempTwoNode = try self.addCommand2(.bindIndexBuffer, .{ .bindIndexBuffer = .{
+                                const tempTwoNode = try self.addCommand2(.{ .bindIndexBuffer = .{
                                     .buffer = indexBufferContent.vkBuffer,
                                     .offset = 0,
                                     .size = indexBufferContent.size,
@@ -2534,7 +2524,6 @@ pub const commands = struct {
                             const pipelineContent = self.vulkan.getPipelineContent(pipeline);
 
                             const tempTwoNode = try self.addCommand2(
-                                .bindPipeline,
                                 .{ .bindPipeline = .{
                                     .bindPoint = vk.VK_PIPELINE_BIND_POINT_GRAPHICS,
                                     .pipeline = pipelineContent.pipeline,
@@ -2556,7 +2545,6 @@ pub const commands = struct {
                                 const scissor = self.vulkan.scissors.getScissorContent(v);
 
                                 const tempTwoNode = try self.addCommand2(
-                                    .setScissor,
                                     .{
                                         .setScissor = scissor,
                                     },
@@ -2580,7 +2568,6 @@ pub const commands = struct {
                                 const viewport = self.vulkan.viewports.getViewportContent(v);
 
                                 const tempTwoNode = try self.addCommand2(
-                                    .setViewport,
                                     .{
                                         .setViewport = viewport,
                                     },
@@ -2629,7 +2616,7 @@ pub const commands = struct {
 
         if (descriptorSetCount > 0) {
             const descriptorSets = pDescriptorSets.?[descriptorSetIndex .. descriptorSetIndex + descriptorSetCount];
-            const tempNode = try self.addCommand2(.bindDescriptorSets, .{
+            const tempNode = try self.addCommand2(.{
                 .bindDescriptorSets = .{
                     .bindDescriptorSetsInfo = .{
                         .sType = vk.VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO,
@@ -2740,12 +2727,12 @@ pub const commands = struct {
         const zone = tracy.initZone(@src(), .{ .name = "add command" });
         defer zone.deinit();
 
+        std.debug.assert(@as(u32, @intFromEnum(commandType)) == @as(u32, @intFromEnum(std.meta.activeTag(command))));
+
         self.mutex.lock();
         defer self.mutex.unlock();
 
         const allocator = self.stackAllocators[self.stackAllocatorsIndex].allocator();
-
-        const allCommandType = drawC.PublicCommandTypeToCommandType(commandType);
 
         const node = try self.nodeDag.create();
         const ID = node.ID;
@@ -2764,7 +2751,6 @@ pub const commands = struct {
             .ID = ID,
             .timestamp = std.time.nanoTimestamp(),
             .command = command,
-            .commandType = allCommandType,
         };
 
         var dependenciesArray: std.array_list.Managed(*anyopaque) = .init(allocator);
@@ -2775,7 +2761,7 @@ pub const commands = struct {
         // combine buffer copy to image with same src buffer and dst image
         const zone2 = tracy.initZone(@src(), .{ .name = "infer dependency 1" });
         errdefer zone2.deinit();
-        switch (commandType) {
+        switch (command) {
             .present => {
                 node.data.commandPoolType = .graphic;
 
@@ -2813,7 +2799,7 @@ pub const commands = struct {
                         1,
                         vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                         .graphic,
-                        commandType,
+                        @enumFromInt(@intFromEnum(std.meta.activeTag(command))),
                     );
                     const dependencyPtr = try dependenciesArray.addOne();
                     dependencyPtr.* = value;
@@ -2827,7 +2813,7 @@ pub const commands = struct {
                     &currentNode,
                     &renderingNode,
                     allocator,
-                    commandType,
+                    @enumFromInt(@intFromEnum(std.meta.activeTag(command))),
                 );
 
                 for (present.pTextures) |value| {
@@ -2857,7 +2843,7 @@ pub const commands = struct {
                     present.pViewport,
                     present.pScissor,
                     present.pipeline,
-                    commandType,
+                    std.meta.activeTag(command),
                 );
 
                 try lastNodeLinkNodeRenderingNodeConnect(lastNode, linkNode, node, renderingNode);
@@ -2870,7 +2856,7 @@ pub const commands = struct {
                     1,
                     vk.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
                     .graphic,
-                    commandType,
+                    std.meta.activeTag(command),
                 );
 
                 try node.childrenAppend(&transNode.a.?.ID);
@@ -2892,7 +2878,7 @@ pub const commands = struct {
                     1,
                     vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                     .graphic,
-                    commandType,
+                    std.meta.activeTag(command),
                 );
 
                 // if (imageQueueNode.a) |aa| {
@@ -2910,7 +2896,7 @@ pub const commands = struct {
                     &currentNode,
                     &renderingNode,
                     allocator,
-                    commandType,
+                    std.meta.activeTag(command),
                 );
 
                 var dependencyPtr = try dependenciesArray.addOne();
@@ -2944,7 +2930,7 @@ pub const commands = struct {
                     draw2D.pViewport,
                     draw2D.pScissor,
                     draw2D.pipeline,
-                    commandType,
+                    std.meta.activeTag(command),
                 );
 
                 // std.log.debug("linkNode end {d} {s} ", .{
@@ -2990,7 +2976,7 @@ pub const commands = struct {
                     copyBuffer.srcBuffer,
                     .transfer,
                     srcOffsets,
-                    commandType,
+                    std.meta.activeTag(command),
                 );
 
                 const dstOffsets = try allocator.alloc(drawC.SizeOffset, tempRegions.len);
@@ -3003,7 +2989,7 @@ pub const commands = struct {
                     copyBuffer.dstBuffer,
                     .transfer,
                     dstOffsets,
-                    commandType,
+                    std.meta.activeTag(command),
                 );
 
                 var nodes = [_]twoQueueNode{ srcBufferNode, dstBufferNode };
@@ -3036,14 +3022,19 @@ pub const commands = struct {
                     copyBufferToImage.layerCount,
                     vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                     .transfer,
-                    commandType,
+                    std.meta.activeTag(command),
                 );
 
                 var region = [1]drawC.SizeOffset{.{
                     .offset = 0,
                     .size = self.vulkan.buffers.getBufferSize(copyBufferToImage.buffer),
                 }};
-                const bufferQueueNode = try self.changeBufferQueueHelper(copyBufferToImage.buffer, .transfer, &region, commandType);
+                const bufferQueueNode = try self.changeBufferQueueHelper(
+                    copyBufferToImage.buffer,
+                    .transfer,
+                    &region,
+                    std.meta.activeTag(command),
+                );
 
                 var nodes = [_]twoQueueNode{ imageQueueNode, bufferQueueNode };
 
@@ -3063,7 +3054,7 @@ pub const commands = struct {
                 try self.cacheMap.put(copyBufferToImage.pTexture, ID);
             },
             else => {
-                std.debug.panic("not supported commandType {s}", .{@tagName(commandType)});
+                std.debug.panic("not supported commandType {s}", .{@tagName(command)});
             },
         }
         zone2.deinit();
@@ -3074,7 +3065,7 @@ pub const commands = struct {
         errdefer zone3.deinit();
 
         const comm = self.queue.get(currentNode.ID).?;
-        switch (comm.commandType) {
+        switch (comm.command) {
             .pipelineBarrier => {
                 // const pipelineBarrier = comm.command.pipelineBarrier;
                 var dependencyLinked = false;
@@ -3193,12 +3184,12 @@ pub const commands = struct {
             },
             // .draw2D => {},
             .start => {
-                if (commandType != .present) {
-                    std.debug.panic("not supported command type {s} end with start", .{@tagName(comm.commandType)});
+                if (command != .present) {
+                    std.debug.panic("not supported command type {s} end with start", .{@tagName(comm.command)});
                 }
             },
             else => {
-                std.debug.panic("not supported command type {s}", .{@tagName(comm.commandType)});
+                std.debug.panic("not supported command type {s}", .{@tagName(comm.command)});
             },
         }
         zone3.deinit();
@@ -3218,7 +3209,6 @@ pub const commands = struct {
             ).?;
 
             const endRenderingTwoNode = try self.addCommand2(
-                .endRendering,
                 .{ .endRendering = void{} },
                 .empty,
             );
@@ -3324,7 +3314,7 @@ pub const oneTimeCommand = struct {
         const zone = tracy.initZone(@src(), .{ .name = "record vulkan command" });
         defer zone.deinit();
 
-        switch (command.commandType) {
+        switch (command.command) {
             .draw2D => {
                 const innerZone = tracy.initZone(@src(), .{ .name = "draw 2D" });
                 defer innerZone.deinit();
@@ -3639,7 +3629,7 @@ pub const oneTimeCommand = struct {
                 vk.vkCmdDraw(commandBuffer, 6, 1, 0, 0);
             },
             else => {
-                std.debug.panic("unsupported command type {s}", .{@tagName(command.commandType)});
+                std.debug.panic("unsupported command type {s}", .{@tagName(command.command)});
             },
         }
     }
@@ -3661,7 +3651,7 @@ pub const oneTimeCommand = struct {
             const command = ctx.taskQueue.popFirst();
             if (command) |comm| {
                 const com = comm.com;
-                if (com.commandType == .beginSecondaryRecord) {
+                if (com.command == .beginSecondaryRecord) {
                     commandBuffer = try ctx.commandPool.getSecondaryCommandBuffer(ctx.commandPoolType, ctx.vulkan);
                     {
                         ctx.mutex.lock();
@@ -3708,11 +3698,11 @@ pub const oneTimeCommand = struct {
 
                 comm.node.data.commandBufferID = cbb.commandBufferID;
 
-                if (com.commandType == .endRecord) {
+                if (com.command == .endRecord) {
                     try VkStruct.endCommandBuffer(commandBuffer);
                     ctx.threadPool.releaseThread(ctx.index);
                     cbb.semaphore.post();
-                } else if (com.commandType == .end) {
+                } else if (com.command == .end) {
                     break;
                 } else {
                     record(com, cbb.commandBufer, sma, ctx.vulkan, ctx.pTextureSet);
@@ -3727,7 +3717,7 @@ pub const oneTimeCommand = struct {
         const zone = tracy.initZone(@src(), .{ .name = "get garbage" });
         defer zone.deinit();
 
-        return rs: switch (command.commandType) {
+        return rs: switch (command.command) {
             .copyBufferToImage => {
                 if (command.command.copyBufferToImage.clean) {
                     break :rs garbageData{ .buffer = command.command.copyBufferToImage.buffer };
@@ -3749,7 +3739,7 @@ pub const oneTimeCommand = struct {
             .draw2D, .present, .bindVertexBuffers, .bindDescriptorSets, .setViewport => null,
             .setScissor, .bindIndexBuffer, .bindPipeline, .start, .beginRendering, .endRendering => null,
             else => {
-                std.debug.panic("not support {s}", .{@tagName(command.commandType)});
+                std.debug.panic("not support {s}", .{@tagName(command.command)});
             },
         };
     }
