@@ -226,7 +226,6 @@ pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Sample
         .copyBufferToImage,
         .{ .copyBufferToImage = .{
             .pTexture = texture_t,
-            .pTextureSet = self,
             .dstImage = texture.image.vkImage,
             .width = texture.source_width,
             .height = texture.source_height,

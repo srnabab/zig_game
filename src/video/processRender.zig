@@ -15,6 +15,8 @@ const uniqueArrayList = @import("uniqueArrayList").UniqueArrayList;
 const rendering = @import("rendering");
 const Handle = @import("handle").Handle;
 
+const logStructSize = @import("logStructSize").logStructSize;
+
 var mutex = Thread.Mutex{};
 
 const twoQueueNode = struct {
@@ -243,7 +245,7 @@ fn SpecialThreadPool(maxThreads: u32) type {
             };
         }
 
-        pub fn getFreeThread(self: *Self, commandBufferQueue: commandBufferDAG, commandPoolType: VkStruct.CommandPoolType, vulkan: *VkStruct) !*ThreadContext {
+        pub fn getFreeThread(self: *Self, commandBufferQueue: commandBufferDAG, commandPoolType: VkStruct.CommandPoolType, vulkan: *VkStruct, pTextureSet: *texture) !*ThreadContext {
             const zone = tracy.initZone(@src(), .{ .name = "get free thread" });
             defer zone.deinit();
 
@@ -276,6 +278,7 @@ fn SpecialThreadPool(maxThreads: u32) type {
                     .threadPool = self,
                     .commandPoolType = commandPoolType,
                     .vulkan = vulkan,
+                    .pTextureSet = pTextureSet,
                 };
 
                 const t = try Thread.spawn(.{}, oneTimeCommand.recordCommand, .{&self.info[self.threadCount].?});
@@ -714,6 +717,7 @@ const ThreadContext = struct {
     /// only one
     commandBuffers: commandBufferDAG,
     vulkan: *VkStruct,
+    pTextureSet: *texture,
 };
 
 const dependencyData = struct {
@@ -789,6 +793,7 @@ pub const commands = struct {
 
     vulkan: *VkStruct,
     pRendering: *rendering,
+    pTextureSet: *texture,
 
     queue: std.hash_map.AutoHashMap(u32, drawC),
     nodeDag: QueueNodes,
@@ -804,9 +809,8 @@ pub const commands = struct {
 
     end: bool = false,
 
-    pub fn init(allocator: std.mem.Allocator, buffers: []u8, vulkan: *VkStruct, pRendering: *rendering) Self {
-        std.log.info("command size: {d}", .{@sizeOf(drawC.comm)});
-        std.log.info("vk struct Buffer size: {d}", .{@sizeOf(VkStruct.Buffer_t)});
+    pub fn init(allocator: std.mem.Allocator, buffers: []u8, vulkan: *VkStruct, pRendering: *rendering, pTextureSet: *texture) Self {
+        logStructSize(drawC);
 
         var stackAllocators: [global.MaxFrameInFlight]std.heap.FixedBufferAllocator = undefined;
         const averageSize = buffers.len / (global.MaxFrameInFlight);
@@ -828,6 +832,7 @@ pub const commands = struct {
             .pRendering = pRendering,
             .u32Mem = .init(allocator),
             .allocator = allocator,
+            .pTextureSet = pTextureSet,
         };
     }
 
@@ -2061,7 +2066,6 @@ pub const commands = struct {
         otherTwoQueueNode: ?[]twoQueueNode,
         currentNode: **QueueNode,
         renderingNode: *?*QueueNode,
-        pTextureSet: *texture,
         allocator: std.mem.Allocator,
         commandType: drawC.PublicCommandType,
     ) !void {
@@ -2102,7 +2106,7 @@ pub const commands = struct {
             if (renderingInfo.pColorAttachments) |v| {
                 for (renderingInfo.textures[0..renderingColorTextureLen], v, 0..) |value, attachment, i| {
                     totalQueueNodes[i] = try self.transLayoutHelper(
-                        pTextureSet,
+                        self.pTextureSet,
                         value,
                         0,
                         1,
@@ -2116,7 +2120,7 @@ pub const commands = struct {
             var depthImageQueueNode: twoQueueNode = .{};
             if (renderingInfo.depthAttachment) |v| {
                 depthImageQueueNode = try self.transLayoutHelper(
-                    pTextureSet,
+                    self.pTextureSet,
                     renderingInfo.textures[renderingColorTextureLen],
                     0,
                     1,
@@ -2129,7 +2133,7 @@ pub const commands = struct {
             var stencilImageQueueNode: twoQueueNode = .{};
             if (renderingInfo.stencilAttachment) |v| {
                 stencilImageQueueNode = try self.transLayoutHelper(
-                    pTextureSet,
+                    self.pTextureSet,
                     renderingInfo.textures[renderingColorTextureLen + 1],
                     0,
                     1,
@@ -2780,7 +2784,6 @@ pub const commands = struct {
                 try self.vulkan.acquireNextImage(&currentIndex);
 
                 const present = ptr.value_ptr.command.present;
-                const pTextureSet = present.pTextureSet;
 
                 rootCommand.command.start.present = true;
                 rootCommand.command.start.currentIndex = currentIndex;
@@ -2788,14 +2791,14 @@ pub const commands = struct {
                 // currentNode = self.nodeDag.get(0).?;
 
                 var imageView = [_]vk.VkImageView{
-                    present.pTextureSet.getVkImageView(self.vulkan.swapchainTextures[currentIndex]),
+                    self.pTextureSet.getVkImageView(self.vulkan.swapchainTextures[currentIndex]),
                 };
                 self.pRendering.changeRenderingImageView(
                     0,
                     1,
                     &imageView,
                     present.rendering,
-                    present.pTextureSet,
+                    self.pTextureSet,
                 );
 
                 var renderingNode: ?*QueueNode = null;
@@ -2803,7 +2806,7 @@ pub const commands = struct {
                 var imageQueueNodes = try allocator.alloc(twoQueueNode, present.pTextures.len);
                 for (present.pTextures, 0..) |value, i| {
                     imageQueueNodes[i] = try self.transLayoutHelper(
-                        pTextureSet,
+                        self.pTextureSet,
                         value,
                         0,
                         1,
@@ -2822,7 +2825,6 @@ pub const commands = struct {
                     imageQueueNodes,
                     &currentNode,
                     &renderingNode,
-                    pTextureSet,
                     allocator,
                     commandType,
                 );
@@ -2861,7 +2863,7 @@ pub const commands = struct {
 
                 const renderingInfo = self.pRendering.getRenderingInfoContent(present.rendering);
                 const transNode = try self.transLayoutHelper(
-                    present.pTextureSet,
+                    self.pTextureSet,
                     renderingInfo.textures[0],
                     0,
                     1,
@@ -2881,10 +2883,9 @@ pub const commands = struct {
                 node.data.commandPoolType = .graphic;
 
                 const draw2D = ptr.value_ptr.command.draw2d;
-                const pTextureSet = draw2D.pTextureSet;
 
                 const imageQueueNode = try self.transLayoutHelper(
-                    pTextureSet,
+                    self.pTextureSet,
                     draw2D.pTexture,
                     0,
                     1,
@@ -2907,7 +2908,6 @@ pub const commands = struct {
                     &otherTwoQueueNodes,
                     &currentNode,
                     &renderingNode,
-                    draw2D.pTextureSet,
                     allocator,
                     commandType,
                 );
@@ -3026,13 +3026,12 @@ pub const commands = struct {
                     node.data.commandPoolType = .graphic;
                 }
 
-                const textureSet = ptr.value_ptr.command.copyBufferToImage.pTextureSet;
-                ptr.value_ptr.command.copyBufferToImage.dstImage = textureSet.getVkImage(ptr.value_ptr.command.copyBufferToImage.pTexture);
+                ptr.value_ptr.command.copyBufferToImage.dstImage = self.pTextureSet.getVkImage(ptr.value_ptr.command.copyBufferToImage.pTexture);
 
                 const copyBufferToImage = ptr.value_ptr.command.copyBufferToImage;
 
                 const imageQueueNode = try self.transLayoutHelper(
-                    textureSet,
+                    self.pTextureSet,
                     copyBufferToImage.pTexture,
                     copyBufferToImage.baseArrayLayer,
                     copyBufferToImage.layerCount,
@@ -3281,9 +3280,6 @@ pub const oneTimeCommand = struct {
     sumbitInfos: [global.MaxFrameInFlight]std.array_list.Managed(vk.VkSubmitInfo2),
 
     pub fn init(allocator: std.mem.Allocator, vulkan: *VkStruct, pRendering: *rendering) Self {
-        std.log.info("command size: {d}", .{@sizeOf(drawC.comm)});
-        std.log.info("vk struct Buffer size: {d}", .{@sizeOf(VkStruct.Buffer_t)});
-
         return Self{
             .allocator = allocator,
             .threadPool = .init(allocator),
@@ -3325,7 +3321,7 @@ pub const oneTimeCommand = struct {
         }
     }
 
-    fn record(command: *drawC, commandBuffer: vk.VkCommandBuffer, stackAllocator: std.mem.Allocator, vulkan: *VkStruct) void {
+    fn record(command: *drawC, commandBuffer: vk.VkCommandBuffer, stackAllocator: std.mem.Allocator, vulkan: *VkStruct, pTextureSet: *texture) void {
         const zone = tracy.initZone(@src(), .{ .name = "record vulkan command" });
         defer zone.deinit();
 
@@ -3336,7 +3332,7 @@ pub const oneTimeCommand = struct {
 
                 const draw2D = command.command.draw2d;
 
-                const offsets = try draw2D.pTextureSet.getTextureOffsets(draw2D.pTexture);
+                const offsets = try pTextureSet.getTextureOffsets(draw2D.pTexture);
 
                 // std.log.debug("{}", .{offsets[0]});
 
@@ -3720,7 +3716,7 @@ pub const oneTimeCommand = struct {
                 } else if (com.commandType == .end) {
                     break;
                 } else {
-                    record(com, cbb.commandBufer, sma, ctx.vulkan);
+                    record(com, cbb.commandBufer, sma, ctx.vulkan, ctx.pTextureSet);
                 }
             } else {
                 break;
@@ -3906,7 +3902,7 @@ pub const oneTimeCommand = struct {
                 var ctx: ?*ThreadContext = null;
                 if (nn.threadCtx == null) {
                     if (nn.queueNode.data.startThread) {
-                        ctx = try self.threadPool.getFreeThread(commandBufferss, nn.queueNode.data.commandPoolType, self.vulkan);
+                        ctx = try self.threadPool.getFreeThread(commandBufferss, nn.queueNode.data.commandPoolType, self.vulkan, pCommands.pTextureSet);
 
                         pNode.?.threadCtx = ctx;
                     }
@@ -4209,7 +4205,7 @@ pub const oneTimeCommand = struct {
                         if (cbs.items.len > 0)
                             vk.vkCmdExecuteCommands(currentCommandBuffer, @intCast(cbs.items.len), @ptrCast(cbs.items.ptr));
 
-                        record(pCommands.queue.getPtr(nn.ID).?, currentCommandBuffer, allocator, self.vulkan);
+                        record(pCommands.queue.getPtr(nn.ID).?, currentCommandBuffer, allocator, self.vulkan, pCommands.pTextureSet);
 
                         if (!global.stopExecuteNodePrint) std.log.debug("e ID {d}", .{nn.ID});
                     }

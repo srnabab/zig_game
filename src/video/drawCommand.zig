@@ -117,7 +117,7 @@ pub fn PrivateCommandTypeToCommandType(a: PrivateCommandType) CommandType {
     return @enumFromInt(@intFromEnum(a));
 }
 
-const TransLayout = struct {
+pub const TransLayout = struct {
     // pTexture: texture.Texture_t,
 
     image: vk.VkImage,
@@ -141,7 +141,6 @@ const TransLayout = struct {
 
 pub const CopyBufferToImage = struct {
     pTexture: texture.Texture_t,
-    pTextureSet: *texture,
 
     width: u32,
     height: u32,
@@ -198,13 +197,13 @@ pub const Start = struct {
     currentIndex: u32 = std.math.maxInt(u32),
 };
 
-const MemoryBarrier = struct {
+pub const MemoryBarrier = struct {
     srcStageMask: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_NONE,
     srcAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_NONE,
     dstStageMask: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_NONE,
     dstAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_NONE,
 };
-const BufferMemoryBarrier = struct {
+pub const BufferMemoryBarrier = struct {
     srcStageMask: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_NONE,
     srcAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_NONE,
     dstStageMask: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_NONE,
@@ -217,7 +216,7 @@ const BufferMemoryBarrier = struct {
     offset: vk.VkDeviceSize,
     size: vk.VkDeviceSize,
 };
-const ImageMemoryBarrier = struct {
+pub const ImageMemoryBarrier = struct {
     srcStageMask: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_NONE,
     srcAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_NONE,
     dstStageMask: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_NONE,
@@ -239,31 +238,31 @@ pub const Barrier = union(BarrierType) {
     bufferMemory: BufferMemoryBarrier,
     imageMemory: ImageMemoryBarrier,
 };
-const PipelineBarrier = struct {
+pub const PipelineBarrier = struct {
     lastSrcStageMask: vk.VkPipelineStageFlags2 = std.math.maxInt(vk.VkPipelineStageFlags2),
     barriers: []Barrier,
 };
 
-const Draw2D = struct {
+pub const Draw2D = struct {
     pipeline: VkStruct.Pipeline_t,
     rendering: rendering.RenderingInfo_t,
     vertexBuffer: []VkStruct.Buffer_t,
     indexBuffer: VkStruct.Buffer_t,
     descriptorSets: []vk.VkDescriptorSet,
     pTexture: texture.Texture_t,
-    pTextureSet: *texture,
+
     pViewport: VkStruct.Viewport_t,
     pScissor: VkStruct.Scissor_t,
 };
 
-const CopyBuffer = struct {
+pub const CopyBuffer = struct {
     srcBuffer: VkStruct.Buffer_t,
     dstBuffer: VkStruct.Buffer_t,
     regions: []vk.VkBufferCopy2,
     clean: bool = true,
 };
 
-const BindVertexBuffers = struct {
+pub const BindVertexBuffers = struct {
     firstBinding: u32,
     buffers: []vk.VkBuffer,
     offsets: []vk.VkDeviceSize,
@@ -276,26 +275,26 @@ pub const SizeOffset = struct {
     offset: vk.VkDeviceSize,
 };
 
-const ChangeBufferQueue = struct {
+pub const ChangeBufferQueue = struct {
     buffer: VkStruct.Buffer_t,
     srcQueueFamily: VkStruct.CommandPoolType,
     dstQueueFamily: VkStruct.CommandPoolType,
     regions: []SizeOffset,
 };
 
-const BindPipeline = struct {
+pub const BindPipeline = struct {
     bindPoint: vk.VkPipelineBindPoint,
     pipeline: vk.VkPipeline,
 };
 
-const BindIndexBuffer = struct {
+pub const BindIndexBuffer = struct {
     buffer: vk.VkBuffer,
     offset: vk.VkDeviceSize,
     size: vk.VkDeviceSize,
     indexType: vk.VkIndexType,
 };
 
-const BindDescriptorSets = struct {
+pub const BindDescriptorSets = struct {
     bindDescriptorSetsInfo: vk.VkBindDescriptorSetsInfo,
     // stageFlags: vk.VkShaderStageFlags,
     // layout: vk.VkPipelineLayout,
@@ -304,12 +303,11 @@ const BindDescriptorSets = struct {
     // dynamicOffsets: []u32,
 };
 
-const Present = struct {
+pub const Present = struct {
     pipeline: VkStruct.Pipeline_t,
     rendering: rendering.RenderingInfo_t,
     descriptorSets: []vk.VkDescriptorSet,
     pTextures: []texture.Texture_t,
-    pTextureSet: *texture,
     pViewport: VkStruct.Viewport_t,
     pScissor: VkStruct.Scissor_t,
 };

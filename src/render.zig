@@ -63,9 +63,10 @@ pub fn render_thread_func(
 
     var commands = Commands.init(
         allocator_t.*,
-        stackMemory[0 .. global.StackMemorySize / 2],
+        stackMemory[0..global.StackMemorySize],
         &vulkan,
         &pRendering,
+        &pTextureSet,
     );
     defer commands.deinit();
 
@@ -258,7 +259,10 @@ pub fn render_thread_func(
     while (true) {
         const frame = vulkan.totalFrame.load(.seq_cst);
 
-        if (frame == 3) global.stopNodeDagPrint = true;
+        if (frame == 3) {
+            global.stopExecuteNodePrint = true;
+            global.stopNodeDagPrint = true;
+        }
 
         try vulkan.waitEndFence();
 
@@ -269,7 +273,6 @@ pub fn render_thread_func(
             .rendering = rendering_test,
             .vertexBuffer = &testBuffers,
             .indexBuffer = vertices.indexBuffer2D,
-            .pTextureSet = &pTextureSet,
             .descriptorSets = &testDescriptorSets,
             .pViewport = viewport_test,
             .pScissor = scissor_test,
@@ -278,7 +281,6 @@ pub fn render_thread_func(
             .pipeline = vulkan.getPipeline("directOut").?,
             .pTextures = &presentTextures,
             .rendering = presetn_rendering_test,
-            .pTextureSet = &pTextureSet,
             .descriptorSets = &presentDescriptorSets,
             .pViewport = viewport_test,
             .pScissor = scissor_test,
@@ -290,7 +292,7 @@ pub fn render_thread_func(
         vulkan.nextFrame();
 
         // if (std.time.milliTimestamp() - renderStart > 1 * std.time.ms_per_s) {
-        if (vulkan.totalFrame.load(.seq_cst) > 40) {
+        if (vulkan.totalFrame.load(.seq_cst) > 400) {
             _ = renderStart;
             break;
         }

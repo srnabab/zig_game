@@ -238,6 +238,11 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const logStructSize_mod = b.createModule(.{
+        .root_source_file = b.path("src/logStructSize.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     // dependency
     rendering_mod.addImport("vulkan", vk_mod);
@@ -365,6 +370,7 @@ pub fn build(b: *std.Build) void {
     processRender_mod.addImport("uniqueArrayList", uniqueArrayList_mod);
     processRender_mod.addImport("rendering", rendering_mod);
     processRender_mod.addImport("handle", handle_mod);
+    processRender_mod.addImport("logStructSize", logStructSize_mod);
 
     uniqueArrayList_mod.addImport("tracy", tracy.module("tracy"));
 
