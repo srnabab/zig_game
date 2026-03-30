@@ -243,8 +243,15 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const input_mod = b.createModule(.{
+        .root_source_file = b.path("src/input/input.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     // dependency
+    input_mod.addImport("sdl", sdl_mod);
+
     rendering_mod.addImport("vulkan", vk_mod);
     rendering_mod.addImport("global", global_mod);
     rendering_mod.addImport("handle", handle_mod);
@@ -307,6 +314,7 @@ pub fn build(b: *std.Build) void {
     gen_mod.linkSystemLibrary("vulkan-1", .{});
 
     sdl_mod.addIncludePath(b.path("include"));
+    sdl_mod.addImport("enumFromC", enum_c_mod);
 
     translate_mod.addImport("vulkan", vk_mod);
     translate_mod.addImport("fileSystem", fileSystem_mod);
@@ -386,6 +394,7 @@ pub fn build(b: *std.Build) void {
     fileSystem_mod.addIncludePath(b.path("include"));
 
     exe_mod.addImport("ECS", ecs_mod);
+    exe_mod.addImport("input", input_mod);
     exe_mod.addImport("cglm", cglm_mod);
     exe_mod.addImport("video", video_mod);
     exe_mod.addImport("enumFromC", enum_c_mod);

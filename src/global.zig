@@ -33,3 +33,5 @@ pub var FrameInFlight: u32 = 2;
 pub var stopNodeDagPrint = true;
 pub var stopNodeDagDetailPrint = true;
 pub var stopExecuteNodePrint = true;
+
+pub var game_end: std.atomic.Value(u8) = .init(0);

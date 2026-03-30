@@ -1,7 +1,7 @@
 const std = @import("std");
 const process = std.process;
 
-const sdl = @cImport(@cInclude("SDL3/SDL.h"));
+const sdl = @import("sdl").sdl;
 const SDL_CheckResult = @import("sdl").SDL_CheckResult;
 
 const Thread = std.Thread;
@@ -24,6 +24,8 @@ const tracy = @import("tracy");
 const Allocator = std.mem.Allocator;
 
 const global = @import("global");
+
+const input = @import("input");
 
 var handles: global.HandlesType = undefined;
 
@@ -75,6 +77,9 @@ pub fn main() !void {
     file.init();
     defer file.deinit();
 
+    var input1 = try input.init(allocator_t.*);
+    defer input1.deinit(allocator_t.*);
+
     {
         const zone = tracy.initZone(@src(), .{ .name = "init SDL" });
         defer zone.deinit();
@@ -123,9 +128,6 @@ pub fn main() !void {
 
     var endSemaphore: std.Thread.Semaphore = .{};
 
-    var update_t = try Thread.spawn(.{}, update.update_thread_func, .{update_thread});
-    defer update_t.join();
-
     var width: u32 = 0;
     var height: u32 = 0;
     const window = try Window.createWindow(&width, &height);
@@ -145,5 +147,26 @@ pub fn main() !void {
     );
     defer render_t.join();
 
+    global.game_end.store(0, .seq_cst);
+
+    var update_t = try Thread.spawn(.{}, update.update_thread_func, .{
+        update_thread,
+        input1,
+    });
+    defer update_t.join();
+
+    while (true) {
+        try processInput(input1);
+
+        if (global.game_end.load(.seq_cst) == 1) break;
+    }
+
     endSemaphore.post();
+}
+
+fn processInput(in: *input) !void {
+    var e: sdl.SDL_Event = undefined;
+    while (sdl.SDL_PollEvent(&e)) {
+        try in.setInput(&e);
+    }
 }

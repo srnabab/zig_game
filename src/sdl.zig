@@ -1,6 +1,21 @@
 const std = @import("std");
 
 pub const sdl = @cImport(@cInclude("SDL3/SDL_namespace.h"));
+const enumFromC = @import("enumFromC");
+
+pub const SDL_EventType = enumFromC.generateEnumFromC(
+    sdl,
+    sdl.SDL_EventType,
+    "SDL_FIRSTEVENT",
+    "SDL_EVENT_ENUM_PADDING",
+);
+
+pub const SDL_Keycode = enumFromC.generateEnumFromC(
+    sdl,
+    sdl.SDL_Keycode,
+    "SDLK_UNKNOWN",
+    "SDLK_RHYPER",
+);
 
 const SDL_Error = error{
     ErrorSDL,
