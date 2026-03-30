@@ -6,7 +6,7 @@ const input = @import("input");
 
 const tracy = @import("tracy");
 
-const triggerPack = struct {
+pub const triggerPack = struct {
     down: bool = false,
     pre: bool = false,
     timestamp: u64 = 0,
@@ -147,10 +147,18 @@ const inputTrigger = struct {
         }
     }
 
+    const expiredTime = std.time.ns_per_ms * 40;
     pub fn set(self: *inputTrigger, pInput: *input.Input) void {
         switch (pInput.*) {
             .key => |key| {
                 if (self.keyFunc[key.key] == 1000) {
+                    return;
+                }
+
+                input.logKey(@constCast(&key));
+
+                if (sdl.SDL_GetTicksNS() - key.timestamp > expiredTime) {
+                    std.log.debug("exipred", .{});
                     return;
                 }
 

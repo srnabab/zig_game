@@ -15,7 +15,6 @@ const textureSet = @import("textureSet");
 const DrawableC = ECS.CompentPool(process.Drawable);
 
 const inputProcessInterval = std.time.ns_per_ms * 5;
-const expiredTime = std.time.ns_per_ms * 40;
 var debug_allocator: std.heap.DebugAllocator(.{ .stack_trace_frames = 10 }) = .init;
 pub fn update_thread_func(thread_count: usize, pInput: *input) !void {
     const gpa, const is_debug = gpa: {
@@ -69,28 +68,8 @@ pub fn update_thread_func(thread_count: usize, pInput: *input) !void {
             if (inputs.len != 0)
                 std.log.debug("input len {d}", .{inputs.len});
             for (inputs) |*value| {
-                // std.log.debug("{}", .{value});
-
                 inputTrigger1.set(value);
                 std.log.debug("{}, {}, {d}", .{ exit.down, exit.pre, exit.timestamp });
-
-                switch (value.*) {
-                    .key => |key| {
-                        input.logKey(@constCast(&key));
-
-                        if (sdl.SDL_GetTicksNS() - key.timestamp > expiredTime) {
-                            std.log.debug("exipred", .{});
-                            continue;
-                        }
-                    },
-                    else => {},
-                }
-
-                // if (value == .key) {
-                //     if (value.key.key == sdl.SDLK_ESCAPE) {
-                //         endGame();
-                //     }
-                // }
             }
 
             accumulateTime -= inputProcessInterval;
