@@ -96,7 +96,7 @@ const createTriggerOnUpdateCascadeBetweenContentPathAndTablesOnID = ct: {
 
     for (tableNames) |name| {
         count += writer.write(std.fmt.comptimePrint(
-            "CREATE TRIGGER IF NOT EXISTS cascadeRelativePath{s} AFTER UPDATE OF ID ON ContentPath " ++
+            "CREATE TRIGGER IF NOT EXISTS cascadeID{s} AFTER UPDATE OF ID ON ContentPath " ++
                 "FOR EACH ROW BEGIN UPDATE {s} SET ID = NEW.ID WHERE FileUUID = NEW.UUID; END;",
             .{ name, name },
         )) catch |err| {
