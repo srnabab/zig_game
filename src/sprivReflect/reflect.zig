@@ -17,6 +17,7 @@ pub const input = struct {
 };
 
 pub const pushConstantMemberType = enum {
+    int,
     float,
     vec2,
     vec3,
@@ -150,6 +151,8 @@ pub fn reflect(allocator: std.mem.Allocator, cc: std.fs.File.Stat, content: []co
                 };
             } else if (pushconstants[0].*.type_description.*.members[j].type_flags == s.SPV_REFLECT_TYPE_FLAG_FLOAT) {
                 res.pushConstantMembers.?[j].varType = pushConstantMemberType.float;
+            } else if (pushconstants[0].*.type_description.*.members[j].type_flags == s.SPV_REFLECT_TYPE_FLAG_INT) {
+                res.pushConstantMembers.?[j].varType = pushConstantMemberType.int;
             } else {
                 std.debug.panic("not supported type", .{});
             }
