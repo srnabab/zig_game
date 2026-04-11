@@ -1,0 +1,19 @@
+.{
+    .name = .meshoptimizer_lib,
+    .fingerprint = 0x195276c4a9146d11,
+    .version = "1.1.0",
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "example",
+        "README.md",
+        "LICENSE",
+    },
+    .dependencies = .{
+        .meshoptimizer = .{
+            .url = "https://github.com/zeux/meshoptimizer/archive/refs/tags/v1.1.tar.gz",
+            .hash = "N-V-__8AAKnSIQCkk0aPuh72cQgc0y29X8ViYL7t_gjPuz_D",
+        },
+    },
+}

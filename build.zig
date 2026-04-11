@@ -30,6 +30,9 @@ pub fn build(b: *std.Build) void {
     const selectModifiedFileToTxtModule = b.dependency("selectModifiedFileToTxt", .{});
     const selectModifiedFileToTxt = selectModifiedFileToTxtModule.artifact("selectModifiedFileToTxt");
 
+    const meshoptimizerModule = b.dependency("meshoptimizer", .{});
+    const meshopt_lib_install_step = meshoptimizerModule.builder.getInstallStep();
+
     const vk_mod = b.createModule(.{
         .root_source_file = b.path("src/vulkan/vulkan.zig"),
         .target = target,
@@ -248,8 +251,28 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const cgltf_mod = b.createModule(.{
+        .root_source_file = b.path("src/cgltf/cgltf.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const meshopt_mod = b.createModule(.{
+        .root_source_file = b.path("src/meshopt/meshopt.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     // dependency
+    meshopt_mod.addIncludePath(b.path("include"));
+
+    cgltf_mod.addImport("enumFromC", enum_c_mod);
+    cgltf_mod.addImport("fileSystem", fileSystem_mod);
+    cgltf_mod.addCSourceFile(.{
+        .file = b.path("include/cgltf/cgltf_namespace.h"),
+        .language = .c,
+    });
+    cgltf_mod.addIncludePath(b.path("include"));
+
     input_mod.addImport("sdl", sdl_mod);
 
     rendering_mod.addImport("vulkan", vk_mod);
@@ -413,9 +436,12 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("rendering", rendering_mod);
     exe_mod.addImport("vulkan", vk_mod);
     exe_mod.addImport("math", math_mod);
+    exe_mod.addImport("cgltf", cgltf_mod);
     exe_mod.addIncludePath(b.path("include/"));
 
     exe_mod.addLibraryPath(b.path("lib/"));
+    exe_mod.addLibraryPath(meshoptimizerModule.path("install/lib"));
+    exe_mod.linkSystemLibrary("meshoptimizer", .{ .preferred_link_mode = .static });
     exe_mod.addLibraryPath(sdl3Module.path("install/lib"));
     exe_mod.linkSystemLibrary("sdl3", .{ .preferred_link_mode = .static });
     exe_mod.linkSystemLibrary("steam_api64", .{});
@@ -614,6 +640,7 @@ pub fn build(b: *std.Build) void {
     exe.step.dependOn(&run_gen_exe.step);
     exe.step.dependOn(runGenFileNameIdExe);
     exe.step.dependOn(runContenManager);
+    exe.step.dependOn(meshopt_lib_install_step);
 
     waf.step.dependOn(&exe.step);
     b.getInstallStep().dependOn(&waf.step);

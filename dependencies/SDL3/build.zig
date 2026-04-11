@@ -27,11 +27,18 @@ pub fn build(b: *std.Build) void {
         }
     };
 
+    const mkdir_cmake_build = b.addSystemCommand(&.{
+        "cmd", "/c", "mkdir", sdl3_build_path_full, "2>nul", "||", "exit", "/b", "0",
+    });
+    const mkdir_cmake_build2 = b.addSystemCommand(&.{
+        "cmd", "/c", "mkdir", sdl3_install_path_full, "2>nul", "||", "exit", "/b", "0",
+    });
+
     const clear_cmake_build = b.addSystemCommand(&.{
         "powershell", "rm", "-r", "-fo", sdl3_build_path_full,
     });
     const clear_cmake_build_step = b.step("clear_cmake_build", "Clear cmake build");
-    if (!std.mem.eql(u8, sdl_dep.builder.pkg_hash, "N-V-__8AAIBfjAMynWwoadl2SIwSsfVfJKbqzrpN21cmhmpR")) {
+    if (!std.mem.eql(u8, sdl_dep.builder.pkg_hash, "N-V-__8AAIBfjAMynWwoadl2SIwSsfVfJKbqzrpN21cmhmpR") or !haveLib) {
         haveLib = false;
         std.log.info("pkg hash updated, will build...", .{});
         clear_cmake_build_step.dependOn(&clear_cmake_build.step);
@@ -85,4 +92,6 @@ pub fn build(b: *std.Build) void {
     copy_header.step.dependOn(&cmake_build_cmd.step);
     cmake_build_cmd.step.dependOn(&cmake_configure_cmd.step);
     cmake_configure_cmd.step.dependOn(clear_cmake_build_step);
+    clear_cmake_build_step.dependOn(&mkdir_cmake_build.step);
+    clear_cmake_build_step.dependOn(&mkdir_cmake_build2.step);
 }
