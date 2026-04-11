@@ -27,6 +27,8 @@ const global = @import("global");
 
 const input = @import("input");
 
+const cgltf = @import("cgltf");
+
 var handles: global.HandlesType = undefined;
 
 var thread_count: usize = 0;
@@ -92,6 +94,8 @@ pub fn main() !void {
         sdl.SDL_MINOR_VERSION,
         sdl.SDL_MICRO_VERSION,
     });
+
+    try cgltf.loadGltfFile(comptime file.comptimeGetID("box.glb"), allocator_t.*);
 
     thread_count = try Thread.getCpuCount();
     const thread_used_count = cot: {
