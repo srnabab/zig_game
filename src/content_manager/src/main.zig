@@ -161,6 +161,7 @@ const FileType = enum {
     WAV,
     SPV,
     TXT,
+    GLTF,
     HASHTABLE,
     UNKNOWN,
 };
@@ -179,6 +180,9 @@ const slash = sl: {
     }
 };
 
+const PNG = ".PNG";
+const GLTF = ".glTF";
+
 const FileTypeHashTable = map: {
     const maptype = std.StaticStringMap(FileType);
     const KV = struct {
@@ -196,6 +200,7 @@ const FileTypeHashTable = map: {
         .{ ".wav", FileType.WAV },
         .{ ".spv", FileType.SPV },
         .{ ".txt", FileType.TXT },
+        .{ ".gltf", FileType.GLTF },
     };
 
     const maps = maptype.initComptime(list);
@@ -245,11 +250,39 @@ fn updateLoadParameter(tp: FileType, cc: std.fs.File.Stat, content: []const u8, 
     }
 }
 
-fn nameToFileType(name: []const u8) FileType {
-    const zone = tracy.initZone(@src(), .{ .name = "name to file type" });
-    defer zone.deinit();
+fn judgeFileTypeByContent(content: []u8) FileType {
+    if (std.mem.eql(u8, content, @constCast(PNG))) {
+        return .PNG;
+    } else if (std.mem.eql(u8, content, @constCast(GLTF))) {
+        return .GLTF;
+    } else {
+        return .UNKNOWN;
+    }
+}
 
-    return FileTypeHashTable.get(name) orelse FileType.UNKNOWN;
+fn judgeFileType(name: []const u8, content: []u8) FileType {
+    const fType = FileTypeHashTable.get(name) orelse FileType.UNKNOWN;
+
+    switch (fType) {
+        .PNG => {
+            if (std.mem.eql(u8, content, @constCast(PNG))) {
+                return .PNG;
+            }
+            return judgeFileTypeByContent(content);
+        },
+        .GLTF => {
+            if (std.mem.eql(u8, content, @constCast(GLTF))) {
+                return .GLTF;
+            }
+            return judgeFileTypeByContent(content);
+        },
+        .UNKNOWN => {
+            return judgeFileTypeByContent(content);
+        },
+        else => {
+            return fType;
+        },
+    }
 }
 
 fn getDbModifiedTime(comptime where_clause: []const u8, params: anytype) !i64 {
@@ -292,7 +325,6 @@ fn processFile(
         var uuidBuffer = [_]u8{0} ** UUID.len;
         try UUID.createNewUUID(&uuidBuffer);
         const index = std.mem.lastIndexOf(u8, name, ".") orelse name.len;
-        const fType = nameToFileType(name[index..]);
         // try ContentPathInsertFile(&uuidBuffer, parentID.ptr, rPZ.ptr, name, time, fType, dir);
 
         var content = try gpa.alloc(u8, metadata.size);
@@ -300,6 +332,9 @@ fn processFile(
         _ = try tempFile.readAll(content);
 
         var hashh = hash.blake3HashContent(content[0..metadata.size]);
+
+        // const fType = nameToFileType(name[index..]);
+        const fType = judgeFileType(name[index..], content);
 
         try ContentPathT.insert(.{
             .ID = @intCast(sqlDB.getGlobalIncrementID()),
@@ -334,7 +369,7 @@ fn processFile(
                 );
 
                 const index = std.mem.lastIndexOf(u8, name, ".") orelse name.len;
-                const fType = nameToFileType(name[index..]);
+                const fType = judgeFileType(name[index..], content);
 
                 try updateLoadParameter(fType, metadata, content, name);
             } else {
@@ -356,7 +391,8 @@ fn processFile(
                 );
 
                 const index = std.mem.lastIndexOf(u8, name, ".") orelse name.len;
-                const fType = nameToFileType(name[index..]);
+                // const fType = nameToFileType(name[index..]);
+                const fType = judgeFileType(name[index..], content);
 
                 try updateLoadParameter(fType, metadata, content, name);
             } else {
