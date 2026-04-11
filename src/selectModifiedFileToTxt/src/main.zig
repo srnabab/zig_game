@@ -91,6 +91,9 @@ pub fn main() !void {
         var cacheJson: json.Parsed([]folderPath_Hash_Pair) = try json.parseFromSlice([]folderPath_Hash_Pair, gpa, cacheContent, .{});
         defer cacheJson.deinit();
 
+        try cacheFile.setEndPos(0);
+        try cacheFile.seekTo(0);
+
         for (cacheJson.value) |value| {
             const tempStr = try arenaAllocator.dupe(u8, value.path);
             const tempHash = try arenaAllocator.dupe(u8, value.hash);
