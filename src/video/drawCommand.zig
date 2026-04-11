@@ -22,6 +22,7 @@ pub const CommandType = enum {
     // graphicTransfer,
     pipelineBarrier,
     present,
+    pushconstant,
     setScissor,
     setViewport,
     start,
@@ -46,6 +47,7 @@ pub const comm = union(CommandType) {
     endRendering: void,
     pipelineBarrier: PipelineBarrier,
     present: Present,
+    pushconstant: PushConstant,
     setScissor: vk.VkRect2D,
     setViewport: vk.VkViewport,
     start: Start,
@@ -330,6 +332,14 @@ pub const Present = struct {
     pTextures: []texture.Texture_t,
     pViewport: VkStruct.Viewport_t,
     pScissor: VkStruct.Scissor_t,
+};
+
+pub const PushConstant = struct {
+    layout: vk.VkPipelineLayout,
+    stageFlags: vk.VkShaderStageFlags,
+    offset: u32,
+    size: u32,
+    pValues: []u8,
 };
 
 // pub const Output = union {

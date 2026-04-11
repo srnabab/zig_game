@@ -14,7 +14,6 @@ pub const vec2 = cglm.vec2;
 pub const Vertex2D = extern struct {
     position: vec3,
     texCoord: vec2,
-    index: u32,
 };
 
 const vertex2DinitCount = 40000;
@@ -92,10 +91,10 @@ pub fn deinit() void {
     // vulkan.destroyBuffer(indexBuffer2D);
 }
 
-pub fn vertexInitialize2D(width: u32, height: u32, x: u32, y: u32, depth: f32, textureIndex: u32) !u32 {
+pub fn vertexInitialize2D(width: u32, height: u32, x: u32, y: u32, depth: f32) !u32 {
     mutex.lock();
     defer mutex.unlock();
-    std.log.debug("idx {d}", .{textureIndex});
+    // std.log.debug("idx {d}", .{textureIndex});
 
     if (vertices2D.len <= vertexCount2D) {
         vertices2D = try vulkan.allocator.realloc(vertices2D, vertexCount2D * 2);
@@ -127,7 +126,7 @@ pub fn vertexInitialize2D(width: u32, height: u32, x: u32, y: u32, depth: f32, t
     vertices2D[vertexCount2D].position[2] = depth;
     vertices2D[vertexCount2D].texCoord[0] = 0.0;
     vertices2D[vertexCount2D].texCoord[1] = 1.0;
-    vertices2D[vertexCount2D].index = textureIndex;
+    // vertices2D[vertexCount2D].index = textureIndex;
 
     //right-up
     vertexCount2D += 1;
@@ -136,7 +135,7 @@ pub fn vertexInitialize2D(width: u32, height: u32, x: u32, y: u32, depth: f32, t
     vertices2D[vertexCount2D].position[2] = depth;
     vertices2D[vertexCount2D].texCoord[0] = 1.0;
     vertices2D[vertexCount2D].texCoord[1] = 1.0;
-    vertices2D[vertexCount2D].index = textureIndex;
+    // vertices2D[vertexCount2D].index = textureIndex;
 
     //right-dowm
     vertexCount2D += 1;
@@ -145,7 +144,7 @@ pub fn vertexInitialize2D(width: u32, height: u32, x: u32, y: u32, depth: f32, t
     vertices2D[vertexCount2D].position[2] = depth;
     vertices2D[vertexCount2D].texCoord[0] = 1.0;
     vertices2D[vertexCount2D].texCoord[1] = 0.0;
-    vertices2D[vertexCount2D].index = textureIndex;
+    // vertices2D[vertexCount2D].index = textureIndex;
 
     //left-down
     vertexCount2D += 1;
@@ -154,7 +153,7 @@ pub fn vertexInitialize2D(width: u32, height: u32, x: u32, y: u32, depth: f32, t
     vertices2D[vertexCount2D].position[2] = depth;
     vertices2D[vertexCount2D].texCoord[0] = 0.0;
     vertices2D[vertexCount2D].texCoord[1] = 0.0;
-    vertices2D[vertexCount2D].index = textureIndex;
+    // vertices2D[vertexCount2D].index = textureIndex;
 
     vertexCount2D += 1;
 

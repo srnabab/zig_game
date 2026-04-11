@@ -10,7 +10,7 @@
     "bindings": [
       {
         "binding": 0,
-        "stride": 24,
+        "stride": 20,
         "inputRate": "VERTEX"
       }
     ],
@@ -26,12 +26,6 @@
         "binding": 0,
         "format": "R32G32_SFLOAT",
         "offset": 12 
-      },
-      {
-        "location": 2,
-        "binding": 0,
-        "format": "R32_UINT",
-        "offset": 20 
       }
     ]
   },

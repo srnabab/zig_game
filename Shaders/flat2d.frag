@@ -2,9 +2,12 @@
 #extension GL_EXT_nonuniform_qualifier : enable
 #extension GL_ARB_separate_shader_objects : enable
 
+layout(push_constant) uniform _PushConstants  {
+    uint index;
+} PushConstants;
+
 // 从顶点着色器接收的输入
 layout(location = 0) in vec2 fragTexCoord;
-layout(location = 1) flat in uint fragTexIndex;
 
 // 全局绑定的纹理数组
 // 假设绑定在 set = 0, binding = 0
@@ -15,7 +18,7 @@ layout(location = 0) out vec4 outColor;
 
 void main() {
     // 使用 nonuniformEXT 来访问纹理数组
-    vec4 texColor = texture(textures[nonuniformEXT(fragTexIndex)], fragTexCoord);
+    vec4 texColor = texture(textures[nonuniformEXT(PushConstants.index)], fragTexCoord);
 
     outColor = texColor;
 }

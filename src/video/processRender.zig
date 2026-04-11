@@ -750,6 +750,7 @@ const garbageDataTag = enum {
     vertexBuffer,
     descriptorSets,
     empty,
+    pValues,
 };
 const garbageData = union(garbageDataTag) {
     renderingInfo: rendering.RenderingInfo_t,
@@ -770,6 +771,7 @@ const garbageData = union(garbageDataTag) {
         offsets: []u32,
     },
     empty: void,
+    pValues: []u8,
 };
 const GarbageData = struct {
     data: garbageData,
@@ -1228,6 +1230,27 @@ pub const commands = struct {
         var resNode2: ?*QueueNode = null;
 
         s: switch (command) {
+            .pushconstant => {
+                const zone2 = tracy.initZone(@src(), .{ .name = "pushconstant" });
+                defer zone2.deinit();
+
+                const rootNode = try self.nodeDag.create();
+                const ptr = try self.queue.getOrPut(rootNode.ID);
+                ptr.value_ptr.* = drawC{
+                    .ID = rootNode.ID,
+                    .timestamp = std.time.nanoTimestamp(),
+                    .command = .{ .pushconstant = command.pushconstant },
+                };
+                rootNode.listID = self.nodeDag.currentListID;
+
+                if (enterCommandType == .draw2D) {
+                    rootNode.data.commandPoolType = .graphic;
+                } else {
+                    std.debug.panic("pushconstant unprocessed enterCommandType {s}", .{@tagName(enterCommandType)});
+                }
+
+                resNode = rootNode;
+            },
             .transLayout => {
                 const zone2 = tracy.initZone(@src(), .{ .name = "transLayout" });
                 defer zone2.deinit();
@@ -1662,14 +1685,12 @@ pub const commands = struct {
                 const zone2 = tracy.initZone(@src(), .{ .name = "beginRendering" });
                 defer zone2.deinit();
 
-                const beginRendering = command.beginRendering;
-
                 const rootNode = try self.nodeDag.create();
                 const ptr = try self.queue.getOrPut(rootNode.ID);
                 ptr.value_ptr.* = drawC{
                     .ID = rootNode.ID,
                     .timestamp = std.time.nanoTimestamp(),
-                    .command = .{ .beginRendering = beginRendering },
+                    .command = .{ .beginRendering = command.beginRendering },
                 };
                 rootNode.listID = self.nodeDag.currentListID;
                 rootNode.data.commandPoolType = .graphic;
@@ -2392,6 +2413,7 @@ pub const commands = struct {
         pViewport: ?VkStruct.Viewport_t,
         pScissor: ?VkStruct.Scissor_t,
         pipeline: VkStruct.Pipeline_t,
+        pushConstants: ?*QueueNode,
         commandType: drawC.CommandType,
     ) !twoQueueNode {
         const vertexBufferLen = if (vertexBuffers != null) vertexBuffers.?.len else 0;
@@ -2653,6 +2675,18 @@ pub const commands = struct {
             }
         }
 
+        if (pushConstants) |pNode| {
+            if (linkNodeEnd == null) {
+                linkNodeEnd = pNode;
+                linkNodeStart = linkNodeEnd;
+            } else {
+                try linkNodeEnd.?.parentsAppend(&pNode.ID);
+                try pNode.childrenAppend(&linkNodeEnd.?.ID);
+
+                linkNodeEnd = pNode;
+            }
+        }
+
         return .{
             .a = linkNodeStart,
             .b = linkNodeEnd,
@@ -2665,6 +2699,8 @@ pub const commands = struct {
         node: *QueueNode,
         renderingNode: ?*QueueNode,
     ) !void {
+        // start to end may have many node and have been linked
+        // end -> start
         const linkNodeStart = linkNode.a;
         const linkNodeEnd = linkNode.b;
 
@@ -2843,6 +2879,7 @@ pub const commands = struct {
                     present.pViewport,
                     present.pScissor,
                     present.pipeline,
+                    null,
                     std.meta.activeTag(command),
                 );
 
@@ -2922,6 +2959,20 @@ pub const commands = struct {
                     &lastNode,
                 );
 
+                const pipelineContent = self.vulkan.getPipelineContent(draw2D.pipeline);
+                const texIndex = try self.pTextureSet.getDescriptorSetIndex(draw2D.pTexture);
+                const texIndexSlice = std.mem.asBytes(&texIndex);
+
+                const texIndex_u8 = try self.allocator.dupe(u8, @alignCast(texIndexSlice));
+
+                const pushConstantNode = try self.addCommand2(.{ .pushconstant = .{
+                    .layout = pipelineContent.pipelineLayout,
+                    .stageFlags = vk.VK_SHADER_STAGE_FRAGMENT_BIT,
+                    .offset = 0,
+                    .size = @sizeOf(u32),
+                    .pValues = texIndex_u8,
+                } }, std.meta.activeTag(command));
+
                 const linkNode = try self.resPackNodeProcess(
                     resPack,
                     draw2D.vertexBuffer,
@@ -2930,6 +2981,7 @@ pub const commands = struct {
                     draw2D.pViewport,
                     draw2D.pScissor,
                     draw2D.pipeline,
+                    pushConstantNode.a,
                     std.meta.activeTag(command),
                 );
 
@@ -3315,6 +3367,20 @@ pub const oneTimeCommand = struct {
         defer zone.deinit();
 
         switch (command.command) {
+            .pushconstant => {
+                const innerZone = tracy.initZone(@src(), .{ .name = "push constant" });
+                defer innerZone.deinit();
+
+                const pushConstant = command.command.pushconstant;
+                vk.vkCmdPushConstants(
+                    commandBuffer,
+                    pushConstant.layout,
+                    pushConstant.stageFlags,
+                    pushConstant.offset,
+                    pushConstant.size,
+                    pushConstant.pValues.ptr,
+                );
+            },
             .draw2D => {
                 const innerZone = tracy.initZone(@src(), .{ .name = "draw 2D" });
                 defer innerZone.deinit();
@@ -3322,7 +3388,6 @@ pub const oneTimeCommand = struct {
                 const draw2D = command.command.draw2D;
 
                 const offsets = try pTextureSet.getTextureOffsets(draw2D.pTexture);
-
                 // std.log.debug("{}", .{offsets[0]});
 
                 for (offsets) |offset| {
@@ -3736,6 +3801,9 @@ pub const oneTimeCommand = struct {
                     break :rs garbageData{ .regions = command.command.copyBuffer.regions };
                 }
             },
+            .pushconstant => {
+                break :rs garbageData{ .pValues = command.command.pushconstant.pValues };
+            },
             .draw2D, .present, .bindVertexBuffers, .bindDescriptorSets, .setViewport => null,
             .setScissor, .bindIndexBuffer, .bindPipeline, .start, .beginRendering, .endRendering => null,
             else => {
@@ -3776,6 +3844,11 @@ pub const oneTimeCommand = struct {
                     self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
                 },
                 .regions => {
+                    self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
+                },
+                .pValues => {
+                    if (currentSemaphoreValue < g.semaphoreValue) continue;
+                    self.allocator.free(g.data.pValues);
                     self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
                 },
                 .descriptorSets, .vertexBuffer, .renderingInfo, .empty => {},
