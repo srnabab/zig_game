@@ -4,6 +4,8 @@ const std = @import("std");
 
 const file = @import("fileSystem");
 
+const vertexStruct = @import("vertexStruct");
+
 const enumFromC = @import("enumFromC");
 
 const cgltf_result = enumFromC.generateEnumFromC(
@@ -23,6 +25,12 @@ const cgltf_type = enumFromC.generateEnumFromC(
     cgltf.cgltf_type,
     "cgltf_type_invalid",
     "cgltf_type_max_enum",
+);
+const cgltf_attribute_type = enumFromC.generateEnumFromC(
+    cgltf,
+    cgltf.cgltf_attribute_type,
+    "cgltf_attribute_type_invalid",
+    "cgltf_attribute_type_max_enum",
 );
 
 const cgltf_error = error{
@@ -61,7 +69,7 @@ fn cgltf_parse(
     }
 }
 
-pub fn loadGltfFile(fileID: i32, allocator: std.mem.Allocator) !void {
+pub fn loadGltfFile(fileID: i32, allocator: std.mem.Allocator) !vertexStruct.Vertex {
     var gltf = try file.getFile(fileID);
     defer gltf.close();
 
@@ -74,54 +82,165 @@ pub fn loadGltfFile(fileID: i32, allocator: std.mem.Allocator) !void {
 
     var data: [*c]cgltf.cgltf_data = null;
     try cgltf_parse(&options, fileMem.ptr, fileStat.size, &data);
-
-    for (0..data.*.accessors_count) |i| {
-        std.log.debug("component type {s}, type {s}, offset {d}, count {d}, stride {d}, size {d}", .{
-            @tagName(@as(cgltf_compent_type, @enumFromInt(data.*.accessors[i].component_type))),
-            @tagName(@as(cgltf_type, @enumFromInt(data.*.accessors[i].type))),
-            data.*.accessors[i].offset,
-            data.*.accessors[i].count,
-            data.*.accessors[i].stride,
-            data.*.accessors[i].buffer_view.*.size,
-        });
-    }
+    defer cgltf.cgltf_free(data);
 
     _ = cgltf.cgltf_load_buffers(&options, data, null);
+    // std.log.debug("{}", .{data.*});
 
-    for (0..data.*.accessors[0].count) |i| {
-        var pos: [3]f32 = undefined;
+    // for (0..data.*.meshes[0].primitives_count) |value| {}
+    // std.log.debug("{d}", .{data.*.meshes[0].primitives_count});
+    // std.log.debug("{d}", .{data.*.meshes[0].primitives[0].attributes_count});
 
-        _ = cgltf.cgltf_accessor_read_float(&data.*.accessors[0], i, &pos, 3);
-        std.log.debug("{d}, {d}, {d}", .{ pos[0], pos[1], pos[2] });
+    const attributes_count = data.*.meshes[0].primitives[0].attributes_count;
+    const attributes = data.*.meshes[0].primitives[0].attributes;
+
+    for (0..attributes_count) |i| {
+        const type_enum: cgltf_attribute_type = @enumFromInt(attributes[i].type);
+        std.log.debug("type {s}", .{@tagName(type_enum)});
+        switch (type_enum) {
+            .cgltf_attribute_type_position => {
+                for (0..attributes[i].data.*.count) |j| {
+                    var pos: [3]f32 = undefined;
+
+                    _ = cgltf.cgltf_accessor_read_float(&data.*.accessors[i], j, &pos, 3);
+                    std.log.debug("{d}, {d}, {d}", .{ pos[0], pos[1], pos[2] });
+                }
+            },
+            .cgltf_attribute_type_normal => {
+                for (0..attributes[i].data.*.count) |j| {
+                    var pos: [3]f32 = undefined;
+
+                    _ = cgltf.cgltf_accessor_read_float(&data.*.accessors[i], j, &pos, 3);
+                    std.log.debug("{d}, {d}, {d}", .{ pos[0], pos[1], pos[2] });
+                }
+            },
+            .cgltf_attribute_type_texcoord => {
+                for (0..attributes[i].data.*.count) |j| {
+                    var pos: [2]f32 = undefined;
+
+                    _ = cgltf.cgltf_accessor_read_float(&data.*.accessors[i], j, &pos, 2);
+                    std.log.debug("{d}, {d}", .{ pos[0], pos[1] });
+                }
+            },
+            else => {
+                std.debug.panic("{s} not supported", .{@tagName(type_enum)});
+            },
+        }
     }
 
-    for (0..data.*.accessors[1].count) |i| {
-        var pos: [3]f32 = undefined;
-
-        _ = cgltf.cgltf_accessor_read_float(&data.*.accessors[1], i, &pos, 3);
-        std.log.debug("{d}, {d}, {d}", .{ pos[0], pos[1], pos[2] });
+    for (0..data.*.meshes[0].primitives[0].indices.*.count) |i| {
+        const index = cgltf.cgltf_accessor_read_index(data.*.meshes[0].primitives[0].indices, i);
+        std.log.debug("{d}", .{index});
     }
 
-    for (0..data.*.accessors[2].count) |i| {
-        var pos: [2]f32 = undefined;
-
-        _ = cgltf.cgltf_accessor_read_float(&data.*.accessors[2], i, &pos, 2);
-        std.log.debug("{d}, {d}", .{ pos[0], pos[1] });
-    }
-
-    for (0..data.*.accessors[2].count) |i| {
-        const pos = cgltf.cgltf_accessor_read_index(&data.*.accessors[3], i);
-        std.log.debug("{d}", .{pos});
-    }
-
-    // const ptr: [*]f32 = @ptrCast(@alignCast(data.*.accessors[0].buffer_view.*.data));
-    // for (0..data.*.accessors[0].count) |j| {
-    //     std.log.debug("{d}, {d}, {d}", .{
-    //         ptr[j * 3 + 0],
-    //         ptr[j * 3 + 1],
-    //         ptr[j * 3 + 2],
+    // for (0..data.*.accessors_count) |i| {
+    //     std.log.debug("component type {s}, type {s}, offset {d}, count {d}, stride {d}, size {d}", .{
+    //         @tagName(@as(cgltf_compent_type, @enumFromInt(data.*.accessors[i].component_type))),
+    //         @tagName(@as(cgltf_type, @enumFromInt(data.*.accessors[i].type))),
+    //         data.*.accessors[i].offset,
+    //         data.*.accessors[i].count,
+    //         data.*.accessors[i].stride,
+    //         data.*.accessors[i].buffer_view.*.size,
     //     });
     // }
+    const vType = judgePrimitiveVertexType(&data.*.meshes[0].primitives[0]);
+    std.log.debug("{s}", .{@tagName(vType)});
+    return .{ .f3pf2u = &.{} };
+}
 
-    defer cgltf.cgltf_free(data);
+const Flag_VertexType = struct {
+    flag: u64,
+    _type: vertexStruct.VertexType,
+};
+const list = [_]Flag_VertexType{
+    .{ .flag = 0x8000000000000000, ._type = vertexStruct.VertexType.f3p },
+    .{ .flag = 0xC000000000000000, ._type = vertexStruct.VertexType.f3pf3n },
+    .{ .flag = 0xA000000000000000, ._type = vertexStruct.VertexType.f3pf2u },
+    .{ .flag = 0xE000000000000000, ._type = vertexStruct.VertexType.f3pf3nf2u },
+};
+
+pub fn judgePrimitiveVertexType(primitives: [*c]cgltf.cgltf_primitive) vertexStruct.VertexType {
+    const attributes_count = primitives.*.attributes_count;
+    const attributes = primitives.*.attributes;
+
+    const FlagLength = 1 + 1 + 8 + 8 + 8 + 8 + 30;
+
+    const Position = FlagLength - 1;
+    const Normal = Position - 1;
+    const TexCoordStart = Normal - 1;
+    const ColorStart = TexCoordStart - 8;
+    const JointStart = ColorStart - 8;
+    const WeightStart = JointStart - 8;
+
+    const FlagType = std.bit_set.IntegerBitSet(FlagLength);
+    var flag = FlagType.initEmpty();
+
+    // const p = 0x8000000000000000;
+    // const pn = 0xC000000000000000;
+    // const pt = 0xA000000000000000;
+    // const pnt = 0xE000000000000000;
+
+    var texcoordsCount: u32 = 0;
+
+    var colorCount: u32 = 0;
+
+    var jointsCount: u32 = 0;
+
+    var weightsCount: u32 = 0;
+
+    for (0..attributes_count) |i| {
+        const type_enum: cgltf_attribute_type = @enumFromInt(attributes[i].type);
+        std.log.debug("type {s}", .{@tagName(type_enum)});
+        switch (type_enum) {
+            .cgltf_attribute_type_position => {
+                flag.set(Position);
+            },
+            .cgltf_attribute_type_normal => {
+                flag.set(Normal);
+            },
+            .cgltf_attribute_type_texcoord => {
+                flag.set(TexCoordStart - texcoordsCount);
+                texcoordsCount += 1;
+
+                if (texcoordsCount >= 16) {
+                    std.debug.panic("too much texcoord(over 16)", .{});
+                }
+            },
+            .cgltf_attribute_type_color => {
+                flag.set(ColorStart - colorCount);
+                colorCount += 1;
+
+                if (colorCount >= 16) {
+                    std.debug.panic("too much color(over 16)", .{});
+                }
+            },
+            .cgltf_attribute_type_joints => {
+                flag.set(JointStart - jointsCount);
+                jointsCount += 1;
+
+                if (jointsCount >= 16) {
+                    std.debug.panic("too much joint(over 16)", .{});
+                }
+            },
+            .cgltf_attribute_type_weights => {
+                flag.set(WeightStart - weightsCount);
+                weightsCount += 1;
+
+                if (weightsCount >= 16) {
+                    std.debug.panic("too much weight(over 16)", .{});
+                }
+            },
+            else => {
+                std.debug.panic("{s} not supported", .{@tagName(type_enum)});
+            },
+        }
+    }
+
+    inline for (list) |value| {
+        if (value.flag ^ flag.mask == 0) {
+            return value._type;
+        }
+    }
+
+    return .none;
 }

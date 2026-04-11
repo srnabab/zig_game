@@ -256,21 +256,29 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    cgltf_mod.addCSourceFile(.{
+        .file = b.path("include/cgltf/cgltf_namespace.h"),
+        .language = .c,
+    });
     const meshopt_mod = b.createModule(.{
         .root_source_file = b.path("src/meshopt/meshopt.zig"),
         .target = target,
         .optimize = optimize,
     });
+    const vertexStruct_mod = b.createModule(.{
+        .root_source_file = b.path("src/vertexStruct.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     // dependency
+    vertexStruct_mod.addImport("cglm", cglm_mod);
+
     meshopt_mod.addIncludePath(b.path("include"));
 
     cgltf_mod.addImport("enumFromC", enum_c_mod);
     cgltf_mod.addImport("fileSystem", fileSystem_mod);
-    cgltf_mod.addCSourceFile(.{
-        .file = b.path("include/cgltf/cgltf_namespace.h"),
-        .language = .c,
-    });
+    cgltf_mod.addImport("vertexStruct", vertexStruct_mod);
     cgltf_mod.addIncludePath(b.path("include"));
 
     input_mod.addImport("sdl", sdl_mod);
@@ -289,6 +297,7 @@ pub fn build(b: *std.Build) void {
     cglm_mod.addIncludePath(b.path("include"));
 
     vertices_mod.addImport("tracy", tracy.module("tracy"));
+    vertices_mod.addImport("vertexStruct", vertexStruct_mod);
     vertices_mod.addImport("vulkan", vk_mod);
     vertices_mod.addImport("global", global_mod);
     vertices_mod.addImport("video", video_mod);

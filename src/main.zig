@@ -95,7 +95,7 @@ pub fn main() !void {
         sdl.SDL_MICRO_VERSION,
     });
 
-    try cgltf.loadGltfFile(comptime file.comptimeGetID("box.glb"), allocator_t.*);
+    _ = try cgltf.loadGltfFile(comptime file.comptimeGetID("box.glb"), allocator_t.*);
 
     thread_count = try Thread.getCpuCount();
     const thread_used_count = cot: {

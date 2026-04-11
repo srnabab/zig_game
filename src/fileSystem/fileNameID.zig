@@ -18,6 +18,7 @@ const list = [_]KV{
 .{ "bottom.obj", 10 },
 .{ "bottom.png", 11 },
 .{ "box.bin", 12 },
+.{ "box.glb", 13 },
 .{ "box.gltf", 14 },
 .{ "box.obj", 15 },
 .{ "box.png", 16 },
@@ -74,7 +75,6 @@ const list = [_]KV{
 .{ "Tilemap", 69 },
 .{ "tileMap1.tsdI", 70 },
 .{ "tileSet1.tsd", 71 },
-.{ "box.glb", 13 },
 .{ "sixVertices.vert.spv", 45 },
 };
 

@@ -14,6 +14,8 @@ const rendering = @import("rendering");
 const vertices = @import("vertices");
 const shaderStruct = @import("video/shaderStruct.zig");
 
+const cglm = @import("cglm").cglm;
+
 const math = @import("math");
 
 const Semaphore = std.Thread.Semaphore;
@@ -92,7 +94,7 @@ pub fn render_thread_func(
             &vulkan,
             &commands,
         );
-        const ix = try vertices.vertexInitialize2D(48, 48, 0, 0, 0.1, try pTextureSet.getDescriptorSetIndex(temp));
+        const ix = try vertices.vertexInitialize2D(48, 48, 0, 0, 0.1);
         try pTextureSet.offsetsAdd(temp, ix);
         try vertices.upload(&commands);
     }
@@ -181,10 +183,10 @@ pub fn render_thread_func(
     const aspect: f32 = (@as(f32, @floatFromInt(vulkan.windowWidth)) / @as(f32, @floatFromInt(vulkan.windowHeight))) * aspect2;
     const VIEW_SCALE = 1.0;
 
-    var eye = vertices.cglm.vec3{ 0.0, 0.0, 100.0 };
-    var center = vertices.cglm.vec3{ 0.0, 0.0, 0.0 };
-    var up = vertices.cglm.vec3{ 0.0, 1.0, 0.0 };
-    vertices.cglm.glm_lookat(
+    var eye = cglm.vec3{ 0.0, 0.0, 100.0 };
+    var center = cglm.vec3{ 0.0, 0.0, 0.0 };
+    var up = cglm.vec3{ 0.0, 1.0, 0.0 };
+    cglm.glm_lookat(
         &eye,
         &center,
         &up,
@@ -255,6 +257,7 @@ pub fn render_thread_func(
     // global.stopExecuteNodePrint = false;
 
     const renderStart = std.time.milliTimestamp();
+    global.game_end.store(1, .seq_cst);
 
     while (true) {
         const frame = vulkan.totalFrame.load(.seq_cst);
@@ -292,7 +295,7 @@ pub fn render_thread_func(
         vulkan.nextFrame();
 
         // if (std.time.milliTimestamp() - renderStart > 1 * std.time.ms_per_s) {
-        if (vulkan.totalFrame.load(.seq_cst) > 400) {
+        if (global.game_end.load(.seq_cst) == 1) {
             _ = renderStart;
             break;
         }
