@@ -24,7 +24,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .link_libc = true,
     });
-    contentManagerModule.addCSourceFile(.{ .file = b.path("src/UUID.c"), .language = .c });
     const spReflectModule = b.createModule(.{
         .root_source_file = b.path("../sprivReflect/reflect.zig"),
         .target = target,
@@ -49,31 +48,54 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    // const cgltf_mod = b.createModule(.{
-    //     .root_source_file = b.path("src/cgltf/cgltf.zig"),
-    //     .target = target,
-    //     .optimize = optimize,
-    // });
-    // cgltf_mod.addCSourceFile(.{
-    //     .file = b.path("include/cgltf/cgltf_namespace.h"),
-    //     .language = .c,
-    // });
-    // const vertexStruct_mod = b.createModule(.{
-    //     .root_source_file = b.path("src/vertexStruct.zig"),
-    //     .target = target,
-    //     .optimize = optimize,
-    // });
+    const cgltf_mod = b.createModule(.{
+        .root_source_file = b.path("../cgltf/cgltf.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    cgltf_mod.addCSourceFile(.{
+        .file = b.path("../../include/cgltf/cgltf_namespace.h"),
+        .language = .c,
+    });
+    const vertexStruct_mod = b.createModule(.{
+        .root_source_file = b.path("../vertexStruct.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const UUID_mod = b.createModule(.{
+        .root_source_file = b.path("../UUID/UUID.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    UUID_mod.addCSourceFile(.{ .file = b.path("../UUID/UUID.c"), .language = .c });
+    const cglm_mod = b.createModule(.{
+        .root_source_file = b.path("../cglm/cglm.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     const blake3_dep = b.dependency("blake3", .{});
     const blake3_lib = blake3_dep.artifact("blake3");
 
+    cglm_mod.addIncludePath(b.path("../../include"));
+
+    cgltf_mod.addImport("vertexStruct", vertexStruct_mod);
+    cgltf_mod.addImport("enumFromC", enum_c_mod);
+    cgltf_mod.addImport("UUID", UUID_mod);
+    cgltf_mod.addIncludePath(b.path("../../include"));
+
+    vertexStruct_mod.addImport("cglm", cglm_mod);
+
+    UUID_mod.addIncludePath(b.path("../../include"));
+
     contentManagerModule.addImport("options", options.createModule());
-    // contentManagerModule.addImport("cgltf", cgltf_mod);
-    // contentManagerModule.addImport("vertexStruct", vertexStruct_mod);
+    contentManagerModule.addImport("cgltf", cgltf_mod);
+    contentManagerModule.addImport("vertexStruct", vertexStruct_mod);
     contentManagerModule.addImport("reflect", spReflectModule);
     contentManagerModule.addImport("sqlDb", sqliteModule);
     contentManagerModule.addImport("tables", tables_mod);
     contentManagerModule.addImport("tracy", tracy.module("tracy"));
+    contentManagerModule.addImport("UUID", UUID_mod);
     contentManagerModule.addIncludePath(b.path("../../include"));
     contentManagerModule.addIncludePath(b.path("../../../../../../msys64/mingw64/include/"));
     contentManagerModule.addLibraryPath(b.path("../../lib"));

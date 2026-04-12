@@ -251,15 +251,15 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    const cgltf_mod = b.createModule(.{
-        .root_source_file = b.path("src/cgltf/cgltf.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    cgltf_mod.addCSourceFile(.{
-        .file = b.path("include/cgltf/cgltf_namespace.h"),
-        .language = .c,
-    });
+    // const cgltf_mod = b.createModule(.{
+    //     .root_source_file = b.path("src/cgltf/cgltf.zig"),
+    //     .target = target,
+    //     .optimize = optimize,
+    // });
+    // cgltf_mod.addCSourceFile(.{
+    //     .file = b.path("include/cgltf/cgltf_namespace.h"),
+    //     .language = .c,
+    // });
     const meshopt_mod = b.createModule(.{
         .root_source_file = b.path("src/meshopt/meshopt.zig"),
         .target = target,
@@ -276,10 +276,10 @@ pub fn build(b: *std.Build) void {
 
     meshopt_mod.addIncludePath(b.path("include"));
 
-    cgltf_mod.addImport("enumFromC", enum_c_mod);
-    cgltf_mod.addImport("fileSystem", fileSystem_mod);
-    cgltf_mod.addImport("vertexStruct", vertexStruct_mod);
-    cgltf_mod.addIncludePath(b.path("include"));
+    // cgltf_mod.addImport("enumFromC", enum_c_mod);
+    // cgltf_mod.addImport("fileSystem", fileSystem_mod);
+    // cgltf_mod.addImport("vertexStruct", vertexStruct_mod);
+    // cgltf_mod.addIncludePath(b.path("include"));
 
     input_mod.addImport("sdl", sdl_mod);
 
@@ -445,7 +445,7 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("rendering", rendering_mod);
     exe_mod.addImport("vulkan", vk_mod);
     exe_mod.addImport("math", math_mod);
-    exe_mod.addImport("cgltf", cgltf_mod);
+    // exe_mod.addImport("cgltf", cgltf_mod);
     exe_mod.addIncludePath(b.path("include/"));
 
     exe_mod.addLibraryPath(b.path("lib/"));

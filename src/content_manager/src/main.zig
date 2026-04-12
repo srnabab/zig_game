@@ -2,13 +2,15 @@ const sqlDB = @import("sqlDb");
 const sqlite = sqlDB.sqlite;
 const std = @import("std");
 const builtin = @import("builtin");
-const UUID = @import("UUID.zig");
+const UUID = @import("UUID");
 const hash = @import("blake_hash.zig");
 const reflect = @import("reflect");
 const vk = reflect.vk;
 const tables = @import("tables");
 const tracy = @import("tracy");
 const options = @import("options");
+const cgltf = @import("cgltf");
+const vertexStruct = @import("vertexStruct");
 
 const assert = std.debug.assert;
 
@@ -180,8 +182,13 @@ const slash = sl: {
     }
 };
 
-const PNG = ".PNG";
-const GLTF = ".glTF";
+const PNG = [_]u8{
+    0x89,
+    std.mem.bytesToValue(u8, "P"),
+    std.mem.bytesToValue(u8, "N"),
+    std.mem.bytesToValue(u8, "G"),
+};
+const GLTF = "glTF";
 
 const FileTypeHashTable = map: {
     const maptype = std.StaticStringMap(FileType);
@@ -201,6 +208,7 @@ const FileTypeHashTable = map: {
         .{ ".spv", FileType.SPV },
         .{ ".txt", FileType.TXT },
         .{ ".gltf", FileType.GLTF },
+        .{ ".glb", FileType.GLTF },
     };
 
     const maps = maptype.initComptime(list);
@@ -238,20 +246,21 @@ fn updateLoadParameter(tp: FileType, cc: std.fs.File.Stat, content: []const u8, 
     const zone = tracy.initZone(@src(), .{ .name = "update load parameter" });
     defer zone.deinit();
 
-    _ = cc;
-    _ = content;
     switch (tp) {
         .PNG => {
             const format: vk.VkFormat, const tiling: vk.VkImageTiling, const usage: vk.VkImageUsageFlags, const properties: vk.VkMemoryPropertyFlags = try judgeImageLoadParameter(fileName);
 
             try ImageLoadParameterT.update("Format,Tiling,Usage,Properties", "FileName = ?", .{ format, tiling, usage, properties, fileName });
         },
+        .GLTF => {
+            _ = try cgltf.loadGltfFile(content, cc, gpa);
+        },
         else => {},
     }
 }
 
 fn judgeFileTypeByContent(content: []u8) FileType {
-    if (std.mem.eql(u8, content, @constCast(PNG))) {
+    if (std.mem.eql(u8, content, @constCast(&PNG))) {
         return .PNG;
     } else if (std.mem.eql(u8, content, @constCast(GLTF))) {
         return .GLTF;
@@ -265,13 +274,13 @@ fn judgeFileType(name: []const u8, content: []u8) FileType {
 
     switch (fType) {
         .PNG => {
-            if (std.mem.eql(u8, content, @constCast(PNG))) {
+            if (std.mem.eql(u8, content[0..PNG.len], @constCast(&PNG))) {
                 return .PNG;
             }
             return judgeFileTypeByContent(content);
         },
         .GLTF => {
-            if (std.mem.eql(u8, content, @constCast(GLTF))) {
+            if (std.mem.eql(u8, content[0..GLTF.len], @constCast(GLTF))) {
                 return .GLTF;
             }
             return judgeFileTypeByContent(content);
@@ -393,6 +402,8 @@ fn processFile(
                 const index = std.mem.lastIndexOf(u8, name, ".") orelse name.len;
                 // const fType = nameToFileType(name[index..]);
                 const fType = judgeFileType(name[index..], content);
+
+                // std.log.debug("{s}", .{@tagName(fType)});
 
                 try updateLoadParameter(fType, metadata, content, name);
             } else {

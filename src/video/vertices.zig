@@ -1,6 +1,7 @@
 const std = @import("std");
 const tracy = @import("tracy");
-pub const cglm = @import("cglm").cglm;
+
+const vertexStruct = @import("vertexStruct");
 
 const vkStruct = @import("video");
 const vk = @import("vulkan").vulkan;
@@ -8,13 +9,9 @@ const global = @import("global");
 
 const Commands = @import("processRender").commands;
 
-pub const vec3 = cglm.vec3;
-pub const vec2 = cglm.vec2;
-
-pub const Vertex2D = extern struct {
-    position: vec3,
-    texCoord: vec2,
-};
+pub const Vertex2D = vertexStruct.Vertex_f3pf2u;
+const vec2 = vertexStruct.vec2;
+const vec3 = vertexStruct.vec3;
 
 const vertex2DinitCount = 40000;
 const index2DinitCount = std.math.maxInt(u16) / 6;
@@ -124,8 +121,8 @@ pub fn vertexInitialize2D(width: u32, height: u32, x: u32, y: u32, depth: f32) !
     vertices2D[vertexCount2D].position[0] = leftUp[0];
     vertices2D[vertexCount2D].position[1] = leftUp[1];
     vertices2D[vertexCount2D].position[2] = depth;
-    vertices2D[vertexCount2D].texCoord[0] = 0.0;
-    vertices2D[vertexCount2D].texCoord[1] = 1.0;
+    vertices2D[vertexCount2D].uv[0] = 0.0;
+    vertices2D[vertexCount2D].uv[1] = 1.0;
     // vertices2D[vertexCount2D].index = textureIndex;
 
     //right-up
@@ -133,8 +130,8 @@ pub fn vertexInitialize2D(width: u32, height: u32, x: u32, y: u32, depth: f32) !
     vertices2D[vertexCount2D].position[0] = leftUp[0] + xOffset;
     vertices2D[vertexCount2D].position[1] = leftUp[1];
     vertices2D[vertexCount2D].position[2] = depth;
-    vertices2D[vertexCount2D].texCoord[0] = 1.0;
-    vertices2D[vertexCount2D].texCoord[1] = 1.0;
+    vertices2D[vertexCount2D].uv[0] = 1.0;
+    vertices2D[vertexCount2D].uv[1] = 1.0;
     // vertices2D[vertexCount2D].index = textureIndex;
 
     //right-dowm
@@ -142,8 +139,8 @@ pub fn vertexInitialize2D(width: u32, height: u32, x: u32, y: u32, depth: f32) !
     vertices2D[vertexCount2D].position[0] = leftUp[0] + xOffset;
     vertices2D[vertexCount2D].position[1] = leftUp[1] + yOffset;
     vertices2D[vertexCount2D].position[2] = depth;
-    vertices2D[vertexCount2D].texCoord[0] = 1.0;
-    vertices2D[vertexCount2D].texCoord[1] = 0.0;
+    vertices2D[vertexCount2D].uv[0] = 1.0;
+    vertices2D[vertexCount2D].uv[1] = 0.0;
     // vertices2D[vertexCount2D].index = textureIndex;
 
     //left-down
@@ -151,8 +148,8 @@ pub fn vertexInitialize2D(width: u32, height: u32, x: u32, y: u32, depth: f32) !
     vertices2D[vertexCount2D].position[0] = leftUp[0];
     vertices2D[vertexCount2D].position[1] = leftUp[1] + yOffset;
     vertices2D[vertexCount2D].position[2] = depth;
-    vertices2D[vertexCount2D].texCoord[0] = 0.0;
-    vertices2D[vertexCount2D].texCoord[1] = 0.0;
+    vertices2D[vertexCount2D].uv[0] = 0.0;
+    vertices2D[vertexCount2D].uv[1] = 0.0;
     // vertices2D[vertexCount2D].index = textureIndex;
 
     vertexCount2D += 1;

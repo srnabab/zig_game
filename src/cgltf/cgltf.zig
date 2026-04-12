@@ -2,11 +2,11 @@ pub const cgltf = @cImport(@cInclude("cgltf/cgltf.h"));
 
 const std = @import("std");
 
-const file = @import("fileSystem");
-
 const vertexStruct = @import("vertexStruct");
 
 const enumFromC = @import("enumFromC");
+
+const UUID = @import("UUID");
 
 const cgltf_result = enumFromC.generateEnumFromC(
     cgltf,
@@ -69,14 +69,17 @@ fn cgltf_parse(
     }
 }
 
-pub fn loadGltfFile(fileID: i32, allocator: std.mem.Allocator) !vertexStruct.Vertex {
-    var gltf = try file.getFile(fileID);
-    defer gltf.close();
+pub fn loadGltfFile(fileMem: []const u8, fileStat: std.fs.File.Stat, allocator: std.mem.Allocator) !struct {
+    // name: []u8,
+    vertex: vertexStruct.Vertex,
+} {
+    // var gltf = try std.fs.cwd().openFile(fileName, .{});
+    // defer gltf.close();
 
-    const fileStat = try gltf.stat();
-    const fileMem = try allocator.alloc(u8, fileStat.size);
-    defer allocator.free(fileMem);
-    _ = try gltf.readAll(fileMem);
+    // const fileStat = try gltf.stat();
+    // const fileMem = try allocator.alloc(u8, fileStat.size);
+    // defer allocator.free(fileMem);
+    // _ = try gltf.readAll(fileMem);
 
     var options = cgltf.cgltf_options{};
 
@@ -87,23 +90,55 @@ pub fn loadGltfFile(fileID: i32, allocator: std.mem.Allocator) !vertexStruct.Ver
     _ = cgltf.cgltf_load_buffers(&options, data, null);
     // std.log.debug("{}", .{data.*});
 
-    // for (0..data.*.meshes[0].primitives_count) |value| {}
-    // std.log.debug("{d}", .{data.*.meshes[0].primitives_count});
-    // std.log.debug("{d}", .{data.*.meshes[0].primitives[0].attributes_count});
+    const scenes = data.*.scenes;
+    const scenes_count = data.*.scenes_count;
+    for (0..scenes_count) |i| {
+        const scene = scenes[i];
+        const scene_name = blk: {
+            if (scene.name) |name| {
+                const len = std.mem.len(name);
+
+                break :blk try allocator.dupe(u8, name[0..len]);
+            } else {
+                const buf = try allocator.alloc(u8, UUID.len);
+                try UUID.createNewUUID(buf.ptr);
+                break :blk buf;
+            }
+        };
+        defer allocator.free(scene_name);
+        std.log.debug("scene name: {s}", .{scene_name});
+
+        const nodes = scene.nodes;
+        const nodes_count = scene.nodes_count;
+        for (0..nodes_count) |j| {
+            const node = nodes[j];
+            const mesh = node.*.mesh;
+
+            const primitives = mesh.*.primitives;
+            const primitives_count = mesh.*.primitives_count;
+            for (0..primitives_count) |l| {
+                const primitive = primitives[l];
+                const attributes = primitive.attributes;
+                const attributes_count = primitive.attributes_count;
+                _ = attributes;
+                _ = attributes_count;
+            }
+        }
+    }
 
     const attributes_count = data.*.meshes[0].primitives[0].attributes_count;
     const attributes = data.*.meshes[0].primitives[0].attributes;
 
     for (0..attributes_count) |i| {
         const type_enum: cgltf_attribute_type = @enumFromInt(attributes[i].type);
-        std.log.debug("type {s}", .{@tagName(type_enum)});
+        // std.log.debug("type {s}", .{@tagName(type_enum)});
         switch (type_enum) {
             .cgltf_attribute_type_position => {
                 for (0..attributes[i].data.*.count) |j| {
                     var pos: [3]f32 = undefined;
 
                     _ = cgltf.cgltf_accessor_read_float(&data.*.accessors[i], j, &pos, 3);
-                    std.log.debug("{d}, {d}, {d}", .{ pos[0], pos[1], pos[2] });
+                    // std.log.debug("{d}, {d}, {d}", .{ pos[0], pos[1], pos[2] });
                 }
             },
             .cgltf_attribute_type_normal => {
@@ -111,7 +146,7 @@ pub fn loadGltfFile(fileID: i32, allocator: std.mem.Allocator) !vertexStruct.Ver
                     var pos: [3]f32 = undefined;
 
                     _ = cgltf.cgltf_accessor_read_float(&data.*.accessors[i], j, &pos, 3);
-                    std.log.debug("{d}, {d}, {d}", .{ pos[0], pos[1], pos[2] });
+                    // std.log.debug("{d}, {d}, {d}", .{ pos[0], pos[1], pos[2] });
                 }
             },
             .cgltf_attribute_type_texcoord => {
@@ -119,7 +154,7 @@ pub fn loadGltfFile(fileID: i32, allocator: std.mem.Allocator) !vertexStruct.Ver
                     var pos: [2]f32 = undefined;
 
                     _ = cgltf.cgltf_accessor_read_float(&data.*.accessors[i], j, &pos, 2);
-                    std.log.debug("{d}, {d}", .{ pos[0], pos[1] });
+                    // std.log.debug("{d}, {d}", .{ pos[0], pos[1] });
                 }
             },
             else => {
@@ -130,7 +165,8 @@ pub fn loadGltfFile(fileID: i32, allocator: std.mem.Allocator) !vertexStruct.Ver
 
     for (0..data.*.meshes[0].primitives[0].indices.*.count) |i| {
         const index = cgltf.cgltf_accessor_read_index(data.*.meshes[0].primitives[0].indices, i);
-        std.log.debug("{d}", .{index});
+        _ = index;
+        // std.log.debug("{d}", .{index});
     }
 
     // for (0..data.*.accessors_count) |i| {
@@ -145,7 +181,10 @@ pub fn loadGltfFile(fileID: i32, allocator: std.mem.Allocator) !vertexStruct.Ver
     // }
     const vType = judgePrimitiveVertexType(&data.*.meshes[0].primitives[0]);
     std.log.debug("{s}", .{@tagName(vType)});
-    return .{ .f3pf2u = &.{} };
+    return .{
+        // .name = " ",
+        .vertex = vertexStruct.Vertex{ .f3pf3nf2u = &.{} },
+    };
 }
 
 const Flag_VertexType = struct {
@@ -243,4 +282,9 @@ pub fn judgePrimitiveVertexType(primitives: [*c]cgltf.cgltf_primitive) vertexStr
     }
 
     return .none;
+}
+
+fn autoName() ![]u8 {
+    const randInt = std.crypto.random.int(u32);
+    _ = randInt;
 }
