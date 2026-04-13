@@ -1,0 +1,19 @@
+.{
+    .name = .cglm_lib,
+    .fingerprint = 0xaee38bad3d624e87,
+    .version = "0.9.6",
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "example",
+        "README.md",
+        "LICENSE",
+    },
+    .dependencies = .{
+        .cglm = .{
+            .url = "https://github.com/recp/cglm/archive/refs/tags/v0.9.6.tar.gz",
+            .hash = "N-V-__8AAGApJACv6OGRSLZEdwbH9P68sV3B96LAZsZ21_4C",
+        },
+    },
+}

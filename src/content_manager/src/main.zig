@@ -11,6 +11,7 @@ const tracy = @import("tracy");
 const options = @import("options");
 const cgltf = @import("cgltf");
 const vertexStruct = @import("vertexStruct");
+const meshopt = @import("meshopt");
 
 const assert = std.debug.assert;
 
@@ -253,7 +254,32 @@ fn updateLoadParameter(tp: FileType, cc: std.fs.File.Stat, content: []const u8, 
             try ImageLoadParameterT.update("Format,Tiling,Usage,Properties", "FileName = ?", .{ format, tiling, usage, properties, fileName });
         },
         .GLTF => {
-            _ = try cgltf.loadGltfFile(content, cc, gpa);
+            std.log.debug("file name {s}", .{fileName});
+            var res = try cgltf.loadGltfFile(content, cc, gpa);
+            defer res.arenaAllocator.deinit();
+
+            for (res.primitives) |value| {
+                cgltf.printVertex(value.vertex, value.index);
+
+                const vertexInfo = cgltf.unpackVertex(value.vertex);
+                std.log.debug("count {d}, size {d}", .{ vertexInfo.vertexCount, vertexInfo.vertexSize });
+
+                const res2 = try meshopt.generateVertexRemap(value.index, vertexInfo.vertices, vertexInfo.vertexCount, vertexInfo.vertexSize, gpa);
+                defer {
+                    gpa.free(res2.indices);
+                    const vertices = @as([*]u8, @ptrCast(@alignCast(res2.vertices)))[0 .. res2.vertexCount * vertexInfo.vertexSize];
+                    gpa.free(vertices);
+                }
+
+                const vertex = cgltf.packVertex(.{
+                    .vertices = res2.vertices.?,
+                    .vertexCount = @intCast(res2.vertexCount),
+                    .vertexSize = vertexInfo.vertexSize,
+                }, std.meta.activeTag(value.vertex));
+
+                std.log.debug("count {d}, size {d}", .{ res2.vertexCount, vertexInfo.vertexSize });
+                cgltf.printVertex(vertex, res2.indices);
+            }
         },
         else => {},
     }

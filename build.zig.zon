@@ -72,6 +72,7 @@
         .sdl3 = .{ .path = "dependencies/sdl3" },
         .selectModifiedFileToTxt = .{ .path = "src/selectModifiedFileToTxt" },
         .meshoptimizer = .{ .path = "dependencies/meshoptimizer" },
+        .cglm = .{ .path = "dependencies/cglm" },
     },
 
     // Specifies the set of files and directories that are included in this package.

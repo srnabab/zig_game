@@ -9,39 +9,23 @@
 #define cglm_h
 
 #include "common.h"
-#include "vec2.h"
-#include "vec3.h"
-#include "vec4.h"
-#include "ivec2.h"
-#include "ivec3.h"
-#include "ivec4.h"
-#include "mat4.h"
-#include "mat4x2.h"
-#include "mat4x3.h"
-#include "mat3.h"
-#include "mat3x2.h"
-#include "mat3x4.h"
-#include "mat2.h"
-#include "mat2x3.h"
-#include "mat2x4.h"
-#include "affine.h"
-#include "cam.h"
-#include "frustum.h"
-#include "quat.h"
-#include "euler.h"
-#include "plane.h"
-#include "noise.h"
-#include "aabb2d.h"
-#include "box.h"
-#include "color.h"
-#include "util.h"
-#include "io.h"
-#include "project.h"
-#include "sphere.h"
-#include "ease.h"
-#include "curve.h"
-#include "bezier.h"
-#include "ray.h"
-#include "affine2d.h"
+#include "types.h"
+/*!
+ * if you have axis order like vec3 orderVec = [0, 1, 2] or [0, 2, 1]...
+ * vector then you can convert it to this enum by doing this:
+ * @code
+ * glm_euler_seq order;
+ * order = orderVec[0] | orderVec[1] << 2 | orderVec[2] << 4;
+ * @endcode
+ * you may need to explicit cast if required
+ */
+typedef enum glm_euler_seq {
+  GLM_EULER_XYZ = 0 << 0 | 1 << 2 | 2 << 4,
+  GLM_EULER_XZY = 0 << 0 | 2 << 2 | 1 << 4,
+  GLM_EULER_YZX = 1 << 0 | 2 << 2 | 0 << 4,
+  GLM_EULER_YXZ = 1 << 0 | 0 << 2 | 2 << 4,
+  GLM_EULER_ZXY = 2 << 0 | 0 << 2 | 1 << 4,
+  GLM_EULER_ZYX = 2 << 0 | 1 << 2 | 0 << 4
+} glm_euler_seq;
 
 #endif /* cglm_h */

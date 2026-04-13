@@ -4,7 +4,7 @@ const cpp_compileFlag = [_][]const u8{ "-std=c++17", "-g" };
 const builtin = @import("builtin");
 
 pub fn build(b: *std.Build) void {
-    const target = b.standardTargetOptions(.{ .default_target = .{} });
+    const target = b.standardTargetOptions(.{ .default_target = .{ .abi = .gnu } });
     const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .Debug });
 
     // modules
@@ -32,6 +32,9 @@ pub fn build(b: *std.Build) void {
 
     const meshoptimizerModule = b.dependency("meshoptimizer", .{});
     const meshopt_lib_install_step = meshoptimizerModule.builder.getInstallStep();
+
+    const cglm_dep = b.dependency("cglm", .{});
+    const cglm_install_step = cglm_dep.builder.getInstallStep();
 
     const vk_mod = b.createModule(.{
         .root_source_file = b.path("src/vulkan/vulkan.zig"),
@@ -452,6 +455,8 @@ pub fn build(b: *std.Build) void {
     exe_mod.addLibraryPath(meshoptimizerModule.path("install/lib"));
     exe_mod.linkSystemLibrary("meshoptimizer", .{ .preferred_link_mode = .static });
     exe_mod.addLibraryPath(sdl3Module.path("install/lib"));
+    exe_mod.addLibraryPath(cglm_dep.path("install/lib"));
+    exe_mod.linkSystemLibrary("cglm", .{ .preferred_link_mode = .static });
     exe_mod.linkSystemLibrary("sdl3", .{ .preferred_link_mode = .static });
     exe_mod.linkSystemLibrary("steam_api64", .{});
     exe_mod.linkSystemLibrary("setupapi", .{ .preferred_link_mode = .static });
@@ -650,6 +655,7 @@ pub fn build(b: *std.Build) void {
     exe.step.dependOn(runGenFileNameIdExe);
     exe.step.dependOn(runContenManager);
     exe.step.dependOn(meshopt_lib_install_step);
+    exe.step.dependOn(cglm_install_step);
 
     waf.step.dependOn(&exe.step);
     b.getInstallStep().dependOn(&waf.step);

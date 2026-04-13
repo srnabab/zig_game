@@ -1,14 +1,21 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const c_flags = [_][]const u8{"-std=c11"};
 
 pub fn build(b: *std.Build) void {
-    const target = b.standardTargetOptions(.{ .default_target = .{} });
+    const target = b.standardTargetOptions(.{ .default_target = .{ .abi = .gnu } });
     const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .Debug });
 
     const force_update = b.option(bool, "force_update", "force contentManager update all resources") orelse false;
 
     const options = b.addOptions();
     options.addOption(bool, "force_update", force_update);
+
+    const cglm_dep = b.dependency("cglm", .{});
+    const cglm_install_step = cglm_dep.builder.getInstallStep();
+
+    const meshopt_dep = b.dependency("meshoptimizer", .{});
+    const meshopt_install_step = meshopt_dep.builder.getInstallStep();
 
     const tracy_enable = b.option(bool, "tracy_enable", "Enable profiling") orelse false;
     const tracy = b.dependency("tracy", .{
@@ -42,7 +49,11 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .link_libc = true,
     });
-    sqliteModule.addCSourceFile(.{ .file = b.path("../sqlite3/sqlite3.c"), .language = .c });
+    sqliteModule.addCSourceFile(.{
+        .file = b.path("../sqlite3/sqlite3.c"),
+        .language = .c,
+        .flags = &c_flags,
+    });
     const tables_mod = b.createModule(.{
         .root_source_file = b.path("../tables.zig"),
         .target = target,
@@ -67,9 +78,18 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    UUID_mod.addCSourceFile(.{ .file = b.path("../UUID/UUID.c"), .language = .c });
+    UUID_mod.addCSourceFile(.{
+        .file = b.path("../UUID/UUID.c"),
+        .language = .c,
+        .flags = &c_flags,
+    });
     const cglm_mod = b.createModule(.{
         .root_source_file = b.path("../cglm/cglm.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const meshopt_mod = b.createModule(.{
+        .root_source_file = b.path("../meshoptimizer/meshopt.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -77,7 +97,10 @@ pub fn build(b: *std.Build) void {
     const blake3_dep = b.dependency("blake3", .{});
     const blake3_lib = blake3_dep.artifact("blake3");
 
+    meshopt_mod.addIncludePath(b.path("../../include/"));
+
     cglm_mod.addIncludePath(b.path("../../include"));
+    // cglm_mod.addCSourceFile(.{ .file = b.path("../cglm/cglm.c"), .language = .c });
 
     cgltf_mod.addImport("vertexStruct", vertexStruct_mod);
     cgltf_mod.addImport("enumFromC", enum_c_mod);
@@ -96,11 +119,16 @@ pub fn build(b: *std.Build) void {
     contentManagerModule.addImport("tables", tables_mod);
     contentManagerModule.addImport("tracy", tracy.module("tracy"));
     contentManagerModule.addImport("UUID", UUID_mod);
+    contentManagerModule.addImport("meshopt", meshopt_mod);
     contentManagerModule.addIncludePath(b.path("../../include"));
     contentManagerModule.addIncludePath(b.path("../../../../../../msys64/mingw64/include/"));
     contentManagerModule.addLibraryPath(b.path("../../lib"));
+    contentManagerModule.addLibraryPath(cglm_dep.path("install/lib"));
+    contentManagerModule.addLibraryPath(meshopt_dep.path("install/lib"));
     contentManagerModule.linkLibrary(blake3_lib);
     // contentManagerModule.linkSystemLibrary("blake3", .{ .preferred_link_mode = .static });
+    contentManagerModule.linkSystemLibrary("meshoptimizer", .{ .preferred_link_mode = .static });
+    contentManagerModule.linkSystemLibrary("cglm", .{ .preferred_link_mode = .static });
     contentManagerModule.linkSystemLibrary("setupapi", .{ .preferred_link_mode = .static });
     contentManagerModule.linkSystemLibrary("imm32", .{ .preferred_link_mode = .static });
     contentManagerModule.linkSystemLibrary("version", .{ .preferred_link_mode = .static });
@@ -125,6 +153,9 @@ pub fn build(b: *std.Build) void {
         .root_module = contentManagerModule,
     });
     b.installArtifact(contenManager);
+
+    contenManager.step.dependOn(cglm_install_step);
+    contenManager.step.dependOn(meshopt_install_step);
 
     // b.install_path =
 }

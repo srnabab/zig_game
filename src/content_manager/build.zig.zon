@@ -10,6 +10,8 @@
     .dependencies = .{
         .tracy = .{ .path = "../../dependencies/tracy" },
         .blake3 = .{ .path = "../../dependencies/blake3" },
+        .cglm = .{ .path = "../../dependencies/cglm" },
+        .meshoptimizer = .{ .path = "../../dependencies/meshoptimizer" },
     },
 
     .paths = .{
