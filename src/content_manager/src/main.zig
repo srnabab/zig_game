@@ -258,7 +258,10 @@ fn judgeImageLoadParameter(fileName: []const u8) !struct {
     return .{ vk.VK_FORMAT_R8G8B8A8_SRGB, vk.VK_IMAGE_TILING_OPTIMAL, vk.VK_IMAGE_USAGE_TRANSFER_DST_BIT | vk.VK_IMAGE_USAGE_SAMPLED_BIT, vk.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT };
 }
 
-fn optimizeVertex(vertex: vertexStruct.Vertex, index: []u32, allocator: std.mem.Allocator) !meshopt.remapReturn {
+fn optimizeVertex(vertex: vertexStruct.Vertex, index: []u32, allocator: std.mem.Allocator) !struct {
+    remap: meshopt.remapReturn,
+    vType: vertexStruct.VertexType,
+} {
     const vertexInfo = cgltf.unpackVertex(vertex);
     std.log.debug("count {d}, size {d}", .{ vertexInfo.vertexCount, vertexInfo.vertexSize });
 
@@ -323,7 +326,7 @@ fn optimizeVertex(vertex: vertexStruct.Vertex, index: []u32, allocator: std.mem.
     std.log.debug("count {d}, size {d}", .{ res3.newVertexCount, vertexInfo.vertexSize });
     // cgltf.printVertex(vertex, res3.indices);
 
-    return res3;
+    return .{ .remap = res3, .vType = std.meta.activeTag(vertex) };
 }
 
 fn updateLoadParameter(
@@ -350,16 +353,6 @@ fn updateLoadParameter(
             defer res.arenaAllocator.deinit();
 
             const arena = SceneJson.arena.allocator();
-            var index: usize = 0;
-            if (SceneJson.value != null) {
-                index = SceneJson.value.?.len;
-                SceneJson.value.? = try arena.realloc(
-                    SceneJson.value.?,
-                    SceneJson.value.?.len + res.scenes.len,
-                );
-            } else {
-                SceneJson.value = try arena.alloc(cgltf.Scene, res.scenes.len);
-            }
 
             var modelNameToNewName = std.StringHashMap([]u8).init(arena);
             defer modelNameToNewName.deinit();
@@ -367,20 +360,20 @@ fn updateLoadParameter(
             for (res.primitives) |value| {
                 const vertex_opted = try optimizeVertex(value.vertex, value.index, gpa);
                 defer {
-                    gpa.free(vertex_opted.indices);
-                    const vertices = @as([*]u8, @ptrCast(@alignCast(vertex_opted.vertices)))[0..vertex_opted.totalVerticesSize];
+                    gpa.free(vertex_opted.remap.indices);
+                    const vertices = @as([*]u8, @ptrCast(@alignCast(vertex_opted.remap.vertices)))[0..vertex_opted.remap.totalVerticesSize];
                     gpa.free(vertices);
                 }
 
                 var meshMem = try arena.alloc(
                     u8,
-                    vertex_opted.indices.len * @sizeOf(u32) + vertex_opted.newVertexCount * vertex_opted.vertexSize,
+                    vertex_opted.remap.indices.len * @sizeOf(u32) + vertex_opted.remap.newVertexCount * vertex_opted.remap.vertexSize,
                 );
-                const indicesBytes = std.mem.sliceAsBytes(vertex_opted.indices);
-                const verticeBytes = std.mem.sliceAsBytes(@as([*]u8, @ptrCast(@alignCast(vertex_opted.vertices)))[0 .. vertex_opted.newVertexCount * vertex_opted.vertexSize]);
+                const indicesBytes = std.mem.sliceAsBytes(vertex_opted.remap.indices);
+                const verticeBytes = std.mem.sliceAsBytes(@as([*]u8, @ptrCast(@alignCast(vertex_opted.remap.vertices)))[0 .. vertex_opted.remap.newVertexCount * vertex_opted.remap.vertexSize]);
 
-                @memcpy(meshMem[0 .. vertex_opted.newVertexCount * vertex_opted.vertexSize], verticeBytes);
-                @memcpy(meshMem[vertex_opted.newVertexCount * vertex_opted.vertexSize ..], indicesBytes);
+                @memcpy(meshMem[0 .. vertex_opted.remap.newVertexCount * vertex_opted.remap.vertexSize], verticeBytes);
+                @memcpy(meshMem[vertex_opted.remap.newVertexCount * vertex_opted.remap.vertexSize ..], indicesBytes);
 
                 const hashh = hash.blake3HashContent(meshMem);
 
@@ -452,41 +445,72 @@ fn updateLoadParameter(
                         .FileType = @intFromEnum(fType),
                     });
 
-                    // try ModelLoadParameterT.insert()
+                    const relativePathZ2 = try std.fmt.bufPrintZ(&relativePathBuffer, "{s}{s}{s}", .{ rpZ, slash, fileName });
+
+                    var anys = [_]*anyopaque{&uuidBuffer};
+                    var types = [_]sqlDB.innerType{.TEXT};
+
+                    try ContentPathT.get(
+                        "UUID",
+                        null,
+                        "RelativePath = ?",
+                        .{relativePathZ2},
+                        &anys,
+                        &types,
+                    );
+
+                    try ModelLoadParameterT.update(
+                        "VertexType,VerticesSize,ParentModelFile",
+                        "ContentHash = ?",
+                        .{
+                            @as(u32, @intFromEnum(vertex_opted.vType)),
+                            vertex_opted.remap.vertexSize * vertex_opted.remap.newVertexCount,
+                            uuidBuffer,
+                            sqlDB.BLOB{ .data = &hashh, .len = hash.blake3.BLAKE3_OUT_LEN },
+                        },
+                    );
                 }
                 // try processFile(dir, primFileName, rPZ, parentID, -1, -1);
             }
 
+            const initSceneCount = SceneJson.value.?.len;
+            var sceneAdd: usize = 0;
             for (res.scenes) |scene| {
-                for (scene.nodes) |node| {
-                    const node_name = try arena.dupe(u8, node.name);
-                    const node_getRes = SceneNameStringMap.get(node_name);
+                const scene_name = try arena.dupe(u8, scene.name);
+                const getRes = try SceneNameStringMap.getOrPut(scene_name);
 
-                    if (node_getRes != null) {
-                        defer arena.free(node_name);
-                        const new_name = try arena.alloc(u8, node.name.len + UUID.len);
+                var scenePtr: *cgltf.Scene = undefined;
 
-                        @memcpy(new_name[0..node.name.len], node.name);
-                        try UUID.createNewUUID(new_name[node.name.len..].ptr);
+                if (getRes.found_existing) {
+                    scenePtr = &SceneJson.value.?[getRes.value_ptr.*];
+                } else {
+                    SceneJson.value = try arena.realloc(SceneJson.value.?, initSceneCount + 1);
+                    scenePtr = &SceneJson.value.?[initSceneCount + sceneAdd];
 
-                        try SceneNameStringMap.put(new_name, void{});
-                    } else {
-                        try NodeNameStringMap.put(node_name, void{});
-                    }
+                    getRes.value_ptr.* = @intCast(initSceneCount + sceneAdd);
+
+                    scenePtr.nodes = &.{};
+                    scenePtr.name = scene_name;
+
+                    sceneAdd += 1;
                 }
-                const name = try arena.dupe(u8, scene.name);
-                const getRes = SceneNameStringMap.get(name);
 
-                if (getRes != null) {
-                    defer arena.free(name);
-                    const new_name = try arena.alloc(u8, scene.name.len + UUID.len);
+                const initNodeCount = scenePtr.nodes.len;
+                scenePtr.nodes = try arena.realloc(scenePtr.nodes, scene.nodes.len + initNodeCount);
 
-                    @memcpy(new_name[0..scene.name.len], scene.name);
-                    try UUID.createNewUUID(new_name[scene.name.len..].ptr);
+                for (scene.nodes, 0..) |node, j| {
+                    const node_name = try arena.dupe(u8, node.name);
 
-                    try SceneNameStringMap.put(new_name, void{});
+                    const primtivesNames = try arena.alloc([]u8, node.primitiveNames.len);
+                    for (node.primitiveNames, 0..) |primName, k| {
+                        primtivesNames[k] = try arena.dupe(u8, primName);
+                    }
 
-                    // SceneJson.value.?[index] = .{ .name = new_name };
+                    scenePtr.nodes[initNodeCount + j] = .{
+                        .name = node_name,
+                        .primitiveNames = primtivesNames,
+                        .transform = node.transform,
+                    };
                 }
             }
         },
@@ -613,7 +637,7 @@ fn processFile(
                 var contentHash = hash.blake3HashContent(content);
                 // const contentHash = try hashFileContent(&tempFile, metadata.size());
                 try ContentPathT.update(
-                    "ID,RelativePath,ParentID,ModifiedTime,LastSeenTime,ContentHash",
+                    "ID,RelativePath,ParentID,ModifiedTime,LastSeenTime,ContentHash,FileSize",
                     "FileName = ?",
                     .{
                         sqlDB.getGlobalIncrementID(),
@@ -622,6 +646,7 @@ fn processFile(
                         currentModifiedTime,
                         time,
                         sqlDB.BLOB{ .data = &contentHash, .len = contentHash.len },
+                        metadata.size,
                         name,
                     },
                 );
@@ -655,9 +680,16 @@ fn processFile(
                 var contentHash = hash.blake3HashContent(content);
 
                 try ContentPathT.update(
-                    "ID,ModifiedTime,LastSeenTime,ContentHash",
+                    "ID,ModifiedTime,LastSeenTime,ContentHash,FileSize",
                     "FileName = ?",
-                    .{ sqlDB.getGlobalIncrementID(), currentModifiedTime, time, sqlDB.BLOB{ .data = &contentHash, .len = contentHash.len }, name },
+                    .{
+                        sqlDB.getGlobalIncrementID(),
+                        currentModifiedTime,
+                        time,
+                        sqlDB.BLOB{ .data = &contentHash, .len = contentHash.len },
+                        metadata.size,
+                        name,
+                    },
                 );
 
                 const index = std.mem.lastIndexOf(u8, name, ".") orelse name.len;
@@ -802,8 +834,7 @@ var ContentPathT: ContentPath = undefined;
 var ImageLoadParameterT: ImageLoadParameter = undefined;
 var ModelLoadParameterT: ModelLoadParameter = undefined;
 var SceneJson: std.json.Parsed(?[]cgltf.Scene) = undefined;
-var SceneNameStringMap: std.StringHashMap(void) = undefined;
-var NodeNameStringMap: std.StringHashMap(void) = undefined;
+var SceneNameStringMap: std.StringHashMap(u32) = undefined;
 
 var forceUpdate = options.force_update;
 
@@ -898,6 +929,12 @@ pub fn main() !void {
         _ = sqlite.sqlite3_close(db.?);
     }
 
+    _ = sqlite.sqlite3_exec(db, "BEGIN TRANSACTION", null, null, null);
+    errdefer {
+        std.debug.print("Detecting error, rolling back all changes...\n", .{});
+        _ = sqlite.sqlite3_exec(db, "ROLLBACK;", null, null, null);
+    }
+
     ContentPathT = ContentPath.init(db.?);
     const exist = ContentPathT.exist();
     try ContentPathT.createTable();
@@ -920,8 +957,9 @@ pub fn main() !void {
     const time: i64 = @truncate(std.time.nanoTimestamp());
     // std.log.debug("time {d}", .{time});
 
-    var sceneFile = cwd.openFile(SceneFileName, .{}) catch |err| blk: switch (err) {
-        error.FileNotFound => break :blk try cwd.createFile(SceneFileName, .{}),
+    var haveSceneFile = false;
+    var sceneFile = content.openFile(SceneFileName, .{ .mode = .read_write }) catch |err| blk: switch (err) {
+        error.FileNotFound => break :blk try content.createFile(SceneFileName, .{ .read = true }),
         else => return err,
     };
     {
@@ -933,36 +971,32 @@ pub fn main() !void {
         defer gpa.free(sceneContent);
 
         SceneNameStringMap = .init(gpa);
-        NodeNameStringMap = .init(gpa);
 
         if (sceneFileStat.size != 0) {
             try sceneFile.setEndPos(0);
             try sceneFile.seekTo(0);
 
+            haveSceneFile = true;
+
             SceneJson = try std.json.parseFromSlice(?[]cgltf.Scene, gpa, sceneContent, .{});
 
             if (SceneJson.value) |v| {
-                for (v) |value| {
+                for (v, 0..) |value, i| {
                     const name_dupe = try SceneJson.arena.allocator().dupe(u8, value.name);
-                    try SceneNameStringMap.put(name_dupe, {});
-                    for (value.nodes) |node| {
-                        const name_dupe2 = try SceneJson.arena.allocator().dupe(u8, node.name);
-                        try NodeNameStringMap.put(name_dupe2, {});
-                    }
+                    try SceneNameStringMap.put(name_dupe, @intCast(i));
                 }
             }
         } else {
             SceneJson = .{
                 .arena = try gpa.create(std.heap.ArenaAllocator),
-                .value = null,
+                .value = &.{},
             };
             SceneJson.arena.* = std.heap.ArenaAllocator.init(gpa);
         }
     }
+    errdefer sceneFile.close();
     defer {
-        sceneFile.close();
         SceneNameStringMap.deinit();
-        NodeNameStringMap.deinit();
 
         SceneJson.deinit();
     }
@@ -1006,7 +1040,50 @@ pub fn main() !void {
 
     try iterateFolderUpdate(content, "Content", &buffer);
 
+    if (SceneJson.value.?.len > 0) {
+        var cacheBuffer = [_]u8{0} ** 1024;
+        var sceneFileWriter = sceneFile.writer(&cacheBuffer);
+        var sceneJsonWrite = std.json.Stringify{
+            .writer = &sceneFileWriter.interface,
+            .options = .{ .whitespace = .indent_tab },
+        };
+        try sceneJsonWrite.write(SceneJson.value);
+        try sceneFileWriter.interface.flush();
+
+        sceneFile.close();
+
+        if (haveSceneFile) {
+            const fileModifiedTime = try getDbModifiedTime("FileName = ?", .{SceneFileName});
+            const pathModifiedTime = try getDbModifiedTime("RelativePath = ?", .{"Content" ++ slash ++ SceneFileName});
+
+            try processFile(
+                content,
+                SceneFileName,
+                "Content" ++ slash ++ SceneFileName,
+                &buffer,
+                fileModifiedTime,
+                pathModifiedTime,
+            );
+        } else {
+            try processFile(
+                content,
+                SceneFileName,
+                "Content" ++ slash ++ SceneFileName,
+                &buffer,
+                -1,
+                -1,
+            );
+        }
+    }
+
     try ContentPathT.delete("LastSeenTime < ?", .{time});
+
+    const rc = sqlite.sqlite3_exec(db, "COMMIT;", null, null, null);
+
+    if (rc != sqlite.SQLITE_OK) {
+        std.log.err("commit failed", .{});
+        return error.CommitError;
+    }
 
     const end = std.time.nanoTimestamp();
 

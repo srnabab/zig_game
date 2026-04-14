@@ -37,7 +37,7 @@ pub inline fn glm_ortho_vulkan(left: f32, right: f32, bottom: f32, top: f32, nea
     var tb: f32 = 0.0;
     var Fn: f32 = 0.0;
 
-    cglm.glm_mat4_zero(&dest.*);
+    cglm.glmc_mat4_zero(&dest.*);
 
     rl = 1.0 / (right - left);
     tb = 1.0 / (top - bottom);

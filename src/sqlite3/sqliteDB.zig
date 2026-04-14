@@ -362,7 +362,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                     i32, u32, c_uint => {
                         _ = sqlite.sqlite3_bind_int(stmt, ii, @intCast(@field(values, fields_info[i].name)));
                     },
-                    i64, u64 => {
+                    i64, u64, usize => {
                         _ = sqlite.sqlite3_bind_int64(stmt, ii, @intCast(@field(values, fields_info[i].name)));
                     },
                     BLOB => {

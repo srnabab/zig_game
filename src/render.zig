@@ -186,7 +186,7 @@ pub fn render_thread_func(
     var eye = cglm.vec3{ 0.0, 0.0, 100.0 };
     var center = cglm.vec3{ 0.0, 0.0, 0.0 };
     var up = cglm.vec3{ 0.0, 1.0, 0.0 };
-    cglm.glm_lookat(
+    cglm.glmc_lookat(
         &eye,
         &center,
         &up,
