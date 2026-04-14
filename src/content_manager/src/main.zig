@@ -475,6 +475,7 @@ fn updateLoadParameter(
 
             const initSceneCount = SceneJson.value.?.len;
             var sceneAdd: usize = 0;
+            var currentIndex: usize = initSceneCount + sceneAdd;
             for (res.scenes) |scene| {
                 const scene_name = try arena.dupe(u8, scene.name);
                 const getRes = try SceneNameStringMap.getOrPut(scene_name);
@@ -482,12 +483,19 @@ fn updateLoadParameter(
                 var scenePtr: *cgltf.Scene = undefined;
 
                 if (getRes.found_existing) {
-                    scenePtr = &SceneJson.value.?[getRes.value_ptr.*];
-                } else {
-                    SceneJson.value = try arena.realloc(SceneJson.value.?, initSceneCount + 1);
-                    scenePtr = &SceneJson.value.?[initSceneCount + sceneAdd];
+                    currentIndex = getRes.value_ptr.*;
 
-                    getRes.value_ptr.* = @intCast(initSceneCount + sceneAdd);
+                    scenePtr = &SceneJson.value.?[currentIndex];
+                } else {
+                    currentIndex = initSceneCount + sceneAdd;
+
+                    SceneJson.value = try arena.realloc(SceneJson.value.?, initSceneCount + sceneAdd + 1);
+                    scenePtr = &SceneJson.value.?[currentIndex];
+
+                    getRes.value_ptr.* = @intCast(currentIndex);
+
+                    SceneNodeNames = try arena.realloc(SceneNodeNames, initSceneCount + sceneAdd + 1);
+                    SceneNodeNames[currentIndex] = .init(arena);
 
                     scenePtr.nodes = &.{};
                     scenePtr.name = scene_name;
@@ -496,21 +504,59 @@ fn updateLoadParameter(
                 }
 
                 const initNodeCount = scenePtr.nodes.len;
-                scenePtr.nodes = try arena.realloc(scenePtr.nodes, scene.nodes.len + initNodeCount);
+                var nodeAdd: usize = 0;
 
                 for (scene.nodes, 0..) |node, j| {
+                    _ = j;
                     const node_name = try arena.dupe(u8, node.name);
+                    const node_getRes = try SceneNodeNames[currentIndex].getOrPut(node_name);
 
-                    const primtivesNames = try arena.alloc([]u8, node.primitiveNames.len);
-                    for (node.primitiveNames, 0..) |primName, k| {
-                        primtivesNames[k] = try arena.dupe(u8, primName);
+                    var nodePtr: *cgltf.Node = undefined;
+
+                    if (node_getRes.found_existing) {
+                        nodePtr = &scenePtr.nodes[node_getRes.value_ptr.*];
+                    } else {
+                        scenePtr.nodes = try arena.realloc(scenePtr.nodes, initNodeCount + nodeAdd + 1);
+                        nodePtr = &scenePtr.nodes[initNodeCount + nodeAdd];
+
+                        node_getRes.value_ptr.* = @intCast(initNodeCount + nodeAdd);
+
+                        nodePtr.primitiveNames = &.{};
+                        nodePtr.name = node_name;
+                        nodePtr.transform = node.transform;
+
+                        nodeAdd += 1;
                     }
 
-                    scenePtr.nodes[initNodeCount + j] = .{
-                        .name = node_name,
-                        .primitiveNames = primtivesNames,
-                        .transform = node.transform,
-                    };
+                    const initPrimitiveCount = nodePtr.primitiveNames.len;
+
+                    var primNameMap = std.StringHashMap(void).init(arena);
+                    defer primNameMap.deinit();
+
+                    for (nodePtr.primitiveNames, 0..) |primName, k| {
+                        _ = k;
+                        try primNameMap.put(primName, {});
+                    }
+
+                    var primAdd: usize = 0;
+
+                    for (node.primitiveNames, 0..) |primName, k| {
+                        _ = k;
+                        const primNameGetRes = try primNameMap.getOrPut(primName);
+
+                        if (primNameGetRes.found_existing) {
+                            continue;
+                        } else {
+                            nodePtr.primitiveNames = try arena.realloc(
+                                nodePtr.primitiveNames,
+                                initPrimitiveCount + primAdd + 1,
+                            );
+
+                            nodePtr.primitiveNames[primAdd + initPrimitiveCount] = try arena.dupe(u8, primName);
+
+                            primAdd += 1;
+                        }
+                    }
                 }
             }
         },
@@ -835,6 +881,7 @@ var ImageLoadParameterT: ImageLoadParameter = undefined;
 var ModelLoadParameterT: ModelLoadParameter = undefined;
 var SceneJson: std.json.Parsed(?[]cgltf.Scene) = undefined;
 var SceneNameStringMap: std.StringHashMap(u32) = undefined;
+var SceneNodeNames: []std.StringHashMap(u32) = undefined;
 
 var forceUpdate = options.force_update;
 
@@ -980,10 +1027,21 @@ pub fn main() !void {
 
             SceneJson = try std.json.parseFromSlice(?[]cgltf.Scene, gpa, sceneContent, .{});
 
+            const arena = SceneJson.arena.allocator();
+
             if (SceneJson.value) |v| {
+                SceneNodeNames = try arena.alloc(std.StringHashMap(u32), v.len);
                 for (v, 0..) |value, i| {
-                    const name_dupe = try SceneJson.arena.allocator().dupe(u8, value.name);
+                    const name_dupe = try arena.dupe(u8, value.name);
                     try SceneNameStringMap.put(name_dupe, @intCast(i));
+
+                    SceneNodeNames[i] = .init(arena);
+
+                    for (value.nodes, 0..) |node, j| {
+                        const node_name = try arena.dupe(u8, node.name);
+
+                        try SceneNodeNames[i].put(node_name, @intCast(j));
+                    }
                 }
             }
         } else {

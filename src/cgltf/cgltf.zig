@@ -73,7 +73,7 @@ fn cgltf_parse(
     }
 }
 
-const Node = struct {
+pub const Node = struct {
     name: []u8,
     primitiveNames: [][]u8,
     transform: vertexStruct.mat4,
