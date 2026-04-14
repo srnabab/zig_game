@@ -12,6 +12,13 @@ pub const ImageLoadParameter = sqlDB.Table(
     "ImageLoadParameter",
     false,
 );
+pub const ModelLoadParameter = sqlDB.Table(
+    "CREATE TABLE IF NOT EXISTS ModelLoadParameter (ID INTEGER KEY, FileName TEXT, ContentHash BLOB UNIQUE, RelativePath TEXT UNIQUE" ++
+        ", VertexType INTEGER, VertexSize INTEGER, ParentModelFile TEXT, FileUUID TEXT, FOREIGN KEY(FileUUID) REFERENCES ContentPath(UUID)," ++
+        "FOREIGN KEY(ParentModelFile) REFERENCES ContentPath(UUID) ON DELETE SET NULL ON UPDATE CASCADE);",
+    "ModelLoadParameter",
+    false,
+);
 // pub const ShaderLoadParameter = sqlDB.Table(
 //     "CREATE TABLE IF NOT EXISTS ShaderLoadParameter (FileName TEXT PRIMARY KEY, ContentHash BLOB UNIQUE, RelativePath TEXT UNIQUE, FileSize INTEGER" ++
 //         ", EntryName TEXT, Stage INTEGER, SetCount INTEGER, BindingCount INTEGER, Bindings BLOB, PushConstantSize INTEGER" ++
