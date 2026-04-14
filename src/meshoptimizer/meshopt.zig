@@ -1,6 +1,11 @@
 const std = @import("std");
 
+pub const Max_Vertices = 64;
+pub const Max_Triangles = 124;
+
 pub const meshopt = @cImport(@cInclude("meshoptimizer.h"));
+
+pub const meshopt_Meshlet = meshopt.meshopt_Meshlet;
 
 pub const remapReturn = struct {
     indices: []u32,
@@ -133,5 +138,53 @@ pub fn analyzeVertex(indices: []u32, vertex_positions: [*c]f32, vertexCount: usi
         .vertexCache = cache,
         .overdraw = overdraw,
         .vertexFetch = fetch,
+    };
+}
+
+pub const MeshletResult = struct {
+    meshlets: []meshopt.meshopt_Meshlet,
+    meshlet_vertices: []u32,
+    meshlet_triangles: []u8,
+};
+
+pub fn clusterization(vertex_positions: [*c]f32, vertexCount: usize, vertexSize: usize, indices: []u32, allocator: std.mem.Allocator) !MeshletResult {
+    const max_meshlets = meshopt.meshopt_buildMeshletsBound(indices.len, Max_Vertices, Max_Triangles);
+
+    var meshlets = try allocator.alloc(meshopt.meshopt_Meshlet, max_meshlets);
+    var meshlet_vertices = try allocator.alloc(u32, indices.len);
+    var meshlet_triangles = try allocator.alloc(u8, indices.len);
+
+    const meshlet_count = meshopt.meshopt_buildMeshlets(
+        meshlets.ptr,
+        meshlet_vertices.ptr,
+        meshlet_triangles.ptr,
+        indices.ptr,
+        indices.len,
+        vertex_positions,
+        vertexCount,
+        vertexSize,
+        Max_Vertices,
+        Max_Triangles,
+        0.0,
+    );
+
+    const last_meshlet = &meshlets[meshlet_count - 1];
+    meshlet_vertices = try allocator.realloc(meshlet_vertices, last_meshlet.vertex_offset + last_meshlet.vertex_count);
+    meshlet_triangles = try allocator.realloc(meshlet_triangles, last_meshlet.triangle_offset + last_meshlet.triangle_count * 3);
+    meshlets = try allocator.realloc(meshlets, meshlet_count);
+
+    for (meshlets) |m| {
+        meshopt.meshopt_optimizeMeshlet(
+            &meshlet_vertices[m.vertex_offset],
+            &meshlet_triangles[m.triangle_offset],
+            m.triangle_count,
+            m.vertex_count,
+        );
+    }
+
+    return .{
+        .meshlets = meshlets,
+        .meshlet_vertices = meshlet_vertices,
+        .meshlet_triangles = meshlet_triangles,
     };
 }

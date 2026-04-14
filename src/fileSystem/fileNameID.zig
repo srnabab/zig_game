@@ -19,10 +19,10 @@ const list = [_]KV{
 .{ "bottom.png", 11 },
 .{ "box.bin", 12 },
 .{ "box.glb", 13 },
-.{ "box.gltf", 14 },
-.{ "box.obj", 15 },
-.{ "box.png", 16 },
-.{ "Cube_0.vtx", 17 },
+.{ "Cube_0.vtx", 14 },
+.{ "box.gltf", 15 },
+.{ "box.obj", 16 },
+.{ "box.png", 17 },
 .{ "dragon.glb", 18 },
 .{ "dragon_0.vtx", 19 },
 .{ "voxel.mtl", 20 },
@@ -34,6 +34,7 @@ const list = [_]KV{
 .{ "model3d.pipeb", 26 },
 .{ "Sampler", 27 },
 .{ "pixel2dSampler.sampler", 28 },
+.{ "Scenes.json", 29 },
 .{ "Shaders", 30 },
 .{ "2d.vert.spv", 31 },
 .{ "combine.frag.spv", 32 },
@@ -79,7 +80,6 @@ const list = [_]KV{
 .{ "Tilemap", 73 },
 .{ "tileMap1.tsdI", 74 },
 .{ "tileSet1.tsd", 75 },
-.{ "Scenes.json", 76 },
 };
 
 break: map std.StaticStringMap(i32).initComptime(list);

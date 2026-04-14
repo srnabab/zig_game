@@ -14,8 +14,9 @@ pub const ImageLoadParameter = sqlDB.Table(
 );
 pub const ModelLoadParameter = sqlDB.Table(
     "CREATE TABLE IF NOT EXISTS ModelLoadParameter (ID INTEGER PRIMARY KEY, FileName TEXT, ContentHash BLOB UNIQUE, RelativePath TEXT UNIQUE" ++
-        ", VertexType INTEGER, VerticesSize INTEGER, ParentModelFile TEXT, FileUUID TEXT, FOREIGN KEY(FileUUID) REFERENCES ContentPath(UUID)," ++
-        "FOREIGN KEY(ParentModelFile) REFERENCES ContentPath(UUID) ON DELETE SET NULL ON UPDATE CASCADE);",
+        ", VertexType INTEGER, VerticesSize INTEGER, MeshletsSize INTEGER, MeshletVerticesSize INTEGER, MeshletTrianglesSize INTEGER" ++
+        ", ParentModelFile TEXT, FileUUID TEXT, FOREIGN KEY(FileUUID) REFERENCES ContentPath(UUID)" ++
+        ", FOREIGN KEY(ParentModelFile) REFERENCES ContentPath(UUID) ON DELETE SET NULL ON UPDATE CASCADE);",
     "ModelLoadParameter",
     false,
 );

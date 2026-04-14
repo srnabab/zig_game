@@ -364,16 +364,41 @@ fn updateLoadParameter(
                     const vertices = @as([*]u8, @ptrCast(@alignCast(vertex_opted.remap.vertices)))[0..vertex_opted.remap.totalVerticesSize];
                     gpa.free(vertices);
                 }
+                const meshlets = try meshopt.clusterization(
+                    @ptrCast(@alignCast(vertex_opted.remap.vertices)),
+                    vertex_opted.remap.newVertexCount,
+                    vertex_opted.remap.vertexSize,
+                    vertex_opted.remap.indices,
+                    gpa,
+                );
+                defer {
+                    gpa.free(meshlets.meshlets);
+                    gpa.free(meshlets.meshlet_vertices);
+                    gpa.free(meshlets.meshlet_triangles);
+                }
 
+                const indicesBytes: []u8 = std.mem.sliceAsBytes(vertex_opted.remap.indices);
+                const verticeBytes: []u8 =
+                    std.mem.sliceAsBytes(@as([*]u8, @ptrCast(@alignCast(vertex_opted.remap.vertices)))[0 .. vertex_opted.remap.newVertexCount * vertex_opted.remap.vertexSize]);
+                const meshletsBytes: []u8 = std.mem.sliceAsBytes(meshlets.meshlets);
+                const meshletVerticesBytes: []u8 = std.mem.sliceAsBytes(meshlets.meshlet_vertices);
+                const meshletTrianglesBytes: []u8 = std.mem.sliceAsBytes(meshlets.meshlet_triangles);
                 var meshMem = try arena.alloc(
                     u8,
-                    vertex_opted.remap.indices.len * @sizeOf(u32) + vertex_opted.remap.newVertexCount * vertex_opted.remap.vertexSize,
+                    indicesBytes.len + meshletsBytes.len + meshletVerticesBytes.len + meshletTrianglesBytes.len + verticeBytes.len,
                 );
-                const indicesBytes = std.mem.sliceAsBytes(vertex_opted.remap.indices);
-                const verticeBytes = std.mem.sliceAsBytes(@as([*]u8, @ptrCast(@alignCast(vertex_opted.remap.vertices)))[0 .. vertex_opted.remap.newVertexCount * vertex_opted.remap.vertexSize]);
+                {
+                    const meshletsStart = verticeBytes.len;
+                    const meshletVerticesStart = meshletsStart + meshletsBytes.len;
+                    const meshletTrianglesStart = meshletVerticesStart + meshletVerticesBytes.len;
+                    const indicesStart = meshletTrianglesStart + meshletTrianglesBytes.len;
 
-                @memcpy(meshMem[0 .. vertex_opted.remap.newVertexCount * vertex_opted.remap.vertexSize], verticeBytes);
-                @memcpy(meshMem[vertex_opted.remap.newVertexCount * vertex_opted.remap.vertexSize ..], indicesBytes);
+                    @memcpy(meshMem[0..meshletsStart], verticeBytes);
+                    @memcpy(meshMem[meshletsStart..meshletVerticesStart], meshletsBytes);
+                    @memcpy(meshMem[meshletVerticesStart..meshletTrianglesStart], meshletVerticesBytes);
+                    @memcpy(meshMem[meshletTrianglesStart..indicesStart], meshletTrianglesBytes);
+                    @memcpy(meshMem[indicesStart..], indicesBytes);
+                }
 
                 const hashh = hash.blake3HashContent(meshMem);
 
@@ -460,11 +485,14 @@ fn updateLoadParameter(
                     );
 
                     try ModelLoadParameterT.update(
-                        "VertexType,VerticesSize,ParentModelFile",
+                        "VertexType,VerticesSize,MeshletsSize,MeshletVerticesSize,MeshletTrianglesSize,ParentModelFile",
                         "ContentHash = ?",
                         .{
                             @as(u32, @intFromEnum(vertex_opted.vType)),
-                            vertex_opted.remap.vertexSize * vertex_opted.remap.newVertexCount,
+                            verticeBytes.len,
+                            meshletsBytes.len,
+                            meshletVerticesBytes.len,
+                            meshletTrianglesBytes.len,
                             uuidBuffer,
                             sqlDB.BLOB{ .data = &hashh, .len = hash.blake3.BLAKE3_OUT_LEN },
                         },
