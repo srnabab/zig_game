@@ -847,6 +847,127 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
             }
         }
 
+        pub fn have(self: *Self, comptime targets: []const u8, comptime constraint: []const u8, values: anytype) sqliteError!bool {
+            const zone = tracy.initZone(@src(), .{ .name = "have" });
+            defer zone.deinit();
+
+            const ArgsType = @TypeOf(values);
+            const args_type_info = @typeInfo(ArgsType);
+            if (args_type_info != .@"struct") {
+                @compileError("expected tuple or struct argument, found " ++ @typeName(ArgsType));
+            }
+
+            const fields_info = args_type_info.@"struct".fields;
+
+            @setEvalBranchQuota(2000000);
+
+            const ssql = comptime ss: {
+                break :ss std.fmt.comptimePrint(
+                    "SELECT {s} FROM  {s} WHERE {s};",
+                    .{ targets, tableName, constraint },
+                );
+            };
+            // std.log.info("{s}", .{ssql});
+
+            var stmt: ?*sqlite.sqlite3_stmt = null;
+            try prepare_v2(self.db, @ptrCast(ssql), -1, @ptrCast(&stmt), null);
+            defer _ = sqlite.sqlite3_finalize(stmt);
+
+            // std.log.info("fields len {d}", .{fields_info.len});
+            inline for (0..fields_info.len) |i| {
+                const ii: c_int = @intCast(i + 1);
+                // std.log.info("cast c_int {d}", .{ii});
+
+                switch (fields_info[i].type) {
+                    i64 => {
+                        _ = sqlite.sqlite3_bind_int64(stmt, ii, @field(values, fields_info[i].name));
+                    },
+                    i32 => {
+                        _ = sqlite.sqlite3_bind_int64(stmt, ii, @field(values, fields_info[i].name));
+                    },
+                    BLOB => {
+                        _ = sqlite.sqlite3_bind_blob(
+                            stmt,
+                            ii,
+                            @field(values, fields_info[i].name).data,
+                            @field(values, fields_info[i].name).len,
+                            sqlite.SQLITE_STATIC,
+                        );
+                    },
+                    [:0]u8, []const u8 => {
+                        const res = sqlite.sqlite3_bind_text(
+                            stmt,
+                            ii,
+                            @ptrCast(@field(values, fields_info[i].name).ptr),
+                            -1,
+                            sqlite.SQLITE_STATIC,
+                        );
+                        // sdl.SDL_Log(@ptrCast(@field(values, fields_info[i].name).ptr));
+                        // std.log.info("name {s}", .{@field(values, fields_info[i].name)});
+                        if (res != sqlite.SQLITE_OK) {
+                            std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
+                        }
+                    },
+                    *const []const u8 => {
+                        const res = sqlite.sqlite3_bind_text(
+                            stmt,
+                            ii,
+                            @ptrCast(@field(values, fields_info[i].name)),
+                            -1,
+                            sqlite.SQLITE_STATIC,
+                        );
+                        // std.log.info("name {s}", .{@field(values, fields_info[i].name)});
+                        if (res != sqlite.SQLITE_OK) {
+                            std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
+                        }
+                    },
+                    else => {
+                        const yes: bool = comptime l: {
+                            break :l isCompileTimeString(fields_info[i].type);
+                        };
+                        const slice = comptime lc: {
+                            break :lc isFixedLengthSlice(fields_info[i].type);
+                        };
+                        if (yes) {
+                            const res = sqlite.sqlite3_bind_text(
+                                stmt,
+                                ii,
+                                @field(values, fields_info[i].name),
+                                -1,
+                                sqlite.SQLITE_STATIC,
+                            );
+                            // std.log.info("name {s}", .{@field(values, fields_info[i].name)});
+                            if (res != sqlite.SQLITE_OK) {
+                                std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
+                            }
+                        } else if (slice) {
+                            const res = sqlite.sqlite3_bind_text(
+                                stmt,
+                                ii,
+                                @ptrCast(&@field(values, fields_info[i].name)),
+                                -1,
+                                sqlite.SQLITE_STATIC,
+                            );
+                            // std.log.info("name {s}", .{@field(values, fields_info[i].name)});
+                            if (res != sqlite.SQLITE_OK) {
+                                std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
+                            }
+                        } else {
+                            // @compileLog("sss");
+                            @compileError(std.fmt.comptimePrint("unsupported type {s} {}", .{ @typeName(fields_info[i].type), yes }));
+                        }
+                    },
+                }
+            }
+
+            const res = sqlite.sqlite3_step(stmt);
+
+            if (res == sqlite.SQLITE_ROW) {
+                return true;
+            }
+            return false;
+        }
+
         fn prepare_v2(db: ?*sqlite.sqlite3, zSql: [*c]const u8, nByte: c_int, ppStmt: [*c]?*sqlite.sqlite3_stmt, pzTail: [*c][*c]const u8) !void {
             if (sqlite.sqlite3_prepare_v2(db, zSql, nByte, ppStmt, pzTail) != sqlite.SQLITE_OK) {
                 std.log.warn("failed to prepare stmt\n {s}\n{s}", .{ sqlite.sqlite3_errmsg(db), zSql });

@@ -79,7 +79,7 @@ const Node = struct {
     transform: vertexStruct.mat4,
 };
 
-const Scene = struct {
+pub const Scene = struct {
     name: []u8,
     nodes: []Node,
 };
@@ -111,11 +111,12 @@ fn setTransform(node: [*c]cgltf.cgltf_node, nodePtr: *Node) void {
             nodePtr.transform[i][3] = node.*.matrix[k * 4 + 3];
         }
     } else {
-        var matrix: vertexStruct.mat3 = undefined;
+        var matrix: vertexStruct.mat3 align(16) = undefined;
         vertexStruct.cglm.glmc_mat3_identity(&matrix);
 
         if (node.*.has_rotation == 1) {
-            vertexStruct.cglm.glmc_quat_mat3(&node.*.rotation, &matrix);
+            var rotation: vertexStruct.vec4 align(16) = node.*.rotation;
+            vertexStruct.cglm.glmc_quat_mat3(&rotation, &matrix);
         }
 
         if (node.*.has_scale == 1) {

@@ -17,8 +17,10 @@ const assert = std.debug.assert;
 
 const ContentPath = tables.ContentPath;
 const ImageLoadParameter = tables.ImageLoadParameter;
+const ModelLoadParameter = tables.ModelLoadParameter;
 
-const tableNames = [_][]const u8{"ImageLoadParameter"};
+const SceneFileName = "Scenes.json";
+const tableNames = [_][]const u8{ "ImageLoadParameter", "ModelLoadParameter" };
 
 const CreateTriggerContentPathOnInsertInsertIntoSubTable = tt: {
     var buffer = [_]u8{0} ** 10240;
@@ -46,6 +48,17 @@ const CreateTriggerContentPathOnInsertInsertIntoSubTable = tt: {
                         "(NEW.ID,NEW.FileName,NEW.ContentHash,NEW.RelativePath,NEW.UUID) ON CONFLICT(FileName,ContentHash) DO UPDATE SET " ++
                         "ID = NEW.ID, FileUUID = NEW.UUID, FileName = NEW.FileName, ContentHash = NEW.ContentHash, RelativePath = NEW.RelativePath; END;",
                     .{ tableNames[0], field.value },
+                )) catch |err| {
+                    @compileError(std.fmt.comptimePrint("{s}", .{@errorName(err)}));
+                };
+            },
+            .VTX => {
+                count += writer.write(std.fmt.comptimePrint(
+                    "CREATE TRIGGER IF NOT EXISTS insertInto{s} AFTER INSERT ON ContentPath " ++
+                        "FOR EACH ROW WHEN NEW.FileType={d} BEGIN INSERT INTO ModelLoadParameter (ID,FileName,ContentHash,RelativePath,FileUUID) VALUES " ++
+                        "(NEW.ID,NEW.FileName,NEW.ContentHash,NEW.RelativePath,NEW.UUID) ON CONFLICT(FileName,ContentHash) DO UPDATE SET " ++
+                        "ID = NEW.ID, FileUUID = NEW.UUID, FileName = NEW.FileName, ContentHash = NEW.ContentHash, RelativePath = NEW.RelativePath; END;",
+                    .{ tableNames[1], field.value },
                 )) catch |err| {
                     @compileError(std.fmt.comptimePrint("{s}", .{@errorName(err)}));
                 };
@@ -165,6 +178,7 @@ const FileType = enum {
     SPV,
     TXT,
     GLTF,
+    VTX,
     HASHTABLE,
     UNKNOWN,
 };
@@ -210,6 +224,7 @@ const FileTypeHashTable = map: {
         .{ ".txt", FileType.TXT },
         .{ ".gltf", FileType.GLTF },
         .{ ".glb", FileType.GLTF },
+        .{ ".vtx", FileType.VTX },
     };
 
     const maps = maptype.initComptime(list);
@@ -243,7 +258,83 @@ fn judgeImageLoadParameter(fileName: []const u8) !struct {
     return .{ vk.VK_FORMAT_R8G8B8A8_SRGB, vk.VK_IMAGE_TILING_OPTIMAL, vk.VK_IMAGE_USAGE_TRANSFER_DST_BIT | vk.VK_IMAGE_USAGE_SAMPLED_BIT, vk.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT };
 }
 
-fn updateLoadParameter(tp: FileType, cc: std.fs.File.Stat, content: []const u8, fileName: []const u8) !void {
+fn optimizeVertex(vertex: vertexStruct.Vertex, index: []u32, allocator: std.mem.Allocator) !meshopt.remapReturn {
+    const vertexInfo = cgltf.unpackVertex(vertex);
+    std.log.debug("count {d}, size {d}", .{ vertexInfo.vertexCount, vertexInfo.vertexSize });
+
+    const analyze1 = meshopt.analyzeVertex(
+        index,
+        @ptrCast(@alignCast(vertexInfo.vertices)),
+        vertexInfo.vertexCount,
+        vertexInfo.vertexSize,
+    );
+    std.log.debug("acmr {d}, atvr {d}, overfetch {d}, overdraw {d}", .{
+        analyze1.vertexCache.acmr,
+        analyze1.vertexCache.atvr,
+        analyze1.vertexFetch.overfetch,
+        analyze1.overdraw.overdraw,
+    });
+
+    const res2 = try meshopt.generateVertexRemap(
+        index,
+        vertexInfo.vertices,
+        vertexInfo.vertexCount,
+        vertexInfo.vertexSize,
+        allocator,
+    );
+    defer {
+        allocator.free(res2.indices);
+        const vertices = @as([*]u8, @ptrCast(@alignCast(res2.vertices)))[0 .. res2.newVertexCount * vertexInfo.vertexSize];
+        allocator.free(vertices);
+    }
+
+    const res3 = try meshopt.vertexOptimization(
+        res2.indices,
+        @ptrCast(@alignCast(res2.vertices)),
+        res2.newVertexCount,
+        vertexInfo.vertexSize,
+        allocator,
+    );
+    // defer {
+    //     allocator.free(res3.indices);
+    //     const vertices = @as([*]u8, @ptrCast(@alignCast(res3.vertices)))[0 .. res2.vertexCount * vertexInfo.vertexSize];
+    //     allocator.free(vertices);
+    // }
+
+    const analyze2 = meshopt.analyzeVertex(
+        res3.indices,
+        @ptrCast(@alignCast(res3.vertices)),
+        res3.newVertexCount,
+        vertexInfo.vertexSize,
+    );
+    std.log.debug("acmr {d}, atvr {d}, overfetch {d}, overdraw {d}", .{
+        analyze2.vertexCache.acmr,
+        analyze2.vertexCache.atvr,
+        analyze2.vertexFetch.overfetch,
+        analyze2.overdraw.overdraw,
+    });
+
+    // const vertex = cgltf.packVertex(.{
+    //     .vertices = res3.vertices.?,
+    //     .vertexCount = @intCast(res3.vertexCount),
+    //     .vertexSize = vertexInfo.vertexSize,
+    // }, std.meta.activeTag(value.vertex));
+
+    std.log.debug("count {d}, size {d}", .{ res3.newVertexCount, vertexInfo.vertexSize });
+    // cgltf.printVertex(vertex, res3.indices);
+
+    return res3;
+}
+
+fn updateLoadParameter(
+    dir: std.fs.Dir,
+    parentID: []const u8,
+    tp: FileType,
+    cc: std.fs.File.Stat,
+    content: []const u8,
+    fileName: []const u8,
+    rpZ: []const u8,
+) !void {
     const zone = tracy.initZone(@src(), .{ .name = "update load parameter" });
     defer zone.deinit();
 
@@ -258,27 +349,145 @@ fn updateLoadParameter(tp: FileType, cc: std.fs.File.Stat, content: []const u8, 
             var res = try cgltf.loadGltfFile(content, cc, gpa);
             defer res.arenaAllocator.deinit();
 
+            const arena = SceneJson.arena.allocator();
+            var index: usize = 0;
+            if (SceneJson.value != null) {
+                index = SceneJson.value.?.len;
+                SceneJson.value.? = try arena.realloc(
+                    SceneJson.value.?,
+                    SceneJson.value.?.len + res.scenes.len,
+                );
+            } else {
+                SceneJson.value = try arena.alloc(cgltf.Scene, res.scenes.len);
+            }
+
+            var modelNameToNewName = std.StringHashMap([]u8).init(arena);
+            defer modelNameToNewName.deinit();
+
             for (res.primitives) |value| {
-                cgltf.printVertex(value.vertex, value.index);
-
-                const vertexInfo = cgltf.unpackVertex(value.vertex);
-                std.log.debug("count {d}, size {d}", .{ vertexInfo.vertexCount, vertexInfo.vertexSize });
-
-                const res2 = try meshopt.generateVertexRemap(value.index, vertexInfo.vertices, vertexInfo.vertexCount, vertexInfo.vertexSize, gpa);
+                const vertex_opted = try optimizeVertex(value.vertex, value.index, gpa);
                 defer {
-                    gpa.free(res2.indices);
-                    const vertices = @as([*]u8, @ptrCast(@alignCast(res2.vertices)))[0 .. res2.vertexCount * vertexInfo.vertexSize];
+                    gpa.free(vertex_opted.indices);
+                    const vertices = @as([*]u8, @ptrCast(@alignCast(vertex_opted.vertices)))[0..vertex_opted.totalVerticesSize];
                     gpa.free(vertices);
                 }
 
-                const vertex = cgltf.packVertex(.{
-                    .vertices = res2.vertices.?,
-                    .vertexCount = @intCast(res2.vertexCount),
-                    .vertexSize = vertexInfo.vertexSize,
-                }, std.meta.activeTag(value.vertex));
+                var meshMem = try arena.alloc(
+                    u8,
+                    vertex_opted.indices.len * @sizeOf(u32) + vertex_opted.newVertexCount * vertex_opted.vertexSize,
+                );
+                const indicesBytes = std.mem.sliceAsBytes(vertex_opted.indices);
+                const verticeBytes = std.mem.sliceAsBytes(@as([*]u8, @ptrCast(@alignCast(vertex_opted.vertices)))[0 .. vertex_opted.newVertexCount * vertex_opted.vertexSize]);
 
-                std.log.debug("count {d}, size {d}", .{ res2.vertexCount, vertexInfo.vertexSize });
-                cgltf.printVertex(vertex, res2.indices);
+                @memcpy(meshMem[0 .. vertex_opted.newVertexCount * vertex_opted.vertexSize], verticeBytes);
+                @memcpy(meshMem[vertex_opted.newVertexCount * vertex_opted.vertexSize ..], indicesBytes);
+
+                const hashh = hash.blake3HashContent(meshMem);
+
+                var buffer = [_:0]u8{0} ** 256;
+                var primFileName = try std.fmt.bufPrintZ(&buffer, "{s}.vtx", .{value.name});
+
+                const have = try ContentPathT.have("FileName", "FileName = ?", .{primFileName});
+                if (have) {
+                    const have3 = try ContentPathT.have(
+                        "ContentHash",
+                        "ContentHash = ?",
+                        .{sqlDB.BLOB{ .data = &hashh, .len = hashh.len }},
+                    );
+                    if (have3) {
+                        continue;
+                    }
+
+                    primFileName = try std.fmt.bufPrintZ(&buffer, "{s}_{s}.vtx", .{
+                        value.name,
+                        std.fmt.bytesToHex(hashh, .lower),
+                    });
+
+                    const name_dupe = try arena.dupe(u8, value.name);
+                    const primFileName_dupe = try arena.dupe(u8, primFileName);
+
+                    try modelNameToNewName.put(name_dupe, primFileName_dupe);
+
+                    const have2 = try ContentPathT.have("FileName", "FileName = ?", .{primFileName});
+                    if (have2) {
+                        continue;
+                    }
+                }
+
+                var primFile = try dir.createFile(primFileName, .{ .read = true });
+                defer primFile.close();
+
+                var primFileWriter = primFile.writer(&buffer);
+                try primFileWriter.interface.writeAll(meshMem);
+
+                {
+                    const time: i64 = @truncate(std.time.nanoTimestamp());
+                    const metadata = primFile.stat() catch |err| blk: switch (err) {
+                        error.AccessDenied => {
+                            std.Thread.sleep(std.time.ns_per_ms);
+                            break :blk try primFile.stat();
+                        },
+                        else => return err,
+                    };
+
+                    var relativePathBuffer = [_]u8{0} ** 256;
+                    const relativePathZ = try std.fmt.bufPrintZ(&relativePathBuffer, "{s}{s}{s}", .{ rpZ, slash, primFileName });
+
+                    var uuidBuffer = [_:0]u8{0} ** UUID.len;
+                    try UUID.createNewUUID(&uuidBuffer);
+                    const sufffix_index = std.mem.lastIndexOf(u8, primFileName, ".") orelse primFileName.len;
+                    const fType = judgeFileType(primFileName[sufffix_index..], meshMem);
+
+                    try ContentPathT.insert(.{
+                        .ID = @intCast(sqlDB.getGlobalIncrementID()),
+                        .UUID = @constCast(&uuidBuffer),
+                        .ParentUUID = @constCast(parentID.ptr),
+                        .RelativePath = @constCast(relativePathZ.ptr),
+                        .FileName = @constCast(primFileName.ptr),
+                        .TYPE = @intFromEnum(metadata.kind),
+                        .FileSize = @intCast(metadata.size),
+                        .ContentHash = sqlDB.BLOB{ .data = &hashh, .len = hash.blake3.BLAKE3_OUT_LEN },
+                        .ModifiedTime = @as(i64, @truncate(metadata.mtime)),
+                        .LastSeenTime = time,
+                        .FileType = @intFromEnum(fType),
+                    });
+
+                    // try ModelLoadParameterT.insert()
+                }
+                // try processFile(dir, primFileName, rPZ, parentID, -1, -1);
+            }
+
+            for (res.scenes) |scene| {
+                for (scene.nodes) |node| {
+                    const node_name = try arena.dupe(u8, node.name);
+                    const node_getRes = SceneNameStringMap.get(node_name);
+
+                    if (node_getRes != null) {
+                        defer arena.free(node_name);
+                        const new_name = try arena.alloc(u8, node.name.len + UUID.len);
+
+                        @memcpy(new_name[0..node.name.len], node.name);
+                        try UUID.createNewUUID(new_name[node.name.len..].ptr);
+
+                        try SceneNameStringMap.put(new_name, void{});
+                    } else {
+                        try NodeNameStringMap.put(node_name, void{});
+                    }
+                }
+                const name = try arena.dupe(u8, scene.name);
+                const getRes = SceneNameStringMap.get(name);
+
+                if (getRes != null) {
+                    defer arena.free(name);
+                    const new_name = try arena.alloc(u8, scene.name.len + UUID.len);
+
+                    @memcpy(new_name[0..scene.name.len], scene.name);
+                    try UUID.createNewUUID(new_name[scene.name.len..].ptr);
+
+                    try SceneNameStringMap.put(new_name, void{});
+
+                    // SceneJson.value.?[index] = .{ .name = new_name };
+                }
             }
         },
         else => {},
@@ -360,7 +569,6 @@ fn processFile(
         var uuidBuffer = [_]u8{0} ** UUID.len;
         try UUID.createNewUUID(&uuidBuffer);
         const index = std.mem.lastIndexOf(u8, name, ".") orelse name.len;
-        // try ContentPathInsertFile(&uuidBuffer, parentID.ptr, rPZ.ptr, name, time, fType, dir);
 
         var content = try gpa.alloc(u8, metadata.size);
         defer gpa.free(content);
@@ -368,7 +576,6 @@ fn processFile(
 
         var hashh = hash.blake3HashContent(content[0..metadata.size]);
 
-        // const fType = nameToFileType(name[index..]);
         const fType = judgeFileType(name[index..], content);
 
         try ContentPathT.insert(.{
@@ -385,7 +592,15 @@ fn processFile(
             .FileType = @intFromEnum(fType),
         });
 
-        try updateLoadParameter(fType, metadata, content, name);
+        try updateLoadParameter(
+            dir,
+            parentID,
+            fType,
+            metadata,
+            content,
+            name,
+            rPZ[0 .. rPZ.len - name.len - 1],
+        );
     } else {
         const isModified = (currentModifiedTime != fileModifiedTime) or forceUpdate;
         if (pathModifiedTime == -1) {
@@ -400,15 +615,35 @@ fn processFile(
                 try ContentPathT.update(
                     "ID,RelativePath,ParentID,ModifiedTime,LastSeenTime,ContentHash",
                     "FileName = ?",
-                    .{ sqlDB.getGlobalIncrementID(), rPZ, parentID, currentModifiedTime, time, sqlDB.BLOB{ .data = &contentHash, .len = contentHash.len }, name },
+                    .{
+                        sqlDB.getGlobalIncrementID(),
+                        rPZ,
+                        parentID,
+                        currentModifiedTime,
+                        time,
+                        sqlDB.BLOB{ .data = &contentHash, .len = contentHash.len },
+                        name,
+                    },
                 );
 
                 const index = std.mem.lastIndexOf(u8, name, ".") orelse name.len;
                 const fType = judgeFileType(name[index..], content);
 
-                try updateLoadParameter(fType, metadata, content, name);
+                try updateLoadParameter(
+                    dir,
+                    parentID,
+                    fType,
+                    metadata,
+                    content,
+                    name,
+                    rPZ[0 .. rPZ.len - name.len - 1],
+                );
             } else {
-                try ContentPathT.update("ID,RelativePath,ParentID,LastSeenTime", "FileName = ?", .{ sqlDB.getGlobalIncrementID(), rPZ, parentID, time, name });
+                try ContentPathT.update(
+                    "ID,RelativePath,ParentID,LastSeenTime",
+                    "FileName = ?",
+                    .{ sqlDB.getGlobalIncrementID(), rPZ, parentID, time, name },
+                );
             }
         } else {
             // 已存在的文件：只更新时间和内容哈希（如果需要）
@@ -431,7 +666,15 @@ fn processFile(
 
                 // std.log.debug("{s}", .{@tagName(fType)});
 
-                try updateLoadParameter(fType, metadata, content, name);
+                try updateLoadParameter(
+                    dir,
+                    parentID,
+                    fType,
+                    metadata,
+                    content,
+                    name,
+                    rPZ[0 .. rPZ.len - name.len - 1],
+                );
             } else {
                 try ContentPathT.update("ID,LastSeenTime", "FileName = ?", .{ sqlDB.getGlobalIncrementID(), time, name });
             }
@@ -469,6 +712,8 @@ fn processDirectory(
     const metadata = try tempDir.stat();
     const currentModifiedTime: i64 = @truncate(metadata.mtime);
     var currentID: [UUID.len]u8 = undefined;
+    currentID[UUID.len - 2] = 0;
+    currentID[UUID.len - 1] = 0;
 
     if (fileModifiedTime == -1) {
         // 新目录：插入记录并获取新ID
@@ -491,16 +736,32 @@ fn processDirectory(
         if (pathModifiedTime == -1) {
             // 目录被移动：更新路径和父ID
             if (isModified) {
-                try ContentPathT.update("ID,RelativePath,ParentUUID,ModifiedTime,LastSeenTime", "FileName = ?", .{ sqlDB.getGlobalIncrementID(), rPZ, parentID, currentModifiedTime, time, name });
+                try ContentPathT.update(
+                    "ID,RelativePath,ParentUUID,ModifiedTime,LastSeenTime",
+                    "FileName = ?",
+                    .{ sqlDB.getGlobalIncrementID(), rPZ, parentID, currentModifiedTime, time, name },
+                );
             } else {
-                try ContentPathT.update("ID,RelativePath,ParentUUID,LastSeenTime", "FileName = ?", .{ sqlDB.getGlobalIncrementID(), rPZ, parentID, time, name });
+                try ContentPathT.update(
+                    "ID,RelativePath,ParentUUID,LastSeenTime",
+                    "FileName = ?",
+                    .{ sqlDB.getGlobalIncrementID(), rPZ, parentID, time, name },
+                );
             }
         } else {
             // 已存在的目录：更新时间
             if (isModified) {
-                try ContentPathT.update("ID,ModifiedTime,LastSeenTime", "FileName = ?", .{ sqlDB.getGlobalIncrementID(), currentModifiedTime, time, name });
+                try ContentPathT.update(
+                    "ID,ModifiedTime,LastSeenTime",
+                    "FileName = ?",
+                    .{ sqlDB.getGlobalIncrementID(), currentModifiedTime, time, name },
+                );
             } else {
-                try ContentPathT.update("ID,LastSeenTime", "FileName = ?", .{ sqlDB.getGlobalIncrementID(), time, name });
+                try ContentPathT.update(
+                    "ID,LastSeenTime",
+                    "FileName = ?",
+                    .{ sqlDB.getGlobalIncrementID(), time, name },
+                );
             }
         }
         // 对于已存在的目录，需要获取其ID以进行递归
@@ -539,6 +800,10 @@ fn iterateFolderUpdate(dir: std.fs.Dir, dirName: []const u8, parentID: []const u
 
 var ContentPathT: ContentPath = undefined;
 var ImageLoadParameterT: ImageLoadParameter = undefined;
+var ModelLoadParameterT: ModelLoadParameter = undefined;
+var SceneJson: std.json.Parsed(?[]cgltf.Scene) = undefined;
+var SceneNameStringMap: std.StringHashMap(void) = undefined;
+var NodeNameStringMap: std.StringHashMap(void) = undefined;
 
 var forceUpdate = options.force_update;
 
@@ -638,6 +903,8 @@ pub fn main() !void {
     try ContentPathT.createTable();
     ImageLoadParameterT = ImageLoadParameter.init(db.?);
     try ImageLoadParameterT.createTable();
+    ModelLoadParameterT = ModelLoadParameter.init(db.?);
+    try ModelLoadParameterT.createTable();
     executeSQL(createUniqueIndexFileNameAndContentHash, db.?);
     executeSQL(createTriggerOnInsertContentPathCheckContentHash, db.?);
     executeSQL(CreateTriggerContentPathOnInsertInsertIntoSubTable, db.?);
@@ -652,6 +919,53 @@ pub fn main() !void {
     var buffer = [_]u8{0} ** UUID.len;
     const time: i64 = @truncate(std.time.nanoTimestamp());
     // std.log.debug("time {d}", .{time});
+
+    var sceneFile = cwd.openFile(SceneFileName, .{}) catch |err| blk: switch (err) {
+        error.FileNotFound => break :blk try cwd.createFile(SceneFileName, .{}),
+        else => return err,
+    };
+    {
+        errdefer sceneFile.close();
+        const sceneFileStat = try sceneFile.stat();
+        var cacheBuffer = [_]u8{0} ** 256;
+        var sceneFileReader = sceneFile.reader(&cacheBuffer);
+        const sceneContent = try sceneFileReader.interface.readAlloc(gpa, sceneFileStat.size);
+        defer gpa.free(sceneContent);
+
+        SceneNameStringMap = .init(gpa);
+        NodeNameStringMap = .init(gpa);
+
+        if (sceneFileStat.size != 0) {
+            try sceneFile.setEndPos(0);
+            try sceneFile.seekTo(0);
+
+            SceneJson = try std.json.parseFromSlice(?[]cgltf.Scene, gpa, sceneContent, .{});
+
+            if (SceneJson.value) |v| {
+                for (v) |value| {
+                    const name_dupe = try SceneJson.arena.allocator().dupe(u8, value.name);
+                    try SceneNameStringMap.put(name_dupe, {});
+                    for (value.nodes) |node| {
+                        const name_dupe2 = try SceneJson.arena.allocator().dupe(u8, node.name);
+                        try NodeNameStringMap.put(name_dupe2, {});
+                    }
+                }
+            }
+        } else {
+            SceneJson = .{
+                .arena = try gpa.create(std.heap.ArenaAllocator),
+                .value = null,
+            };
+            SceneJson.arena.* = std.heap.ArenaAllocator.init(gpa);
+        }
+    }
+    defer {
+        sceneFile.close();
+        SceneNameStringMap.deinit();
+        NodeNameStringMap.deinit();
+
+        SceneJson.deinit();
+    }
 
     if (exist) {
         const cc = try content.stat();

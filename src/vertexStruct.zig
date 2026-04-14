@@ -1,5 +1,6 @@
 pub const cglm = @import("cglm").cglm;
 
+pub const vec4 = cglm.vec4;
 pub const vec3 = cglm.vec3;
 pub const vec2 = cglm.vec2;
 pub const mat3 = cglm.mat3;
