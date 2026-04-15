@@ -46,11 +46,14 @@ pub fn update_thread_func(thread_count: usize, pInput: *input) !void {
     const exit = try inputFunc1.registerAction(
         inputTrigger1,
         "exit",
-        sdl.SDLK_ESCAPE,
+        sdl.SDL_SCANCODE_ESCAPE,
         null,
         null,
         true,
     );
+
+    var lastMouseX: f32 = 0;
+    var lastMouseY: f32 = 0;
 
     var inputs: []input.Input = &.{};
     var lastTimestamp = sdl.SDL_GetTicksNS();
@@ -59,27 +62,33 @@ pub fn update_thread_func(thread_count: usize, pInput: *input) !void {
 
     out: while (true) {
         if (accumulateTime > inputProcessInterval) {
+            defer accumulateTime -= inputProcessInterval;
+
             inputs = try pInput.getCurrentInput();
             defer {
                 pInput.releaseCurrentInput(inputs);
                 inputs = &.{};
             }
 
-            if (inputs.len != 0)
-                std.log.debug("input len {d}", .{inputs.len});
             for (inputs) |*value| {
-                inputTrigger1.set(value);
-                std.log.debug("{}, {}, {d}", .{ exit.down, exit.pre, exit.timestamp });
-            }
+                const r = inputTrigger1.set(value);
+                if (r) continue;
 
-            accumulateTime -= inputProcessInterval;
+                switch (value.*) {
+                    .mouse => |mouse| {
+                        lastMouseX = mouse.x;
+                        lastMouseY = mouse.y;
+                    },
+                    else => {},
+                }
+            }
         }
 
         accumulateTime += sdl.SDL_GetTicksNS() - lastTimestamp;
 
         lastTimestamp = sdl.SDL_GetTicksNS();
 
-        if (exit.preIsTrue()) {
+        if (exit.down) {
             endGame();
         }
 

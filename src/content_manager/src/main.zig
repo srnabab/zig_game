@@ -231,14 +231,14 @@ const FileTypeHashTable = map: {
     break :map maps;
 };
 
-fn executeSQL(SQL: []const u8, db: *sqlite.sqlite3) void {
+fn executeSQL(SQL: []const u8, db_: *sqlite.sqlite3) void {
     const zone = tracy.initZone(@src(), .{ .name = "execute sql" });
     defer zone.deinit();
 
-    const res = sqlite.sqlite3_exec(db, @ptrCast(SQL.ptr), null, null, null);
+    const res = sqlite.sqlite3_exec(db_, @ptrCast(SQL.ptr), null, null, null);
 
     if (res != sqlite.SQLITE_OK) {
-        std.log.err("{s}\n{s}", .{ sqlite.sqlite3_errmsg(db), SQL });
+        std.log.err("{s}\n{s}", .{ sqlite.sqlite3_errmsg(db_), SQL });
     }
 }
 
@@ -457,7 +457,7 @@ fn updateLoadParameter(
                     const fType = judgeFileType(primFileName[sufffix_index..], meshMem);
 
                     try ContentPathT.insert(.{
-                        .ID = @intCast(sqlDB.getGlobalIncrementID()),
+                        .ID = @intCast(getInsertID()),
                         .UUID = @constCast(&uuidBuffer),
                         .ParentUUID = @constCast(parentID.ptr),
                         .RelativePath = @constCast(relativePathZ.ptr),
@@ -677,7 +677,7 @@ fn processFile(
         const fType = judgeFileType(name[index..], content);
 
         try ContentPathT.insert(.{
-            .ID = @intCast(sqlDB.getGlobalIncrementID()),
+            .ID = @intCast(getInsertID()),
             .UUID = @constCast(&uuidBuffer),
             .ParentUUID = @constCast(parentID.ptr),
             .RelativePath = @constCast(rPZ.ptr),
@@ -714,7 +714,7 @@ fn processFile(
                     "ID,RelativePath,ParentID,ModifiedTime,LastSeenTime,ContentHash,FileSize",
                     "FileName = ?",
                     .{
-                        sqlDB.getGlobalIncrementID(),
+                        getInsertID(),
                         rPZ,
                         parentID,
                         currentModifiedTime,
@@ -741,7 +741,7 @@ fn processFile(
                 try ContentPathT.update(
                     "ID,RelativePath,ParentID,LastSeenTime",
                     "FileName = ?",
-                    .{ sqlDB.getGlobalIncrementID(), rPZ, parentID, time, name },
+                    .{ getInsertID(), rPZ, parentID, time, name },
                 );
             }
         } else {
@@ -757,7 +757,7 @@ fn processFile(
                     "ID,ModifiedTime,LastSeenTime,ContentHash,FileSize",
                     "FileName = ?",
                     .{
-                        sqlDB.getGlobalIncrementID(),
+                        getInsertID(),
                         currentModifiedTime,
                         time,
                         sqlDB.BLOB{ .data = &contentHash, .len = contentHash.len },
@@ -782,7 +782,7 @@ fn processFile(
                     rPZ[0 .. rPZ.len - name.len - 1],
                 );
             } else {
-                try ContentPathT.update("ID,LastSeenTime", "FileName = ?", .{ sqlDB.getGlobalIncrementID(), time, name });
+                try ContentPathT.update("ID,LastSeenTime", "FileName = ?", .{ getInsertID(), time, name });
             }
         }
     }
@@ -825,7 +825,7 @@ fn processDirectory(
         // 新目录：插入记录并获取新ID
         try UUID.createNewUUID(&currentID);
         try ContentPathT.insert(.{
-            .ID = @intCast(sqlDB.getGlobalIncrementID()),
+            .ID = @intCast(getInsertID()),
             .UUID = &currentID,
             .ParentUUID = @constCast(parentID.ptr),
             .RelativePath = @constCast(rPZ.ptr),
@@ -845,13 +845,13 @@ fn processDirectory(
                 try ContentPathT.update(
                     "ID,RelativePath,ParentUUID,ModifiedTime,LastSeenTime",
                     "FileName = ?",
-                    .{ sqlDB.getGlobalIncrementID(), rPZ, parentID, currentModifiedTime, time, name },
+                    .{ getInsertID(), rPZ, parentID, currentModifiedTime, time, name },
                 );
             } else {
                 try ContentPathT.update(
                     "ID,RelativePath,ParentUUID,LastSeenTime",
                     "FileName = ?",
-                    .{ sqlDB.getGlobalIncrementID(), rPZ, parentID, time, name },
+                    .{ getInsertID(), rPZ, parentID, time, name },
                 );
             }
         } else {
@@ -860,13 +860,13 @@ fn processDirectory(
                 try ContentPathT.update(
                     "ID,ModifiedTime,LastSeenTime",
                     "FileName = ?",
-                    .{ sqlDB.getGlobalIncrementID(), currentModifiedTime, time, name },
+                    .{ getInsertID(), currentModifiedTime, time, name },
                 );
             } else {
                 try ContentPathT.update(
                     "ID,LastSeenTime",
                     "FileName = ?",
-                    .{ sqlDB.getGlobalIncrementID(), time, name },
+                    .{ getInsertID(), time, name },
                 );
             }
         }
@@ -903,6 +903,30 @@ fn iterateFolderUpdate(dir: std.fs.Dir, dirName: []const u8, parentID: []const u
         }
     }
 }
+
+fn getInsertID() u32 {
+    const sql = "WITH RECURSIVE" ++
+        " next_id(n) AS (" ++
+        "VALUES(0) UNION ALL" ++
+        " SELECT n + 1 FROM next_id WHERE n IN (SELECT ID FROM ContentPath))" ++
+        " SELECT n FROM next_id ORDER BY n DESC LIMIT 1";
+
+    var stmt: ?*sqlite.sqlite3_stmt = null;
+    var missing_id: c_int = 0;
+
+    // 准备
+    _ = sqlite.sqlite3_prepare_v2(db, sql, -1, &stmt, null);
+
+    if (sqlite.sqlite3_step(stmt) == sqlite.SQLITE_ROW) {
+        missing_id = sqlite.sqlite3_column_int(stmt, 0);
+    }
+
+    _ = sqlite.sqlite3_finalize(stmt);
+
+    return @intCast(missing_id);
+}
+
+var db: ?*sqlite.sqlite3 = null;
 
 var ContentPathT: ContentPath = undefined;
 var ImageLoadParameterT: ImageLoadParameter = undefined;
@@ -960,8 +984,6 @@ pub fn main() !void {
             forceUpdate = true;
         }
     }
-
-    var db: ?*sqlite.sqlite3 = null;
 
     {
         const zone2 = tracy.initZone(@src(), .{ .name = "init database to memory" });
@@ -1100,17 +1122,17 @@ pub fn main() !void {
         // std.log.info("{s}", .{buffer});
 
         if (cc.mtime != @as(i128, @intCast(modifiedTime))) {
-            try ContentPathT.update("ID,ModifiedTime,LastSeenTime", "UUID = ?", .{ sqlDB.getGlobalIncrementID(), modifiedTime, time, buffer });
+            try ContentPathT.update("ID,ModifiedTime,LastSeenTime", "UUID = ?", .{ getInsertID(), modifiedTime, time, buffer });
             // std.log.info("update", .{});
         } else {
-            try ContentPathT.update("ID,LastSeenTime", "UUID = ?", .{ sqlDB.getGlobalIncrementID(), time, buffer });
+            try ContentPathT.update("ID,LastSeenTime", "UUID = ?", .{ getInsertID(), time, buffer });
         }
     } else {
         const cc = try content.stat();
         try UUID.createNewUUID(&buffer);
 
         try ContentPathT.insert(.{
-            .ID = @intCast(sqlDB.getGlobalIncrementID()),
+            .ID = @intCast(getInsertID()),
             .UUID = &buffer,
             .ParentUUID = null,
             .RelativePath = @constCast("Content"),

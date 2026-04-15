@@ -33,7 +33,12 @@ const deviceExtensionNeeded = [_][*c]const u8{
     "VK_KHR_dynamic_rendering",
     "VK_EXT_extended_dynamic_state",
     "VK_EXT_robustness2",
+    "VK_EXT_mesh_shader",
 };
+const deviceExtensionOptional = [_][*c]const u8{
+    "VK_EXT_mesh_shader",
+};
+
 const featureNeed = [_][]const u8{
     "geometryShader",
     "independentBlend",
@@ -62,60 +67,204 @@ const featureRobustness2Need = [_][]const u8{
     "robustImageAccess2",
     "nullDescriptor",
 };
+const featureMeshShaderNeed = [_][]const u8{ "meshShader", "taskShader" };
+const feature8BitStorageNeed = [_][]const u8{"storageBuffer8BitAccess"};
+
+const typeNames = struct {
+    featureType: type,
+    names: []const []const u8,
+};
+const featureTypeAndNames = [_]typeNames{
+    .{ .featureType = vk.VkPhysicalDeviceFeatures, .names = &featureNeed },
+    .{ .featureType = vk.VkPhysicalDeviceDescriptorIndexingFeatures, .names = &featureIndexingNeed },
+    .{ .featureType = vk.VkPhysicalDeviceTimelineSemaphoreFeatures, .names = &featureTimelineSemaphoreNeed },
+    .{ .featureType = vk.VkPhysicalDeviceDynamicRenderingFeatures, .names = &featureDynamicRenderingNeed },
+    .{ .featureType = vk.VkPhysicalDeviceSynchronization2Features, .names = &featureSynchronization2Need },
+    .{ .featureType = vk.VkPhysicalDeviceMaintenance5Features, .names = &featureMaintenance5Need },
+    .{ .featureType = vk.VkPhysicalDeviceRobustness2FeaturesEXT, .names = &featureRobustness2Need },
+    .{ .featureType = vk.VkPhysicalDeviceMeshShaderFeaturesEXT, .names = &featureMeshShaderNeed },
+    .{ .featureType = vk.VkPhysicalDevice8BitStorageFeatures, .names = &feature8BitStorageNeed },
+};
 
 const VkQueueFamily = types.VkQueueFamily;
 
-fn featureNeededCheck(comptime featureType: type, featurePack: anytype) bool {
+fn featureNeededCheck(featurePack: anytype) bool {
+    const featureType = @TypeOf(featurePack);
+
     var count: u32 = 0;
     var len: u32 = 0;
-    switch (featureType) {
-        vk.VkPhysicalDeviceFeatures => {
-            len = featureNeed.len;
-            inline for (featureNeed) |feature| {
+
+    comptime var fType = false;
+
+    inline for (featureTypeAndNames) |value| {
+        if (featureType == value.featureType) {
+            fType = true;
+            len = value.names.len;
+            inline for (value.names) |feature| {
                 count += @field(featurePack, feature);
             }
-        },
-        vk.VkPhysicalDeviceDescriptorIndexingFeatures => {
-            len = featureIndexingNeed.len;
-            inline for (featureIndexingNeed) |feature| {
-                count += @field(featurePack, feature);
-            }
-        },
-        vk.VkPhysicalDeviceTimelineSemaphoreFeatures => {
-            len = featureTimelineSemaphoreNeed.len;
-            inline for (featureTimelineSemaphoreNeed) |feature| {
-                count += @field(featurePack, feature);
-            }
-        },
-        vk.VkPhysicalDeviceDynamicRenderingFeatures => {
-            len = featureDynamicRenderingNeed.len;
-            inline for (featureDynamicRenderingNeed) |feature| {
-                count += @field(featurePack, feature);
-            }
-        },
-        vk.VkPhysicalDeviceSynchronization2Features => {
-            len = featureSynchronization2Need.len;
-            inline for (featureSynchronization2Need) |feature| {
-                count += @field(featurePack, feature);
-            }
-        },
-        vk.VkPhysicalDeviceMaintenance5Features => {
-            len = featureMaintenance5Need.len;
-            inline for (featureMaintenance5Need) |feature| {
-                count += @field(featurePack, feature);
-            }
-        },
-        vk.VkPhysicalDeviceRobustness2FeaturesEXT => {
-            len = featureRobustness2Need.len;
-            inline for (featureRobustness2Need) |feature| {
-                count += @field(featurePack, feature);
-            }
-        },
-        else => {
-            @compileError("unsupported");
-        },
+        }
     }
+
+    if (!fType) @compileError(std.fmt.comptimePrint("unknow feature {s}", .{@typeName(featureType)}));
+
     return count == len;
+}
+
+const Features: type = t: {
+    var fields: [1024]std.builtin.Type.StructField = undefined;
+    var count: u32 = 0;
+
+    @setEvalBranchQuota(10000);
+
+    for (featureTypeAndNames) |value| {
+        if (value.featureType == vk.VkPhysicalDeviceFeatures) continue;
+
+        var name = @typeName(value.featureType);
+        const needle = "VkPhysicalDevice";
+        const index = std.mem.indexOf(u8, name, needle).?;
+        const index2 = std.mem.indexOf(u8, name, "EXT");
+
+        const fieldName = name[index + needle.len .. index2 orelse name.len];
+
+        fields[count] = .{
+            .name = std.fmt.comptimePrint("_{s}", .{fieldName}),
+            .type = value.featureType,
+            .default_value_ptr = null,
+            .is_comptime = false,
+            .alignment = @alignOf(value.featureType),
+        };
+        count += 1;
+    }
+
+    // getVkStructType(vk.VkPhysicalDeviceMeshShaderFeaturesNV);
+
+    fields[count] = .{
+        .name = "_Features2",
+        .type = vk.VkPhysicalDeviceFeatures2,
+        .default_value_ptr = null,
+        .is_comptime = false,
+        .alignment = @alignOf(vk.VkPhysicalDeviceFeatures2),
+    };
+    count += 1;
+
+    break :t @Type(.{ .@"struct" = .{
+        .layout = .auto,
+        .fields = fields[0..count],
+        .decls = &.{},
+        .is_tuple = false,
+    } });
+};
+
+// fn getVkStructType(sType: type) []const u8 {
+//     comptime {
+//         @setEvalBranchQuota(100000);
+//         const KeywordList = [_][]const u8{
+//             "Vk",
+//             "Physical",
+//             "Device",
+//             "Features",
+//             "2",
+//             "Descriptor",
+//             "Indexing",
+//             "Timeline",
+//             "Semaphore",
+//             "Dynamic",
+//             "Rendering",
+//             "Synchronization",
+//             "Maintenance",
+//             "3",
+//             "4",
+//             "5",
+//             "Robustness",
+//             "Mesh",
+//             "Shader",
+//             "8Bit",
+//             "Storage",
+//             "EXT",
+//         };
+//         const Head = "VK_STRUCTURE_TYPE_";
+
+//         var name = @typeName(sType);
+
+//         const index_vk = std.mem.indexOf(u8, name, "Vk");
+//         var pureName = name[index_vk.?..];
+
+//         var StructTypeName = [_]u8{0} ** 512;
+//         @memcpy(StructTypeName[0..Head.len], Head);
+
+//         var name_cur = index_vk.?;
+//         var sName_cur = Head.len;
+
+//         while (name_cur < pureName.len) {
+//             for (KeywordList) |keyword| {
+//                 if (std.mem.indexOf(u8, pureName[name_cur..], keyword)) |sIdx| {
+//                     if (sIdx == name_cur) {
+//                         var upperBuffer = [_]u8{0} ** 64;
+//                         for (keyword, 0..) |value, i| {
+//                             upperBuffer[i] = std.ascii.toUpper(value);
+//                         }
+
+//                         @memcpy(StructTypeName[sName_cur .. sName_cur + keyword.len], upperBuffer[0..keyword.len]);
+//                         name_cur += keyword.len;
+//                         sName_cur += keyword.len;
+
+//                         StructTypeName[sName_cur] = '_';
+//                         sName_cur += 1;
+
+//                         break;
+//                     }
+//                 }
+//             }
+//         }
+
+//         StructTypeName[sName_cur] = 0;
+//         sName_cur -= 1;
+
+//         return StructTypeName[0..sName_cur];
+//     }
+// }
+
+fn getSType(comptime T: type) vk.VkStructureType {
+    return switch (T) {
+        vk.VkPhysicalDeviceFeatures => vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES,
+        vk.VkPhysicalDeviceTimelineSemaphoreFeatures => vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES,
+        vk.VkPhysicalDeviceDescriptorIndexingFeatures => vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES,
+        vk.VkPhysicalDeviceDynamicRenderingFeatures => vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
+        vk.VkPhysicalDeviceSynchronization2Features => vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES,
+        vk.VkPhysicalDeviceMaintenance5Features => vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_FEATURES,
+        vk.VkPhysicalDeviceRobustness2FeaturesEXT => vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT,
+        vk.VkPhysicalDeviceMeshShaderFeaturesEXT => vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT,
+        vk.VkPhysicalDevice8BitStorageFeatures => vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES,
+        vk.VkPhysicalDeviceFeatures2 => vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+        // ... 在这里添加新类型的映射
+        else => @compileError(std.fmt.comptimePrint("Unsupported feature type {s}", .{@typeName(T)})),
+    };
+}
+
+fn initFeatures(allocator: std.mem.Allocator) !*Features {
+    const self = try allocator.create(Features);
+    const fields = @typeInfo(Features).@"struct".fields;
+
+    // 假设最后一个字段是 features2 (入口)，之前的字段按顺序链接
+    inline for (fields, 0..) |field, i| {
+        const current_ptr = &@field(self.*, field.name);
+
+        // 设置 sType
+        current_ptr.sType = getSType(field.type);
+
+        if (std.mem.eql(u8, field.name, "_Features2")) {
+            // features2 作为头，它的 pNext 指向字段列表的第一个
+            current_ptr.pNext = &@field(self.*, fields[0].name);
+        } else if (i + 1 < fields.len and !std.mem.eql(u8, fields[i + 1].name, "_Features2")) {
+            // 中间节点指向下一个字段
+            current_ptr.pNext = &@field(self.*, fields[i + 1].name);
+        } else {
+            // 最后一个节点 (在 features2 之前的那个) 指向 null
+            current_ptr.pNext = null;
+        }
+    }
+    return self;
 }
 
 pub fn createInstance(pAllocCallBacks: [*c]vk.VkAllocationCallbacks, allocator: std.mem.Allocator) VkError!vk.VkInstance {
@@ -274,6 +423,16 @@ pub fn pickPhysicalDevice(instance: vk.VkInstance, allocator: std.mem.Allocator,
         if (array.items.len != deviceExtensionNeeded.len) {
             continue;
         }
+
+        // const array2 = try chooseEnabledLayers(
+        //     vk.VkExtensionProperties,
+        //     "extensionName",
+        //     deviceExtensionOptional[0..deviceExtensionOptional.len],
+        //     deviceGroup.physicalDevices[0].?,
+        //     allocator,
+        // );
+        // defer array2.deinit();
+
         var deviceProperty2 = vk.VkPhysicalDeviceProperties2{
             .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
             .pNext = null,
@@ -283,38 +442,12 @@ pub fn pickPhysicalDevice(instance: vk.VkInstance, allocator: std.mem.Allocator,
             .pNext = null,
         };
 
-        var robustness2 = vk.VkPhysicalDeviceRobustness2FeaturesEXT{
-            .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT,
-            .pNext = null,
-        };
-        var maintenance5Feature = vk.VkPhysicalDeviceMaintenance5Features{
-            .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_FEATURES,
-            .pNext = &robustness2,
-        };
-        var renderingFeature = vk.VkPhysicalDeviceDynamicRenderingFeatures{
-            .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
-            .pNext = &maintenance5Feature,
-        };
-        var timelineFeature = vk.VkPhysicalDeviceTimelineSemaphoreFeatures{
-            .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES,
-            .pNext = &renderingFeature,
-        };
-        var indexingFeature = vk.VkPhysicalDeviceDescriptorIndexingFeatures{
-            .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES,
-            .pNext = &timelineFeature,
-        };
-        var synchronization2Feature = vk.VkPhysicalDeviceSynchronization2Features{
-            .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES,
-            .pNext = &indexingFeature,
-        };
-        var deviceFeatures2 = vk.VkPhysicalDeviceFeatures2{
-            .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-            .pNext = &synchronization2Feature,
-        };
+        var features = try initFeatures(allocator);
+        defer allocator.destroy(features);
 
         vk.vkGetPhysicalDeviceProperties2(deviceGroup.physicalDevices[0].?, @ptrCast(&deviceProperty2));
         vk.vkGetPhysicalDeviceMemoryProperties2(deviceGroup.physicalDevices[0].?, @ptrCast(&deviceMemoryProperty2));
-        vk.vkGetPhysicalDeviceFeatures2(deviceGroup.physicalDevices[0].?, @ptrCast(&deviceFeatures2));
+        vk.vkGetPhysicalDeviceFeatures2(deviceGroup.physicalDevices[0].?, @ptrCast(&features._Features2));
 
         // TODO memory requirement undeclared
         const memoryCount = calculateMemoryGPU(deviceMemoryProperty2.memoryProperties);
@@ -322,15 +455,17 @@ pub fn pickPhysicalDevice(instance: vk.VkInstance, allocator: std.mem.Allocator,
             continue;
         }
 
-        const featureSupported = featureNeededCheck(vk.VkPhysicalDeviceFeatures, deviceFeatures2.features);
-        const featureIndexingSupported = featureNeededCheck(vk.VkPhysicalDeviceDescriptorIndexingFeatures, indexingFeature);
-        const featureTimelineSemaphoreSupported = featureNeededCheck(vk.VkPhysicalDeviceTimelineSemaphoreFeatures, timelineFeature);
-        const featureDynamicRenderingSupported = featureNeededCheck(vk.VkPhysicalDeviceDynamicRenderingFeatures, renderingFeature);
-        const featureSynchronization2Supported = featureNeededCheck(vk.VkPhysicalDeviceSynchronization2Features, synchronization2Feature);
-        const featureMaintenance5Supported = featureNeededCheck(vk.VkPhysicalDeviceMaintenance5Features, maintenance5Feature);
-        const featureRobustnessSupported = featureNeededCheck(vk.VkPhysicalDeviceRobustness2FeaturesEXT, robustness2);
+        const featureSupported = featureNeededCheck(features._Features2.features);
+        const featureIndexingSupported = featureNeededCheck(features._DescriptorIndexingFeatures);
+        const featureTimelineSemaphoreSupported = featureNeededCheck(features._TimelineSemaphoreFeatures);
+        const featureDynamicRenderingSupported = featureNeededCheck(features._DynamicRenderingFeatures);
+        const featureSynchronization2Supported = featureNeededCheck(features._Synchronization2Features);
+        const featureMaintenance5Supported = featureNeededCheck(features._Maintenance5Features);
+        const featureRobustnessSupported = featureNeededCheck(features._Robustness2Features);
+        const featureMeshShaderSupported = featureNeededCheck(features._MeshShaderFeatures);
+        const feature8BitStorageSupported = featureNeededCheck(features._8BitStorageFeatures);
 
-        if (featureSupported and featureIndexingSupported and featureTimelineSemaphoreSupported and featureDynamicRenderingSupported and featureSynchronization2Supported and featureMaintenance5Supported and featureRobustnessSupported) {
+        if (featureSupported and featureIndexingSupported and featureTimelineSemaphoreSupported and featureDynamicRenderingSupported and featureSynchronization2Supported and featureMaintenance5Supported and featureRobustnessSupported and featureMeshShaderSupported and feature8BitStorageSupported) {
             switch (deviceProperty2.properties.deviceType) {
                 vk.VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU => {
                     resIndex = @intCast(i + 1);
@@ -356,7 +491,16 @@ pub fn pickPhysicalDevice(instance: vk.VkInstance, allocator: std.mem.Allocator,
                 },
             }
         } else {
-            std.debug.panic("feature not supported", .{});
+            std.log.debug("feature2 {}", .{featureSupported});
+            std.log.debug("indexing {}", .{featureIndexingSupported});
+            std.log.debug("timeline {}", .{featureTimelineSemaphoreSupported});
+            std.log.debug("dynamic rendering {}", .{featureDynamicRenderingSupported});
+            std.log.debug("synchronization2 {}", .{featureSynchronization2Supported});
+            std.log.debug("maintenance5 {}", .{featureMaintenance5Supported});
+            std.log.debug("robustness {}", .{featureRobustnessSupported});
+            std.log.debug("mesh shader {}", .{featureMeshShaderSupported});
+            // std.debug.panic("", .{});
+            std.log.debug("feature not supported", .{});
         }
     }
 
@@ -388,9 +532,23 @@ pub fn createDevice(
         .pPhysicalDevices = physicalDevices,
     };
 
+    var _8bitStoreageFeature = vk.VkPhysicalDevice8BitStorageFeatures{
+        .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES,
+        .pNext = &groupCreateInfo,
+    };
+    inline for (feature8BitStorageNeed) |feature| {
+        @field(_8bitStoreageFeature, feature) = 1;
+    }
+    var meshShaderFeature = vk.VkPhysicalDeviceMeshShaderFeaturesEXT{
+        .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT,
+        .pNext = &_8bitStoreageFeature,
+    };
+    inline for (featureMeshShaderNeed) |feature| {
+        @field(meshShaderFeature, feature) = 1;
+    }
     var maintenance5Feature = vk.VkPhysicalDeviceMaintenance5Features{
         .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_FEATURES,
-        .pNext = &groupCreateInfo,
+        .pNext = &meshShaderFeature,
     };
     inline for (featureMaintenance5Need) |feature| {
         @field(maintenance5Feature, feature) = 1;

@@ -1,0 +1,60 @@
+#version 460
+
+#extension GL_EXT_mesh_shader : require
+#extension GL_EXT_shader_8bit_storage : require
+
+layout(local_size_x = 32) in;
+layout(triangles, max_vertices = 64, max_primitives = 124) out;
+
+struct Vertex {
+    vec3 pos;
+    vec3 normal;
+    vec2 uv;
+};
+
+struct Meshlet {
+    uint vertexOffset;
+    uint primitiveOffset;
+    uint vertexCount;
+    uint primitiveCount;
+};
+
+layout(set = 3, binding = 0) readonly buffer VertexBuffer { Vertex vertices[]; };
+layout(set = 3, binding = 1) readonly buffer MeshletBuffer { Meshlet meshlets[]; };
+layout(set = 3, binding = 2) readonly buffer MeshletVertices { uint meshletVertices[]; };
+layout(set = 3, binding = 3) readonly buffer MeshletIndices { uint8_t meshletIndices[]; };
+
+layout(location = 0) out vec2 uv[];
+
+void main() {
+    uint mi = gl_WorkGroupID.x;
+    uint tid = gl_LocalInvocationID.x;
+
+    Meshlet m = meshlets[mi];
+    uint v_count = m.vertexCount;
+    uint p_count = m.primitiveCount;
+
+    SetMeshOutputsEXT(v_count, p_count);
+
+    // 3. 并行读取顶点数据 (每个线程处理一部分顶点)
+    for (uint i = tid; i < v_count; i += 32) {
+        // a. 获取该顶点在全局顶点缓冲区中的真实索引
+        uint vertexIdx = meshletVertices[m.vertexOffset + i];
+        // b. 从全局顶点缓冲区拉取数据
+        vec3 pos = vertices[vertexIdx].pos;
+        
+        // c. 写入内置输出变量
+        gl_MeshVerticesEXT[i].gl_Position = vec4(pos, 1.0);
+    }
+
+    // 4. 并行读取索引数据 (生成三角形)
+    for (uint i = tid; i < p_count; i += 32) {
+        // 读取局部索引（通常是 3 个 uint8 拼成一个三角形）
+        // 假设索引是连续存储的
+        gl_PrimitiveTriangleIndicesEXT[i] = uvec3(
+            meshletIndices[m.primitiveOffset + i * 3 + 0],
+            meshletIndices[m.primitiveOffset + i * 3 + 1],
+            meshletIndices[m.primitiveOffset + i * 3 + 2]
+        );
+    }
+}

@@ -1,11 +1,11 @@
 [
 	{
-		"path": "Shaders\\direct.frag",
-		"hash": "359263610cf3820b"
-	},
-	{
 		"path": "Shaders\\triangle.vert",
 		"hash": "0d3a195222fce337"
+	},
+	{
+		"path": "Shaders\\model.mesh",
+		"hash": "be02579c8042d553"
 	},
 	{
 		"path": "Pipeline\\directOut.pipe",
@@ -16,8 +16,8 @@
 		"hash": "e4ddc48566406634"
 	},
 	{
-		"path": "Shaders\\mesh_test.mesh",
-		"hash": "89b96c301fd2d7a9"
+		"path": "Shaders\\direct.frag",
+		"hash": "359263610cf3820b"
 	},
 	{
 		"path": "Pipeline\\flat2d.pipe",
@@ -56,6 +56,10 @@
 		"hash": "54752e836292d94d"
 	},
 	{
+		"path": "Pipeline\\model.pipe",
+		"hash": "b425f7d93797c5f7"
+	},
+	{
 		"path": "Shaders\\empty.frag",
 		"hash": "e98cfd7c1e104899"
 	},
@@ -64,23 +68,23 @@
 		"hash": "02ccc3dd9a061bea"
 	},
 	{
-		"path": "Shaders\\flat2d.vert",
-		"hash": "3c51b4ee0221c22a"
+		"path": "Shaders\\shape.frag",
+		"hash": "d566d14d53f7aa42"
 	},
 	{
 		"path": "Shaders\\SSGI.comp",
 		"hash": "101815da1a4219ec"
 	},
 	{
-		"path": "Shaders\\shape.frag",
-		"hash": "d566d14d53f7aa42"
-	},
-	{
-		"path": "Pipeline\\model3d.pipe",
-		"hash": "cf5c67a6fb96e13e"
+		"path": "Shaders\\flat2d.vert",
+		"hash": "3c51b4ee0221c22a"
 	},
 	{
 		"path": "Shaders\\model3d.vert",
 		"hash": "0098506810222e4e"
+	},
+	{
+		"path": "Pipeline\\model3d.pipe",
+		"hash": "cf5c67a6fb96e13e"
 	}
 ]

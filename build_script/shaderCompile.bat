@@ -49,7 +49,7 @@ for /f "usebackq delims=" %%i in ("%File_List%") do (
 
     for %%f in ("%INPUT_DIR%\%%i") do (
         if exist "%%f" (
-            glslc.exe "%%f" -o "%OUTPUT_DIR%\%%~nxf.spv"
+            glslc.exe --target-env=vulkan1.4 "%%f" -o "%OUTPUT_DIR%\%%~nxf.spv"
             @REM echo "%OUTPUT_DIR%\%%f.spv"
             set /a SHADER_COUNT+=1
         )

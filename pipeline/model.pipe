@@ -1,0 +1,137 @@
+{
+  "Name": "model",
+  "PipelineType": "Graphics",
+  "Shaders": [
+    "model.mesh.spv",
+    "flat2d.frag.spv"
+  ],
+  "VersionCount": 0,
+  "VertexInput": {},
+  "InputState": {
+    "InputStatepNext": null,
+    "flag": 0,
+    "vertexBindingDescriptionCount": 0,
+    "vertexAttributeDescriptionCount": 0
+  },
+  "InputAssembly": {
+    "InputAssemblypNext": null,
+    "flag": 0,
+    "topology": "TRIANGLE_LIST",
+    "primitiveRestartEnable": false
+  },
+  "TessellationState": null,
+  "ViewportState": {
+    "ViewportStatepNext": null,
+    "flag": 0,
+    "viewports": [
+      {
+        "x": 0.0,
+        "y": 0.0,
+        "width": 800,
+        "height": 600,
+        "minDepth": 0.0,
+        "maxDepth": 1.0
+      }
+    ],
+    "scissors": [
+      {
+        "offset": {
+          "x": 0,
+          "y": 0
+        },
+        "extent": {
+          "width": 800,
+          "height": 600
+        }
+      }
+    ]
+  },
+  "RasterizationState": {
+    "RasterizationStatepNext": null,
+    "flag": 0,
+    "depthClampEnable": false,
+    "rasterizerDiscardEnable": false,
+    "polygonMode": "FILL",
+    "cullMode": "BACK_BIT",
+    "frontFace": "COUNTER_CLOCKWISE",
+    "depthBiasEnable": false,
+    "depthBiasConstantFactor": 0.0,
+    "depthBiasClamp": 0.0,
+    "depthBiasSlopeFactor": 0.0,
+    "lineWidth": 1.0
+  },
+  "MultisampleState": {
+    "MultisampleStatepNext": null,
+    "flag": 0,
+    "rasterizationSamples": "1_BIT",
+    "sampleShadingEnable": false,
+    "minSampleShading": 1.0,
+    "alphaToCoverageEnable": false,
+    "alphaToOneEnable": false
+  },
+  "DepthStencilState": {
+    "DepthStencilStatepNext": null,
+    "flag": 0,
+    "depthTestEnable": true,
+    "depthWriteEnable": true,
+    "depthCompareOp": "LESS",
+    "depthBoundsTestEnable": false,
+    "stencilTestEnable": false,
+    "front": {
+      "failOp": "KEEP",
+      "passOp": "KEEP",
+      "depthFailOp": "KEEP",
+      "compareOp": "NEVER",
+      "compareMask": 0,
+      "writeMask": 0,
+      "reference": 0
+    },
+    "back": null,
+    "minDepthBounds": 0.0,
+    "maxDepthBounds": 1.0
+  },
+  "ColorBlendState": {
+    "ColorBlendStatepNext": null,
+    "flag": 0,
+    "logicOpEnable": false,
+    "logicOp": "COPY",
+    "attachments": [
+      {
+        "blendEnable": false,
+        "srcColorBlendFactor": "ONE",
+        "dstColorBlendFactor": "ZERO",
+        "colorBlendOp": "ADD",
+        "srcAlphaBlendFactor": "ONE",
+        "dstAlphaBlendFactor": "ZERO",
+        "alphaBlendOp": "ADD",
+        "colorWriteMask": [
+          "R",
+          "G",
+          "B",
+          "A"
+        ]
+      }
+    ],
+    "blendConstants": [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "DynamicStates": {
+    "DynamicStatespNext": null,
+    "flag": 0,
+    "States": [
+      "VIEWPORT",
+      "SCISSOR"
+    ]
+  },
+  "PipelineRendering": {
+    "color": [
+      "R8G8B8A8_SRGB"
+    ],
+    "depth": "D32_SFLOAT",
+    "stencil": "UNDEFINED"
+  }
+}

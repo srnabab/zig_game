@@ -17,6 +17,13 @@ pub const SDL_Keycode = enumFromC.generateEnumFromC(
     "SDLK_RHYPER",
 );
 
+pub const SDL_Scancode = enumFromC.generateEnumFromC(
+    sdl,
+    sdl.SDL_Scancode,
+    "SDL_SCANCODE_UNKNOWN",
+    "SDL_SCANCODE_COUNT",
+);
+
 const SDL_Error = error{
     ErrorSDL,
 };
