@@ -250,8 +250,11 @@ fn initFeatures(allocator: std.mem.Allocator) !*Features {
     inline for (fields, 0..) |field, i| {
         const current_ptr = &@field(self.*, field.name);
 
+        current_ptr.* = std.mem.zeroes(field.type);
+
         // 设置 sType
         current_ptr.sType = getSType(field.type);
+        current_ptr.pNext = null;
 
         if (std.mem.eql(u8, field.name, "_Features2")) {
             // features2 作为头，它的 pNext 指向字段列表的第一个
@@ -521,6 +524,7 @@ pub fn createDevice(
     graphicQueueFamily: VkQueueFamily,
     computeQueueFamily: VkQueueFamily,
     transferQueueFamily: VkQueueFamily,
+    allocator: std.mem.Allocator,
 ) !vk.VkDevice {
     const zone = tracy.initZone(@src(), .{ .name = "create logical device" });
     defer zone.deinit();
@@ -532,68 +536,24 @@ pub fn createDevice(
         .pPhysicalDevices = physicalDevices,
     };
 
-    var _8bitStoreageFeature = vk.VkPhysicalDevice8BitStorageFeatures{
-        .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES,
-        .pNext = &groupCreateInfo,
-    };
-    inline for (feature8BitStorageNeed) |feature| {
-        @field(_8bitStoreageFeature, feature) = 1;
+    const featuresFields = @typeInfo(Features).@"struct".fields;
+    const features = try initFeatures(allocator);
+    defer allocator.destroy(features);
+
+    inline for (featuresFields) |field| {
+        inline for (featureTypeAndNames) |value| {
+            if (value.featureType == field.type) {
+                inline for (value.names) |name| {
+                    @field(@field(features.*, field.name), name) = 1;
+                }
+            }
+        }
+        if (@field(features.*, field.name).pNext == null) {
+            @field(features.*, field.name).pNext = &groupCreateInfo;
+        }
     }
-    var meshShaderFeature = vk.VkPhysicalDeviceMeshShaderFeaturesEXT{
-        .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT,
-        .pNext = &_8bitStoreageFeature,
-    };
-    inline for (featureMeshShaderNeed) |feature| {
-        @field(meshShaderFeature, feature) = 1;
-    }
-    var maintenance5Feature = vk.VkPhysicalDeviceMaintenance5Features{
-        .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_FEATURES,
-        .pNext = &meshShaderFeature,
-    };
-    inline for (featureMaintenance5Need) |feature| {
-        @field(maintenance5Feature, feature) = 1;
-    }
-    var robustness2 = vk.VkPhysicalDeviceRobustness2FeaturesEXT{
-        .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT,
-        .pNext = &maintenance5Feature,
-    };
-    inline for (featureRobustness2Need) |feature| {
-        @field(robustness2, feature) = 1;
-    }
-    var synchronization2Feature = vk.VkPhysicalDeviceSynchronization2Features{
-        .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES,
-        .pNext = &robustness2,
-    };
-    inline for (featureSynchronization2Need) |feature| {
-        @field(synchronization2Feature, feature) = 1;
-    }
-    var dynamicRenderingFeature = vk.VkPhysicalDeviceDynamicRenderingFeatures{
-        .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
-        .pNext = &synchronization2Feature,
-    };
-    inline for (featureDynamicRenderingNeed) |feature| {
-        @field(dynamicRenderingFeature, feature) = 1;
-    }
-    var timelineSemaphoreFeature = vk.VkPhysicalDeviceTimelineSemaphoreFeatures{
-        .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES,
-        .pNext = &dynamicRenderingFeature,
-    };
-    inline for (featureTimelineSemaphoreNeed) |feature| {
-        @field(timelineSemaphoreFeature, feature) = 1;
-    }
-    var indexingFeature = vk.VkPhysicalDeviceDescriptorIndexingFeatures{
-        .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES,
-        .pNext = &timelineSemaphoreFeature,
-    };
-    inline for (featureIndexingNeed) |feature| {
-        @field(indexingFeature, feature) = 1;
-    }
-    var feature2 = vk.VkPhysicalDeviceFeatures2{
-        .sType = vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-        .pNext = &indexingFeature,
-    };
     inline for (featureNeed) |feature| {
-        @field(feature2.features, feature) = 1;
+        @field(features.*._Features2.features, feature) = 1;
     }
 
     const queueCreateInfo, const queueCount = blk: {
@@ -617,7 +577,7 @@ pub fn createDevice(
 
     var createInfo = vk.VkDeviceCreateInfo{
         .sType = vk.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-        .pNext = &feature2,
+        .pNext = &features._Features2,
         .flags = 0,
         .queueCreateInfoCount = queueCount,
         .pQueueCreateInfos = @ptrCast(&queueCreateInfo),

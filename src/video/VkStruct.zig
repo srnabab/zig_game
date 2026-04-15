@@ -328,6 +328,7 @@ pub fn initVulkan(self: *Self, textureSets: *textureSet) !void {
         self.graphicQueueFamily,
         self.computeQueueFamily,
         self.transferQueueFamily,
+        self.allocator,
     );
 
     var queueTypeArray = [_]i32{100} ** 3;
