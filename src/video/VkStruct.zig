@@ -45,6 +45,7 @@ pub const Descriptor_t = Handle;
 const globalDescriptorPoolSizes = [_]vk.VkDescriptorPoolSize{
     .{ .type = vk.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 2048 },
     .{ .type = vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = 100 },
+    .{ .type = vk.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 64 },
 };
 const globalDescriptorMaxSets = 10;
 
@@ -54,13 +55,36 @@ const descriptorSetLayoutCreateInfo = struct {
     bindings: [5]vk.VkDescriptorSetLayoutBinding,
     bindingFlags: [5]vk.VkDescriptorBindingFlags,
 };
-const set0SetLayoutCreateInfos = descriptorSetLayoutCreateInfo{
+const vertexSet0SetLayoutCreateInfos = descriptorSetLayoutCreateInfo{
     .flag = 0,
     .bindingCount = 1,
     .bindings = [5]vk.VkDescriptorSetLayoutBinding{
         .{
             .binding = 0,
             .stageFlags = vk.VK_SHADER_STAGE_VERTEX_BIT,
+            .descriptorType = vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .descriptorCount = 1,
+        },
+        .{},
+        .{},
+        .{},
+        .{},
+    },
+    .bindingFlags = [5]vk.VkDescriptorBindingFlags{
+        0,
+        0,
+        0,
+        0,
+        0,
+    },
+};
+const meshSet0SetLayoutCreateInfos = descriptorSetLayoutCreateInfo{
+    .flag = 0,
+    .bindingCount = 1,
+    .bindings = [5]vk.VkDescriptorSetLayoutBinding{
+        .{
+            .binding = 0,
+            .stageFlags = vk.VK_SHADER_STAGE_MESH_BIT_EXT,
             .descriptorType = vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
             .descriptorCount = 1,
         },
@@ -94,6 +118,44 @@ const set1SetLayoutCreateInfos = descriptorSetLayoutCreateInfo{
     },
     .bindingFlags = [5]vk.VkDescriptorBindingFlags{
         vk.VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | vk.VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT,
+        0,
+        0,
+        0,
+        0,
+    },
+};
+const meshSet2SetLayourCreateInfos = descriptorSetLayoutCreateInfo{
+    .flag = 0,
+    .bindingCount = 4,
+    .bindings = [5]vk.VkDescriptorSetLayoutBinding{
+        .{
+            .binding = 0,
+            .stageFlags = vk.VK_SHADER_STAGE_MESH_BIT_EXT,
+            .descriptorType = vk.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .descriptorCount = 1,
+        },
+        .{
+            .binding = 1,
+            .stageFlags = vk.VK_SHADER_STAGE_MESH_BIT_EXT,
+            .descriptorType = vk.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .descriptorCount = 1,
+        },
+        .{
+            .binding = 2,
+            .stageFlags = vk.VK_SHADER_STAGE_MESH_BIT_EXT,
+            .descriptorType = vk.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .descriptorCount = 1,
+        },
+        .{
+            .binding = 3,
+            .stageFlags = vk.VK_SHADER_STAGE_MESH_BIT_EXT,
+            .descriptorType = vk.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .descriptorCount = 1,
+        },
+        .{},
+    },
+    .bindingFlags = [5]vk.VkDescriptorBindingFlags{
+        0,
         0,
         0,
         0,
@@ -158,6 +220,7 @@ const InitLayout = enum {
 const descriptorSetsType = enum {
     present,
     draw,
+    meshDraw,
 };
 
 const AllocationCount = struct {
@@ -244,10 +307,14 @@ globalDescriptorPool: vk.VkDescriptorPool = null,
 
 drawDescriptorSetLayout: [2]vk.VkDescriptorSetLayout = undefined,
 
+meshDrawDescriptorSetLayout: [3]vk.VkDescriptorSetLayout = undefined,
+
 globalFixed2dMVPMatrixDescriptorSet: vk.VkDescriptorSet = null,
 global2dMVPMatrixDescriptorSet: vk.VkDescriptorSet = null,
 global3dMVPMatrixDescriptorSet: vk.VkDescriptorSet = null,
 globalTextureDescriptorSet: vk.VkDescriptorSet = null,
+
+meshletsDescriptorSet: vk.VkDescriptorSet = null,
 
 presentDescriptorSetLayout: [1]vk.VkDescriptorSetLayout = undefined,
 
@@ -470,9 +537,9 @@ pub fn initVulkan(self: *Self, textureSets: *textureSet) !void {
         self.device,
         self.pAllocCallBacks,
         null,
-        set0SetLayoutCreateInfos.flag,
-        set0SetLayoutCreateInfos.bindingCount,
-        @constCast(&set0SetLayoutCreateInfos.bindings),
+        vertexSet0SetLayoutCreateInfos.flag,
+        vertexSet0SetLayoutCreateInfos.bindingCount,
+        @constCast(&vertexSet0SetLayoutCreateInfos.bindings),
     );
     var ptr = try self.allDescriptorSetLayouts.addOne();
     ptr.* = self.drawDescriptorSetLayout[0];
@@ -493,6 +560,39 @@ pub fn initVulkan(self: *Self, textureSets: *textureSet) !void {
     );
     ptr = try self.allDescriptorSetLayouts.addOne();
     ptr.* = self.drawDescriptorSetLayout[1];
+
+    self.meshDrawDescriptorSetLayout[0] = try Descriptor.createDescriptorSetLayout(
+        self.device,
+        self.pAllocCallBacks,
+        null,
+        meshSet0SetLayoutCreateInfos.flag,
+        meshSet0SetLayoutCreateInfos.bindingCount,
+        @constCast(&meshSet0SetLayoutCreateInfos.bindings),
+    );
+    ptr = try self.allDescriptorSetLayouts.addOne();
+    ptr.* = self.meshDrawDescriptorSetLayout[0];
+
+    self.meshDrawDescriptorSetLayout[1] = try Descriptor.createDescriptorSetLayout(
+        self.device,
+        self.pAllocCallBacks,
+        null,
+        set1SetLayoutCreateInfos.flag,
+        set1SetLayoutCreateInfos.bindingCount,
+        @constCast(&set1SetLayoutCreateInfos.bindings),
+    );
+    ptr = try self.allDescriptorSetLayouts.addOne();
+    ptr.* = self.meshDrawDescriptorSetLayout[1];
+
+    self.meshDrawDescriptorSetLayout[2] = try Descriptor.createDescriptorSetLayout(
+        self.device,
+        self.pAllocCallBacks,
+        null,
+        meshSet2SetLayourCreateInfos.flag,
+        meshSet2SetLayourCreateInfos.bindingCount,
+        @constCast(&meshSet2SetLayourCreateInfos.bindings),
+    );
+    ptr = try self.allDescriptorSetLayouts.addOne();
+    ptr.* = self.meshDrawDescriptorSetLayout[2];
 
     var set0Sets: [3]vk.VkDescriptorSet = undefined;
     var set0Setlayout = [_]vk.VkDescriptorSetLayout{ self.drawDescriptorSetLayout[0], self.drawDescriptorSetLayout[0], self.drawDescriptorSetLayout[0] };
@@ -522,6 +622,18 @@ pub fn initVulkan(self: *Self, textureSets: *textureSet) !void {
 
     self.globalTextureDescriptorSet = set1Sets[0];
     try self.descriptorSetShaderStages.put(self.globalTextureDescriptorSet, vk.VK_SHADER_STAGE_FRAGMENT_BIT);
+
+    var set2Sets: [1]vk.VkDescriptorSet = undefined;
+    var set2Setlayout = [_]vk.VkDescriptorSetLayout{self.meshDrawDescriptorSetLayout[2]};
+    try Descriptor.allocateDescriptorSets(
+        self.device,
+        self.globalDescriptorPool,
+        &set2Setlayout,
+        &set2Sets,
+    );
+
+    self.meshletsDescriptorSet = set2Sets[0];
+    try self.descriptorSetShaderStages.put(self.meshletsDescriptorSet, vk.VK_SHADER_STAGE_MESH_BIT_EXT);
 
     self.presentDescriptorSetLayout[0] = try Descriptor.createDescriptorSetLayout(
         self.device,
@@ -1213,6 +1325,7 @@ pub fn readPipelineFileAndAdd(self: *Self, fileID: i32, setsType: descriptorSets
 
     try translate.toVulkan(pipelineInfo, shaderCodes, blk: switch (setsType) {
         .draw => break :blk @constCast(&self.drawDescriptorSetLayout),
+        .meshDraw => break :blk @constCast(&self.meshDrawDescriptorSetLayout),
         .present => break :blk @constCast(&self.presentDescriptorSetLayout),
     }, self);
 

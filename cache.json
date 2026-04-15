@@ -5,7 +5,7 @@
 	},
 	{
 		"path": "Shaders\\model.mesh",
-		"hash": "be02579c8042d553"
+		"hash": "420d5a7e8469d544"
 	},
 	{
 		"path": "Pipeline\\directOut.pipe",
@@ -77,7 +77,7 @@
 	},
 	{
 		"path": "Shaders\\flat2d.vert",
-		"hash": "3c51b4ee0221c22a"
+		"hash": "828c401658fd2d6e"
 	},
 	{
 		"path": "Shaders\\model3d.vert",

@@ -108,7 +108,7 @@ pub fn render_thread_func(
 
     try vulkan.readPipelineFileAndAdd(comptime file.comptimeGetID("flat2d.pipeb"), .draw);
     try vulkan.readPipelineFileAndAdd(comptime file.comptimeGetID("directOut.pipeb"), .present);
-    try vulkan.readPipelineFileAndAdd(comptime file.comptimeGetID("model.pipeb"), .draw);
+    try vulkan.readPipelineFileAndAdd(comptime file.comptimeGetID("model.pipeb"), .meshDraw);
 
     try vulkan.createAllPipelinesAdded();
 

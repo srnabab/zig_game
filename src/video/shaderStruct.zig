@@ -5,7 +5,6 @@ const cglm = @import("cglm").cglm;
 const mat4 = cglm.mat4;
 
 pub const UniformBufferObject = extern struct {
-    model: mat4,
     view: mat4,
     proj: mat4,
 };

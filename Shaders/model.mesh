@@ -19,10 +19,15 @@ struct Meshlet {
     uint primitiveCount;
 };
 
-layout(set = 3, binding = 0) readonly buffer VertexBuffer { Vertex vertices[]; };
-layout(set = 3, binding = 1) readonly buffer MeshletBuffer { Meshlet meshlets[]; };
-layout(set = 3, binding = 2) readonly buffer MeshletVertices { uint meshletVertices[]; };
-layout(set = 3, binding = 3) readonly buffer MeshletIndices { uint8_t meshletIndices[]; };
+layout(set = 0, binding = 0) uniform UniformBufferObject {
+    mat4 view;
+    mat4 proj;
+} ubo;
+
+layout(set = 2, binding = 0) readonly buffer VertexBuffer { Vertex vertices[]; };
+layout(set = 2, binding = 1) readonly buffer MeshletBuffer { Meshlet meshlets[]; };
+layout(set = 2, binding = 2) readonly buffer MeshletVertices { uint meshletVertices[]; };
+layout(set = 2, binding = 3) readonly buffer MeshletIndices { uint8_t meshletIndices[]; };
 
 layout(location = 0) out vec2 uv[];
 
@@ -44,7 +49,7 @@ void main() {
         vec3 pos = vertices[vertexIdx].pos;
         
         // c. 写入内置输出变量
-        gl_MeshVerticesEXT[i].gl_Position = vec4(pos, 1.0);
+        gl_MeshVerticesEXT[i].gl_Position = ubo.proj * ubo.view * vec4(pos, 1.0);
     }
 
     // 4. 并行读取索引数据 (生成三角形)
