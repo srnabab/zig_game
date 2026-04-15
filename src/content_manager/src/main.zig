@@ -711,10 +711,9 @@ fn processFile(
                 var contentHash = hash.blake3HashContent(content);
                 // const contentHash = try hashFileContent(&tempFile, metadata.size());
                 try ContentPathT.update(
-                    "ID,RelativePath,ParentID,ModifiedTime,LastSeenTime,ContentHash,FileSize",
+                    "RelativePath,ParentID,ModifiedTime,LastSeenTime,ContentHash,FileSize",
                     "FileName = ?",
                     .{
-                        getInsertID(),
                         rPZ,
                         parentID,
                         currentModifiedTime,
@@ -739,9 +738,9 @@ fn processFile(
                 );
             } else {
                 try ContentPathT.update(
-                    "ID,RelativePath,ParentID,LastSeenTime",
+                    "RelativePath,ParentID,LastSeenTime",
                     "FileName = ?",
-                    .{ getInsertID(), rPZ, parentID, time, name },
+                    .{ rPZ, parentID, time, name },
                 );
             }
         } else {
@@ -754,10 +753,9 @@ fn processFile(
                 var contentHash = hash.blake3HashContent(content);
 
                 try ContentPathT.update(
-                    "ID,ModifiedTime,LastSeenTime,ContentHash,FileSize",
+                    "ModifiedTime,LastSeenTime,ContentHash,FileSize",
                     "FileName = ?",
                     .{
-                        getInsertID(),
                         currentModifiedTime,
                         time,
                         sqlDB.BLOB{ .data = &contentHash, .len = contentHash.len },
@@ -782,7 +780,7 @@ fn processFile(
                     rPZ[0 .. rPZ.len - name.len - 1],
                 );
             } else {
-                try ContentPathT.update("ID,LastSeenTime", "FileName = ?", .{ getInsertID(), time, name });
+                try ContentPathT.update("LastSeenTime", "FileName = ?", .{ time, name });
             }
         }
     }
@@ -843,30 +841,30 @@ fn processDirectory(
             // 目录被移动：更新路径和父ID
             if (isModified) {
                 try ContentPathT.update(
-                    "ID,RelativePath,ParentUUID,ModifiedTime,LastSeenTime",
+                    "RelativePath,ParentUUID,ModifiedTime,LastSeenTime",
                     "FileName = ?",
-                    .{ getInsertID(), rPZ, parentID, currentModifiedTime, time, name },
+                    .{ rPZ, parentID, currentModifiedTime, time, name },
                 );
             } else {
                 try ContentPathT.update(
-                    "ID,RelativePath,ParentUUID,LastSeenTime",
+                    "RelativePath,ParentUUID,LastSeenTime",
                     "FileName = ?",
-                    .{ getInsertID(), rPZ, parentID, time, name },
+                    .{ rPZ, parentID, time, name },
                 );
             }
         } else {
             // 已存在的目录：更新时间
             if (isModified) {
                 try ContentPathT.update(
-                    "ID,ModifiedTime,LastSeenTime",
+                    "ModifiedTime,LastSeenTime",
                     "FileName = ?",
-                    .{ getInsertID(), currentModifiedTime, time, name },
+                    .{ currentModifiedTime, time, name },
                 );
             } else {
                 try ContentPathT.update(
-                    "ID,LastSeenTime",
+                    "LastSeenTime",
                     "FileName = ?",
-                    .{ getInsertID(), time, name },
+                    .{ time, name },
                 );
             }
         }
@@ -1122,10 +1120,10 @@ pub fn main() !void {
         // std.log.info("{s}", .{buffer});
 
         if (cc.mtime != @as(i128, @intCast(modifiedTime))) {
-            try ContentPathT.update("ID,ModifiedTime,LastSeenTime", "UUID = ?", .{ getInsertID(), modifiedTime, time, buffer });
+            try ContentPathT.update("ModifiedTime,LastSeenTime", "UUID = ?", .{ modifiedTime, time, buffer });
             // std.log.info("update", .{});
         } else {
-            try ContentPathT.update("ID,LastSeenTime", "UUID = ?", .{ getInsertID(), time, buffer });
+            try ContentPathT.update("LastSeenTime", "UUID = ?", .{ time, buffer });
         }
     } else {
         const cc = try content.stat();
