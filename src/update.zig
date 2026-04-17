@@ -16,16 +16,7 @@ const DrawableC = ECS.CompentPool(process.Drawable);
 
 const inputProcessInterval = std.time.ns_per_ms * 5;
 var debug_allocator: std.heap.DebugAllocator(.{ .stack_trace_frames = 10 }) = .init;
-pub fn update_thread_func(thread_count: usize, pInput: *input) !void {
-    const gpa, const is_debug = gpa: {
-        break :gpa switch (builtin.mode) {
-            .Debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
-            .ReleaseFast, .ReleaseSmall => .{ std.heap.smp_allocator, false },
-        };
-    };
-    defer if (is_debug) {
-        _ = debug_allocator.deinit();
-    };
+pub fn update_thread_func(io: std.Io, gpa: std.mem.Allocator, thread_count: usize, pInput: *input) !void {
     var tracyAllocator = tracy.TracingAllocator.initNamed("pool", gpa);
     defer tracyAllocator.deinit();
     var taa = tracyAllocator.allocator();
@@ -37,7 +28,7 @@ pub fn update_thread_func(thread_count: usize, pInput: *input) !void {
     const zone = tracy.initZone(@src(), .{ .name = "update" });
     defer zone.deinit();
 
-    var inputFunc1 = inputFunc.init(allocator_t.*);
+    var inputFunc1 = try inputFunc.init(allocator_t.*);
     defer inputFunc1.deinit();
 
     var inputTrigger1 = try inputFunc1.createInputTrigger();
@@ -64,11 +55,7 @@ pub fn update_thread_func(thread_count: usize, pInput: *input) !void {
         if (accumulateTime > inputProcessInterval) {
             defer accumulateTime -= inputProcessInterval;
 
-            inputs = try pInput.getCurrentInput();
-            defer {
-                pInput.releaseCurrentInput(inputs);
-                inputs = &.{};
-            }
+            inputs = try pInput.getCurrentInput(io);
 
             for (inputs) |*value| {
                 const r = inputTrigger1.set(value);
@@ -82,6 +69,9 @@ pub fn update_thread_func(thread_count: usize, pInput: *input) !void {
                     else => {},
                 }
             }
+
+            try pInput.releaseCurrentInput(io, inputs);
+            inputs = &.{};
         }
 
         accumulateTime += sdl.SDL_GetTicksNS() - lastTimestamp;

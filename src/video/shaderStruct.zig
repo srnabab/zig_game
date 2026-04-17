@@ -1,6 +1,6 @@
-const vk = @import("vulkan").vulkan;
+const vk = @import("vulkan");
 
-const cglm = @import("cglm").cglm;
+const cglm = @import("cglm");
 
 const mat4 = cglm.mat4;
 

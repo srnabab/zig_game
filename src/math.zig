@@ -1,5 +1,5 @@
 const std = @import("std");
-const cglm = @import("cglm").cglm;
+const cglm = @import("cglm");
 
 fn doubleWidthCast(value: anytype) doubleWidthIntType(@TypeOf(value)) {
     return @intCast(value);
@@ -10,12 +10,7 @@ fn doubleWidthIntType(comptime T: type) type {
 
     std.debug.assert(info == .int and info.int.signedness == .unsigned);
 
-    return @Type(.{
-        .int = .{
-            .signedness = .unsigned,
-            .bits = info.int.bits * 2,
-        },
-    });
+    return @Int(.unsigned, info.int.bits * 2);
 }
 
 pub fn szudzikPairing(a: anytype, b: @TypeOf(a)) doubleWidthIntType(@TypeOf(b)) {

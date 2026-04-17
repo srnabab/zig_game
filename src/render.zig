@@ -5,7 +5,7 @@ const sdl = @import("sdl").sdl;
 const global = @import("global");
 const tracy = @import("tracy");
 
-const vk = @import("vulkan").vulkan;
+const vk = @import("vulkan");
 const VkStruct = @import("video");
 const OneTimeCommand = @import("processRender").oneTimeCommand;
 const Commands = @import("processRender").commands;
@@ -13,18 +13,21 @@ const textureSet = @import("textureSet");
 const rendering = @import("rendering");
 const vertices = @import("vertices");
 const shaderStruct = @import("video/shaderStruct.zig");
+const vertexStruct = @import("vertexStruct");
 
-const cglm = @import("cglm").cglm;
+const cglm = @import("cglm");
 
 const math = @import("math");
 
-const Semaphore = std.Thread.Semaphore;
+const Semaphore = std.Io.Semaphore;
 
 const file = @import("fileSystem");
 
 var debug_allocator: std.heap.DebugAllocator(.{ .stack_trace_frames = 10 }) = .init;
 
 pub fn render_thread_func(
+    io: std.Io,
+    gpa: std.mem.Allocator,
     thread_count: usize,
     endSemaphore: *Semaphore,
     handles: *global.HandlesType,
@@ -40,30 +43,22 @@ pub fn render_thread_func(
 
     var stackMemory = [_]u8{0} ** global.StackMemorySize;
 
-    const gpa, const is_debug = gpa: {
-        break :gpa switch (builtin.mode) {
-            .Debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
-            .ReleaseFast, .ReleaseSmall => .{ std.heap.smp_allocator, false },
-        };
-    };
-    defer if (is_debug) {
-        _ = debug_allocator.deinit();
-    };
     var tracyAllocator = tracy.TracingAllocator.initNamed("render thread", gpa);
     defer tracyAllocator.deinit();
     var taa = tracyAllocator.allocator();
     const allocator_t = &taa;
 
-    var pTextureSet = textureSet.init(allocator_t.*, handles);
+    var pTextureSet = textureSet.init(io, allocator_t.*, handles);
     var vulkan = VkStruct.init(allocator_t.*, handles, window, width, height);
-    try vulkan.initVulkan(&pTextureSet);
+    try vulkan.initVulkan(io, &pTextureSet);
     defer vulkan.deinit();
     defer pTextureSet.deinit(&vulkan);
 
-    var pRendering = rendering.init(allocator_t.*, handles);
+    var pRendering = rendering.init(io, allocator_t.*, handles);
     defer pRendering.deinit();
 
-    var commands = Commands.init(
+    var commands = try Commands.init(
+        io,
         allocator_t.*,
         stackMemory[0..global.StackMemorySize],
         &vulkan,
@@ -72,8 +67,10 @@ pub fn render_thread_func(
     );
     defer commands.deinit();
 
-    var graphic = OneTimeCommand.init(allocator_t.*, &vulkan, &pRendering);
-    defer graphic.deinit();
+    var graphic = OneTimeCommand.init(io, allocator_t.*, &vulkan, &pRendering);
+    defer graphic.deinit() catch |err| {
+        std.debug.panic("error {s}", .{@errorName(err)});
+    };
 
     try vulkan.waitEndFence();
     try commands.startCommand();
@@ -94,7 +91,7 @@ pub fn render_thread_func(
             &vulkan,
             &commands,
         );
-        const ix = try vertices.vertexInitialize2D(48, 48, 0, 0, 0.1);
+        const ix = try vertices.vertexInitialize2D(io, 48, 48, 0, 0, 0.1);
         try pTextureSet.offsetsAdd(temp, ix);
         try vertices.upload(&commands);
     }
@@ -106,9 +103,9 @@ pub fn render_thread_func(
     try graphic.executeCommands(&commands);
     vulkan.nextFrame();
 
-    try vulkan.readPipelineFileAndAdd(comptime file.comptimeGetID("flat2d.pipeb"), .draw);
-    try vulkan.readPipelineFileAndAdd(comptime file.comptimeGetID("directOut.pipeb"), .present);
-    try vulkan.readPipelineFileAndAdd(comptime file.comptimeGetID("model.pipeb"), .meshDraw);
+    try vulkan.readPipelineFileAndAdd(io, comptime file.comptimeGetID("flat2d.pipeb"), .draw);
+    try vulkan.readPipelineFileAndAdd(io, comptime file.comptimeGetID("directOut.pipeb"), .present);
+    try vulkan.readPipelineFileAndAdd(io, comptime file.comptimeGetID("model.pipeb"), .meshDraw);
 
     try vulkan.createAllPipelinesAdded();
 
@@ -143,6 +140,7 @@ pub fn render_thread_func(
 
     var texture_test_array = [_]textureSet.Texture_t{texture_test};
     const rendering_test = try pRendering.createRenderingInfo(
+        io,
         0,
         vk.VkRect2D{
             .extent = .{
@@ -162,7 +160,8 @@ pub fn render_thread_func(
     // _ = rendering_test;
 
     var present_texture_test_array = [_]textureSet.Texture_t{undefined};
-    const presetn_rendering_test = try pRendering.createRenderingInfo(
+    const present_rendering_test = try pRendering.createRenderingInfo(
+        io,
         0,
         vk.VkRect2D{ .extent = .{
             .width = vulkan.windowWidth,
@@ -205,6 +204,9 @@ pub fn render_thread_func(
     const pData = @as(*shaderStruct.UniformBufferObject, @ptrCast(@alignCast(ubo.pMappedData)));
     pData.* = pUIUbo;
 
+    const ssbo_test = try vulkan.createStorageBuffer(global.MeshletStorageBufferSize);
+    _ = ssbo_test;
+
     try vulkan.addWriteDescriptorSetBuffer(
         0,
         vulkan.buffers.getVkBuffer(ubo_test),
@@ -227,7 +229,7 @@ pub fn render_thread_func(
 
     vulkan.writeCachedDescriptorSetResources();
 
-    const viewport_test = try vulkan.viewports.createViewport(.{
+    const viewport_test = try vulkan.viewports.createViewport(io, .{
         .x = 0,
         .y = 0,
         .width = @floatFromInt(vulkan.windowWidth),
@@ -236,7 +238,7 @@ pub fn render_thread_func(
         .minDepth = 0.0,
     });
 
-    const scissor_test = try vulkan.scissors.createScissor(.{
+    const scissor_test = try vulkan.scissors.createScissor(io, .{
         .extent = .{
             .width = vulkan.windowWidth,
             .height = vulkan.windowHeight,
@@ -257,7 +259,7 @@ pub fn render_thread_func(
     // global.stopNodeDagPrint = false;
     // global.stopExecuteNodePrint = false;
 
-    const renderStart = std.time.milliTimestamp();
+    const renderStart = std.Io.Timestamp.now(io, .real).toNanoseconds();
     global.game_end.store(1, .seq_cst);
 
     while (true) {
@@ -284,7 +286,7 @@ pub fn render_thread_func(
         try commands.addCommand(.present, .{ .present = .{
             .pipeline = vulkan.getPipeline("directOut").?,
             .pTextures = &presentTextures,
-            .rendering = presetn_rendering_test,
+            .rendering = present_rendering_test,
             .descriptorSets = &presentDescriptorSets,
             .pViewport = viewport_test,
             .pScissor = scissor_test,

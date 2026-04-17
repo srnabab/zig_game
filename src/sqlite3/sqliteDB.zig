@@ -1,4 +1,4 @@
-pub const sqlite = @cImport(@cInclude("sqlite3/sqlite3.h"));
+pub const sqlite = @import("sqlite3");
 const std = @import("std");
 const tracy = @import("tracy");
 
@@ -170,40 +170,39 @@ fn getParamFromSQL(comptime SQL: []const u8, comptime skipID: bool) ParamsPack {
 
 // std.builtin.Type.Struct;
 fn createInsertStruct(comptime pack: ParamsPack) type {
-    var fileds: [64]std.builtin.Type.StructField = undefined;
+    var fileds_name: [64][]const u8 = undefined;
+    var fileds_type: [64]type = undefined;
     var fieldsCount: u32 = 0;
 
     for (pack.ps[0..pack.count]) |para| {
-        fileds[fieldsCount].name = std.fmt.comptimePrint("{s}", .{para.paramName});
+        fileds_name[fieldsCount] = std.fmt.comptimePrint("{s}", .{para.paramName});
         // @compileLog(std.fmt.comptimePrint("{s}", .{fileds[fieldsCount].name}));
-        fileds[fieldsCount].type = switch (para.paramType) {
+        fileds_type[fieldsCount] = switch (para.paramType) {
             .BLOB => ?BLOB,
             .INTEGER => i64,
             .INTEGER32 => i32,
             .TEXT => ?[*]u8,
         };
 
-        fileds[fieldsCount].default_value_ptr = null;
-        fileds[fieldsCount].is_comptime = false;
-        fileds[fieldsCount].alignment = switch (para.paramType) {
-            .BLOB => @alignOf(?BLOB),
-            .INTEGER => @alignOf(i64),
-            .INTEGER32 => @alignOf(i32),
-            .TEXT => @alignOf(?[*]u8),
-        };
+        // fileds[fieldsCount].default_value_ptr = null;
+        // fileds[fieldsCount].is_comptime = false;
+        // fileds[fieldsCount].alignment = switch (para.paramType) {
+        //     .BLOB => @alignOf(?BLOB),
+        //     .INTEGER => @alignOf(i64),
+        //     .INTEGER32 => @alignOf(i32),
+        //     .TEXT => @alignOf(?[*]u8),
+        // };
         fieldsCount += 1;
         // @compileLog(std.fmt.comptimePrint("count {d}", .{fieldsCount}));
     }
 
-    return @Type(.{
-        .@"struct" = .{
-            .layout = .auto,
-            .backing_integer = null,
-            .fields = fileds[0..fieldsCount],
-            .decls = &.{},
-            .is_tuple = false,
-        },
-    });
+    return @Struct(
+        .auto,
+        null,
+        fileds_name[0..fieldsCount],
+        fileds_type[0..fieldsCount],
+        &@splat(.{}),
+    );
 }
 
 pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime skipID: bool) type {

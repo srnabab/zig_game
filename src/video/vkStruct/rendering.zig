@@ -4,7 +4,7 @@ const global = @import("global");
 
 const tracy = @import("tracy");
 
-const vk = @import("vulkan").vulkan;
+const vk = @import("vulkan");
 const textureSet = @import("textureSet");
 const Handles = @import("handle");
 const Handle = Handles.Handle;
@@ -29,15 +29,17 @@ const Self = @This();
 
 pub const RenderingInfo_t = Handle;
 
-var mutex: std.Thread.Mutex = .{};
+var mutex: std.Io.Mutex = .init;
 
 allocator: std.mem.Allocator,
+io: std.Io,
 
 array: std.array_list.Managed(RenderingInfo),
 handles: *global.HandlesType,
 
-pub fn init(allocator: std.mem.Allocator, handles: *global.HandlesType) Self {
+pub fn init(io: std.Io, allocator: std.mem.Allocator, handles: *global.HandlesType) Self {
     return .{
+        .io = io,
         .allocator = allocator,
         .array = .init(allocator),
         .handles = handles,
@@ -56,6 +58,7 @@ pub fn deinit(self: *Self) void {
 
 pub fn createRenderingInfo(
     self: *Self,
+    io: std.Io,
     flags: vk.VkRenderingFlags,
     renderArea: vk.VkRect2D,
     layerCount: u32,
@@ -68,8 +71,8 @@ pub fn createRenderingInfo(
     const zone = tracy.initZone(@src(), .{ .name = "create rendering info" });
     defer zone.deinit();
 
-    mutex.lock();
-    defer mutex.unlock();
+    try mutex.lock(io);
+    defer mutex.unlock(io);
 
     const ptr = try self.array.addOne();
 
@@ -159,8 +162,8 @@ pub fn getRenderingInfoContent(self: Self, renderingInfo: RenderingInfo_t) Rende
     const zone = tracy.initZone(@src(), .{ .name = "get rendering info content" });
     defer zone.deinit();
 
-    mutex.lock();
-    defer mutex.unlock();
+    mutex.lock(self.io) catch unreachable;
+    defer mutex.unlock(self.io);
 
     const index = Handles.getIndex(renderingInfo);
 
@@ -171,8 +174,8 @@ pub fn renderingIsStart(self: *Self, renderingInfo: RenderingInfo_t) bool {
     const zone = tracy.initZone(@src(), .{ .name = "rendering started" });
     defer zone.deinit();
 
-    mutex.lock();
-    defer mutex.unlock();
+    mutex.lock(self.io) catch unreachable;
+    defer mutex.unlock(self.io);
 
     const index = Handles.getIndex(renderingInfo);
 
@@ -183,8 +186,8 @@ pub fn renderingStart(self: *Self, renderingInfo: RenderingInfo_t) void {
     const zone = tracy.initZone(@src(), .{ .name = "rendering start" });
     defer zone.deinit();
 
-    mutex.lock();
-    defer mutex.unlock();
+    mutex.lock(self.io) catch unreachable;
+    defer mutex.unlock(self.io);
 
     const index = Handles.getIndex(renderingInfo);
     self.array.items[index].start = true;
@@ -194,8 +197,8 @@ pub fn renderingEnd(self: *Self, renderingInfo: RenderingInfo_t) void {
     const zone = tracy.initZone(@src(), .{ .name = "rendering end" });
     defer zone.deinit();
 
-    mutex.lock();
-    defer mutex.unlock();
+    mutex.lock(self.io) catch unreachable;
+    defer mutex.unlock(self.io);
 
     const index = Handles.getIndex(renderingInfo);
     self.array.items[index].start = false;
@@ -229,12 +232,12 @@ pub fn updateRendering(self: *Self, args: anytype, rendering: RenderingInfo_t) v
     }
 }
 
-pub fn changeRenderingImageView(self: *Self, startIndex: u32, count: u32, imageViews: []vk.VkImageView, rendering: RenderingInfo_t, pTextureSet: *textureSet) void {
+pub fn changeRenderingImageView(self: *Self, startIndex: u32, count: u32, imageViews: []vk.VkImageView, rendering: RenderingInfo_t, pTextureSet: *textureSet) !void {
     const zone = tracy.initZone(@src(), .{ .name = "change rendering image view" });
     defer zone.deinit();
 
-    mutex.lock();
-    defer mutex.unlock();
+    try mutex.lock(self.io);
+    defer mutex.unlock(self.io);
 
     const index = Handles.getIndex(rendering);
     const temp = &self.array.items[index];

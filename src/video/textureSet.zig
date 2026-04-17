@@ -1,9 +1,9 @@
 const std = @import("std");
-const Mutex = std.Thread.Mutex;
+const Mutex = std.Io.Mutex;
 const Atomic = std.atomic;
 const file = @import("fileSystem");
-const stb_image = @import("stb_image").image;
-const vk = @import("vulkan").vulkan;
+const stb_image = @import("stb_image");
+const vk = @import("vulkan");
 const VkStruct = @import("video");
 const global = @import("global");
 const MemoryPool = @import("memoryPool").MemoryPoolSlice;
@@ -63,7 +63,8 @@ pub const Texture = struct {
     }
 };
 
-var mutex: Mutex = .{};
+mutex: Mutex = .init,
+io: std.Io,
 
 allocator: std.mem.Allocator,
 
@@ -85,12 +86,13 @@ descriptorSetIndex: u32 = 0,
 // vulkan: *VkStruct,
 // graphic: *OneTimeCommand,
 
-pub fn init(allocator: std.mem.Allocator, handles: *global.HandlesType) Self {
+pub fn init(io: std.Io, allocator: std.mem.Allocator, handles: *global.HandlesType) Self {
     const zone = tracy.initZone(@src(), .{ .name = "init texture set" });
     defer zone.deinit();
 
     // std.log.debug("texture set init", .{});
     return .{
+        .io = io,
         .allocator = allocator,
         .map = .init(allocator),
         .array = .init(allocator),
@@ -150,16 +152,18 @@ pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Sample
     var channel: u32 = 0;
     var index: u32 = 0;
     {
-        mutex.lock();
-        defer mutex.unlock();
+        self.mutex.lock(self.io) catch unreachable;
+        defer self.mutex.unlock(self.io);
 
-        const img = try file.getImageLoadParam(@intCast(fileID));
-        defer img.file.close();
+        const img = try file.getImageLoadParam(self.io, @intCast(fileID));
+        defer img.file.close(self.io);
 
-        const imgStat = try img.file.stat();
-        const fileMem = try self.allocator.alloc(u8, imgStat.size);
+        const imgStat = try img.file.stat(self.io);
+
+        var fileBuffer = [_]u8{0} ** 256;
+        var fileReader = img.file.reader(self.io, &fileBuffer);
+        const fileMem = try fileReader.interface.readAlloc(self.allocator, imgStat.size);
         defer self.allocator.free(fileMem);
-        _ = try img.file.readAll(fileMem);
 
         std.log.debug("img size {d}", .{fileMem.len});
 
@@ -181,7 +185,7 @@ pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Sample
         vulkan.buffers.copyDataToMapped(stagingBuffer, u8, imageMem[0..pixelSize]);
         // @memcpy(@as([*c]u8, @ptrCast(stagingBuffer.pMappedData.?)), imageMem[0..pixelSize]);
 
-        const image = try vulkan.createImage2D(imgWidth, imgHeight, img.format, img.tiling, img.usage);
+        const image = try vulkan.createImage2D(imgWidth, imgHeight, img.image.format, img.image.tiling, img.image.usage);
         errdefer vulkan.destroyImage(image);
 
         // texture = try self.memory.create();
@@ -209,7 +213,7 @@ pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Sample
             .source_height = imgHeight,
             .layouts = try self.layoutMemory.create(1),
             .imageView = null,
-            .format = img.format,
+            .format = img.image.format,
             // .usage = .shader,
         };
         for (0..texture.layouts.len) |i| {
@@ -261,8 +265,8 @@ pub fn create2DTexture(
     usage: vk.VkImageUsageFlags,
     name: []const u8,
 ) !Texture_t {
-    mutex.lock();
-    defer mutex.unlock();
+    self.mutex.lock(self.io) catch unreachable;
+    defer self.mutex.unlock(self.io);
 
     const image = try vulkan.createImage2D(width, height, format, tiling, usage);
     errdefer vulkan.destroyImage(image);
@@ -302,6 +306,7 @@ pub fn create2DTexture(
 
 pub fn createTexturePackVkImage(
     self: *Self,
+    io: std.Io,
     width: u32,
     height: u32,
     format: vk.VkFormat,
@@ -309,8 +314,8 @@ pub fn createTexturePackVkImage(
     vkImageView: vk.VkImageView,
     name: []const u8,
 ) !Texture_t {
-    mutex.lock();
-    defer mutex.unlock();
+    try self.mutex.lock(io);
+    defer self.mutex.unlock(io);
 
     var texture = try self.array.addOne();
     const index: u32 = @intCast(self.array.items.len - 1);
@@ -345,8 +350,8 @@ pub fn createTexturePackVkImage(
 }
 
 fn acquireDescriptorSetIndex(self: *Self, ID: u32) !u32 {
-    mutex.lock();
-    defer mutex.unlock();
+    self.mutex.lock(self.io) catch unreachable;
+    defer self.mutex.unlock(self.io);
 
     try self.descriptorSetIndices.put(ID, self.descriptorSetIndex);
     defer self.descriptorSetIndex += 1;
@@ -357,8 +362,8 @@ fn acquireDescriptorSetIndex(self: *Self, ID: u32) !u32 {
 pub fn getDescriptorSetIndex(self: *Self, texture: Texture_t) !u32 {
     const ID = self.getTextureCotent(texture).ID;
 
-    mutex.lock();
-    defer mutex.unlock();
+    self.mutex.lock(self.io) catch unreachable;
+    defer self.mutex.unlock(self.io);
 
     const index = self.descriptorSetIndices.get(ID) orelse return error.not_found;
 
@@ -373,8 +378,8 @@ pub fn createImageTextureEnsureWithErrorImage(self: *Self, fileID: u32, samplerT
 }
 
 pub fn getTexture(self: *Self, textureID: u32) ?Texture_t {
-    mutex.lock();
-    defer mutex.unlock();
+    self.mutex.lock(self.io) catch unreachable;
+    defer self.mutex.unlock(self.io);
 
     const index = self.map.get(textureID);
     if (index) |_| {
@@ -385,8 +390,8 @@ pub fn getTexture(self: *Self, textureID: u32) ?Texture_t {
 }
 
 pub fn getTextureCotent(self: *Self, texture: Texture_t) Texture {
-    mutex.lock();
-    defer mutex.unlock();
+    self.mutex.lock(self.io) catch unreachable;
+    defer self.mutex.unlock(self.io);
 
     const index: u32 = Handles.getIndex(texture);
     return self.array.items[index];
@@ -425,8 +430,8 @@ pub fn getTextureOffsets(self: *Self, texture: Texture_t) ![]Offsets {
     const zone = tracy.initZone(@src(), .{ .name = "texture offsets get" });
     defer zone.deinit();
 
-    mutex.lock();
-    defer mutex.unlock();
+    self.mutex.lock(self.io) catch unreachable;
+    defer self.mutex.unlock(self.io);
 
     const index = Handles.getIndex(texture);
 
@@ -434,8 +439,8 @@ pub fn getTextureOffsets(self: *Self, texture: Texture_t) ![]Offsets {
 }
 
 pub fn changeTextureLayout(self: *Self, texture: Texture_t, baseLayer: u32, layerCount: u32, layout: vk.VkImageLayout) void {
-    mutex.lock();
-    defer mutex.unlock();
+    self.mutex.lock(self.io) catch unreachable;
+    defer self.mutex.unlock(self.io);
 
     const index = Handles.getIndex(texture);
     const tex = &self.array.items[index];
@@ -449,8 +454,8 @@ pub fn getCurrentLayouts(self: *Self, texture: Texture_t) []vk.VkImageLayout {
     return tex.layouts;
 }
 pub fn changeTextureQueue(self: *Self, texture: Texture_t, queueType: VkStruct.CommandPoolType) void {
-    mutex.lock();
-    defer mutex.unlock();
+    self.mutex.lock(self.io) catch unreachable;
+    defer self.mutex.unlock(self.io);
 
     const index = Handles.getIndex(texture);
     const tex = &self.array.items[index];
@@ -489,8 +494,8 @@ pub fn updateTexture(self: *Self, args: anytype, texture: Texture_t) void {
         @compileError("argument must be a struct");
     }
 
-    mutex.lock();
-    defer mutex.unlock();
+    self.mutex.lock(self.io) catch unreachable;
+    defer self.mutex.unlock(self.io);
 
     const index = Handles.getIndex(texture);
     const temp = &self.array.items[index];

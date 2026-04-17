@@ -1,5 +1,5 @@
 const std = @import("std");
-const inn = @cImport(@cInclude("UUID/UUID.h"));
+const inn = @import("UUID_C");
 // const tracy = @import("tracy");
 
 const UUIDerr = error{

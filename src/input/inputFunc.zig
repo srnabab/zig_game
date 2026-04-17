@@ -9,6 +9,7 @@ const tracy = @import("tracy");
 pub const triggerPack = struct {
     down: bool = false,
     pre: bool = false,
+
     timestamp: u64 = 0,
 
     pub fn preIsTrue(self: *triggerPack) bool {
@@ -148,18 +149,18 @@ const inputTrigger = struct {
     }
 
     const expiredTime = std.time.ns_per_ms * 40;
-    pub fn set(self: *inputTrigger, pInput: *input.Input) void {
+    pub fn set(self: *inputTrigger, pInput: *input.Input) bool {
         switch (pInput.*) {
             .key => |key| {
                 if (self.keyFunc[key.key] == 1000) {
-                    return;
+                    return false;
                 }
 
                 input.logKey(@constCast(&key));
 
                 if (sdl.SDL_GetTicksNS() - key.timestamp > expiredTime) {
                     std.log.debug("exipred", .{});
-                    return;
+                    return false;
                 }
 
                 if (key.down) {
@@ -198,8 +199,13 @@ const inputTrigger = struct {
                         };
                     }
                 }
+
+                return true;
+                // std.log.debug("{}, {}, {d}", .{ exit.down, exit.pre, exit.timestamp });
             },
-            else => {},
+            else => {
+                return false;
+            },
         }
     }
 };
@@ -211,21 +217,21 @@ const idInputTrigger = struct {
 
 const Self = @This();
 
-triggerPackMem: std.heap.MemoryPoolExtra(triggerPack, .{}),
+triggerPackMem: std.heap.memory_pool.Extra(triggerPack, .{}),
 actionIdMap: std.hash_map.StringHashMap(idInputTrigger),
 
 allocator: std.mem.Allocator,
 
-pub fn init(allocator: std.mem.Allocator) Self {
+pub fn init(allocator: std.mem.Allocator) !Self {
     return .{
-        .triggerPackMem = .init(allocator),
+        .triggerPackMem = try .initCapacity(allocator, 128),
         .actionIdMap = .init(allocator),
         .allocator = allocator,
     };
 }
 
 pub fn deinit(self: *Self) void {
-    self.triggerPackMem.deinit();
+    self.triggerPackMem.deinit(self.allocator);
     self.actionIdMap.deinit();
 }
 
@@ -264,13 +270,13 @@ pub fn registerAction(
                 }
             }
 
-            break :blk try self.triggerPackMem.create();
+            break :blk try self.triggerPackMem.create(self.allocator);
         };
 
         res.value_ptr.pTriggerPack[if (isLong) long else short] = ptr;
     } else {
         id = pInputTrigger.getID();
-        ptr = try self.triggerPackMem.create();
+        ptr = try self.triggerPackMem.create(self.allocator);
 
         res.key_ptr.* = name;
         res.value_ptr.* = .{

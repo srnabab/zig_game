@@ -6,7 +6,8 @@ fn comptime_print(comptime format: []const u8, comptime args: anytype) void {
 
 /// depend on enum sequence
 pub fn generateEnumFromC(comptime import: anytype, comptime tag_type: anytype, comptime startEnumMember: [:0]const u8, comptime endEnumMember: [:0]const u8) type {
-    comptime var enum_fields: [1024]std.builtin.Type.EnumField = undefined;
+    comptime var enum_fields_names: [1024][]const u8 = undefined;
+    comptime var enum_fields_values: [1024]tag_type = undefined;
     comptime var count: u32 = 0;
 
     // comptime_print("start {s}, end {s}", .{ startEnumMember, endEnumMember });
@@ -27,7 +28,7 @@ pub fn generateEnumFromC(comptime import: anytype, comptime tag_type: anytype, c
         comptime var i = count;
         while (i > 0) {
             i -= 1;
-            if (enum_fields[i].value == @field(import, decl.name)) {
+            if (enum_fields_values[i] == @field(import, decl.name)) {
                 has = true;
                 break;
             }
@@ -41,10 +42,8 @@ pub fn generateEnumFromC(comptime import: anytype, comptime tag_type: anytype, c
             continue;
         }
 
-        enum_fields[count] = .{
-            .name = decl.name,
-            .value = @field(import, decl.name),
-        };
+        enum_fields_names[count] = decl.name;
+        enum_fields_values[count] = @field(import, decl.name);
 
         count += 1;
         // comptime_print("decl name: {s}", .{decl.name});
@@ -59,12 +58,10 @@ pub fn generateEnumFromC(comptime import: anytype, comptime tag_type: anytype, c
         }
     }
 
-    return @Type(.{
-        .@"enum" = .{
-            .tag_type = tag_type,
-            .fields = enum_fields[0..count],
-            .decls = &.{},
-            .is_exhaustive = false,
-        },
-    });
+    return @Enum(
+        tag_type,
+        .nonexhaustive,
+        enum_fields_names[0..count],
+        enum_fields_values[0..count],
+    );
 }

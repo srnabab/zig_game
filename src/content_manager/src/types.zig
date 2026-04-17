@@ -1,0 +1,16 @@
+pub const FileType = enum {
+    DIR,
+    OBJ,
+    MTL,
+    PNG,
+    TSDI,
+    TSD,
+    TTF,
+    WAV,
+    SPV,
+    TXT,
+    GLTF,
+    VTX,
+    HASHTABLE,
+    UNKNOWN,
+};

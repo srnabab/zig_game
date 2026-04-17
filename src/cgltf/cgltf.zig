@@ -1,8 +1,9 @@
-pub const cgltf = @cImport(@cInclude("cgltf/cgltf.h"));
+pub const cgltf = @import("cgltf");
 
 const std = @import("std");
 
 const vertexStruct = @import("vertexStruct");
+
 const vec3 = vertexStruct.vec3;
 const vec2 = vertexStruct.vec2;
 const mat3 = vertexStruct.mat3;
@@ -105,10 +106,11 @@ fn getName(name: [*c]u8, allocator: std.mem.Allocator) ![]u8 {
 fn setTransform(node: [*c]cgltf.cgltf_node, nodePtr: *Node) void {
     if (node.*.has_matrix == 1) {
         for (0..nodePtr.transform.len, 0..) |i, k| {
-            nodePtr.transform[i][0] = node.*.matrix[k * 4 + 0];
-            nodePtr.transform[i][1] = node.*.matrix[k * 4 + 1];
-            nodePtr.transform[i][2] = node.*.matrix[k * 4 + 2];
-            nodePtr.transform[i][3] = node.*.matrix[k * 4 + 3];
+            // @compileLog(std.fmt.comptimePrint("{s}", .{@typeName(@TypeOf(node.*.matrix[0][0]))}));
+            nodePtr.transform[i][0] = node.*.matrix[0][k * 4 + 0];
+            nodePtr.transform[i][1] = node.*.matrix[0][k * 4 + 1];
+            nodePtr.transform[i][2] = node.*.matrix[0][k * 4 + 2];
+            nodePtr.transform[i][3] = node.*.matrix[0][k * 4 + 3];
         }
     } else {
         var matrix: vertexStruct.mat3 align(16) = undefined;
@@ -120,15 +122,15 @@ fn setTransform(node: [*c]cgltf.cgltf_node, nodePtr: *Node) void {
         }
 
         if (node.*.has_scale == 1) {
-            vertexStruct.cglm.glmc_vec3_scale(&matrix[0], node.*.scale[0], &matrix[0]);
-            vertexStruct.cglm.glmc_vec3_scale(&matrix[1], node.*.scale[1], &matrix[1]);
-            vertexStruct.cglm.glmc_vec3_scale(&matrix[2], node.*.scale[2], &matrix[2]);
+            vertexStruct.cglm.glmc_vec3_scale(&matrix[0], node.*.scale[0][0], &matrix[0]);
+            vertexStruct.cglm.glmc_vec3_scale(&matrix[1], node.*.scale[0][1], &matrix[1]);
+            vertexStruct.cglm.glmc_vec3_scale(&matrix[2], node.*.scale[0][2], &matrix[2]);
         }
 
         if (node.*.has_translation == 1) {
-            nodePtr.transform[3][0] = node.*.translation[0];
-            nodePtr.transform[3][1] = node.*.translation[1];
-            nodePtr.transform[3][2] = node.*.translation[2];
+            nodePtr.transform[3][0] = node.*.translation[0][0];
+            nodePtr.transform[3][1] = node.*.translation[0][1];
+            nodePtr.transform[3][2] = node.*.translation[0][2];
         } else {
             nodePtr.transform[3][0] = 0.0;
             nodePtr.transform[3][1] = 0.0;
@@ -148,7 +150,7 @@ fn setTransform(node: [*c]cgltf.cgltf_node, nodePtr: *Node) void {
     }
 }
 
-pub fn loadGltfFile(fileMem: []const u8, fileStat: std.fs.File.Stat, allocator: std.mem.Allocator) !struct {
+pub fn loadGltfFile(fileMem: []const u8, fileStat: std.Io.File.Stat, allocator: std.mem.Allocator) !struct {
     scenes: []Scene,
     primitives: []Primitive,
     arenaAllocator: std.heap.ArenaAllocator,

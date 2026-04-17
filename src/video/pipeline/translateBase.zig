@@ -1,5 +1,5 @@
 const std = @import("std");
-pub const vk = @import("vulkan").vulkan;
+pub const vk = @import("vulkan");
 const pipeline = @import("pipeline.zig");
 
 pub fn createStaticStringMap(

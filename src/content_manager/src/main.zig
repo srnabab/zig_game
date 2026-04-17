@@ -12,6 +12,7 @@ const options = @import("options");
 const cgltf = @import("cgltf");
 const vertexStruct = @import("vertexStruct");
 const meshopt = @import("meshopt");
+const Types = @import("types.zig");
 
 const assert = std.debug.assert;
 
@@ -166,22 +167,7 @@ const FileData = union {
     shader: ShaderLoad,
 };
 
-const FileType = enum {
-    DIR,
-    OBJ,
-    MTL,
-    PNG,
-    TSDI,
-    TSD,
-    TTF,
-    WAV,
-    SPV,
-    TXT,
-    GLTF,
-    VTX,
-    HASHTABLE,
-    UNKNOWN,
-};
+const FileType = Types.FileType;
 
 const slash = sl: {
     switch (builtin.os.tag) {
@@ -330,10 +316,11 @@ fn optimizeVertex(vertex: vertexStruct.Vertex, index: []u32, allocator: std.mem.
 }
 
 fn updateLoadParameter(
-    dir: std.fs.Dir,
+    io: std.Io,
+    dir: std.Io.Dir,
     parentID: []const u8,
     tp: FileType,
-    cc: std.fs.File.Stat,
+    cc: std.Io.File.Stat,
     content: []const u8,
     fileName: []const u8,
     rpZ: []const u8,
@@ -432,18 +419,22 @@ fn updateLoadParameter(
                     }
                 }
 
-                var primFile = try dir.createFile(primFileName, .{ .read = true });
-                defer primFile.close();
+                var primFile = try dir.createFile(io, primFileName, .{ .read = true });
+                defer primFile.close(io);
 
-                var primFileWriter = primFile.writer(&buffer);
+                var primFileWriter = primFile.writer(io, &buffer);
                 try primFileWriter.interface.writeAll(meshMem);
 
                 {
-                    const time: i64 = @truncate(std.time.nanoTimestamp());
-                    const metadata = primFile.stat() catch |err| blk: switch (err) {
+                    const time: i64 = @truncate(std.Io.Timestamp.now(io, .real).toNanoseconds());
+                    const metadata = primFile.stat(io) catch |err| blk: switch (err) {
                         error.AccessDenied => {
-                            std.Thread.sleep(std.time.ns_per_ms);
-                            break :blk try primFile.stat();
+                            try std.Io.sleep(
+                                io,
+                                std.Io.Duration{ .nanoseconds = std.time.ns_per_ms },
+                                .real,
+                            );
+                            break :blk try primFile.stat(io);
                         },
                         else => return err,
                     };
@@ -465,7 +456,7 @@ fn updateLoadParameter(
                         .TYPE = @intFromEnum(metadata.kind),
                         .FileSize = @intCast(metadata.size),
                         .ContentHash = sqlDB.BLOB{ .data = &hashh, .len = hash.blake3.BLAKE3_OUT_LEN },
-                        .ModifiedTime = @as(i64, @truncate(metadata.mtime)),
+                        .ModifiedTime = @as(i64, @truncate(metadata.mtime.toNanoseconds())),
                         .LastSeenTime = time,
                         .FileType = @intFromEnum(fType),
                     });
@@ -644,7 +635,8 @@ fn getDbModifiedTime(comptime where_clause: []const u8, params: anytype) !i64 {
 }
 
 fn processFile(
-    dir: std.fs.Dir,
+    io: std.Io,
+    dir: std.Io.Dir,
     name: []const u8,
     rPZ: []const u8,
     parentID: []const u8,
@@ -654,13 +646,15 @@ fn processFile(
     const zone = tracy.initZone(@src(), .{ .name = "process file" });
     defer zone.deinit();
 
-    const time: i64 = @truncate(std.time.nanoTimestamp());
+    const time: i64 = @truncate(std.Io.Timestamp.now(io, .real).toNanoseconds());
     // std.log.debug("time {d} {s}", .{ time, name });
-    var tempFile = try dir.openFile(name, .{});
-    defer tempFile.close();
+    var tempFile = try dir.openFile(io, name, .{});
+    defer tempFile.close(io);
 
-    const metadata = try tempFile.stat();
-    const currentModifiedTime: i64 = @truncate(metadata.mtime);
+    const metadata = try tempFile.stat(io);
+    const currentModifiedTime: i64 = @truncate(metadata.mtime.toNanoseconds());
+
+    var fileBuffer = [_]u8{0} ** 256;
 
     if (fileModifiedTime == -1) {
         // 新文件：插入新记录
@@ -668,9 +662,10 @@ fn processFile(
         try UUID.createNewUUID(&uuidBuffer);
         const index = std.mem.lastIndexOf(u8, name, ".") orelse name.len;
 
-        var content = try gpa.alloc(u8, metadata.size);
+        var fileReader = tempFile.reader(io, &fileBuffer);
+        const content = try fileReader.interface.readAlloc(gpa, metadata.size);
         defer gpa.free(content);
-        _ = try tempFile.readAll(content);
+        // _ = try tempFile.readAll(content);
 
         var hashh = hash.blake3HashContent(content[0..metadata.size]);
 
@@ -685,12 +680,13 @@ fn processFile(
             .TYPE = @intFromEnum(metadata.kind),
             .FileSize = @intCast(metadata.size),
             .ContentHash = sqlDB.BLOB{ .data = &hashh, .len = hash.blake3.BLAKE3_OUT_LEN },
-            .ModifiedTime = @as(i64, @truncate(metadata.mtime)),
+            .ModifiedTime = @as(i64, @truncate(metadata.mtime.toNanoseconds())),
             .LastSeenTime = time,
             .FileType = @intFromEnum(fType),
         });
 
         try updateLoadParameter(
+            io,
             dir,
             parentID,
             fType,
@@ -704,9 +700,9 @@ fn processFile(
         if (pathModifiedTime == -1) {
             // 文件被移动：更新路径和父ID
             if (isModified) {
-                const content = try gpa.alloc(u8, metadata.size);
+                var fileReader = tempFile.reader(io, &fileBuffer);
+                const content = try fileReader.interface.readAlloc(gpa, metadata.size);
                 defer gpa.free(content);
-                _ = try tempFile.readAll(content);
 
                 var contentHash = hash.blake3HashContent(content);
                 // const contentHash = try hashFileContent(&tempFile, metadata.size());
@@ -728,6 +724,7 @@ fn processFile(
                 const fType = judgeFileType(name[index..], content);
 
                 try updateLoadParameter(
+                    io,
                     dir,
                     parentID,
                     fType,
@@ -746,9 +743,9 @@ fn processFile(
         } else {
             // 已存在的文件：只更新时间和内容哈希（如果需要）
             if (isModified) {
-                const content = try gpa.alloc(u8, metadata.size);
+                var fileReader = tempFile.reader(io, &fileBuffer);
+                const content = try fileReader.interface.readAlloc(gpa, metadata.size);
                 defer gpa.free(content);
-                _ = try tempFile.readAll(content);
 
                 var contentHash = hash.blake3HashContent(content);
 
@@ -771,6 +768,7 @@ fn processFile(
                 // std.log.debug("{s}", .{@tagName(fType)});
 
                 try updateLoadParameter(
+                    io,
                     dir,
                     parentID,
                     fType,
@@ -798,7 +796,8 @@ fn hashFileContent(file: *std.fs.File, size: u64) !sqlDB.BLOB {
 }
 
 fn processDirectory(
-    dir: std.fs.Dir,
+    io: std.Io,
+    dir: std.Io.Dir,
     name: []const u8,
     rPZ: []const u8,
     parentID: []const u8,
@@ -808,13 +807,13 @@ fn processDirectory(
     const zone = tracy.initZone(@src(), .{ .name = "process directory" });
     defer zone.deinit();
 
-    const time: i64 = @truncate(std.time.nanoTimestamp());
+    const time: i64 = @truncate(std.Io.Timestamp.now(io, .real).toNanoseconds());
     // std.log.debug("time {d} {s}", .{ time, name });
-    var tempDir = try dir.openDir(name, .{ .iterate = true });
-    defer tempDir.close();
+    var tempDir = try dir.openDir(io, name, .{ .iterate = true });
+    defer tempDir.close(io);
 
-    const metadata = try tempDir.stat();
-    const currentModifiedTime: i64 = @truncate(metadata.mtime);
+    const metadata = try tempDir.stat(io);
+    const currentModifiedTime: i64 = @truncate(metadata.mtime.toNanoseconds());
     var currentID: [UUID.len]u8 = undefined;
     currentID[UUID.len - 2] = 0;
     currentID[UUID.len - 1] = 0;
@@ -875,15 +874,15 @@ fn processDirectory(
     }
 
     // 对子目录进行递归
-    try iterateFolderUpdate(tempDir, rPZ, &currentID);
+    try iterateFolderUpdate(io, tempDir, rPZ, &currentID);
 }
 
-fn iterateFolderUpdate(dir: std.fs.Dir, dirName: []const u8, parentID: []const u8) !void {
+fn iterateFolderUpdate(io: std.Io, dir: std.Io.Dir, dirName: []const u8, parentID: []const u8) !void {
     const zone = tracy.initZone(@src(), .{ .name = "iterate folder" });
     defer zone.deinit();
 
     var contentIt = dir.iterate();
-    while (try contentIt.next()) |entry| {
+    while (try contentIt.next(io)) |entry| {
         var relativePathBuffer = [_]u8{0} ** 256;
         const rPZ = try std.fmt.bufPrintZ(&relativePathBuffer, "{s}{s}{s}", .{ dirName, slash, entry.name });
 
@@ -895,8 +894,8 @@ fn iterateFolderUpdate(dir: std.fs.Dir, dirName: []const u8, parentID: []const u
         const pathModifiedTime = try getDbModifiedTime("RelativePath = ?", .{rPZ});
 
         switch (entry.kind) {
-            .file => try processFile(dir, nameZ, rPZ, parentID, fileModifiedTime, pathModifiedTime),
-            .directory => try processDirectory(dir, nameZ, rPZ, parentID, fileModifiedTime, pathModifiedTime),
+            .file => try processFile(io, dir, nameZ, rPZ, parentID, fileModifiedTime, pathModifiedTime),
+            .directory => try processDirectory(io, dir, nameZ, rPZ, parentID, fileModifiedTime, pathModifiedTime),
             else => {},
         }
     }
@@ -936,8 +935,7 @@ var SceneNodeNames: []std.StringHashMap(u32) = undefined;
 var forceUpdate = options.force_update;
 
 var gpa: std.mem.Allocator = undefined;
-var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
     tracy.startupProfiler();
     // std.Thread.sleep(std.time.ns_per_ms * 100);
     defer tracy.shutdownProfiler();
@@ -948,19 +946,11 @@ pub fn main() !void {
     const zone = tracy.initZone(@src(), .{ .name = "main" });
     defer zone.deinit();
 
-    const start = std.time.nanoTimestamp();
+    const start = std.Io.Timestamp.now(init.io, .real).toNanoseconds();
 
-    gpa, const is_debug = gpa: {
-        break :gpa switch (builtin.mode) {
-            .Debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
-            .ReleaseFast, .ReleaseSmall => .{ std.heap.smp_allocator, false },
-        };
-    };
-    defer if (is_debug) {
-        _ = debug_allocator.deinit();
-    };
+    gpa = init.gpa;
 
-    var it = try std.process.argsWithAllocator(gpa);
+    var it = try init.minimal.args.iterateAllocator(gpa);
     defer it.deinit();
 
     const rootExe = it.next().?;
@@ -974,8 +964,8 @@ pub fn main() !void {
     const index = std.mem.lastIndexOf(u8, &root, slash) orelse 0;
     @memset(root[index..root.len], 0);
 
-    var cwd = try std.fs.openDirAbsolute(&root, .{});
-    try cwd.setAsCwd();
+    var cwd = try std.Io.Dir.openDirAbsolute(init.io, &root, .{});
+    try std.process.setCurrentDir(init.io, cwd);
 
     while (it.next()) |arg| {
         if (std.mem.eql(u8, arg, "-f")) {
@@ -1045,31 +1035,31 @@ pub fn main() !void {
     executeSQL(createTriggerOnUpdateCascadeBetweenContentPathAndTablesOnRelativePath, db.?);
     executeSQL(createTriggerOnUpdateCascadeBetweenContentPathAndTablesOnID, db.?);
 
-    var content = try cwd.openDir("Content", .{ .iterate = true });
-    defer content.close();
+    var content = try cwd.openDir(init.io, "Content", .{ .iterate = true });
+    defer content.close(init.io);
 
     var buffer = [_]u8{0} ** UUID.len;
-    const time: i64 = @truncate(std.time.nanoTimestamp());
+    const time: i64 = @truncate(std.Io.Timestamp.now(init.io, .real).toNanoseconds());
     // std.log.debug("time {d}", .{time});
 
     var haveSceneFile = false;
-    var sceneFile = content.openFile(SceneFileName, .{ .mode = .read_write }) catch |err| blk: switch (err) {
-        error.FileNotFound => break :blk try content.createFile(SceneFileName, .{ .read = true }),
+    var sceneFile = content.openFile(init.io, SceneFileName, .{ .mode = .read_write }) catch |err| blk: switch (err) {
+        error.FileNotFound => break :blk try content.createFile(init.io, SceneFileName, .{ .read = true }),
         else => return err,
     };
     {
-        errdefer sceneFile.close();
-        const sceneFileStat = try sceneFile.stat();
+        errdefer sceneFile.close(init.io);
+        const sceneFileStat = try sceneFile.stat(init.io);
         var cacheBuffer = [_]u8{0} ** 256;
-        var sceneFileReader = sceneFile.reader(&cacheBuffer);
+        var sceneFileReader = sceneFile.reader(init.io, &cacheBuffer);
         const sceneContent = try sceneFileReader.interface.readAlloc(gpa, sceneFileStat.size);
         defer gpa.free(sceneContent);
 
         SceneNameStringMap = .init(gpa);
 
         if (sceneFileStat.size != 0) {
-            try sceneFile.setEndPos(0);
-            try sceneFile.seekTo(0);
+            try sceneFile.setLength(init.io, 0);
+            try sceneFileReader.seekTo(0);
 
             haveSceneFile = true;
 
@@ -1100,7 +1090,7 @@ pub fn main() !void {
             SceneJson.arena.* = std.heap.ArenaAllocator.init(gpa);
         }
     }
-    errdefer sceneFile.close();
+    errdefer sceneFile.close(init.io);
     defer {
         SceneNameStringMap.deinit();
 
@@ -1108,7 +1098,7 @@ pub fn main() !void {
     }
 
     if (exist) {
-        const cc = try content.stat();
+        const cc = try content.stat(init.io);
         var modifiedTime: i64 = 0;
 
         var getValues: [2]*anyopaque = undefined;
@@ -1119,14 +1109,14 @@ pub fn main() !void {
         try ContentPathT.get("UUID,ModifiedTime", null, "RelativePath = ?", .{"Content"}, &getValues, &types);
         // std.log.info("{s}", .{buffer});
 
-        if (cc.mtime != @as(i128, @intCast(modifiedTime))) {
+        if (cc.mtime.toNanoseconds() != @as(i96, @intCast(modifiedTime))) {
             try ContentPathT.update("ModifiedTime,LastSeenTime", "UUID = ?", .{ modifiedTime, time, buffer });
             // std.log.info("update", .{});
         } else {
             try ContentPathT.update("LastSeenTime", "UUID = ?", .{ time, buffer });
         }
     } else {
-        const cc = try content.stat();
+        const cc = try content.stat(init.io);
         try UUID.createNewUUID(&buffer);
 
         try ContentPathT.insert(.{
@@ -1138,17 +1128,17 @@ pub fn main() !void {
             .TYPE = @intFromEnum(cc.kind),
             .FileSize = @intCast(cc.size),
             .ContentHash = null,
-            .ModifiedTime = @as(i64, @truncate(cc.mtime)),
+            .ModifiedTime = @as(i64, @truncate(cc.mtime.toNanoseconds())),
             .LastSeenTime = @as(i64, @truncate(time)),
             .FileType = @intFromEnum(FileType.DIR),
         });
     }
 
-    try iterateFolderUpdate(content, "Content", &buffer);
+    try iterateFolderUpdate(init.io, content, "Content", &buffer);
 
     if (SceneJson.value.?.len > 0) {
         var cacheBuffer = [_]u8{0} ** 1024;
-        var sceneFileWriter = sceneFile.writer(&cacheBuffer);
+        var sceneFileWriter = sceneFile.writer(init.io, &cacheBuffer);
         var sceneJsonWrite = std.json.Stringify{
             .writer = &sceneFileWriter.interface,
             .options = .{ .whitespace = .indent_tab },
@@ -1156,13 +1146,14 @@ pub fn main() !void {
         try sceneJsonWrite.write(SceneJson.value);
         try sceneFileWriter.interface.flush();
 
-        sceneFile.close();
+        sceneFile.close(init.io);
 
         if (haveSceneFile) {
             const fileModifiedTime = try getDbModifiedTime("FileName = ?", .{SceneFileName});
             const pathModifiedTime = try getDbModifiedTime("RelativePath = ?", .{"Content" ++ slash ++ SceneFileName});
 
             try processFile(
+                init.io,
                 content,
                 SceneFileName,
                 "Content" ++ slash ++ SceneFileName,
@@ -1172,6 +1163,7 @@ pub fn main() !void {
             );
         } else {
             try processFile(
+                init.io,
                 content,
                 SceneFileName,
                 "Content" ++ slash ++ SceneFileName,
@@ -1191,7 +1183,7 @@ pub fn main() !void {
         return error.CommitError;
     }
 
-    const end = std.time.nanoTimestamp();
+    const end = std.Io.Timestamp.now(init.io, .real).toNanoseconds();
 
     std.log.info("update content database time: {d}ms", .{@as(f128, @floatFromInt(end - start)) / @as(f128, @floatFromInt(std.time.ns_per_ms))});
 }

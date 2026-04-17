@@ -1,4 +1,4 @@
-pub const steamInner = @cImport(@cInclude("steam_C/steamC.h"));
+pub const steamInner = @import("steamC");
 
 const tracy = @import("tracy");
 

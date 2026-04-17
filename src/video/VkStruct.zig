@@ -1,4 +1,4 @@
-const vk = @import("vulkan").vulkan;
+const vk = @import("vulkan");
 const sdl = @import("sdl").sdl;
 const SDL_CheckResult = @import("sdl").SDL_CheckResult;
 const std = @import("std");
@@ -364,7 +364,7 @@ pub fn init(allocator: Allocator, handles: *global.HandlesType, window: *sdl.SDL
     };
 }
 
-pub fn initVulkan(self: *Self, textureSets: *textureSet) !void {
+pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet) !void {
     const zone = tracy.initZone(@src(), .{ .name = "init vulkan resources" });
     defer zone.deinit();
 
@@ -516,6 +516,7 @@ pub fn initVulkan(self: *Self, textureSets: *textureSet) !void {
         );
 
         texture.* = try textureSets.createTexturePackVkImage(
+            io,
             0,
             0,
             self.surfaceFormats.formats[@intCast(self.surfaceFormats.sdr)].format,
@@ -658,7 +659,7 @@ pub fn initVulkan(self: *Self, textureSets: *textureSet) !void {
     self.presentSamplerDescriptorSet = presentSets[0];
     try self.descriptorSetShaderStages.put(self.presentSamplerDescriptorSet, vk.VK_SHADER_STAGE_FRAGMENT_BIT);
 
-    try self.samplers.initSamplers(self.device, self.pAllocCallBacks, self.allocator);
+    try self.samplers.initSamplers(io, self.device, self.pAllocCallBacks, self.allocator);
 }
 
 pub fn deinit(self: *Self) void {
@@ -1169,7 +1170,7 @@ pub fn nextFrame(self: *Self) void {
     _ = self.totalFrame.fetchAdd(1, .seq_cst);
 }
 
-pub fn queueSubmit(self: *Self, kind: CommandPoolType, submitCount: u32, pSubmits: *vk.VkSubmitInfo2, fence: ?*vk.VkFence) VkError!void {
+pub fn queueSubmit(self: *Self, io: std.Io, kind: CommandPoolType, submitCount: u32, pSubmits: *vk.VkSubmitInfo2, fence: ?*vk.VkFence) !void {
     const zone = tracy.initZone(@src(), .{ .name = "queue submit" });
     defer zone.deinit();
 
@@ -1181,8 +1182,8 @@ pub fn queueSubmit(self: *Self, kind: CommandPoolType, submitCount: u32, pSubmit
             .present, .init => unreachable,
         };
 
-    queue.mutex.lock();
-    defer queue.mutex.unlock();
+    try queue.mutex.lock(io);
+    defer queue.mutex.unlock(io);
 
     if (fence != null) {
         try checkVkResult(vk.vkResetFences(self.device, 1, fence.?));
@@ -1202,12 +1203,12 @@ pub fn queueSubmit(self: *Self, kind: CommandPoolType, submitCount: u32, pSubmit
     // std.log.debug("submit {s}", .{@tagName(kind)});
 }
 
-pub fn presentSubmit(self: *Self, pPresentInfo: [*c]vk.VkPresentInfoKHR) !void {
+pub fn presentSubmit(self: *Self, io: std.Io, pPresentInfo: [*c]vk.VkPresentInfoKHR) !void {
     const zone = tracy.initZone(@src(), .{ .name = "present" });
     defer zone.deinit();
 
-    self.graphicQueue.mutex.lock();
-    defer self.graphicQueue.mutex.unlock();
+    try self.graphicQueue.mutex.lock(io);
+    defer self.graphicQueue.mutex.unlock(io);
 
     try checkVkResult(vk.vkQueuePresentKHR(self.graphicQueue.queue, pPresentInfo));
 }
@@ -1291,17 +1292,20 @@ pub fn destroyImage(self: *Self, image: Image) void {
     self.vmaS.destroyImage(@ptrCast(image.vkImage), image.allocation);
 }
 
-pub fn readPipelineFileAndAdd(self: *Self, fileID: i32, setsType: descriptorSetsType) !void {
+pub fn readPipelineFileAndAdd(self: *Self, io: std.Io, fileID: i32, setsType: descriptorSetsType) !void {
     const zone = tracy.initZone(@src(), .{ .name = "read pipeline file and add" });
     defer zone.deinit();
 
     const zone2 = tracy.initZone(@src(), .{ .name = "read file in read pipeline file and add" });
-    var pFile = try file.getFile(fileID);
-    defer pFile.close();
-    const fileSize = (try pFile.stat()).size;
-    var fileContent = try self.allocator.alloc(u8, fileSize);
+    var pFile = try file.getFile(io, fileID);
+    defer pFile.close(io);
+
+    const fileSize = (try pFile.stat(io)).size;
+
+    var fileBuffer = [_]u8{0} ** 256;
+    var fileReader = pFile.reader(io, &fileBuffer);
+    const fileContent = try fileReader.interface.readAlloc(self.allocator, fileSize);
     defer self.allocator.free(fileContent);
-    _ = try pFile.readAll(fileContent);
     zone2.deinit();
 
     var shaderCodes: [5][]u8 = undefined;
@@ -1529,6 +1533,10 @@ pub fn createIndexBuffer(self: *Self, bufferSize: vk.VkDeviceSize) !Buffer_t {
 
 pub fn createUniformBuffer(self: *Self, bufferSize: vk.VkDeviceSize) !Buffer_t {
     return self.buffers.createUniformBuffer(&self.vmaS, bufferSize, self.handles);
+}
+
+pub fn createStorageBuffer(self: *Self, bufferSize: vk.VkDeviceSize) !Buffer_t {
+    return self.buffers.createStorageBuffer(&self.vmaS, bufferSize, self.handles);
 }
 
 pub fn destroyBuffer(self: *Self, buffer: Buffer_t) void {

@@ -1,7 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-const vk = @import("vulkan").vulkan;
+const vk = @import("vulkan");
 
 const VkResultToError = @import("resultToError");
 const vulkanType = VkResultToError.vulkanType;

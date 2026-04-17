@@ -4,22 +4,15 @@ const parse = @import("pipeline.zig");
 const trans = @import("translate2.zig");
 
 var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
-pub fn main() !void {
-    const start = std.time.nanoTimestamp();
+pub fn main(init: std.process.Init) !void {
+    const start = std.Io.Timestamp.now(init.io, .real).toNanoseconds();
 
-    const gpa, const is_debug = gpa: {
-        break :gpa switch (builtin.mode) {
-            .Debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
-            .ReleaseFast, .ReleaseSmall => .{ std.heap.smp_allocator, false },
-        };
-    };
-    defer if (is_debug) {
-        _ = debug_allocator.deinit();
-    };
+    const gpa = init.gpa;
 
     // @breakpoint();
-    var argsIt = try std.process.argsWithAllocator(gpa);
+    var argsIt = try init.minimal.args.iterateAllocator(gpa);
     defer argsIt.deinit();
+
     var argCount: u32 = 0;
     var args: [10][:0]const u8 = undefined;
     args[2] = "a.pipeb";
@@ -35,9 +28,9 @@ pub fn main() !void {
         std.process.exit(1);
     }
 
-    var jsonP = try parse.parse(args[1], gpa);
+    var jsonP = try parse.parse(init.io, args[1], gpa);
     defer jsonP.deinit();
-    const res = try trans.toVulkan2(&jsonP, args[2], gpa);
+    const res = try trans.toVulkan2(init.io, &jsonP, args[2], gpa);
     defer {
         gpa.destroy(res.info);
         for (res.shaderCodes) |value| {
@@ -54,17 +47,21 @@ pub fn main() !void {
     // errdefer
 
     if (res.pushConstantInfo) |_| {
-        var configFile = std.fs.cwd().openFile("config/pipelinePushConstants.json", .{
+        var configFile = std.Io.Dir.cwd().openFile(init.io, "config/pipelinePushConstants.json", .{
             .mode = .read_write,
         }) catch |err| rs: switch (err) {
-            error.FileNotFound => break :rs try std.fs.cwd().createFile("config/pipelinePushConstants.json", .{ .truncate = false, .read = true }),
+            error.FileNotFound => break :rs try std.Io.Dir.cwd().createFile(
+                init.io,
+                "config/pipelinePushConstants.json",
+                .{ .truncate = false, .read = true },
+            ),
             else => return err,
         };
-        defer configFile.close();
+        defer configFile.close(init.io);
 
         var smallBuffer = [_]u8{0} ** (1);
         var smallBuffer2 = [_]u8{0} ** (1);
-        const fileState = try configFile.stat();
+        const fileState = try configFile.stat(init.io);
         var json: std.json.Parsed(trans.PipelinePushConstatsJson) = undefined;
         var jsonValue: trans.PipelinePushConstatsJson = undefined;
         if (fileState.size != 0) {
@@ -72,7 +69,7 @@ pub fn main() !void {
             const fileBuffer = try gpa.alloc(u8, fileState.size);
             defer gpa.free(fileBuffer);
 
-            var reader = configFile.reader(&smallBuffer);
+            var reader = configFile.reader(init.io, &smallBuffer);
             const content = try reader.interface.readAlloc(gpa, fileState.size);
             defer gpa.free(content);
 
@@ -139,7 +136,7 @@ pub fn main() !void {
                 }
             }
 
-            var fileWriter = configFile.writer(&smallBuffer2);
+            var fileWriter = configFile.writer(init.io, &smallBuffer2);
             var stringify = std.json.Stringify{ .writer = &fileWriter.interface, .options = .{ .whitespace = .indent_tab } };
             try stringify.write(json.value);
             try fileWriter.interface.flush();
@@ -170,7 +167,7 @@ pub fn main() !void {
                 }
             }
 
-            var fileWriter = configFile.writer(&smallBuffer2);
+            var fileWriter = configFile.writer(init.io, &smallBuffer2);
             var stringify = std.json.Stringify{ .writer = &fileWriter.interface, .options = .{ .whitespace = .indent_tab } };
             try stringify.write(jsonValue);
             try fileWriter.interface.flush();
@@ -179,22 +176,22 @@ pub fn main() !void {
 
     var outputFile = ps: {
         if (std.fs.path.isAbsolute(args[3])) {
-            break :ps std.fs.openFileAbsolute(args[3], .{ .mode = .write_only }) catch |err| switch (err) {
-                error.FileNotFound => try std.fs.createFileAbsolute(args[3], .{}),
+            break :ps std.Io.Dir.openFileAbsolute(init.io, args[3], .{ .mode = .write_only }) catch |err| switch (err) {
+                error.FileNotFound => try std.Io.Dir.createFileAbsolute(init.io, args[3], .{}),
                 else => {
                     return err;
                 },
             };
         } else {
-            break :ps std.fs.cwd().openFile(args[3], .{ .mode = .write_only }) catch |err| switch (err) {
-                error.FileNotFound => try std.fs.cwd().createFile(args[3], .{}),
+            break :ps std.Io.Dir.cwd().openFile(init.io, args[3], .{ .mode = .write_only }) catch |err| switch (err) {
+                error.FileNotFound => try std.Io.Dir.cwd().createFile(init.io, args[3], .{}),
                 else => {
                     return err;
                 },
             };
         }
     };
-    defer outputFile.close();
+    defer outputFile.close(init.io);
 
     const slice = std.mem.asBytes(res.info);
     var totalLen: u64 = 0;
@@ -205,16 +202,16 @@ pub fn main() !void {
         // std.log.debug("total len {d}", .{totalLen});
     }
 
-    var buffer = [_]u8{0} ** 102400;
-    var writer = outputFile.writer(buffer[0..totalLen]);
+    var buffer = [_]u8{0} ** 10240;
+    var writer = outputFile.writer(init.io, buffer[0..totalLen]);
     _ = try writer.interface.write(slice);
     for (0..res.shaderCodes.len) |i| {
         var val = std.mem.toBytes(res.shaderCodes[i].len);
         _ = try writer.interface.write(&val);
         _ = try writer.interface.write(res.shaderCodes[i]);
     }
-    try writer.end();
+    try writer.flush();
 
-    const endTime = std.time.nanoTimestamp();
+    const endTime = std.Io.Timestamp.now(init.io, .real).toNanoseconds();
     std.log.info("create pipeline file {s} time: {d}ms", .{ args[3], @as(f128, @floatFromInt(endTime - start)) / @as(f128, @floatFromInt(std.time.ns_per_ms)) });
 }

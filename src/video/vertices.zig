@@ -4,7 +4,7 @@ const tracy = @import("tracy");
 const vertexStruct = @import("vertexStruct");
 
 const vkStruct = @import("video");
-const vk = @import("vulkan").vulkan;
+const vk = @import("vulkan");
 const global = @import("global");
 
 const Commands = @import("processRender").commands;
@@ -24,7 +24,7 @@ pub var indexBuffer2D: vkStruct.Buffer_t = undefined;
 var updated2D = false;
 
 var vulkan: *vkStruct = undefined;
-var mutex = std.Thread.Mutex{};
+var mutex: std.Io.Mutex = .init;
 
 pub fn init(vulkan_t: *vkStruct, graphic: *Commands) !void {
     const zone = tracy.initZone(@src(), .{ .name = "vertices initialization" });
@@ -88,9 +88,9 @@ pub fn deinit() void {
     // vulkan.destroyBuffer(indexBuffer2D);
 }
 
-pub fn vertexInitialize2D(width: u32, height: u32, x: u32, y: u32, depth: f32) !u32 {
-    mutex.lock();
-    defer mutex.unlock();
+pub fn vertexInitialize2D(io: std.Io, width: u32, height: u32, x: u32, y: u32, depth: f32) !u32 {
+    try mutex.lock(io);
+    defer mutex.unlock(io);
     // std.log.debug("idx {d}", .{textureIndex});
 
     if (vertices2D.len <= vertexCount2D) {

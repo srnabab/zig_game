@@ -36,18 +36,12 @@ var update_thread: usize = 0;
 var render_thread: usize = 0;
 
 var debug_allocator: std.heap.DebugAllocator(.{ .stack_trace_frames = 10 }) = .init;
-pub fn main() !void {
-    const gpa, const is_debug = gpa: {
-        break :gpa switch (builtin.mode) {
-            .Debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
-            .ReleaseFast, .ReleaseSmall => .{ std.heap.smp_allocator, false },
-        };
-    };
-    defer if (is_debug) {
-        _ = debug_allocator.deinit();
-    };
+pub fn main(init: std.process.Init) !void {
+    const gpa = init.gpa;
+
     var tracyAllocator = tracy.TracingAllocator.initNamed("pool", gpa);
     defer tracyAllocator.deinit();
+
     var taa = tracyAllocator.allocator();
     const allocator_t = &taa;
 
@@ -62,16 +56,19 @@ pub fn main() !void {
 
     output.init();
 
-    const args = try process.argsAlloc(allocator_t.*);
-    defer process.argsFree(allocator_t.*, args);
+    var arenaAllocator = std.heap.ArenaAllocator.init(gpa);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    const args = try init.minimal.args.toSlice(arena);
 
     for (args) |arg| {
         std.log.info("arg: {s}", .{arg});
     }
 
     const index = std.mem.lastIndexOf(u8, args[0], "\\").?;
-    var temp = try std.fs.openDirAbsolute(args[0][0..index], .{});
-    try temp.setAsCwd();
+    const temp = try std.Io.Dir.openDirAbsolute(init.io, args[0][0..index], .{});
+    try std.process.setCurrentDir(init.io, temp);
 
     handles = try .init(gpa);
     defer handles.deinit(gpa);
@@ -130,7 +127,7 @@ pub fn main() !void {
     achievements.UnlockAchievement(@ptrCast(&steam.g_rgAchievements[1]));
     achievements.StoreStatsIfNecessary();
 
-    var endSemaphore: std.Thread.Semaphore = .{};
+    var endSemaphore: std.Io.Semaphore = .{};
 
     var width: u32 = 0;
     var height: u32 = 0;
@@ -141,6 +138,8 @@ pub fn main() !void {
         .{},
         render.render_thread_func,
         .{
+            init.io,
+            gpa,
             render_thread,
             &endSemaphore,
             &handles,
@@ -154,23 +153,25 @@ pub fn main() !void {
     global.game_end.store(0, .seq_cst);
 
     var update_t = try Thread.spawn(.{}, update.update_thread_func, .{
+        init.io,
+        gpa,
         update_thread,
         input1,
     });
     defer update_t.join();
 
     while (true) {
-        try processInput(input1);
+        try processInput(init.io, input1);
 
         if (global.game_end.load(.seq_cst) == 1) break;
     }
 
-    endSemaphore.post();
+    endSemaphore.post(init.io);
 }
 
-fn processInput(in: *input) !void {
+fn processInput(io: std.Io, in: *input) !void {
     var e: sdl.SDL_Event = undefined;
     while (sdl.SDL_PollEvent(&e)) {
-        try in.setInput(&e);
+        try in.setInput(io, &e);
     }
 }

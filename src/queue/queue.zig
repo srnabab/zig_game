@@ -1,7 +1,7 @@
 const std = @import("std");
 const DoublyLinkedList = std.DoublyLinkedList;
 const Allocator = std.mem.Allocator;
-const Mutex = std.Thread.Mutex;
+const Mutex = std.Io.Mutex;
 const MemoryPoolExtra = std.heap.MemoryPoolExtra;
 
 const tracy = @import("tracy");
@@ -82,33 +82,32 @@ pub fn Queue(T: type) type {
             }
         };
 
-        threadSafeAllocator: std.heap.ThreadSafeAllocator = undefined,
+        allocator: std.mem.Allocator = undefined,
         nodeMemory: MemoryPoolExtra(DataNode, .{}) = undefined,
         list: DoublyLinkedList = .{},
         totalSize: usize = 0,
-        mutex: Mutex = .{},
+        mutex: Mutex = .init,
 
-        pub fn init(self: *Self, allocator: Allocator) void {
-            self.threadSafeAllocator = std.heap.ThreadSafeAllocator{ .child_allocator = allocator };
-            self.nodeMemory = .init(self.threadSafeAllocator.allocator());
-            self.list = .{};
-            self.totalSize = 0;
-            self.mutex = .{};
+        pub fn init(allocator: Allocator) !Self {
+            return .{
+                .allocator = allocator,
+                .nodeMemory = try .initCapacity(allocator, 128),
+                .list = .{},
+                .totalSize = 0,
+                .mutex = .init,
+            };
         }
 
         pub fn deinit(self: *Self) void {
-            self.mutex.lock();
-            defer self.mutex.unlock();
-
-            self.nodeMemory.deinit();
+            self.nodeMemory.deinit(self.allocator);
         }
 
-        pub fn pushFirst(self: *Self, data: T) !void {
+        pub fn pushFirst(self: *Self, io: std.Io, data: T) !void {
             const zone = tracy.initZone(@src(), .{ .name = "queue push first" });
             defer zone.deinit();
 
-            self.mutex.lock();
-            defer self.mutex.unlock();
+            try self.mutex.lock(io);
+            defer self.mutex.unlock(io);
 
             const nnode = try self.nodeMemory.create();
             nnode.* = DataNode{
@@ -118,12 +117,12 @@ pub fn Queue(T: type) type {
             self.totalSize += 1;
         }
 
-        pub fn popFirst(self: *Self) ?T {
+        pub fn popFirst(self: *Self, io: std.Io) ?T {
             const zone = tracy.initZone(@src(), .{ .name = "queue pop first" });
             defer zone.deinit();
 
-            self.mutex.lock();
-            defer self.mutex.unlock();
+            self.mutex.lock(io) catch unreachable;
+            defer self.mutex.unlock(io);
 
             if (self.list.first == null) return null;
 
@@ -136,14 +135,14 @@ pub fn Queue(T: type) type {
             return parent.data;
         }
 
-        pub fn pushLast(self: *Self, data: T) !void {
+        pub fn pushLast(self: *Self, io: std.Io, data: T) !void {
             const zone = tracy.initZone(@src(), .{ .name = "queue push last" });
             defer zone.deinit();
 
-            self.mutex.lock();
-            defer self.mutex.unlock();
+            try self.mutex.lock(io);
+            defer self.mutex.unlock(io);
 
-            const nnode = try self.nodeMemory.create();
+            const nnode = try self.nodeMemory.create(self.allocator);
             nnode.* = DataNode{
                 .data = data,
             };
@@ -151,12 +150,12 @@ pub fn Queue(T: type) type {
             self.totalSize += 1;
         }
 
-        pub fn popLast(self: *Self) ?T {
+        pub fn popLast(self: *Self, io: std.Io) ?T {
             const zone = tracy.initZone(@src(), .{ .name = "queue pop last" });
             defer zone.deinit();
 
-            self.mutex.lock();
-            defer self.mutex.unlock();
+            self.mutex.lock(io) catch unreachable;
+            defer self.mutex.unlock(io);
 
             if (self.list.last == null) return null;
 
@@ -170,7 +169,7 @@ pub fn Queue(T: type) type {
         }
 
         pub fn toOwnedSlice(self: *Self) ![]T {
-            var res = try self.threadSafeAllocator.allocator().alloc(T, self.totalSize);
+            var res = try self.allocator.allocator().alloc(T, self.totalSize);
             var idx: usize = 0;
 
             while (self.list.popFirst()) |node| {

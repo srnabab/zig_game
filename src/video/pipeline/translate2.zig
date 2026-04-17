@@ -1,7 +1,7 @@
 const pipeline = @import("pipeline.zig");
 const std = @import("std");
 const s = @import("translateBase.zig");
-const vk = @import("vulkan").vulkan;
+const vk = @import("vulkan");
 const reflect = @import("reflect");
 const efc = @import("enumFromC");
 
@@ -61,17 +61,17 @@ pub const PipelinePushConstatsJson = struct {
     ?[]PipelineNameAndPushConstantsByStage,
 };
 
-fn getPipelineShaderInfos(shaders: [5][]const u8, count: u32, shaderFolder: []const u8, allocator: std.mem.Allocator) ![]PipelineShaderInfo {
+fn getPipelineShaderInfos(io: std.Io, shaders: [5][]const u8, count: u32, shaderFolder: []const u8, allocator: std.mem.Allocator) ![]PipelineShaderInfo {
     var infos = try allocator.alloc(PipelineShaderInfo, count);
     errdefer allocator.free(infos);
 
     var nameBuffer = [_]u8{0} ** 128;
     var nameZ: [:0]u8 = undefined;
 
-    var folder = try std.fs.cwd().openDir(shaderFolder, .{});
-    defer folder.close();
+    var folder = try std.Io.Dir.cwd().openDir(io, shaderFolder, .{});
+    defer folder.close(io);
 
-    var file: std.fs.File = undefined;
+    var file: std.Io.File = undefined;
 
     for (0..count) |i| {
         nameZ = try std.fmt.bufPrintZ(&nameBuffer, "{s}", .{shaders[i]});
@@ -85,14 +85,16 @@ fn getPipelineShaderInfos(shaders: [5][]const u8, count: u32, shaderFolder: []co
                 std.log.debug("{s}", .{shaders[i]});
             }
 
-            file = try folder.openFile(shaders[i], .{});
-            defer file.close();
+            file = try folder.openFile(io, shaders[i], .{});
+            defer file.close(io);
 
-            const cc = try file.stat();
+            const cc = try file.stat(io);
             // std.log.debug("file size {d}", .{cc.size});
-            const content = try allocator.alloc(u8, cc.size);
+            var buffer = [_]u8{0} ** 256;
+            var fileReader = file.reader(io, &buffer);
+
+            const content = try fileReader.interface.readAlloc(allocator, cc.size);
             errdefer allocator.free(content);
-            _ = try file.readAll(content);
 
             const res = try reflect.reflect(allocator, cc, content);
             defer res.deinit(allocator);
@@ -222,7 +224,7 @@ fn createPipelineLayout(pipeRes: *VulkanPipelineInfo) !void {
     pipeRes.pipelineLayout.layout = null;
 }
 
-pub fn toVulkan2(info: *pipeline.pipelineInfo, shaderFolder: []const u8, allocator: std.mem.Allocator) !struct {
+pub fn toVulkan2(io: std.Io, info: *pipeline.pipelineInfo, shaderFolder: []const u8, allocator: std.mem.Allocator) !struct {
     info: *VulkanPipelineInfo,
     shaderCodes: [][]u8,
     pushConstantInfo: ?[]PushConstants,
@@ -232,6 +234,7 @@ pub fn toVulkan2(info: *pipeline.pipelineInfo, shaderFolder: []const u8, allocat
     res.* = std.mem.zeroes(VulkanPipelineInfo);
 
     var shaderInfos = try getPipelineShaderInfos(
+        io,
         info.shaders,
         info.shaderCount,
         shaderFolder,

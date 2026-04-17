@@ -17,7 +17,7 @@ pub fn build(b: *std.Build) void {
     const mesh_install_path_full = b.path(mesh_install_path).getPath(b);
 
     var haveLib = true;
-    std.fs.accessAbsolute(b.fmt("{s}/lib/libmeshoptimizer.a", .{mesh_install_path_full}), .{}) catch |err| {
+    std.Io.Dir.accessAbsolute(b.graph.io, b.fmt("{s}/lib/libmeshoptimizer.a", .{mesh_install_path_full}), .{}) catch |err| {
         if (err == error.FileNotFound) {
             haveLib = false;
             std.log.info("libmesh.a not found, will build...", .{});

@@ -4,7 +4,7 @@ const global = @import("global");
 
 const errorProcess = @import("error");
 
-const vk = @import("vulkan").vulkan;
+const vk = @import("vulkan");
 
 const tracy = @import("tracy");
 
@@ -115,7 +115,8 @@ fn featureNeededCheck(featurePack: anytype) bool {
 }
 
 const Features: type = t: {
-    var fields: [1024]std.builtin.Type.StructField = undefined;
+    var fields_name: [1024][]const u8 = undefined;
+    var fields_type: [1024]type = undefined;
     var count: u32 = 0;
 
     @setEvalBranchQuota(10000);
@@ -130,33 +131,25 @@ const Features: type = t: {
 
         const fieldName = name[index + needle.len .. index2 orelse name.len];
 
-        fields[count] = .{
-            .name = std.fmt.comptimePrint("_{s}", .{fieldName}),
-            .type = value.featureType,
-            .default_value_ptr = null,
-            .is_comptime = false,
-            .alignment = @alignOf(value.featureType),
-        };
+        fields_name[count] = std.fmt.comptimePrint("_{s}", .{fieldName});
+        fields_type[count] = value.featureType;
+
         count += 1;
     }
 
     // getVkStructType(vk.VkPhysicalDeviceMeshShaderFeaturesNV);
 
-    fields[count] = .{
-        .name = "_Features2",
-        .type = vk.VkPhysicalDeviceFeatures2,
-        .default_value_ptr = null,
-        .is_comptime = false,
-        .alignment = @alignOf(vk.VkPhysicalDeviceFeatures2),
-    };
+    fields_name[count] = "_Features2";
+    fields_type[count] = vk.VkPhysicalDeviceFeatures2;
     count += 1;
 
-    break :t @Type(.{ .@"struct" = .{
-        .layout = .auto,
-        .fields = fields[0..count],
-        .decls = &.{},
-        .is_tuple = false,
-    } });
+    break :t @Struct(
+        .auto,
+        null,
+        fields_name[0..count],
+        fields_type[0..count],
+        &@splat(.{}),
+    );
 };
 
 // fn getVkStructType(sType: type) []const u8 {
@@ -342,7 +335,7 @@ fn chooseEnabledLayers(comptime fields: type, comptime field_name: []const u8, n
             try checkVkResult(vk.vkEnumerateInstanceLayerProperties(&count, null));
             vulkanNames = allocator.alloc(fields, count) catch |err| {
                 std.debug.print("err: {s}\n", .{@errorName(err)});
-                return VkError.VK_ERROR_OUT_OF_HOST_MEMORY;
+                return VkError.VkError;
             };
             try checkVkResult(vk.vkEnumerateInstanceLayerProperties(&count, vulkanNames.ptr));
         },
@@ -351,14 +344,14 @@ fn chooseEnabledLayers(comptime fields: type, comptime field_name: []const u8, n
                 try checkVkResult(vk.vkEnumerateDeviceExtensionProperties(device, null, &count, null));
                 vulkanNames = allocator.alloc(fields, count) catch |err| {
                     std.debug.print("err: {s}\n", .{@errorName(err)});
-                    return VkError.VK_ERROR_OUT_OF_HOST_MEMORY;
+                    return VkError.VkError;
                 };
                 try checkVkResult(vk.vkEnumerateDeviceExtensionProperties(device, null, &count, vulkanNames.ptr));
             } else {
                 try checkVkResult(vk.vkEnumerateInstanceExtensionProperties(null, &count, null));
                 vulkanNames = allocator.alloc(fields, count) catch |err| {
                     std.debug.print("err: {s}\n", .{@errorName(err)});
-                    return VkError.VK_ERROR_OUT_OF_HOST_MEMORY;
+                    return VkError.VkError;
                 };
                 try checkVkResult(vk.vkEnumerateInstanceExtensionProperties(null, &count, vulkanNames.ptr));
             }
@@ -375,7 +368,7 @@ fn chooseEnabledLayers(comptime fields: type, comptime field_name: []const u8, n
             if (std.mem.eql(u8, need[0..len], @field(vulkan, field_name)[0..len])) {
                 namesEnabled.append(need) catch |err| {
                     std.debug.print("err: {s}\n", .{@errorName(err)});
-                    return VkError.VK_ERROR_OUT_OF_HOST_MEMORY;
+                    return VkError.VkError;
                 };
                 break;
             }
@@ -403,7 +396,7 @@ pub fn pickPhysicalDevice(instance: vk.VkInstance, allocator: std.mem.Allocator,
     const physicalDeviceGroups: []vk.VkPhysicalDeviceGroupProperties = allocator.alloc(vk.VkPhysicalDeviceGroupProperties, deviceGroupCount) catch |err| {
         errorProcess.showErrorWithMessageBox(@errorName(err));
 
-        return VkError.VK_ERROR_OUT_OF_HOST_MEMORY;
+        return VkError.VkError;
     };
     defer allocator.free(physicalDeviceGroups);
     for (physicalDeviceGroups) |*deviceGroup| {
@@ -494,7 +487,7 @@ pub fn pickPhysicalDevice(instance: vk.VkInstance, allocator: std.mem.Allocator,
                 },
                 else => {
                     // TODO add warn message box
-                    return VkError.VK_ERROR_UNKNOWN;
+                    return VkError.VkError;
                 },
             }
         } else {

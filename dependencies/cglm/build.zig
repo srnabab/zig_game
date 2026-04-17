@@ -17,7 +17,7 @@ pub fn build(b: *std.Build) void {
     const cglm_install_path_full = b.path(cglm_install_path).getPath(b);
 
     var haveLib = true;
-    std.fs.accessAbsolute(b.fmt("{s}/lib/libcglm.a", .{cglm_install_path_full}), .{}) catch |err| {
+    std.Io.Dir.accessAbsolute(b.graph.io, b.fmt("{s}/lib/libcglm.a", .{cglm_install_path_full}), .{}) catch |err| {
         if (err == error.FileNotFound) {
             haveLib = false;
             std.log.info("libcglm.a not found, will build...", .{});

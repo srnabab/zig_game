@@ -1,9 +1,9 @@
 const std = @import("std");
-const Mutex = std.Thread.Mutex;
+const Mutex = std.Io.Mutex;
 
 const errorProcess = @import("error");
 
-const vk = @import("vulkan").vulkan;
+const vk = @import("vulkan");
 const checkVkResult = @import("resultToError").checkVkResult;
 
 const tracy = @import("tracy");
@@ -11,7 +11,7 @@ const tracy = @import("tracy");
 const types = @import("types");
 
 pub const VkQueueFamily = types.VkQueueFamily;
-pub const VkTheadQueue = struct { queue: vk.VkQueue = null, mutex: Mutex = .{} };
+pub const VkTheadQueue = struct { queue: vk.VkQueue = null, mutex: Mutex = .init };
 
 pub fn setQueueFamilies(physicalDevice: vk.VkPhysicalDevice, allocator: std.mem.Allocator, surface: vk.VkSurfaceKHR) !struct {
     graphic: VkQueueFamily = .{},

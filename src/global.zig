@@ -4,6 +4,8 @@ const Allocator = std.mem.Allocator;
 const OneTimeCommand = @import("processRender").oneTimeCommand;
 const TextureSet = @import("textureSet");
 const Handles = @import("handle");
+const vertexStruct = @import("vertexStruct");
+const math = @import("math");
 
 pub const databaseName = "Content.db";
 
@@ -27,6 +29,13 @@ pub const EngineVersionMinor = 1;
 pub const EngineVersionPatch = 125;
 
 pub const MaxFrameInFlight = 3;
+
+pub const StorageBufferVerticesEnd = math.round(16, @sizeOf(vertexStruct.Vertex_f3pf3nf2u) * 4000);
+pub const StorageBufferMeshletsEnd = math.round(16, @sizeOf(vertexStruct.Meshlet) * 4000) + StorageBufferVerticesEnd;
+pub const StorageBufferMeshletVerticesEnd = math.round(16, @sizeOf(u32) * 4000) + StorageBufferMeshletsEnd;
+pub const StorageBufferMeshletTrianglesEnd = math.round(16, @sizeOf(u8) * 4000) + StorageBufferMeshletVerticesEnd;
+
+pub const MeshletStorageBufferSize = StorageBufferMeshletTrianglesEnd;
 
 pub var FrameInFlight: u32 = 2;
 

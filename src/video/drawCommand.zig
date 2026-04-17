@@ -1,6 +1,6 @@
 const std = @import("std");
 const texture = @import("textureSet");
-const vk = @import("vulkan").vulkan;
+const vk = @import("vulkan");
 const VkStruct = @import("video");
 const rendering = @import("rendering");
 
@@ -74,7 +74,8 @@ const privateEnum = [_]CommandType{
 
 pub const PrivateCommandType: type = blk: {
     const ct = @typeInfo(CommandType).@"enum";
-    var pe: [1024]std.builtin.Type.EnumField = undefined;
+    var pe_names: [1024][]const u8 = undefined;
+    var pe_values: [1024]u32 = undefined;
 
     var count: usize = 0;
 
@@ -82,8 +83,8 @@ pub const PrivateCommandType: type = blk: {
         if (count < privateEnum.len) {
             for (privateEnum) |ee| {
                 if (@intFromEnum(ee) == value.value) {
-                    pe[count].name = value.name;
-                    pe[count].value = value.value;
+                    pe_names[count] = value.name;
+                    pe_values[count] = value.value;
 
                     count += 1;
                     break;
@@ -94,17 +95,18 @@ pub const PrivateCommandType: type = blk: {
         break;
     }
 
-    break :blk @Type(.{ .@"enum" = .{
-        .decls = &.{},
-        .fields = pe[0..count],
-        .is_exhaustive = true,
-        .tag_type = u32,
-    } });
+    break :blk @Enum(
+        u32,
+        .exhaustive,
+        pe_names[0..count],
+        pe_values[0..count],
+    );
 };
 
 pub const PublicCommandType: type = blk: {
     const ct = @typeInfo(CommandType).@"enum";
-    var pe: [1024]std.builtin.Type.EnumField = undefined;
+    var pe_names: [1024][]const u8 = undefined;
+    var pe_values: [1024]u32 = undefined;
 
     var count: usize = 0;
     var i: usize = 0;
@@ -119,17 +121,17 @@ pub const PublicCommandType: type = blk: {
             }
         }
 
-        pe[i].name = value.name;
-        pe[i].value = value.value;
+        pe_names[i] = value.name;
+        pe_values[i] = value.value;
         i += 1;
     }
 
-    break :blk @Type(.{ .@"enum" = .{
-        .tag_type = u32,
-        .fields = pe[0..i],
-        .decls = &.{},
-        .is_exhaustive = true,
-    } });
+    break :blk @Enum(
+        u32,
+        .exhaustive,
+        pe_names[0..i],
+        pe_values[0..i],
+    );
 };
 
 pub fn PublicCommandTypeToCommandType(a: PublicCommandType) CommandType {
@@ -364,6 +366,6 @@ pub const BufferUsage = enum {
 //     shader,
 // };
 
-timestamp: i128,
+timestamp: i96,
 ID: u32,
 command: comm,

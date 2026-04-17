@@ -4,7 +4,7 @@ const Atomic = std.atomic;
 pub const drawC = @import("drawCommand.zig");
 // const drawCProcess = @import("drawCommandProcess.zig");
 const texture = @import("textureSet");
-const vk = @import("vulkan").vulkan;
+const vk = @import("vulkan");
 const VkStruct = @import("video");
 const vulkanType = VkStruct.vulkanType;
 const Queue = @import("queue").Queue;
@@ -17,7 +17,7 @@ const Handle = @import("handle").Handle;
 
 const logStructSize = @import("logStructSize").logStructSize;
 
-var mutex = Thread.Mutex{};
+var mutex: std.Io.Mutex = .init;
 
 const twoQueueNode = struct {
     a: ?*QueueNode = null,
@@ -232,9 +232,10 @@ fn SpecialThreadPool(maxThreads: u32) type {
         freeCount: u32 = 0,
         info: [maxThreads]?ThreadContext = [_]?ThreadContext{null} ** maxThreads,
         allocator: std.mem.Allocator,
-        mutex: Thread.Mutex = .{},
+        mutex: std.Io.Mutex = .init,
+        io: std.Io,
 
-        pub fn init(allocator: std.mem.Allocator) Self {
+        pub fn init(io: std.Io, allocator: std.mem.Allocator) Self {
             var fl: [maxThreads]i32 = undefined;
             for (0..fl.len) |i| {
                 fl[i] = -1;
@@ -242,6 +243,7 @@ fn SpecialThreadPool(maxThreads: u32) type {
             return .{
                 .freeList = fl,
                 .allocator = allocator,
+                .io = io,
             };
         }
 
@@ -249,8 +251,8 @@ fn SpecialThreadPool(maxThreads: u32) type {
             const zone = tracy.initZone(@src(), .{ .name = "get free thread" });
             defer zone.deinit();
 
-            self.mutex.lock();
-            defer self.mutex.unlock();
+            try self.mutex.lock(self.io);
+            defer self.mutex.unlock(self.io);
 
             if (self.freeCount > 0) {
                 const idx: usize = @intCast(self.freeList[0]);
@@ -266,19 +268,20 @@ fn SpecialThreadPool(maxThreads: u32) type {
                     return error.OutOfCapacity;
                 }
 
-                var tempTaskQueue: Queue(ThreadContext.task) = undefined;
-                tempTaskQueue.init(self.allocator);
+                const tempTaskQueue: Queue(ThreadContext.task) = try .init(self.allocator);
+
                 self.info[self.threadCount] = ThreadContext{
                     .semaphore = .{},
                     .taskQueue = tempTaskQueue,
                     .commandPool = .init(self.allocator, 4, 2, 2),
-                    .mutex = .{},
+                    .mutex = .init,
                     .commandBuffers = commandBufferQueue,
                     .index = @intCast(self.threadCount),
                     .threadPool = self,
                     .commandPoolType = commandPoolType,
                     .vulkan = vulkan,
                     .pTextureSet = pTextureSet,
+                    .io = self.io,
                 };
 
                 const t = try Thread.spawn(.{}, oneTimeCommand.recordCommand, .{&self.info[self.threadCount].?});
@@ -294,8 +297,8 @@ fn SpecialThreadPool(maxThreads: u32) type {
             const zone = tracy.initZone(@src(), .{ .name = "release thread" });
             defer zone.deinit();
 
-            self.mutex.lock();
-            defer self.mutex.unlock();
+            self.mutex.lock(self.io) catch unreachable;
+            defer self.mutex.unlock(self.io);
 
             if (index < 0 or index >= self.threadCount) return;
 
@@ -303,11 +306,11 @@ fn SpecialThreadPool(maxThreads: u32) type {
             self.freeCount += 1;
         }
 
-        pub fn waitThread(self: *Self, vulkan: *VkStruct) void {
+        pub fn waitThread(self: *Self, vulkan: *VkStruct) !void {
             for (0..self.threads.len) |i| {
                 var end = drawC{
                     .ID = 1234124142,
-                    .timestamp = std.time.nanoTimestamp(),
+                    .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                     .command = .{ .end = void{} },
                 };
                 var emptyQueueNode: QueueNode = .{
@@ -317,13 +320,13 @@ fn SpecialThreadPool(maxThreads: u32) type {
                 };
 
                 if (self.info[i] != null) {
-                    self.info[i].?.mutex.lock();
-                    defer self.info[i].?.mutex.unlock();
+                    try self.info[i].?.mutex.lock(self.io);
+                    defer self.info[i].?.mutex.unlock(self.io);
 
-                    self.info[i].?.taskQueue.pushLast(.{ .com = &end, .node = &emptyQueueNode }) catch |err| {
+                    self.info[i].?.taskQueue.pushLast(self.io, .{ .com = &end, .node = &emptyQueueNode }) catch |err| {
                         std.log.err("failed to push end command to thread task queue: {s}", .{@errorName(err)});
                     };
-                    self.info[i].?.semaphore.post();
+                    self.info[i].?.semaphore.post(self.io);
                 }
 
                 if (self.threads[i] != null) {
@@ -489,7 +492,7 @@ const CommandBufferRecordKind = enum {
 const CommandBufferBelong = struct {
     commandBufer: vk.VkCommandBuffer,
     kind: CommandBufferRecordKind,
-    semaphore: Thread.Semaphore = .{},
+    semaphore: std.Io.Semaphore = .{},
     commandBufferID: u32 = 0,
 };
 
@@ -503,21 +506,21 @@ fn DAG(T: type) type {
 
         currentListID: ?*u32 = null,
 
-        mem: std.heap.MemoryPoolExtra(Inner, .{}),
+        mem: std.heap.memory_pool.Extra(Inner, .{}),
         map: std.hash_map.AutoHashMap(u32, *Inner),
-        allocator: std.heap.ArenaAllocator,
+        arena: std.heap.ArenaAllocator,
 
-        pub fn init(allocator: std.mem.Allocator) Self {
+        pub fn init(allocator: std.mem.Allocator) !Self {
             return .{
-                .mem = .init(allocator),
+                .mem = try .initCapacity(allocator, 128),
                 .map = .init(allocator),
-                .allocator = .init(allocator),
+                .arena = .init(allocator),
             };
         }
 
         pub fn deinit(self: *Self) void {
-            self.allocator.deinit();
-            self.mem.deinit();
+            self.arena.deinit();
+            self.mem.deinit(self.arena.child_allocator);
             self.map.deinit();
         }
 
@@ -529,12 +532,12 @@ fn DAG(T: type) type {
         }
 
         pub fn create(self: *Self) !*Inner {
-            const node = try self.mem.create();
+            const node = try self.mem.create(self.arena.allocator());
             node.* = .{
                 .ID = self.innerID,
                 .listID = null,
-                .children = .init(self.allocator.allocator()),
-                .parents = .init(self.allocator.allocator()),
+                .children = .init(self.arena.allocator()),
+                .parents = .init(self.arena.allocator()),
             };
 
             self.innerID += 1;
@@ -565,7 +568,7 @@ fn DAG(T: type) type {
             const zone = tracy.initZone(@src(), .{ .name = "DAG clear" });
             defer zone.deinit();
 
-            _ = self.mem.reset(.retain_capacity);
+            _ = self.mem.reset(self.arena.child_allocator, .retain_capacity);
             self.map.clearRetainingCapacity();
             self.innerID = 0;
             self.innerListID = 0;
@@ -704,11 +707,11 @@ const ThreadContext = struct {
         node: *QueueNode,
         com: *drawC,
     };
-    semaphore: Thread.Semaphore,
+    semaphore: std.Io.Semaphore,
 
     taskQueue: Queue(task),
     commandPool: CommandPools,
-    mutex: Thread.Mutex,
+    mutex: std.Io.Mutex,
     index: i32,
     threadPool: *SpecialThreadPool(MaxThreads),
     commandPoolType: VkStruct.CommandPoolType,
@@ -717,6 +720,7 @@ const ThreadContext = struct {
     commandBuffers: commandBufferDAG,
     vulkan: *VkStruct,
     pTextureSet: *texture,
+    io: std.Io,
 };
 
 const dependencyData = struct {
@@ -790,7 +794,8 @@ const drawResourceMapGetOrPutResult = drawResourceMapType.GetOrPutResult;
 pub const commands = struct {
     const Self = @This();
 
-    mutex: Thread.Mutex = .{},
+    mutex: std.Io.Mutex = .init,
+    io: std.Io,
 
     vulkan: *VkStruct,
     pRendering: *rendering,
@@ -802,7 +807,7 @@ pub const commands = struct {
 
     cacheMap: std.AutoHashMap(*anyopaque, u32),
     renderingMap: std.AutoHashMap(rendering.RenderingInfo_t, RenderingPack),
-    u32Mem: std.heap.MemoryPoolExtra(u32, .{}),
+    u32Mem: std.heap.memory_pool.Extra(u32, .{}),
 
     allocator: std.mem.Allocator,
     stackAllocators: [global.MaxFrameInFlight]std.heap.FixedBufferAllocator,
@@ -810,7 +815,7 @@ pub const commands = struct {
 
     end: bool = false,
 
-    pub fn init(allocator: std.mem.Allocator, buffers: []u8, vulkan: *VkStruct, pRendering: *rendering, pTextureSet: *texture) Self {
+    pub fn init(io: std.Io, allocator: std.mem.Allocator, buffers: []u8, vulkan: *VkStruct, pRendering: *rendering, pTextureSet: *texture) !Self {
         logStructSize(drawC);
         std.log.debug("command size {d}", .{@sizeOf(drawC.comm)});
         std.log.debug("drawc size {d}", .{@sizeOf(drawC)});
@@ -825,15 +830,16 @@ pub const commands = struct {
         }
 
         return Self{
+            .io = io,
             .queue = .init(allocator),
-            .nodeDag = .init(allocator),
+            .nodeDag = try .init(allocator),
             .stackAllocators = stackAllocators,
             .combineMap = .init(allocator),
             .cacheMap = .init(allocator),
             .renderingMap = .init(allocator),
             .vulkan = vulkan,
             .pRendering = pRendering,
-            .u32Mem = .init(allocator),
+            .u32Mem = try .initCapacity(allocator, 128),
             .allocator = allocator,
             .pTextureSet = pTextureSet,
         };
@@ -845,7 +851,7 @@ pub const commands = struct {
         self.combineMap.deinit();
         self.cacheMap.deinit();
         self.renderingMap.deinit();
-        self.u32Mem.deinit();
+        self.u32Mem.deinit(self.allocator);
     }
 
     pub fn clearRetainCapacity(self: *Self) void {
@@ -861,7 +867,7 @@ pub const commands = struct {
         }
         self.renderingMap.clearRetainingCapacity();
 
-        _ = self.u32Mem.reset(.retain_capacity);
+        _ = self.u32Mem.reset(self.allocator, .retain_capacity);
     }
 
     pub fn startCommand(self: *Self) !void {
@@ -872,14 +878,14 @@ pub const commands = struct {
 
         self.stackAllocators[self.stackAllocatorsIndex].reset();
 
-        _ = self.u32Mem.reset(.retain_capacity);
+        _ = self.u32Mem.reset(self.allocator, .retain_capacity);
 
         const node = try self.nodeDag.create();
 
         const ptr = try self.queue.getOrPut(node.ID);
         ptr.value_ptr.* = drawC{
             .ID = node.ID,
-            .timestamp = std.time.nanoTimestamp(),
+            .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
             .command = .{ .start = .{} },
         };
     }
@@ -1238,7 +1244,7 @@ pub const commands = struct {
                 const ptr = try self.queue.getOrPut(rootNode.ID);
                 ptr.value_ptr.* = drawC{
                     .ID = rootNode.ID,
-                    .timestamp = std.time.nanoTimestamp(),
+                    .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                     .command = .{ .pushconstant = command.pushconstant },
                 };
                 rootNode.listID = self.nodeDag.currentListID;
@@ -1310,7 +1316,7 @@ pub const commands = struct {
                             const ptr = try self.queue.getOrPut(node.ID);
                             ptr.value_ptr.* = drawC{
                                 .ID = node.ID,
-                                .timestamp = std.time.nanoTimestamp(),
+                                .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                                 .command = .{
                                     .pipelineBarrier = .{
                                         .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
@@ -1391,7 +1397,7 @@ pub const commands = struct {
                             const ptr = try self.queue.getOrPut(node.ID);
                             ptr.value_ptr.* = drawC{
                                 .ID = node.ID,
-                                .timestamp = std.time.nanoTimestamp(),
+                                .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                                 .command = .{
                                     .pipelineBarrier = .{
                                         .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
@@ -1474,7 +1480,7 @@ pub const commands = struct {
                             const ptr = try self.queue.getOrPut(node.ID);
                             ptr.value_ptr.* = drawC{
                                 .ID = node.ID,
-                                .timestamp = std.time.nanoTimestamp(),
+                                .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                                 .command = .{
                                     .pipelineBarrier = .{
                                         .lastSrcStageMask = flags.sourceStage,
@@ -1562,7 +1568,7 @@ pub const commands = struct {
                         const ptr = try self.queue.getOrPut(node.ID);
                         ptr.value_ptr.* = drawC{
                             .ID = node.ID,
-                            .timestamp = std.time.nanoTimestamp(),
+                            .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                             .command = .{
                                 .pipelineBarrier = .{
                                     .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
@@ -1636,7 +1642,7 @@ pub const commands = struct {
                         const ptr = try self.queue.getOrPut(node.ID);
                         ptr.value_ptr.* = drawC{
                             .ID = node.ID,
-                            .timestamp = std.time.nanoTimestamp(),
+                            .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                             .command = .{
                                 .pipelineBarrier = .{
                                     .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
@@ -1689,7 +1695,7 @@ pub const commands = struct {
                 const ptr = try self.queue.getOrPut(rootNode.ID);
                 ptr.value_ptr.* = drawC{
                     .ID = rootNode.ID,
-                    .timestamp = std.time.nanoTimestamp(),
+                    .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                     .command = .{ .beginRendering = command.beginRendering },
                 };
                 rootNode.listID = self.nodeDag.currentListID;
@@ -1707,7 +1713,7 @@ pub const commands = struct {
                 const ptr = try self.queue.getOrPut(rootNode.ID);
                 ptr.value_ptr.* = drawC{
                     .ID = rootNode.ID,
-                    .timestamp = std.time.nanoTimestamp(),
+                    .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                     .command = .{ .bindPipeline = bindPipeline },
                 };
                 rootNode.listID = self.nodeDag.currentListID;
@@ -1725,7 +1731,7 @@ pub const commands = struct {
                 const ptr = try self.queue.getOrPut(rootNode.ID);
                 ptr.value_ptr.* = drawC{
                     .ID = rootNode.ID,
-                    .timestamp = std.time.nanoTimestamp(),
+                    .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                     .command = .{ .bindIndexBuffer = bindIndexBuffer },
                 };
                 rootNode.listID = self.nodeDag.currentListID;
@@ -1743,7 +1749,7 @@ pub const commands = struct {
                 const ptr = try self.queue.getOrPut(rootNode.ID);
                 ptr.value_ptr.* = drawC{
                     .ID = rootNode.ID,
-                    .timestamp = std.time.nanoTimestamp(),
+                    .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                     .command = .{ .bindVertexBuffers = bindVertexBuffers },
                 };
                 rootNode.listID = self.nodeDag.currentListID;
@@ -1761,7 +1767,7 @@ pub const commands = struct {
                 const ptr = try self.queue.getOrPut(rootNode.ID);
                 ptr.value_ptr.* = drawC{
                     .ID = rootNode.ID,
-                    .timestamp = std.time.nanoTimestamp(),
+                    .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                     .command = .{ .bindDescriptorSets = bindDescriptorSets },
                 };
                 rootNode.listID = self.nodeDag.currentListID;
@@ -1777,7 +1783,7 @@ pub const commands = struct {
                 const ptr = try self.queue.getOrPut(rootNode.ID);
                 ptr.value_ptr.* = drawC{
                     .ID = rootNode.ID,
-                    .timestamp = std.time.nanoTimestamp(),
+                    .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                     .command = .{ .endRendering = void{} },
                 };
                 rootNode.listID = self.nodeDag.currentListID;
@@ -1793,7 +1799,7 @@ pub const commands = struct {
                 const ptr = try self.queue.getOrPut(rootNode.ID);
                 ptr.value_ptr.* = drawC{
                     .ID = rootNode.ID,
-                    .timestamp = std.time.nanoTimestamp(),
+                    .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                     .command = .{ .setScissor = command.setScissor },
                 };
                 rootNode.listID = self.nodeDag.currentListID;
@@ -1809,7 +1815,7 @@ pub const commands = struct {
                 const ptr = try self.queue.getOrPut(rootNode.ID);
                 ptr.value_ptr.* = drawC{
                     .ID = rootNode.ID,
-                    .timestamp = std.time.nanoTimestamp(),
+                    .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                     .command = .{ .setViewport = command.setViewport },
                 };
                 rootNode.listID = self.nodeDag.currentListID;
@@ -2564,7 +2570,7 @@ pub const commands = struct {
                             if (v == @as(Handle, @ptrCast(value.key_ptr.*))) {
                                 // std.log.debug("xxx 1", .{});
 
-                                const scissor = self.vulkan.scissors.getScissorContent(v);
+                                const scissor = self.vulkan.scissors.getScissorContent(self.io, v);
 
                                 const tempTwoNode = try self.addCommand2(
                                     .{
@@ -2587,7 +2593,7 @@ pub const commands = struct {
                             if (v == @as(Handle, @ptrCast(value.key_ptr.*))) {
                                 // std.log.debug("xxx 3", .{});
 
-                                const viewport = self.vulkan.viewports.getViewportContent(v);
+                                const viewport = self.vulkan.viewports.getViewportContent(self.io, v);
 
                                 const tempTwoNode = try self.addCommand2(
                                     .{
@@ -2765,14 +2771,14 @@ pub const commands = struct {
 
         std.debug.assert(@as(u32, @intFromEnum(commandType)) == @as(u32, @intFromEnum(std.meta.activeTag(command))));
 
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        try self.mutex.lock(self.io);
+        defer self.mutex.unlock(self.io);
 
         const allocator = self.stackAllocators[self.stackAllocatorsIndex].allocator();
 
         const node = try self.nodeDag.create();
         const ID = node.ID;
-        node.listID = try self.u32Mem.create();
+        node.listID = try self.u32Mem.create(self.allocator);
 
         node.listID.?.* = 0;
 
@@ -2781,11 +2787,11 @@ pub const commands = struct {
         var currentNode = node;
         const ptr = try self.queue.getOrPut(ID);
         // ptr.value_ptr.ID = ID;
-        // ptr.value_ptr.timestamp = std.time.nanoTimestamp();
+        // ptr.value_ptr.timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds();
 
         ptr.value_ptr.* = drawC{
             .ID = ID,
-            .timestamp = std.time.nanoTimestamp(),
+            .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
             .command = command,
         };
 
@@ -2816,7 +2822,7 @@ pub const commands = struct {
                 var imageView = [_]vk.VkImageView{
                     self.pTextureSet.getVkImageView(self.vulkan.swapchainTextures[currentIndex]),
                 };
-                self.pRendering.changeRenderingImageView(
+                try self.pRendering.changeRenderingImageView(
                     0,
                     1,
                     &imageView,
@@ -3304,6 +3310,7 @@ pub const oneTimeCommand = struct {
     // single
     vulkan: *VkStruct,
     pRendering: *rendering,
+    io: std.Io,
 
     innerID: u32 = 0,
     innerCommandBufferID: u32 = 0,
@@ -3312,7 +3319,7 @@ pub const oneTimeCommand = struct {
     allocator: std.mem.Allocator,
 
     threadPool: SpecialThreadPool(MaxThreads),
-    mutex: Thread.Mutex = .{},
+    mutex: std.Io.Mutex = .init,
 
     garbageData: std.array_list.Managed(GarbageData),
 
@@ -3320,10 +3327,10 @@ pub const oneTimeCommand = struct {
     signalSemaphoreSubmitInfos: [global.MaxFrameInFlight]std.array_list.Managed(vk.VkSemaphoreSubmitInfo),
     sumbitInfos: [global.MaxFrameInFlight]std.array_list.Managed(vk.VkSubmitInfo2),
 
-    pub fn init(allocator: std.mem.Allocator, vulkan: *VkStruct, pRendering: *rendering) Self {
+    pub fn init(io: std.Io, allocator: std.mem.Allocator, vulkan: *VkStruct, pRendering: *rendering) Self {
         return Self{
             .allocator = allocator,
-            .threadPool = .init(allocator),
+            .threadPool = .init(io, allocator),
             .primaryCommandPool = .init(allocator, 0, 0, 0),
             .vulkan = vulkan,
             .waitSemaphoreSubmitInfos = [_]std.array_list.Managed(vk.VkSemaphoreSubmitInfo){.init(allocator)} ** global.MaxFrameInFlight,
@@ -3331,10 +3338,11 @@ pub const oneTimeCommand = struct {
             .sumbitInfos = [_]std.array_list.Managed(vk.VkSubmitInfo2){.init(allocator)} ** global.MaxFrameInFlight,
             .pRendering = pRendering,
             .garbageData = .init(allocator),
+            .io = io,
         };
     }
 
-    pub fn deinit(self: *Self) void {
+    pub fn deinit(self: *Self) !void {
         const zone = tracy.initZone(@src(), .{ .name = "deinit OnetimeCommand" });
         defer zone.deinit();
 
@@ -3346,7 +3354,7 @@ pub const oneTimeCommand = struct {
         ) catch |err| {
             std.log.err("wait semaphore error {s}\n", .{@errorName(err)});
         };
-        self.threadPool.waitThread(self.vulkan);
+        try self.threadPool.waitThread(self.vulkan);
         self.primaryCommandPool.deinit(self.vulkan);
         self.cleanGarbage() catch |err| {
             std.log.err("clean garbage error {s}\n", .{@errorName(err)});
@@ -3711,16 +3719,16 @@ pub const oneTimeCommand = struct {
         var cbb: *CommandBufferBelong = undefined;
 
         while (true) {
-            ctx.semaphore.wait();
+            try ctx.semaphore.wait(ctx.io);
 
-            const command = ctx.taskQueue.popFirst();
+            const command = ctx.taskQueue.popFirst(ctx.io);
             if (command) |comm| {
                 const com = comm.com;
                 if (com.command == .beginSecondaryRecord) {
                     commandBuffer = try ctx.commandPool.getSecondaryCommandBuffer(ctx.commandPoolType, ctx.vulkan);
                     {
-                        ctx.mutex.lock();
-                        defer ctx.mutex.unlock();
+                        try ctx.mutex.lock(ctx.io);
+                        defer ctx.mutex.unlock(ctx.io);
 
                         const temp = try ctx.commandBuffers.create();
                         temp.data = CommandBufferBelong{
@@ -3766,7 +3774,7 @@ pub const oneTimeCommand = struct {
                 if (com.command == .endRecord) {
                     try VkStruct.endCommandBuffer(commandBuffer);
                     ctx.threadPool.releaseThread(ctx.index);
-                    cbb.semaphore.post();
+                    cbb.semaphore.post(ctx.io);
                 } else if (com.command == .end) {
                     break;
                 } else {
@@ -3877,8 +3885,8 @@ pub const oneTimeCommand = struct {
 
         if (!pCommands.end) return;
 
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        try self.mutex.lock(self.io);
+        defer self.mutex.unlock(self.io);
 
         const currentFrame = self.vulkan.currentFrame.load(.seq_cst);
 
@@ -3899,24 +3907,22 @@ pub const oneTimeCommand = struct {
             queueNode: *QueueNode,
             threadCtx: ?*ThreadContext,
         };
-        var prepareToExecuteQueue: Queue(taskQueueStruct) = undefined;
-        prepareToExecuteQueue.init(self.allocator);
+        var prepareToExecuteQueue: Queue(taskQueueStruct) = try .init(self.allocator);
         defer prepareToExecuteQueue.deinit();
 
-        var inferNodeNextTaskQueue: Queue(taskQueueStruct) = undefined;
-        inferNodeNextTaskQueue.init(self.allocator);
+        var inferNodeNextTaskQueue: Queue(taskQueueStruct) = try .init(self.allocator);
         defer inferNodeNextTaskQueue.deinit();
 
         var finalPrimaryTaskQueue = std.array_list.Managed(*QueueNode).init(self.allocator);
         defer finalPrimaryTaskQueue.deinit();
 
-        var commandBufferss = commandBufferDAG.init(self.allocator);
+        var commandBufferss = try commandBufferDAG.init(self.allocator);
         defer commandBufferss.deinit();
 
         // xxx
         const root = pCommands.nodeDag.get(0);
         if (root) |rr| {
-            try prepareToExecuteQueue.pushLast(taskQueueStruct{
+            try prepareToExecuteQueue.pushLast(self.io, taskQueueStruct{
                 .queueNode = rr,
                 .threadCtx = null,
             });
@@ -3931,7 +3937,7 @@ pub const oneTimeCommand = struct {
 
             if (pTotalSize == 0) break;
 
-            var pNode = prepareToExecuteQueue.popFirst();
+            var pNode = prepareToExecuteQueue.popFirst(self.io);
 
             var executeCount: u32 = 0;
 
@@ -3952,11 +3958,11 @@ pub const oneTimeCommand = struct {
                 if (nn.queueNode.parentsDone < nn.queueNode.parentsLen) {
                     // std.log.debug("1", .{});
 
-                    try prepareToExecuteQueue.pushLast(nn);
+                    try prepareToExecuteQueue.pushLast(self.io, nn);
                     executeCount += 1;
-                    try inferNodeNextTaskQueue.pushLast(nn);
+                    try inferNodeNextTaskQueue.pushLast(self.io, nn);
 
-                    pNode = prepareToExecuteQueue.popFirst();
+                    pNode = prepareToExecuteQueue.popFirst(self.io);
 
                     continue;
                 }
@@ -3964,7 +3970,12 @@ pub const oneTimeCommand = struct {
                 var ctx: ?*ThreadContext = null;
                 if (nn.threadCtx == null) {
                     if (nn.queueNode.data.startThread) {
-                        ctx = try self.threadPool.getFreeThread(commandBufferss, nn.queueNode.data.commandPoolType, self.vulkan, pCommands.pTextureSet);
+                        ctx = try self.threadPool.getFreeThread(
+                            commandBufferss,
+                            nn.queueNode.data.commandPoolType,
+                            self.vulkan,
+                            pCommands.pTextureSet,
+                        );
 
                         pNode.?.threadCtx = ctx;
                     }
@@ -3979,27 +3990,30 @@ pub const oneTimeCommand = struct {
                         //     std.log.debug("f ID {d}", .{temp.*.ID});
                     }
                 } else {
-                    nn.threadCtx.?.mutex.lock();
-                    defer nn.threadCtx.?.mutex.unlock();
+                    try nn.threadCtx.?.mutex.lock(self.io);
+                    defer nn.threadCtx.?.mutex.unlock(self.io);
 
                     // nn.queueNode.data.commandBufferID = nn.threadCtx.?.commandBufferID.*;
-                    try nn.threadCtx.?.taskQueue.pushLast(.{ .com = pCommands.queue.getPtr(nn.queueNode.ID).?, .node = nn.queueNode });
+                    try nn.threadCtx.?.taskQueue.pushLast(
+                        self.io,
+                        .{ .com = pCommands.queue.getPtr(nn.queueNode.ID).?, .node = nn.queueNode },
+                    );
 
-                    nn.threadCtx.?.semaphore.post();
+                    nn.threadCtx.?.semaphore.post(self.io);
                 }
 
                 nn.queueNode.nodeDone();
 
                 executeCount += 1;
-                try inferNodeNextTaskQueue.pushLast(pNode.?);
-                pNode = prepareToExecuteQueue.popFirst();
+                try inferNodeNextTaskQueue.pushLast(self.io, pNode.?);
+                pNode = prepareToExecuteQueue.popFirst(self.io);
 
                 // std.log.debug("3", .{});
 
                 zone2.deinit();
             }
 
-            var iNode = inferNodeNextTaskQueue.popFirst();
+            var iNode = inferNodeNextTaskQueue.popFirst(self.io);
             while (iNode) |nn| {
                 // std.log.debug("2", .{});
                 const zone2 = tracy.initZone(@src(), .{ .name = "execute b" });
@@ -4026,14 +4040,14 @@ pub const oneTimeCommand = struct {
                         first = jjj.next;
                     }
 
-                    try prepareToExecuteQueue.pushLast(.{
+                    try prepareToExecuteQueue.pushLast(self.io, .{
                         .queueNode = ccc,
                         .threadCtx = if (ccc.data.isSecondary) nn.threadCtx else null,
                     });
 
                     zone3.deinit();
                 }
-                iNode = inferNodeNextTaskQueue.popFirst();
+                iNode = inferNodeNextTaskQueue.popFirst(self.io);
                 zone2.deinit();
             }
             // std.log.debug("", .{});
@@ -4047,8 +4061,7 @@ pub const oneTimeCommand = struct {
             node: *QueueNode,
             semaphoreValue: u64,
         };
-        var nextNodeQueue: Queue(nextNodeQueueSemaphoreValue) = undefined;
-        nextNodeQueue.init(self.allocator);
+        var nextNodeQueue: Queue(nextNodeQueueSemaphoreValue) = try .init(self.allocator);
         defer nextNodeQueue.deinit();
 
         var cbIdxs = std.array_list.Managed(u32).init(self.allocator);
@@ -4059,8 +4072,8 @@ pub const oneTimeCommand = struct {
 
         // std.log.debug("2\n\n\n\n", .{});
         {
-            mutex.lock();
-            defer mutex.unlock();
+            try mutex.lock(self.io);
+            defer mutex.unlock(self.io);
 
             const currentFrames = self.vulkan.currentFrame.load(.seq_cst);
 
@@ -4114,7 +4127,7 @@ pub const oneTimeCommand = struct {
                 // std.log.debug("\n\n", .{});
 
                 if (nn.childrenLen > 1) {
-                    try nextNodeQueue.pushLast(.{
+                    try nextNodeQueue.pushLast(self.io, .{
                         .node = nn,
                         .semaphoreValue = currentSemaphoreValue,
                     });
@@ -4174,7 +4187,7 @@ pub const oneTimeCommand = struct {
                     submitInfo.signalSemaphoreInfoCount = @intCast(signalSemaphoreSubmitInfos.items.len);
                     submitInfo.pSignalSemaphoreInfos = @ptrCast(signalSemaphoreSubmitInfos.items.ptr);
 
-                    try self.vulkan.queueSubmit(currentType, 1, submitInfo, null);
+                    try self.vulkan.queueSubmit(self.io, currentType, 1, submitInfo, null);
 
                     switch (currentType) {
                         .graphic => graphicSemaphoreValue = currentSemaphoreValue,
@@ -4261,7 +4274,7 @@ pub const oneTimeCommand = struct {
                                 const cbPtr = try cbs.addOne();
                                 cbPtr.* = cbb.data.commandBufer;
 
-                                cbb.data.semaphore.wait();
+                                try cbb.data.semaphore.wait(self.io);
                             }
                         }
                         if (cbs.items.len > 0)
@@ -4277,7 +4290,7 @@ pub const oneTimeCommand = struct {
                         while (node) |value| {
                             firstNode = value.node.getFirstUndoneChild();
                             if (firstNode == null) {
-                                _ = nextNodeQueue.popLast();
+                                _ = nextNodeQueue.popLast(self.io);
                                 node = nextNodeQueue.peekLast();
                             } else {
                                 timelinewaitValue = value.semaphoreValue;
@@ -4292,7 +4305,7 @@ pub const oneTimeCommand = struct {
                     while (node) |value| {
                         firstNode = value.node.getFirstUndoneChild();
                         if (firstNode == null) {
-                            _ = nextNodeQueue.popLast();
+                            _ = nextNodeQueue.popLast(self.io);
                             node = nextNodeQueue.peekLast();
                         } else {
                             timelinewaitValue = value.semaphoreValue;
@@ -4381,6 +4394,7 @@ pub const oneTimeCommand = struct {
                 // std.log.debug("semaphore {*}", .{submitInfo.pSignalSemaphoreInfos[0].semaphore});
 
                 try self.vulkan.queueSubmit(
+                    self.io,
                     currentType,
                     1,
                     submitInfo,
@@ -4399,7 +4413,7 @@ pub const oneTimeCommand = struct {
                     .pImageIndices = @ptrCast(&currentIndex),
                     .pResults = null,
                 };
-                try self.vulkan.presentSubmit(@ptrCast(&presentInfo));
+                try self.vulkan.presentSubmit(self.io, @ptrCast(&presentInfo));
             }
 
             self.vulkan.globalTimelineValue.store(currentSemaphoreValue, .seq_cst);

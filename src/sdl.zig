@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub const sdl = @cImport(@cInclude("SDL3/SDL_namespace.h"));
+pub const sdl = @import("sdl");
 const enumFromC = @import("enumFromC");
 
 pub const SDL_EventType = enumFromC.generateEnumFromC(

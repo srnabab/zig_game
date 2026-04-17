@@ -1,5 +1,5 @@
 const std = @import("std");
-pub const blake3 = @cImport(@cInclude("blake3.h"));
+pub const blake3 = @import("blake3");
 const tracy = @import("tracy");
 
 pub fn blake3HashContent(content: []const u8) [blake3.BLAKE3_OUT_LEN]u8 {

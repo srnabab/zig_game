@@ -3,7 +3,7 @@ const std = @import("std");
 pub const Max_Vertices = 64;
 pub const Max_Triangles = 124;
 
-pub const meshopt = @cImport(@cInclude("meshoptimizer.h"));
+pub const meshopt = @import("meshopt");
 
 pub const meshopt_Meshlet = meshopt.meshopt_Meshlet;
 

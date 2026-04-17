@@ -3,7 +3,7 @@ const std = @import("std");
 const sdl = @import("sdl").sdl;
 const SDL_CheckResult = @import("sdl").SDL_CheckResult;
 
-const vk = @import("vulkan").vulkan;
+const vk = @import("vulkan");
 const types = @import("types");
 
 const VkResultToError = @import("resultToError");

@@ -1,14 +1,14 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-pub const vma = @import("vma").vma;
+pub const vma = @import("vma");
 
 const VkResultToError = @import("resultToError");
 const vulkanType = VkResultToError.vulkanType;
 const VkError = vulkanType.VkError;
 const checkVkResult = VkResultToError.checkVkResult;
 
-const vk = @import("vulkan").vulkan;
+const vk = @import("vulkan");
 
 const tracy = @import("tracy");
 
@@ -93,7 +93,7 @@ pub fn _createBuffer(
         self.vmaAllocator,
         pBufferCreateInfo,
         pAllocationCreateInfo,
-        pBuffer,
+        @ptrCast(pBuffer),
         pAllocation,
         pAllocationInfo,
     ));
@@ -125,7 +125,7 @@ pub fn _createImage(
         self.vmaAllocator,
         pImageCreateInfo,
         pAllocationCreateInfo,
-        pImage,
+        @ptrCast(pImage),
         pAllocation,
         pAllocationInfo,
     ));

@@ -1,4 +1,4 @@
-const vk = @import("vulkan").vulkan;
+const vk = @import("vulkan");
 
 const VkResultToError = @import("resultToError");
 const checkVkResult = VkResultToError.checkVkResult;

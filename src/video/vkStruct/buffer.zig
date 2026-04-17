@@ -1,6 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const vk = @import("vulkan").vulkan;
+const vk = @import("vulkan");
 const vmaStruct = @import("vma.zig");
 const vma = vmaStruct.vma;
 const QueueType = @import("queueType.zig").QueueType;
@@ -16,15 +16,22 @@ const global = @import("global");
 const tracy = @import("tracy");
 const math = @import("math");
 
+// pub const Allocation = union {
+
+//         t: vma.VmaAllocation,
+//         v: vma.VmaVirtualAllocation,
+// };
+
 pub const Buffer = struct {
     vkBuffer: vk.VkBuffer,
+    /// VmaAllocation, VmaVirtualAllocation
     allocation: vma.VmaAllocation,
-    // info: vma.VmaAllocationInfo,
     size: vk.VkDeviceSize,
     stride: vk.VkDeviceSize = 0,
     pMappedData: ?*anyopaque = @import("std").mem.zeroes(?*anyopaque),
     queueIndex: QueueType = .init,
     usage: Usage = .none,
+    isVirtual: bool = false,
 
     pub fn changeQueueIndex(self: *Buffer, queueType: QueueType) void {
         self.queueIndex = queueType;
@@ -36,6 +43,7 @@ pub const Buffer_t = Handle;
 const Self = @This();
 
 const BufferAlign = 16;
+const UniformBufferAlign = 64;
 const bufferRatio: f32 = 0.5 / 11;
 
 buffers: FixedIndexArray(Buffer),
@@ -211,11 +219,31 @@ pub fn createUniformBuffer(
         0,
         null,
         vk.VK_SHARING_MODE_EXCLUSIVE,
-        @intCast(math.round(BufferAlign, size)),
+        @intCast(math.round(UniformBufferAlign, size)),
         0,
         vk.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-        vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | vma.VMA_ALLOCATION_CREATE_MAPPED_BIT,
+        vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | vma.VMA_ALLOCATION_CREATE_MAPPED_BIT,
         vma.VMA_MEMORY_USAGE_AUTO_PREFER_HOST,
+        handles,
+    );
+}
+
+pub fn createStorageBuffer(
+    self: *Self,
+    vmaa: *vmaStruct,
+    size: vk.VkDeviceSize,
+    handles: *global.HandlesType,
+) !Buffer_t {
+    return self._createBuffer(
+        vmaa,
+        0,
+        null,
+        vk.VK_SHARING_MODE_EXCLUSIVE,
+        @intCast(math.round(BufferAlign, size)),
+        0,
+        vk.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | vk.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+        vma.VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
         handles,
     );
 }

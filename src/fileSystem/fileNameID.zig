@@ -83,6 +83,8 @@ const list = [_]KV{
 .{ "Tilemap", 75 },
 .{ "tileMap1.tsdI", 76 },
 .{ "tileSet1.tsd", 77 },
+.{ "monkey.glb", 78 },
+.{ "Suzanne_0.vtx", 79 },
 };
 
 break: map std.StaticStringMap(i32).initComptime(list);

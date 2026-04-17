@@ -36,17 +36,13 @@ pub fn build(b: *std.Build) void {
     const cglm_dep = b.dependency("cglm", .{});
     const cglm_install_step = cglm_dep.builder.getInstallStep();
 
-    const vk_mod = b.createModule(.{
-        .root_source_file = b.path("src/vulkan/vulkan.zig"),
+    const vma_c = b.addTranslateC(.{
+        .root_source_file = b.path("include/vma/vk_mem_alloc_namespace.h"),
         .target = target,
         .optimize = optimize,
+        .link_libc = true,
     });
-    const vma_mod = b.createModule(.{
-        .root_source_file = b.path("src/vma/vma.zig"),
-        .target = target,
-        .optimize = optimize,
-        .link_libcpp = true,
-    });
+    const vma_mod = vma_c.createModule();
     vma_mod.addCSourceFile(.{ .file = b.path("src/vma/vma_impl.cpp"), .language = .cpp });
     const enum_c_mod = b.createModule(.{
         .root_source_file = b.path("src/enumFromC.zig"),
@@ -58,6 +54,20 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const spriv_reflect_c = b.addTranslateC(.{
+        .root_source_file = b.path("include/spirv_reflect/spirv_reflect.h"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    const srpiv_reflect_c_mod = spriv_reflect_c.createModule();
+    const vk_c = b.addTranslateC(.{
+        .root_source_file = b.path("include/vulkan/vulkan.h"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    const vk_c_mod = vk_c.createModule();
     const spReflectModule = b.createModule(.{
         .root_source_file = b.path("src/sprivReflect/reflect.zig"),
         .target = target,
@@ -70,13 +80,20 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const sqlite_c = b.addTranslateC(.{
+        .root_source_file = b.path("include/sqlite3/sqlite3.h"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    const sqlite_c_mod = sqlite_c.createModule();
+    sqlite_c_mod.addCSourceFile(.{ .file = b.path("src/sqlite3/sqlite3.c"), .language = .c });
     const sqliteModule = b.createModule(.{
         .root_source_file = b.path("src/sqlite3/sqliteDB.zig"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
     });
-    sqliteModule.addCSourceFile(.{ .file = b.path("src/sqlite3/sqlite3.c"), .language = .c });
     const tables_mod = b.createModule(.{
         .root_source_file = b.path("src/tables.zig"),
         .target = target,
@@ -102,12 +119,19 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    const gen_mod = b.createModule(.{
-        .root_source_file = b.path("src/video/gen.zig"),
+    // const gen_mod = b.createModule(.{
+    //     .root_source_file = b.path("src/video/gen.zig"),
+    //     .target = target,
+    //     .optimize = .ReleaseFast,
+    //     .link_libc = true,
+    // });
+    const sdl_c = b.addTranslateC(.{
+        .root_source_file = b.path("include/SDL3/SDL_namespace.h"),
         .target = target,
-        .optimize = .ReleaseFast,
+        .optimize = optimize,
         .link_libc = true,
     });
+    const sdl_c_mod = sdl_c.createModule();
     const sdl_mod = b.createModule(.{
         .root_source_file = b.path("src/sdl.zig"),
         .target = target,
@@ -118,13 +142,15 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    const stb_image_mod = b.createModule(.{
-        .root_source_file = b.path("src/stb_image.zig"),
+    const stb_image_c = b.addTranslateC(.{
+        .root_source_file = b.path("include/stb/stb_image.h"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
     });
+    const stb_image_mod = stb_image_c.createModule();
     stb_image_mod.addCSourceFile(.{ .file = b.path("include/stb/stb_image_impl.h"), .language = .c });
+
     const textureSet_mod = b.createModule(.{
         .root_source_file = b.path("src/video/textureSet.zig"),
         .target = target,
@@ -151,14 +177,21 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .link_libcpp = true,
     });
+    const steam_c = b.addTranslateC(.{
+        .root_source_file = b.path("include/steam_C/SteamC.h"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    const steam_c_mod = steam_c.createModule();
+    steam_c_mod.addCSourceFile(.{ .file = b.path("src/steam_C/steamC.cpp"), .language = .cpp, .flags = &cpp_compileFlag });
+    steam_c_mod.addCSourceFile(.{ .file = b.path("src/steam_C/ISteamUserStats.cpp"), .language = .cpp, .flags = &cpp_compileFlag });
     const steam_mod = b.createModule(.{
         .root_source_file = b.path("src/steam_C/SteamC.zig"),
         .target = target,
         .optimize = optimize,
         .link_libcpp = true,
     });
-    steam_mod.addCSourceFile(.{ .file = b.path("src/steam_C/steamC.cpp"), .language = .cpp, .flags = &cpp_compileFlag });
-    steam_mod.addCSourceFile(.{ .file = b.path("src/steam_C/ISteamUserStats.cpp"), .language = .cpp, .flags = &cpp_compileFlag });
     const processRender_mod = b.createModule(.{
         .root_source_file = b.path("src/video/processRender.zig"),
         .target = target,
@@ -204,11 +237,13 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    const cglm_mod = b.createModule(.{
-        .root_source_file = b.path("src/cglm/cglm.zig"),
+    const cglm_c = b.addTranslateC(.{
+        .root_source_file = b.path("include/cglm/call.h"),
         .target = target,
         .optimize = optimize,
+        .link_libc = true,
     });
+    const cglm_mod = cglm_c.createModule();
     const handle_mod = b.createModule(.{
         .root_source_file = b.path("src/handle/handle.zig"),
         .target = target,
@@ -273,6 +308,11 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const fileTypes_mod = b.createModule(.{
+        .root_source_file = b.path("src/content_manager/src/types.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     // dependency
     vertexStruct_mod.addImport("cglm", cglm_mod);
@@ -286,7 +326,7 @@ pub fn build(b: *std.Build) void {
 
     input_mod.addImport("sdl", sdl_mod);
 
-    rendering_mod.addImport("vulkan", vk_mod);
+    rendering_mod.addImport("vulkan", vk_c_mod);
     rendering_mod.addImport("global", global_mod);
     rendering_mod.addImport("handle", handle_mod);
     rendering_mod.addImport("textureSet", textureSet_mod);
@@ -295,13 +335,13 @@ pub fn build(b: *std.Build) void {
     error_mod.addImport("sdl", sdl_mod);
 
     resultToError_mod.addImport("enumFromC", enum_c_mod);
-    resultToError_mod.addImport("vulkan", vk_mod);
+    resultToError_mod.addImport("vulkan", vk_c_mod);
 
-    cglm_mod.addIncludePath(b.path("include"));
+    cglm_c.addIncludePath(b.path("include"));
 
     vertices_mod.addImport("tracy", tracy.module("tracy"));
     vertices_mod.addImport("vertexStruct", vertexStruct_mod);
-    vertices_mod.addImport("vulkan", vk_mod);
+    vertices_mod.addImport("vulkan", vk_c_mod);
     vertices_mod.addImport("global", global_mod);
     vertices_mod.addImport("video", video_mod);
     vertices_mod.addImport("cglm", cglm_mod);
@@ -309,30 +349,37 @@ pub fn build(b: *std.Build) void {
 
     objectPool_mod.addImport("tracy", tracy.module("tracy"));
 
-    sampler_read_mod.addImport("vulkan", vk_mod);
+    sampler_read_mod.addImport("vulkan", vk_c_mod);
     sampler_read_mod.addImport("fileSystem", fileSystem_mod);
     sampler_read_mod.addImport("tracy", tracy.module("tracy"));
 
-    sampler_mod.addImport("vulkan", vk_mod);
+    sampler_mod.addImport("vulkan", vk_c_mod);
 
-    vk_mod.addIncludePath(b.path("include"));
+    vk_c.addIncludePath(b.path("include"));
 
     math_mod.addImport("tracy", tracy.module("tracy"));
     math_mod.addImport("cglm", cglm_mod);
 
     steam_mod.addImport("tracy", tracy.module("tracy"));
-    steam_mod.addIncludePath(b.path("include"));
+    steam_mod.addImport("steamC", steam_c_mod);
+    steam_c.addIncludePath(b.path("include"));
+    steam_c_mod.addIncludePath(b.path("include"));
+
+    spriv_reflect_c.addIncludePath(b.path("include"));
 
     spReflectModule.addImport("EnumC", enum_c_mod);
+    spReflectModule.addImport("spriv_reflect", srpiv_reflect_c_mod);
+    spReflectModule.addImport("vulkan", vk_c_mod);
     spReflectModule.addIncludePath(b.path("include"));
 
     pipelineJsonParse_mod.addIncludePath(b.path("include"));
-    pipelineJsonParse_mod.addImport("vulkan", vk_mod);
+    pipelineJsonParse_mod.addImport("vulkan", vk_c_mod);
     pipelineJsonParse_mod.addImport("reflect", spReflectModule);
     pipelineJsonParse_mod.addImport("enumFromC", enum_c_mod);
 
     sqliteModule.addImport("tracy", tracy.module("tracy"));
-    sqliteModule.addIncludePath(b.path("include"));
+    sqliteModule.addImport("sqlite3", sqlite_c_mod);
+    sqlite_c.addIncludePath(b.path("include"));
 
     tables_mod.addImport("sqlDb", sqliteModule);
 
@@ -340,25 +387,28 @@ pub fn build(b: *std.Build) void {
     gen_fileName_ID_mod.addImport("tables", tables_mod);
 
     vulkanType_mod.addImport("enumFromC", enum_c_mod);
-    vulkanType_mod.addImport("vulkan", vk_mod);
+    vulkanType_mod.addImport("vulkan", vk_c_mod);
 
-    gen_mod.addIncludePath(b.path("include"));
-    gen_mod.addLibraryPath(b.path("lib"));
-    gen_mod.addImport("enumFromC", enum_c_mod);
-    gen_mod.addImport("vulkanType", vulkanType_mod);
-    gen_mod.linkSystemLibrary("vulkan-1", .{});
+    // gen_mod.addIncludePath(b.path("include"));
+    // gen_mod.addLibraryPath(b.path("lib"));
+    // gen_mod.addImport("enumFromC", enum_c_mod);
+    // gen_mod.addImport("vulkanType", vulkanType_mod);
+    // gen_mod.linkSystemLibrary("vulkan-1", .{});
+
+    sdl_c.addIncludePath(b.path("include"));
 
     sdl_mod.addIncludePath(b.path("include"));
     sdl_mod.addImport("enumFromC", enum_c_mod);
+    sdl_mod.addImport("sdl", sdl_c_mod);
 
-    translate_mod.addImport("vulkan", vk_mod);
+    translate_mod.addImport("vulkan", vk_c_mod);
     translate_mod.addImport("fileSystem", fileSystem_mod);
     translate_mod.addImport("global", global_mod);
     translate_mod.addImport("enumFromC", enum_c_mod);
     translate_mod.addImport("tracy", tracy.module("tracy"));
 
     textureSet_mod.addImport("stb_image", stb_image_mod);
-    textureSet_mod.addImport("vulkan", vk_mod);
+    textureSet_mod.addImport("vulkan", vk_c_mod);
     textureSet_mod.addImport("memoryPool", memoryPool_mod);
     textureSet_mod.addImport("video", video_mod);
     textureSet_mod.addImport("global", global_mod);
@@ -369,20 +419,21 @@ pub fn build(b: *std.Build) void {
     textureSet_mod.addImport("processRender", processRender_mod);
     textureSet_mod.addIncludePath(b.path("include"));
 
-    debug_mod.addImport("vulkan", vk_mod);
+    debug_mod.addImport("vulkan", vk_c_mod);
     debug_mod.addImport("resultToError", resultToError_mod);
 
     stableArray_mod.addImport("tracy", tracy.module("tracy"));
 
     stb_image_mod.addIncludePath(b.path("include"));
 
+    vma_c.addIncludePath(b.path("include"));
     vma_mod.addIncludePath(b.path("include"));
 
-    vk_types_mod.addImport("vulkan", vk_mod);
+    vk_types_mod.addImport("vulkan", vk_c_mod);
 
     video_mod.addImport("sdl", sdl_mod);
     video_mod.addImport("vma", vma_mod);
-    video_mod.addImport("vulkan", vk_mod);
+    video_mod.addImport("vulkan", vk_c_mod);
     video_mod.addImport("translate", translate_mod);
     video_mod.addImport("enumFromC", enum_c_mod);
     video_mod.addImport("textureSet", textureSet_mod);
@@ -404,7 +455,7 @@ pub fn build(b: *std.Build) void {
     memoryPool_mod.addImport("tracy", tracy.module("tracy"));
 
     processRender_mod.addImport("video", video_mod);
-    processRender_mod.addImport("vulkan", vk_mod);
+    processRender_mod.addImport("vulkan", vk_c_mod);
     processRender_mod.addImport("textureSet", textureSet_mod);
     processRender_mod.addImport("queue", queue_mod);
     processRender_mod.addImport("global", global_mod);
@@ -421,10 +472,14 @@ pub fn build(b: *std.Build) void {
     global_mod.addImport("processRender", processRender_mod);
     global_mod.addImport("textureSet", textureSet_mod);
     global_mod.addImport("handle", handle_mod);
+    global_mod.addImport("math", math_mod);
+    global_mod.addImport("vertexStruct", vertexStruct_mod);
 
     fileSystem_mod.addImport("sqlDb", sqliteModule);
     fileSystem_mod.addImport("global", global_mod);
     fileSystem_mod.addImport("tables", tables_mod);
+    fileSystem_mod.addImport("types", fileTypes_mod);
+    fileSystem_mod.addImport("vulkan", vk_c_mod);
     fileSystem_mod.addImport("tracy", tracy.module("tracy"));
     fileSystem_mod.addIncludePath(b.path("include"));
 
@@ -446,7 +501,7 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("handle", handle_mod);
     exe_mod.addImport("sdl", sdl_mod);
     exe_mod.addImport("rendering", rendering_mod);
-    exe_mod.addImport("vulkan", vk_mod);
+    exe_mod.addImport("vulkan", vk_c_mod);
     exe_mod.addImport("math", math_mod);
     // exe_mod.addImport("cgltf", cgltf_mod);
     exe_mod.addIncludePath(b.path("include/"));
@@ -488,7 +543,7 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(genFileNameIDexe);
 
-    const gen_exe = b.addExecutable(.{ .name = "gen", .root_module = gen_mod });
+    // const gen_exe = b.addExecutable(.{ .name = "gen", .root_module = gen_mod });
 
     const exe = b.addExecutable(.{
         .name = "game",
@@ -594,8 +649,8 @@ pub fn build(b: *std.Build) void {
     const runGenFileNameIdExe_cmd = b.addRunArtifact(genFileNameIDexe);
     runGenFileNameIdExe_cmd.addArg(b.fmt("{s}/{s}", .{ root_path, "src/fileSystem/fileNameID.zig" }));
 
-    const run_gen_exe = b.addRunArtifact(gen_exe);
-    run_gen_exe.addArg(b.fmt("{s}/{s}", .{ root_path, "src/video/resultToError.zig" }));
+    // const run_gen_exe = b.addRunArtifact(gen_exe);
+    // run_gen_exe.addArg(b.fmt("{s}/{s}", .{ root_path, "src/video/resultToError.zig" }));
 
     const waf = b.addWriteFiles();
     _ = waf.addCopyFile(exe.getEmittedAsm(), "main.asm");
@@ -645,13 +700,13 @@ pub fn build(b: *std.Build) void {
     runGenFileNameIdExe.dependOn(&runGenFileNameIdExe_cmd.step);
     runGenFileNameIdExe_cmd.step.dependOn(runContenManager);
 
-    run_gen_exe.step.dependOn(&gen_exe.step);
+    // run_gen_exe.step.dependOn(&gen_exe.step);
 
     // copy_sdl3_header.step.dependOn(sdl3_lib_install_step);
 
     // exe.step.dependOn(&copy_sdl3_header.step);
     exe.step.dependOn(sdl3_lib_install_step);
-    exe.step.dependOn(&run_gen_exe.step);
+    // exe.step.dependOn(&run_gen_exe.step);
     exe.step.dependOn(runGenFileNameIdExe);
     exe.step.dependOn(runContenManager);
     exe.step.dependOn(meshopt_lib_install_step);

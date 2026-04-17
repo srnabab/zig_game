@@ -27,22 +27,12 @@ const kv = struct {
     ID: i32,
 };
 
-var gpa: std.mem.Allocator = undefined;
-var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
-pub fn main() !void {
-    const start = std.time.nanoTimestamp();
+pub fn main(init: std.process.Init) !void {
+    const start = std.Io.Timestamp.now(init.io, .real).toNanoseconds();
 
-    gpa, const is_debug = gpa: {
-        break :gpa switch (builtin.mode) {
-            .Debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
-            .ReleaseFast, .ReleaseSmall => .{ std.heap.smp_allocator, false },
-        };
-    };
-    defer if (is_debug) {
-        _ = debug_allocator.deinit();
-    };
+    const gpa = init.gpa;
 
-    var it = try std.process.argsWithAllocator(gpa);
+    var it = try init.minimal.args.iterateAllocator(gpa);
     defer it.deinit();
 
     var root: [256:0]u8 = undefined;
@@ -57,8 +47,8 @@ pub fn main() !void {
     const index = std.mem.lastIndexOf(u8, &root, slash) orelse 0;
     @memset(root[index..root.len], 0);
 
-    var cwd = try std.fs.openDirAbsolute(&root, .{});
-    try cwd.setAsCwd();
+    const cwd = try std.Io.Dir.openDirAbsolute(init.io, &root, .{});
+    try std.process.setCurrentDir(init.io, cwd);
 
     var db: ?*sqlite.sqlite3 = null;
     if (sqlite.sqlite3_open("Content.db", @ptrCast(&db)) != sqlite.SQLITE_OK) return error.SQLError;
@@ -82,8 +72,8 @@ pub fn main() !void {
 
     try ContentPathT.gets("ID,FileName", null, null, .{}, ptrs[0..kvs.len], &types);
 
-    const file = try std.fs.createFileAbsolute(outputPath, .{ .read = true });
-    defer file.close();
+    const file = try std.Io.Dir.createFileAbsolute(init.io, outputPath, .{ .read = true });
+    defer file.close(init.io);
 
     var buffer = [_]u8{0} ** 102400;
     const content = "const std = @import(\"std\");\n\nconst FileNameIdHashMap = map: {\nconst KV = struct {\n[]const u8,i64,\n};\nconst list = [_]KV{\n";
@@ -108,9 +98,13 @@ pub fn main() !void {
     const cPtr = @as([*c]u8, &buffer);
     const nameLen = std.mem.len(cPtr);
 
-    _ = try file.write(buffer[0..nameLen]);
+    // _ = try file.write(buffer[0..nameLen]);
+    var buffer2 = [_]u8{0} ** 256;
+    var fileWriter = file.writer(init.io, &buffer2);
+    _ = try fileWriter.interface.write(buffer[0..nameLen]);
+    try fileWriter.interface.flush();
 
-    const endTime = std.time.nanoTimestamp();
+    const endTime = std.Io.Timestamp.now(init.io, .real).toNanoseconds();
 
     std.log.info("create file name to id map time: {d}ms", .{@as(f128, @floatFromInt(endTime - start)) / @as(f128, @floatFromInt(std.time.ns_per_ms))});
 }

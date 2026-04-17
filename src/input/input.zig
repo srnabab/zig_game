@@ -3,11 +3,12 @@ const std = @import("std");
 const sdl = @import("sdl").sdl;
 const SDL_EventType = @import("sdl").SDL_EventType;
 const SDL_Keycode = @import("sdl").SDL_Keycode;
+const SDL_Scancode = @import("sdl").SDL_Scancode;
 
 pub const Key = struct {
     down: bool = false,
     repeat: bool = false,
-    key: sdl.SDL_Keycode = 0,
+    key: sdl.SDL_Scancode = 0,
     timestamp: u64 = 0,
 };
 
@@ -81,7 +82,7 @@ mouseWheel: MouseWheel,
 gamepadAxis: [sdl.SDL_GAMEPAD_AXIS_COUNT]GamePadAxis,
 gamepadButtons: [sdl.SDL_GAMEPAD_BUTTON_COUNT]GamePadButton,
 
-mutex: std.Thread.Mutex = .{},
+mutex: std.Io.Mutex = .init,
 
 inputQueue: std.array_list.Managed(Input),
 
@@ -108,7 +109,7 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
     mem.mouse = .{};
     mem.mouseWheel = .{};
     mem.inputQueue = .init(allocator);
-    mem.mutex = .{};
+    mem.mutex = .init;
 
     return mem;
 }
@@ -117,7 +118,7 @@ pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
     allocator.destroy(self);
 }
 
-pub fn setInput(self: *Self, event: *sdl.SDL_Event) !void {
+pub fn setInput(self: *Self, io: std.Io, event: *sdl.SDL_Event) !void {
     // const eventType: SDL_EventType = @enumFromInt(event.type);
 
     switch (event.type) {
@@ -126,11 +127,11 @@ pub fn setInput(self: *Self, event: *sdl.SDL_Event) !void {
                 .down = event.key.down,
                 .repeat = event.key.repeat,
                 .timestamp = event.key.timestamp,
-                .key = event.key.key,
+                .key = event.key.scancode,
             };
 
-            self.mutex.lock();
-            defer self.mutex.unlock();
+            try self.mutex.lock(io);
+            defer self.mutex.unlock(io);
 
             try self.inputQueue.append(.{ .key = self.keys[event.key.scancode] });
         },
@@ -139,28 +140,42 @@ pub fn setInput(self: *Self, event: *sdl.SDL_Event) !void {
                 .down = event.key.down,
                 .repeat = event.key.repeat,
                 .timestamp = event.key.timestamp,
-                .key = event.key.key,
+                .key = event.key.scancode,
             };
 
-            self.mutex.lock();
-            defer self.mutex.unlock();
+            try self.mutex.lock(io);
+            defer self.mutex.unlock(io);
 
             try self.inputQueue.append(.{ .key = self.keys[event.key.scancode] });
+        },
+        sdl.SDL_EVENT_MOUSE_MOTION => {
+            self.mouse = .{
+                .x = event.motion.x,
+                .y = event.motion.y,
+                .relX = event.motion.xrel,
+                .relY = event.motion.yrel,
+                .timestamp = event.motion.timestamp,
+            };
+
+            try self.mutex.lock(io);
+            defer self.mutex.unlock(io);
+
+            try self.inputQueue.append(.{ .mouse = self.mouse });
         },
         else => {},
     }
 }
 
-pub fn getCurrentInput(self: *Self) ![]Input {
-    self.mutex.lock();
-    defer self.mutex.unlock();
+pub fn getCurrentInput(self: *Self, io: std.Io) ![]Input {
+    try self.mutex.lock(io);
+    defer self.mutex.unlock(io);
 
     return self.inputQueue.toOwnedSlice();
 }
 
-pub fn releaseCurrentInput(self: *Self, inputs: []Input) void {
-    self.mutex.lock();
-    defer self.mutex.unlock();
+pub fn releaseCurrentInput(self: *Self, io: std.Io, inputs: []Input) !void {
+    try self.mutex.lock(io);
+    defer self.mutex.unlock(io);
 
     self.inputQueue.allocator.free(inputs);
 }
@@ -171,6 +186,6 @@ pub fn logKey(key: *Key) void {
         key.repeat,
         key.timestamp,
         // key.key,
-        @tagName(@as(SDL_Keycode, @enumFromInt(key.key))),
+        @tagName(@as(SDL_Scancode, @enumFromInt(key.key))),
     });
 }

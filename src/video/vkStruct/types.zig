@@ -1,4 +1,4 @@
-const vk = @import("vulkan").vulkan;
+const vk = @import("vulkan");
 
 pub const VkQueueFamily = struct {
     familyIndice: i32 = -1,

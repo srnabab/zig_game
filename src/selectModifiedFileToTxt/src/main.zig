@@ -4,8 +4,6 @@ const json = std.json;
 
 const builtin = @import("builtin");
 
-// const git2 = @cImport(@cInclude("git2.h"));
-
 const folderPath_Hash_Pair = struct {
     path: []const u8,
     hash: []const u8,
@@ -17,7 +15,7 @@ const cachePath = "cache.json";
 var cacheMap: std.StringHashMap([]u8) = undefined;
 
 var debug_allocator: std.heap.DebugAllocator(.{ .stack_trace_frames = 10 }) = .init;
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
     var buffer1 = [_]u8{0} ** 1024;
     var buffer2 = [_]u8{0} ** 1024;
     var buffer3 = [_]u8{0} ** 1024;
@@ -40,8 +38,7 @@ pub fn main() !void {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    const args = try process.argsAlloc(gpa);
-    defer process.argsFree(gpa, args);
+    const args = try init.minimal.args.toSlice(arenaAllocator);
 
     if (args.len < 3) {
         std.log.info(".exe [root dir] [relative to root folder] (output file path)", .{});
@@ -51,7 +48,7 @@ pub fn main() !void {
     const root_dir = args[1];
     const dest_folder_path = args[2];
 
-    var ouput_file: [:0]u8 = undefined;
+    var ouput_file: [:0]const u8 = undefined;
     if (args.len > 3) {
         ouput_file = args[3];
     } else {
@@ -62,28 +59,28 @@ pub fn main() !void {
     //     std.log.info("arg: {s}", .{arg});
     // }
 
-    var cwd = try std.fs.cwd().openDir(root_dir, .{});
-    defer cwd.close();
+    var cwd = try std.Io.Dir.cwd().openDir(init.io, root_dir, .{});
+    defer cwd.close(init.io);
 
-    try cwd.setAsCwd();
+    try std.process.setCurrentDir(init.io, cwd);
 
-    var dest_dir = try cwd.openDir(dest_folder_path, .{ .iterate = true });
-    defer dest_dir.close();
+    var dest_dir = try cwd.openDir(init.io, dest_folder_path, .{ .iterate = true });
+    defer dest_dir.close(init.io);
 
-    var cacheFile = std.fs.cwd().openFile(cachePath, .{
+    var cacheFile = std.Io.Dir.cwd().openFile(init.io, cachePath, .{
         .mode = .read_write,
     }) catch |err| switch (err) {
-        error.FileNotFound => try std.fs.cwd().createFile(cachePath, .{
+        error.FileNotFound => try std.Io.Dir.cwd().createFile(init.io, cachePath, .{
             .read = true,
             .truncate = false,
         }),
         else => return err,
     };
-    defer cacheFile.close();
+    defer cacheFile.close(init.io);
 
     var initCacheCount: u32 = 0;
-    var cacheFileReader = cacheFile.reader(&buffer1);
-    const cacheFileStat = try cacheFile.stat();
+    var cacheFileReader = cacheFile.reader(init.io, &buffer1);
+    const cacheFileStat = try cacheFile.stat(init.io);
     if (cacheFileStat.size != 0) {
         const cacheContent = try cacheFileReader.interface.readAlloc(gpa, cacheFileStat.size);
         defer gpa.free(cacheContent);
@@ -91,8 +88,8 @@ pub fn main() !void {
         var cacheJson: json.Parsed([]folderPath_Hash_Pair) = try json.parseFromSlice([]folderPath_Hash_Pair, gpa, cacheContent, .{});
         defer cacheJson.deinit();
 
-        try cacheFile.setEndPos(0);
-        try cacheFile.seekTo(0);
+        try cacheFile.setLength(init.io, 0);
+        try cacheFileReader.seekTo(0);
 
         for (cacheJson.value) |value| {
             const tempStr = try arenaAllocator.dupe(u8, value.path);
@@ -102,26 +99,26 @@ pub fn main() !void {
         }
     }
 
-    var outputFile = try std.fs.cwd().createFile(ouput_file, .{ .truncate = true });
-    defer outputFile.close();
+    var outputFile = try std.Io.Dir.cwd().createFile(init.io, ouput_file, .{ .truncate = true });
+    defer outputFile.close(init.io);
 
-    var outputFileWriter = outputFile.writer(&buffer2);
+    var outputFileWriter = outputFile.writer(init.io, &buffer2);
 
     var hasher = std.hash.Wyhash.init(987461);
 
     var folderIt = dest_dir.iterate();
-    while (try folderIt.next()) |entry| {
+    while (try folderIt.next(init.io)) |entry| {
         switch (entry.kind) {
             .file => {
                 const path = try std.fs.path.join(arenaAllocator, &.{ dest_folder_path, entry.name });
 
-                const file = try cwd.openFile(path, .{});
-                defer file.close();
+                const file = try cwd.openFile(init.io, path, .{});
+                defer file.close(init.io);
 
-                var fileReader = file.reader(&buffer4);
+                var fileReader = file.reader(init.io, &buffer4);
                 defer @memset(&buffer4, 0);
 
-                const fileStat = try file.stat();
+                const fileStat = try file.stat(init.io);
                 const content = try fileReader.interface.readAlloc(gpa, fileStat.size);
                 defer gpa.free(content);
 
@@ -170,7 +167,7 @@ pub fn main() !void {
         initCacheCount -= 1;
     }
 
-    var cacheFileWriter = cacheFile.writer(&buffer3);
+    var cacheFileWriter = cacheFile.writer(init.io, &buffer3);
     var stringify = std.json.Stringify{ .writer = &cacheFileWriter.interface, .options = .{ .whitespace = .indent_tab } };
     try stringify.write(jsonValue);
     try cacheFileWriter.interface.flush();

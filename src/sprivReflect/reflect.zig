@@ -1,6 +1,6 @@
 const std = @import("std");
-const s = @cImport(@cInclude("spirv_reflect/spirv_reflect.h"));
-pub const vk = @cImport(@cInclude("vulkan/vulkan.h"));
+const s = @import("spriv_reflect");
+pub const vk = @import("vulkan");
 const efc = @import("EnumC");
 const assert = std.debug.assert;
 
@@ -65,7 +65,7 @@ const shaderInfo = struct {
     }
 };
 
-pub fn reflect(allocator: std.mem.Allocator, cc: std.fs.File.Stat, content: []const u8) !shaderInfo {
+pub fn reflect(allocator: std.mem.Allocator, cc: std.Io.File.Stat, content: []const u8) !shaderInfo {
     var res: shaderInfo = undefined;
 
     var spv_result: s.SpvReflectResult = 0;

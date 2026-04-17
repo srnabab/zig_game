@@ -3,7 +3,9 @@ const sqlite = sqlDB.sqlite;
 const std = @import("std");
 const assert = std.debug.assert;
 const tables = @import("tables");
+const vertexStruct = @import("vertexStruct");
 const fileNameID = @import("fileNameID.zig");
+const Types = @import("types");
 
 pub const comptimeGetID = fileNameID.comptimeGetID;
 pub const getID = fileNameID.getID;
@@ -49,7 +51,7 @@ pub fn init(databaseName: []const u8) void {
     ImageLoadParameterT = ImageLoadParameter.init(db.?);
 }
 
-pub fn getFile(id: i64, cwd: std.fs.Dir) !std.fs.File {
+pub fn getFile(io: std.Io, id: i64, cwd: std.Io.Dir) !std.Io.File {
     var buffer = [_]u8{0} ** 256;
 
     try getRelativePath(id, &buffer);
@@ -58,23 +60,10 @@ pub fn getFile(id: i64, cwd: std.fs.Dir) !std.fs.File {
 
     std.log.debug("open file {s}", .{buffer[0..len]});
 
-    return cwd.openFile(buffer[0..len], .{});
+    return cwd.openFile(io, buffer[0..len], .{});
 }
 
-pub const FileType = enum {
-    DIR,
-    OBJ,
-    MTL,
-    PNG,
-    TSDI,
-    TSD,
-    TTF,
-    WAV,
-    SPV,
-    TXT,
-    HASHTABLE,
-    UNKNOWN,
-};
+pub const FileType = Types.FileType;
 
 pub fn getFileType(id: i32) sqlDB.sqliteError!FileType {
     var res: i64 = 0;
@@ -88,7 +77,7 @@ pub fn getFileType(id: i32) sqlDB.sqliteError!FileType {
     return @enumFromInt(res);
 }
 
-const vk = @cImport(@cInclude("vulkan/vulkan.h"));
+const vk = @import("vulkan");
 
 // pub const PipelineShaderInfo = struct {
 //     const Self = @This();
@@ -116,12 +105,16 @@ const vk = @cImport(@cInclude("vulkan/vulkan.h"));
 //     }
 // };
 
-const imageLoad = struct {
-    relativePath: [256]u8,
+pub const Image = struct {
     format: vk.VkFormat,
     tiling: vk.VkImageTiling,
     usage: vk.VkImageUsageFlags,
     properties: vk.VkMemoryPropertyFlags,
+};
+
+const imageLoad = struct {
+    relativePath: [256]u8,
+    image: Image,
 };
 
 pub fn getImageLoadParam(id: i32) !imageLoad {
@@ -145,11 +138,73 @@ pub fn getImageLoadParam(id: i32) !imageLoad {
             try ImageLoadParameterT.get("RelativePath,Format,Tiling,Usage,Properties", null, "ID = ?", .{id}, &ptrs, &types);
 
             return imageLoad{
-                .format = format,
-                .tiling = tiling,
-                .usage = usage,
-                .properties = properties,
+                .image = .{
+                    .format = format,
+                    .tiling = tiling,
+                    .usage = usage,
+                    .properties = properties,
+                },
                 .relativePath = buffer,
+            };
+        },
+        else => {
+            return error.fileTypeError;
+        },
+    }
+}
+
+pub const Mesh = struct {
+    verticesSize: usize,
+    meshletsSize: usize,
+    meshletVerticesSize: usize,
+    meshletTrianglesSize: usize,
+    vertexType: vertexStruct.VertexType,
+};
+
+const meshLoad = struct {
+    relativePath: [256]u8,
+    mesh: Mesh,
+};
+
+pub fn getMeshLoadParam(id: i32) !meshLoad {
+    const fType = try getFileType(id);
+    switch (fType) {
+        .VTX => {
+            var ptrs: [6]*anyopaque = undefined;
+            var buffer = [_]u8{0} ** 256;
+            var verticesSize: usize = 0;
+            var meshletsSize: usize = 0;
+            var meshletVerticesSize: usize = 0;
+            var meshletTrianglesSize: usize = 0;
+            var vertexType: vertexStruct.VertexType = .none;
+
+            ptrs[0] = @ptrCast(&buffer);
+            ptrs[1] = @ptrCast(&vertexType);
+            ptrs[2] = @ptrCast(&verticesSize);
+            ptrs[3] = @ptrCast(&meshletsSize);
+            ptrs[4] = @ptrCast(&meshletVerticesSize);
+            ptrs[5] = @ptrCast(&meshletTrianglesSize);
+
+            var types = [_]sqlDB.innerType{ .TEXT, .INTEGER, .INTEGER, .INTEGER, .INTEGER, .INTEGER32 };
+
+            try ImageLoadParameterT.get(
+                "RelativePath,VertexType,VerticesSize,MeshletsSize,MeshletVertiecsSize,MeshletTrianglesSize",
+                null,
+                "ID = ?",
+                .{id},
+                &ptrs,
+                &types,
+            );
+
+            return meshLoad{
+                .relativePath = buffer,
+                .mesh = .{
+                    .vertexType = vertexType,
+                    .meshletsSize = meshletsSize,
+                    .meshletTrianglesSize = meshletTrianglesSize,
+                    .meshletVerticesSize = meshletVerticesSize,
+                    .verticesSize = verticesSize,
+                },
             };
         },
         else => {

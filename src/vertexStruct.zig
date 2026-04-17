@@ -1,10 +1,21 @@
-pub const cglm = @import("cglm").cglm;
+pub const cglm = @import("cglm");
+
+const std = @import("std");
 
 pub const vec4 = cglm.vec4;
 pub const vec3 = cglm.vec3;
 pub const vec2 = cglm.vec2;
 pub const mat3 = cglm.mat3;
 pub const mat4 = cglm.mat4;
+
+const Self = @This();
+
+pub const Meshlet = extern struct {
+    vertexOffset: u32,
+    primitiveOffset: u32,
+    vertexCount: u32,
+    primitiveCount: u32,
+};
 
 pub const Vertex_f3pf3nf2u = extern struct {
     position: vec3,
@@ -44,10 +55,10 @@ pub const Vertex = union(VertexType) {
 
 pub fn enumToType(vType: VertexType) type {
     switch (vType) {
-        .f3p => Vertex_f3p,
-        .f3pf2u => Vertex_f3pf2u,
-        .f3pf3n => Vertex_f3pf3n,
-        .f3pf3nf2u => Vertex_f3pf3nf2u,
-        .none => void,
+        .none => return void,
+        inline else => {
+            const name = std.fmt.comptimePrint("Vertex_{s}", @tagName(vType));
+            return @field(Self, name);
+        },
     }
 }
