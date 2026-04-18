@@ -16,22 +16,32 @@ const global = @import("global");
 const tracy = @import("tracy");
 const math = @import("math");
 
-// pub const Allocation = union {
+const assert = std.debug.assert;
 
-//         t: vma.VmaAllocation,
-//         v: vma.VmaVirtualAllocation,
-// };
+const AllocationType = enum {
+    real,
+    virtual,
+    block,
+};
+
+pub const Allocation = union(AllocationType) {
+    real: vma.VmaAllocation,
+    virtual: vma.VmaVirtualAllocation,
+    block: void,
+};
 
 pub const Buffer = struct {
+    pMappedData: ?*anyopaque = @import("std").mem.zeroes(?*anyopaque),
+    virtualBlock: vma.VmaVirtualBlock = null,
     vkBuffer: vk.VkBuffer,
+
     /// VmaAllocation, VmaVirtualAllocation
-    allocation: vma.VmaAllocation,
+    allocation: Allocation,
     size: vk.VkDeviceSize,
     stride: vk.VkDeviceSize = 0,
-    pMappedData: ?*anyopaque = @import("std").mem.zeroes(?*anyopaque),
     queueIndex: QueueType = .init,
     usage: Usage = .none,
-    isVirtual: bool = false,
+    offset: vk.VkDeviceSize = 0,
 
     pub fn changeQueueIndex(self: *Buffer, queueType: QueueType) void {
         self.queueIndex = queueType;
@@ -57,8 +67,20 @@ pub fn init(allocator: std.mem.Allocator) Self {
 pub fn deinit(self: *Self, vmaa: *vmaStruct) void {
     for (self.buffers.items.items) |value| {
         if (value == .data) {
-            _ = vmaa.vmaBufferAllocations.fetchSub(1, .seq_cst);
-            vma.vmaDestroyBuffer(vmaa.vmaAllocator, @ptrCast(value.data.vkBuffer), value.data.allocation);
+            switch (value.data.allocation) {
+                .block => {
+                    vma.vmaDestroyVirtualBlock(value.data.virtualBlock);
+                },
+                .real => {
+                    _ = vmaa.vmaBufferAllocations.fetchSub(1, .seq_cst);
+                    vma.vmaDestroyBuffer(
+                        vmaa.vmaAllocator,
+                        @ptrCast(value.data.vkBuffer),
+                        @ptrCast(value.data.allocation.real),
+                    );
+                },
+                .virtual => {},
+            }
         }
     }
     self.buffers.deinit();
@@ -114,12 +136,18 @@ pub fn _createBuffer(
     var pAllocation: vma.VmaAllocation = null;
     var allocationInfo = vma.VmaAllocationInfo{};
 
-    try vmaa._createBuffer(@ptrCast(&bufferCreateInfo), @ptrCast(&allocationCreateInfo), @ptrCast(&pBuffer), @ptrCast(&pAllocation), @ptrCast(&allocationInfo));
+    try vmaa._createBuffer(
+        @ptrCast(&bufferCreateInfo),
+        @ptrCast(&allocationCreateInfo),
+        @ptrCast(&pBuffer),
+        @ptrCast(&pAllocation),
+        @ptrCast(&allocationInfo),
+    );
 
     const pack = try self.buffers.addOne();
     pack.ptr.* = Buffer{
         .vkBuffer = pBuffer,
-        .allocation = pAllocation,
+        .allocation = .{ .real = pAllocation },
         // .info = allocationInfo,
         .size = allocationInfo.size,
         .pMappedData = allocationInfo.pMappedData,
@@ -142,7 +170,9 @@ pub fn destroyBuffer(
     const index = getIndex(buffer);
     const ptr = self.buffers.get(index);
 
-    vmaa.destroyBuffer(ptr.vkBuffer, ptr.allocation);
+    assert(ptr.allocation == .real);
+
+    vmaa.destroyBuffer(ptr.vkBuffer, ptr.allocation.real);
 
     self.buffers.remove(index);
     handles.destroyHandle(buffer);
@@ -301,4 +331,106 @@ pub fn getBufferContent(self: *Self, buffer: Buffer_t) Buffer {
     const ptr = self.buffers.get(index);
 
     return ptr.*;
+}
+
+pub fn createVirtualBlockBuffer(
+    self: *Self,
+    pAllocationCallBacks: [*c]vk.VkAllocationCallbacks,
+    flags: u32,
+    size: u64,
+    buffer: Buffer_t,
+    offset: vk.VkDeviceSize,
+    stride: vk.VkDeviceSize,
+    handles: *global.HandlesType,
+) !Buffer_t {
+    var block: vma.VmaVirtualBlock = null;
+
+    try vmaStruct._createVirtualBlock(
+        pAllocationCallBacks,
+        flags,
+        size,
+        &block,
+    );
+
+    const index = getIndex(buffer);
+    const ptr = self.buffers.get(index);
+
+    const pack = try self.buffers.addOne();
+    pack.ptr.* = Buffer{
+        .vkBuffer = ptr.vkBuffer,
+        .allocation = .{ .block = void{} },
+        .size = size,
+        .pMappedData = ptr.pMappedData,
+        .queueIndex = ptr.queueIndex,
+        .usage = ptr.usage,
+        .stride = stride,
+        .offset = offset + ptr.offset,
+        .virtualBlock = block,
+    };
+
+    const handle = handles.createHandle(@intCast(pack.index));
+
+    return handle;
+}
+
+pub fn createVirtualBuffer(
+    self: *Self,
+    blockBuffer: Buffer_t,
+    flags: u32,
+    size: u64,
+    alignment: u64,
+    handles: *global.HandlesType,
+) !Buffer_t {
+    const index = getIndex(blockBuffer);
+    const ptr = self.buffers.get(index);
+
+    assert(ptr.virtualBlock != null);
+
+    var allocation: vma.VmaVirtualAllocation = null;
+    var offset: vk.VkDeviceSize = 0;
+
+    vmaStruct._virtualAlloc(
+        ptr.virtualBlock,
+        null,
+        flags,
+        size,
+        alignment,
+        &allocation,
+        &offset,
+    );
+
+    const pack = try self.buffers.addOne();
+    pack.ptr.* = Buffer{
+        .vkBuffer = ptr.vkBuffer,
+        .allocation = .{ .virtual = allocation },
+        .size = size,
+        .pMappedData = ptr.pMappedData,
+        .queueIndex = ptr.queueIndex,
+        .usage = ptr.usage,
+        .stride = ptr.stride,
+        .offset = ptr.offset + offset,
+        .virtualBlock = null,
+    };
+
+    const handle = handles.createHandle(@intCast(pack.index));
+
+    return handle;
+}
+
+pub fn destroyVirtualBlockBuffer(self: *Self, buffer: Buffer_t) void {
+    const index = getIndex(buffer);
+    const ptr = self.buffers.get(index);
+
+    assert(ptr.allocation == .block);
+
+    vma.vmaDestroyVirtualBlock(ptr.virtualBlock);
+}
+
+pub fn destroyVirtualBuffer(self: *Self, buffer: Buffer_t) void {
+    const index = getIndex(buffer);
+    const ptr = self.buffers.get(index);
+
+    assert(ptr.allocation == .virtual);
+
+    vma.vmaVirtualFree(ptr.virtualBlock, ptr.allocation.virtual);
 }

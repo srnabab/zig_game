@@ -69,7 +69,7 @@ pub fn init(vulkan_t: *vkStruct, graphic: *Commands) !void {
             .size = vulkan.buffers.getBufferSize(indexBuffer2D),
         }};
 
-        try graphic.addCommand(.copyBuffer, .{ .copyBuffer = .{
+        try graphic.cacheCommand(.{ .copyBuffer = .{
             .srcBuffer = stagingBuffer,
             .dstBuffer = indexBuffer2D,
             .regions = &region,
@@ -181,7 +181,7 @@ pub fn upload(graphic: *Commands) !void {
             .size = bufferSize,
         }};
 
-        try graphic.addCommand(.copyBuffer, .{ .copyBuffer = .{
+        try graphic.cacheCommand(.{ .copyBuffer = .{
             .srcBuffer = stagingBuffer,
             .dstBuffer = vertexBuffer2D,
             .regions = &region,

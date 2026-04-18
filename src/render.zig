@@ -72,9 +72,6 @@ pub fn render_thread_func(
         std.debug.panic("error {s}", .{@errorName(err)});
     };
 
-    try vulkan.waitEndFence();
-    try commands.startCommand();
-
     try vertices.init(&vulkan, &commands);
     defer vertices.deinit();
 
@@ -96,12 +93,7 @@ pub fn render_thread_func(
         try vertices.upload(&commands);
     }
 
-    try commands.addCommandEnd();
-
     vulkan.writeCachedDescriptorSetResources();
-
-    try graphic.executeCommands(&commands);
-    vulkan.nextFrame();
 
     try vulkan.readPipelineFileAndAdd(io, comptime file.comptimeGetID("flat2d.pipeb"), .draw);
     try vulkan.readPipelineFileAndAdd(io, comptime file.comptimeGetID("directOut.pipeb"), .present);
@@ -205,7 +197,38 @@ pub fn render_thread_func(
     pData.* = pUIUbo;
 
     const ssbo_test = try vulkan.createStorageBuffer(global.MeshletStorageBufferSize);
-    _ = ssbo_test;
+    const ssbo_test_vertices = try vulkan.createVirtualBlockBuffer(
+        0,
+        global.StorageBufferVerticesSize,
+        ssbo_test,
+        0,
+        @sizeOf(vertexStruct.Vertex_f3pf3nf2u),
+    );
+    const ssbo_test_meshlets = try vulkan.createVirtualBlockBuffer(
+        0,
+        global.StorageBufferMeshletsSize,
+        ssbo_test,
+        global.StorageBufferVerticesEnd,
+        @sizeOf(vertexStruct.Meshlet),
+    );
+    const ssbo_test_meshletVertices = try vulkan.createVirtualBlockBuffer(
+        0,
+        global.StorageBufferMeshletVerticesSize,
+        ssbo_test,
+        global.StorageBufferMeshletsEnd,
+        @sizeOf(u32),
+    );
+    const ssbo_test_meshletTriangles = try vulkan.createVirtualBlockBuffer(
+        0,
+        global.StorageBufferMeshletTrianglesSize,
+        ssbo_test,
+        global.StorageBufferMeshletVerticesEnd,
+        @sizeOf(u8),
+    );
+    _ = ssbo_test_vertices;
+    _ = ssbo_test_meshlets;
+    _ = ssbo_test_meshletVertices;
+    _ = ssbo_test_meshletTriangles;
 
     try vulkan.addWriteDescriptorSetBuffer(
         0,
@@ -273,6 +296,7 @@ pub fn render_thread_func(
         try vulkan.waitEndFence();
 
         try commands.startCommand();
+        try commands.addCachedCommand();
         try commands.addCommand(.draw2D, .{ .draw2D = .{
             .pipeline = vulkan.getPipeline("flat2d").?,
             .pTexture = pTextureSet.getTexture(@intCast(file.getID("circle.png"))).?,

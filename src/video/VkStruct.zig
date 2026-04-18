@@ -3,9 +3,7 @@ const sdl = @import("sdl").sdl;
 const SDL_CheckResult = @import("sdl").SDL_CheckResult;
 const std = @import("std");
 const builtin = @import("builtin");
-const Mutex = std.Thread.Mutex;
 const Thread = std.Thread;
-const output = @import("output");
 const Allocator = std.mem.Allocator;
 const VkResultToError = @import("resultToError");
 pub const vulkanType = VkResultToError.vulkanType;
@@ -1537,6 +1535,42 @@ pub fn createUniformBuffer(self: *Self, bufferSize: vk.VkDeviceSize) !Buffer_t {
 
 pub fn createStorageBuffer(self: *Self, bufferSize: vk.VkDeviceSize) !Buffer_t {
     return self.buffers.createStorageBuffer(&self.vmaS, bufferSize, self.handles);
+}
+
+pub fn createVirtualBlockBuffer(
+    self: *Self,
+    flags: u32,
+    size: u64,
+    buffer: Buffer_t,
+    offset: vk.VkDeviceSize,
+    stride: vk.VkDeviceSize,
+) !Buffer_t {
+    return self.buffers.createVirtualBlockBuffer(
+        self.pAllocCallBacks,
+        flags,
+        size,
+        buffer,
+        offset,
+        stride,
+        self.handles,
+    );
+}
+
+pub fn createVirtualBuffer(
+    self: *Self,
+    blockBuffer: Buffer_t,
+    flags: u32,
+    size: u64,
+    alignment: u64,
+) !Buffer_t {
+    return self.buffers.createVirtualBuffer(
+        &self.vmaS,
+        blockBuffer,
+        flags,
+        size,
+        alignment,
+        self.handles,
+    );
 }
 
 pub fn destroyBuffer(self: *Self, buffer: Buffer_t) void {

@@ -226,8 +226,7 @@ pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Sample
     }
     // errdefer self.array.giveBack(texture);
 
-    try graphic.addCommand(
-        .copyBufferToImage,
+    try graphic.cacheCommand(
         .{ .copyBufferToImage = .{
             .pTexture = texture_t,
             .width = texture.source_width,

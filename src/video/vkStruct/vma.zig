@@ -136,3 +136,31 @@ pub fn destroyImage(self: *Self, image: vk.VkImage, allocation: vma.VmaAllocatio
     _ = self.vmaImageAllocations.fetchSub(1, .seq_cst);
     vma.vmaDestroyImage(self.vmaAllocator, @ptrCast(image), allocation);
 }
+
+pub fn _createVirtualBlock(pAllocationCallBacks: [*c]vk.VkAllocationCallbacks, flags: u32, size: vk.VkDeviceSize, pVirtualBlock: [*c]vma.VmaVirtualBlock) !void {
+    var info = vma.VmaVirtualBlockCreateInfo{
+        .flags = flags,
+        .pAllocationCallbacks = @ptrCast(pAllocationCallBacks),
+        .size = size,
+    };
+
+    try checkVkResult(vma.vmaCreateVirtualBlock(&info, pVirtualBlock));
+}
+
+pub fn destroyVirtualBlock(block: vma.VmaVirtualBlock) void {
+    vma.vmaDestroyVirtualBlock(block);
+}
+
+pub fn _virtualAlloc(block: vma.VmaVirtualBlock, pUserData: ?*anyopaque, flags: u32, size: u64, alignment: u64, pAllocation: [*c]vma.VmaVirtualAllocation, pOffset: [*c]vk.VkDeviceSize) !void {
+    var info = vma.VmaVirtualAllocationCreateInfo{
+        .size = size,
+        .alignment = alignment,
+        .flags = flags,
+        .pUserData = pUserData,
+    };
+
+    try checkVkResult(vma.vmaVirtualAllocate(block, &info, pAllocation, pOffset));
+}
+pub fn virtualFree(block: vma.VmaVirtualBlock, allocation: vma.VmaVirtualAllocation) void {
+    vma.vmaVirtualFree(block, allocation);
+}

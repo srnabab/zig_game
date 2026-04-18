@@ -813,6 +813,8 @@ pub const commands = struct {
     stackAllocators: [global.MaxFrameInFlight]std.heap.FixedBufferAllocator,
     stackAllocatorsIndex: u32 = 0,
 
+    cachedCommand: std.array_list.Managed(drawC.comm),
+
     end: bool = false,
 
     pub fn init(io: std.Io, allocator: std.mem.Allocator, buffers: []u8, vulkan: *VkStruct, pRendering: *rendering, pTextureSet: *texture) !Self {
@@ -842,6 +844,7 @@ pub const commands = struct {
             .u32Mem = try .initCapacity(allocator, 128),
             .allocator = allocator,
             .pTextureSet = pTextureSet,
+            .cachedCommand = .init(allocator),
         };
     }
 
@@ -852,6 +855,7 @@ pub const commands = struct {
         self.cacheMap.deinit();
         self.renderingMap.deinit();
         self.u32Mem.deinit(self.allocator);
+        self.cachedCommand.deinit();
     }
 
     pub fn clearRetainCapacity(self: *Self) void {
@@ -2780,6 +2784,8 @@ pub const commands = struct {
         const ID = node.ID;
         node.listID = try self.u32Mem.create(self.allocator);
 
+        std.log.debug("{d}, {s}", .{ ID, @tagName(commandType) });
+
         node.listID.?.* = 0;
 
         self.nodeDag.currentListID = node.listID;
@@ -3301,6 +3307,33 @@ pub const commands = struct {
         nodeDagPrint(&self.nodeDag, self);
 
         self.end = true;
+    }
+
+    pub fn cacheCommand(self: *Self, command: drawC.comm) !void {
+        try self.mutex.lock(self.io);
+        defer self.mutex.unlock(self.io);
+
+        const ptr = try self.cachedCommand.addOne();
+        ptr.* = command;
+
+        const allocator = self.stackAllocators[self.stackAllocatorsIndex].allocator();
+
+        switch (command) {
+            .copyBuffer => {
+                ptr.copyBuffer.regions = try allocator.dupe(vk.VkBufferCopy2, command.copyBuffer.regions);
+            },
+            else => {},
+        }
+    }
+
+    pub fn addCachedCommand(self: *Self) !void {
+        if (self.cachedCommand.items.len == 0) return;
+
+        defer self.cachedCommand.clearRetainingCapacity();
+        for (self.cachedCommand.items) |comm| {
+            std.log.debug("{s}", .{@tagName(@as(drawC.PublicCommandType, @enumFromInt(@intFromEnum(std.meta.activeTag(comm)))))});
+            try self.addCommand(@enumFromInt(@intFromEnum(std.meta.activeTag(comm))), comm);
+        }
     }
 };
 

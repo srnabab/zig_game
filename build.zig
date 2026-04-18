@@ -483,6 +483,7 @@ pub fn build(b: *std.Build) void {
     fileSystem_mod.addImport("tracy", tracy.module("tracy"));
     fileSystem_mod.addIncludePath(b.path("include"));
 
+    exe_mod.addImport("vertexStruct", vertexStruct_mod);
     exe_mod.addImport("ECS", ecs_mod);
     exe_mod.addImport("input", input_mod);
     exe_mod.addImport("cglm", cglm_mod);

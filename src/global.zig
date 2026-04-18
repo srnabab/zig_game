@@ -30,10 +30,15 @@ pub const EngineVersionPatch = 125;
 
 pub const MaxFrameInFlight = 3;
 
-pub const StorageBufferVerticesEnd = math.round(16, @sizeOf(vertexStruct.Vertex_f3pf3nf2u) * 4000);
-pub const StorageBufferMeshletsEnd = math.round(16, @sizeOf(vertexStruct.Meshlet) * 4000) + StorageBufferVerticesEnd;
-pub const StorageBufferMeshletVerticesEnd = math.round(16, @sizeOf(u32) * 4000) + StorageBufferMeshletsEnd;
-pub const StorageBufferMeshletTrianglesEnd = math.round(16, @sizeOf(u8) * 4000) + StorageBufferMeshletVerticesEnd;
+pub const StorageBufferVerticesSize = math.round(16, @sizeOf(vertexStruct.Vertex_f3pf3nf2u) * 4000);
+pub const StorageBufferMeshletsSize = math.round(16, @sizeOf(vertexStruct.Meshlet) * 4000);
+pub const StorageBufferMeshletVerticesSize = math.round(16, @sizeOf(u32) * 4000);
+pub const StorageBufferMeshletTrianglesSize = math.round(16, @sizeOf(u8) * 4000);
+
+pub const StorageBufferVerticesEnd = StorageBufferVerticesSize;
+pub const StorageBufferMeshletsEnd = StorageBufferMeshletsSize + StorageBufferVerticesEnd;
+pub const StorageBufferMeshletVerticesEnd = StorageBufferMeshletVerticesSize + StorageBufferMeshletsEnd;
+pub const StorageBufferMeshletTrianglesEnd = StorageBufferMeshletTrianglesSize + StorageBufferMeshletVerticesEnd;
 
 pub const MeshletStorageBufferSize = StorageBufferMeshletTrianglesEnd;
 
