@@ -15,6 +15,7 @@ pub const CommandType = enum {
     copyBuffer,
     copyBufferToImage,
     draw2D,
+    drawMesh,
     empty,
     end,
     endRecord,
@@ -41,6 +42,7 @@ pub const comm = union(CommandType) {
     copyBuffer: CopyBuffer,
     copyBufferToImage: CopyBufferToImage,
     draw2D: Draw2D,
+    drawMesh: DrawMesh,
     empty: void,
     end: void,
     endRecord: void,
@@ -342,6 +344,16 @@ pub const PushConstant = struct {
     offset: u32,
     size: u32,
     pValues: []u8,
+};
+
+pub const DrawMesh = struct {
+    pipeline: VkStruct.Pipeline_t,
+    rendering: rendering.RenderingInfo_t,
+    descriptorSets: []vk.VkDescriptorSet,
+    pTextures: []texture.Texture_t,
+    pViewport: VkStruct.Viewport_t,
+    pScissor: VkStruct.Scissor_t,
+    usedBuffers: []VkStruct.Buffer_t,
 };
 
 // pub const Output = union {

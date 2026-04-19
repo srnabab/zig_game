@@ -24,8 +24,8 @@ layout(set = 0, binding = 0) uniform UniformBufferObject {
     mat4 proj;
 } ubo;
 
-layout(set = 2, binding = 0) readonly buffer VertexBuffer { Vertex vertices[]; };
-layout(set = 2, binding = 1) readonly buffer MeshletBuffer { Meshlet meshlets[]; };
+layout(set = 2, binding = 0) readonly buffer MeshletBuffer { Meshlet meshlets[]; };
+layout(set = 2, binding = 1) readonly buffer VertexBuffer { Vertex vertices[]; };
 layout(set = 2, binding = 2) readonly buffer MeshletVertices { uint meshletVertices[]; };
 layout(set = 2, binding = 3) readonly buffer MeshletIndices { uint8_t meshletIndices[]; };
 

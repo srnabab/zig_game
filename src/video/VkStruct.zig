@@ -1562,9 +1562,8 @@ pub fn createVirtualBuffer(
     flags: u32,
     size: u64,
     alignment: u64,
-) !Buffer_t {
+) !bufferStruct.BufferAndOffset {
     return self.buffers.createVirtualBuffer(
-        &self.vmaS,
         blockBuffer,
         flags,
         size,

@@ -68,9 +68,7 @@ pub fn deinit(self: *Self, vmaa: *vmaStruct) void {
     for (self.buffers.items.items) |value| {
         if (value == .data) {
             switch (value.data.allocation) {
-                .block => {
-                    vma.vmaDestroyVirtualBlock(value.data.virtualBlock);
-                },
+                .block => {},
                 .real => {
                     _ = vmaa.vmaBufferAllocations.fetchSub(1, .seq_cst);
                     vma.vmaDestroyBuffer(
@@ -79,6 +77,20 @@ pub fn deinit(self: *Self, vmaa: *vmaStruct) void {
                         @ptrCast(value.data.allocation.real),
                     );
                 },
+                .virtual => {
+                    vma.vmaVirtualFree(value.data.virtualBlock, value.data.allocation.virtual);
+                },
+            }
+        }
+    }
+
+    for (self.buffers.items.items) |value| {
+        if (value == .data) {
+            switch (value.data.allocation) {
+                .block => {
+                    vma.vmaDestroyVirtualBlock(value.data.virtualBlock);
+                },
+                .real => {},
                 .virtual => {},
             }
         }
@@ -326,6 +338,13 @@ pub fn getBufferUsage(self: *Self, buffer: Buffer_t) Usage {
     return ptr.usage;
 }
 
+pub fn getBufferOffset(self: *Self, buffer: Buffer_t) vk.VkDeviceSize {
+    const index = getIndex(buffer);
+    const ptr = self.buffers.get(index);
+
+    return ptr.offset;
+}
+
 pub fn getBufferContent(self: *Self, buffer: Buffer_t) Buffer {
     const index = getIndex(buffer);
     const ptr = self.buffers.get(index);
@@ -352,10 +371,11 @@ pub fn createVirtualBlockBuffer(
         &block,
     );
 
+    const pack = try self.buffers.addOne();
+
     const index = getIndex(buffer);
     const ptr = self.buffers.get(index);
 
-    const pack = try self.buffers.addOne();
     pack.ptr.* = Buffer{
         .vkBuffer = ptr.vkBuffer,
         .allocation = .{ .block = void{} },
@@ -368,10 +388,17 @@ pub fn createVirtualBlockBuffer(
         .virtualBlock = block,
     };
 
+    // std.log.debug("ptr {*}, {*}, index {d}", .{ pack.ptr.vkBuffer, ptr.vkBuffer, index });
+
     const handle = handles.createHandle(@intCast(pack.index));
 
     return handle;
 }
+
+pub const BufferAndOffset = struct {
+    buffer: Buffer_t,
+    offset: vk.VkDeviceSize,
+};
 
 pub fn createVirtualBuffer(
     self: *Self,
@@ -380,7 +407,9 @@ pub fn createVirtualBuffer(
     size: u64,
     alignment: u64,
     handles: *global.HandlesType,
-) !Buffer_t {
+) !BufferAndOffset {
+    const pack = try self.buffers.addOne();
+
     const index = getIndex(blockBuffer);
     const ptr = self.buffers.get(index);
 
@@ -389,7 +418,7 @@ pub fn createVirtualBuffer(
     var allocation: vma.VmaVirtualAllocation = null;
     var offset: vk.VkDeviceSize = 0;
 
-    vmaStruct._virtualAlloc(
+    try vmaStruct._virtualAlloc(
         ptr.virtualBlock,
         null,
         flags,
@@ -399,7 +428,6 @@ pub fn createVirtualBuffer(
         &offset,
     );
 
-    const pack = try self.buffers.addOne();
     pack.ptr.* = Buffer{
         .vkBuffer = ptr.vkBuffer,
         .allocation = .{ .virtual = allocation },
@@ -409,12 +437,12 @@ pub fn createVirtualBuffer(
         .usage = ptr.usage,
         .stride = ptr.stride,
         .offset = ptr.offset + offset,
-        .virtualBlock = null,
+        .virtualBlock = ptr.virtualBlock,
     };
 
     const handle = handles.createHandle(@intCast(pack.index));
 
-    return handle;
+    return .{ .buffer = handle, .offset = offset };
 }
 
 pub fn destroyVirtualBlockBuffer(self: *Self, buffer: Buffer_t) void {

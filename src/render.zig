@@ -23,6 +23,8 @@ const Semaphore = std.Io.Semaphore;
 
 const file = @import("fileSystem");
 
+const mesh = @import("mesh");
+
 var debug_allocator: std.heap.DebugAllocator(.{ .stack_trace_frames = 10 }) = .init;
 
 pub fn render_thread_func(
@@ -149,7 +151,25 @@ pub fn render_thread_func(
         null,
         null,
     );
-    // _ = rendering_test;
+    colorAttachment[0].loadOp = vk.VK_ATTACHMENT_LOAD_OP_LOAD;
+    const rendering_mesh_test = try pRendering.createRenderingInfo(
+        io,
+        0,
+        vk.VkRect2D{
+            .extent = .{
+                .width = vulkan.windowWidth,
+                .height = vulkan.windowHeight,
+            },
+            .offset = .{ .x = 0, .y = 0 },
+        },
+
+        1,
+        0,
+        &texture_test_array,
+        &colorAttachment,
+        null,
+        null,
+    );
 
     var present_texture_test_array = [_]textureSet.Texture_t{undefined};
     const present_rendering_test = try pRendering.createRenderingInfo(
@@ -197,25 +217,25 @@ pub fn render_thread_func(
     pData.* = pUIUbo;
 
     const ssbo_test = try vulkan.createStorageBuffer(global.MeshletStorageBufferSize);
-    const ssbo_test_vertices = try vulkan.createVirtualBlockBuffer(
-        0,
-        global.StorageBufferVerticesSize,
-        ssbo_test,
-        0,
-        @sizeOf(vertexStruct.Vertex_f3pf3nf2u),
-    );
     const ssbo_test_meshlets = try vulkan.createVirtualBlockBuffer(
         0,
         global.StorageBufferMeshletsSize,
         ssbo_test,
-        global.StorageBufferVerticesEnd,
+        0,
+        @sizeOf(vertexStruct.Vertex_f3pf3nf2u),
+    );
+    const ssbo_test_vertices = try vulkan.createVirtualBlockBuffer(
+        0,
+        global.StorageBufferVerticesSize,
+        ssbo_test,
+        global.StorageBufferMeshletsEnd,
         @sizeOf(vertexStruct.Meshlet),
     );
     const ssbo_test_meshletVertices = try vulkan.createVirtualBlockBuffer(
         0,
         global.StorageBufferMeshletVerticesSize,
         ssbo_test,
-        global.StorageBufferMeshletsEnd,
+        global.StorageBufferVerticesEnd,
         @sizeOf(u32),
     );
     const ssbo_test_meshletTriangles = try vulkan.createVirtualBlockBuffer(
@@ -225,10 +245,15 @@ pub fn render_thread_func(
         global.StorageBufferMeshletVerticesEnd,
         @sizeOf(u8),
     );
-    _ = ssbo_test_vertices;
-    _ = ssbo_test_meshlets;
-    _ = ssbo_test_meshletVertices;
-    _ = ssbo_test_meshletTriangles;
+    var meshes = mesh.init(
+        ssbo_test_meshlets,
+        ssbo_test_vertices,
+        ssbo_test_meshletVertices,
+        ssbo_test_meshletTriangles,
+        null,
+        io,
+    );
+    try meshes.loadMeshlet(comptime file.comptimeGetID("Suzanne_0.vtx"), gpa, &vulkan, &commands);
 
     try vulkan.addWriteDescriptorSetBuffer(
         0,
@@ -248,6 +273,46 @@ pub fn render_thread_func(
         vulkan.presentSamplerDescriptorSet,
         0,
         vk.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+    );
+
+    try vulkan.addWriteDescriptorSetBuffer(
+        0,
+        vulkan.buffers.getVkBuffer(ssbo_test_meshlets),
+        vulkan.buffers.getBufferOffset(ssbo_test_meshlets),
+        vulkan.buffers.getBufferSize(ssbo_test_meshlets),
+        vulkan.meshletsDescriptorSet,
+        0,
+        vk.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+    );
+
+    try vulkan.addWriteDescriptorSetBuffer(
+        0,
+        vulkan.buffers.getVkBuffer(ssbo_test_vertices),
+        vulkan.buffers.getBufferOffset(ssbo_test_vertices),
+        vulkan.buffers.getBufferSize(ssbo_test_vertices),
+        vulkan.meshletsDescriptorSet,
+        1,
+        vk.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+    );
+
+    try vulkan.addWriteDescriptorSetBuffer(
+        0,
+        vulkan.buffers.getVkBuffer(ssbo_test_meshletVertices),
+        vulkan.buffers.getBufferOffset(ssbo_test_meshletVertices),
+        vulkan.buffers.getBufferSize(ssbo_test_meshletVertices),
+        vulkan.meshletsDescriptorSet,
+        2,
+        vk.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+    );
+
+    try vulkan.addWriteDescriptorSetBuffer(
+        0,
+        vulkan.buffers.getVkBuffer(ssbo_test_meshletTriangles),
+        vulkan.buffers.getBufferOffset(ssbo_test_meshletTriangles),
+        vulkan.buffers.getBufferSize(ssbo_test_meshletTriangles),
+        vulkan.meshletsDescriptorSet,
+        3,
+        vk.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
     );
 
     vulkan.writeCachedDescriptorSetResources();
@@ -276,8 +341,21 @@ pub fn render_thread_func(
         vulkan.globalFixed2dMVPMatrixDescriptorSet, vulkan.globalTextureDescriptorSet,
     };
 
+    var testMeshDescriptorSets = [_]vk.VkDescriptorSet{
+        vulkan.globalFixed2dMVPMatrixDescriptorSet,
+        vulkan.globalTextureDescriptorSet,
+        vulkan.meshletsDescriptorSet,
+    };
+
     var presentTextures = [_]textureSet.Texture_t{texture_test};
     var presentDescriptorSets = [_]vk.VkDescriptorSet{vulkan.presentSamplerDescriptorSet};
+
+    var test_meshTextures = [_]textureSet.Texture_t{
+        pTextureSet.getTexture(@intCast(file.getID("circle.png"))).?,
+    };
+    var test_meshBuffers = [_]VkStruct.Buffer_t{
+        ssbo_test,
+    };
 
     // global.stopNodeDagPrint = false;
     // global.stopExecuteNodePrint = false;
@@ -306,6 +384,15 @@ pub fn render_thread_func(
             .descriptorSets = &testDescriptorSets,
             .pViewport = viewport_test,
             .pScissor = scissor_test,
+        } });
+        try commands.addCommand(.drawMesh, .{ .drawMesh = .{
+            .pipeline = vulkan.getPipeline("model").?,
+            .rendering = rendering_mesh_test,
+            .descriptorSets = &testMeshDescriptorSets,
+            .pTextures = &test_meshTextures,
+            .pViewport = viewport_test,
+            .pScissor = scissor_test,
+            .usedBuffers = &test_meshBuffers,
         } });
         try commands.addCommand(.present, .{ .present = .{
             .pipeline = vulkan.getPipeline("directOut").?,

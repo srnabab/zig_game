@@ -203,7 +203,7 @@ pub fn main(init: std.process.Init) !void {
     }
 
     var buffer = [_]u8{0} ** 10240;
-    var writer = outputFile.writer(init.io, buffer[0..totalLen]);
+    var writer = outputFile.writer(init.io, buffer[0..]);
     _ = try writer.interface.write(slice);
     for (0..res.shaderCodes.len) |i| {
         var val = std.mem.toBytes(res.shaderCodes[i].len);

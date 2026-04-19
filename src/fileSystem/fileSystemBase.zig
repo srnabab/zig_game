@@ -12,10 +12,12 @@ pub const getID = fileNameID.getID;
 
 const ContentPath = tables.ContentPath;
 const ImageLoadParameter = tables.ImageLoadParameter;
+const ModelLoadParameter = tables.ModelLoadParameter;
 
 var db: ?*sqlite.sqlite3 = null;
 var ContentPathT: ContentPath = undefined;
 var ImageLoadParameterT: ImageLoadParameter = undefined;
+var ModelLoadParameterT: ModelLoadParameter = undefined;
 
 fn getRelativePath(id: i64, result: []u8) !void {
     var ptrs: [1]*anyopaque = undefined;
@@ -49,6 +51,7 @@ pub fn init(databaseName: []const u8) void {
 
     ContentPathT = ContentPath.init(db.?);
     ImageLoadParameterT = ImageLoadParameter.init(db.?);
+    ModelLoadParameterT = ModelLoadParameter.init(db.?);
 }
 
 pub fn getFile(io: std.Io, id: i64, cwd: std.Io.Dir) !std.Io.File {
@@ -154,10 +157,10 @@ pub fn getImageLoadParam(id: i32) !imageLoad {
 }
 
 pub const Mesh = struct {
-    verticesSize: usize,
-    meshletsSize: usize,
-    meshletVerticesSize: usize,
-    meshletTrianglesSize: usize,
+    verticesSize: u64,
+    meshletsSize: u64,
+    meshletVerticesSize: u64,
+    meshletTrianglesSize: u64,
     vertexType: vertexStruct.VertexType,
 };
 
@@ -172,11 +175,11 @@ pub fn getMeshLoadParam(id: i32) !meshLoad {
         .VTX => {
             var ptrs: [6]*anyopaque = undefined;
             var buffer = [_]u8{0} ** 256;
-            var verticesSize: usize = 0;
-            var meshletsSize: usize = 0;
-            var meshletVerticesSize: usize = 0;
-            var meshletTrianglesSize: usize = 0;
-            var vertexType: vertexStruct.VertexType = .none;
+            var vertexType: u32 = @intFromEnum(vertexStruct.VertexType.none);
+            var verticesSize: u64 = 0;
+            var meshletsSize: u64 = 0;
+            var meshletVerticesSize: u64 = 0;
+            var meshletTrianglesSize: u64 = 0;
 
             ptrs[0] = @ptrCast(&buffer);
             ptrs[1] = @ptrCast(&vertexType);
@@ -185,10 +188,10 @@ pub fn getMeshLoadParam(id: i32) !meshLoad {
             ptrs[4] = @ptrCast(&meshletVerticesSize);
             ptrs[5] = @ptrCast(&meshletTrianglesSize);
 
-            var types = [_]sqlDB.innerType{ .TEXT, .INTEGER, .INTEGER, .INTEGER, .INTEGER, .INTEGER32 };
+            var types = [_]sqlDB.innerType{ .TEXT, .INTEGER32, .INTEGER, .INTEGER, .INTEGER, .INTEGER };
 
-            try ImageLoadParameterT.get(
-                "RelativePath,VertexType,VerticesSize,MeshletsSize,MeshletVertiecsSize,MeshletTrianglesSize",
+            try ModelLoadParameterT.get(
+                "RelativePath,VertexType,VerticesSize,MeshletsSize,MeshletVerticesSize,MeshletTrianglesSize",
                 null,
                 "ID = ?",
                 .{id},
@@ -199,7 +202,7 @@ pub fn getMeshLoadParam(id: i32) !meshLoad {
             return meshLoad{
                 .relativePath = buffer,
                 .mesh = .{
-                    .vertexType = vertexType,
+                    .vertexType = @enumFromInt(vertexType),
                     .meshletsSize = meshletsSize,
                     .meshletTrianglesSize = meshletTrianglesSize,
                     .meshletVerticesSize = meshletVerticesSize,

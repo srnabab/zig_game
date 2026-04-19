@@ -313,8 +313,21 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const mesh_mod = b.createModule(
+        .{
+            .root_source_file = b.path("src/video/mesh.zig"),
+            .target = target,
+            .optimize = optimize,
+        },
+    );
 
     // dependency
+    mesh_mod.addImport("processRender", processRender_mod);
+    mesh_mod.addImport("vertexStruct", vertexStruct_mod);
+    mesh_mod.addImport("video", video_mod);
+    mesh_mod.addImport("fileSystem", fileSystem_mod);
+    mesh_mod.addImport("vulkan", vk_c_mod);
+
     vertexStruct_mod.addImport("cglm", cglm_mod);
 
     meshopt_mod.addIncludePath(b.path("include"));
@@ -330,6 +343,7 @@ pub fn build(b: *std.Build) void {
     rendering_mod.addImport("global", global_mod);
     rendering_mod.addImport("handle", handle_mod);
     rendering_mod.addImport("textureSet", textureSet_mod);
+    rendering_mod.addImport("mesh", mesh_mod);
     rendering_mod.addImport("tracy", tracy.module("tracy"));
 
     error_mod.addImport("sdl", sdl_mod);
@@ -481,6 +495,7 @@ pub fn build(b: *std.Build) void {
     fileSystem_mod.addImport("types", fileTypes_mod);
     fileSystem_mod.addImport("vulkan", vk_c_mod);
     fileSystem_mod.addImport("tracy", tracy.module("tracy"));
+    fileSystem_mod.addImport("vertexStruct", vertexStruct_mod);
     fileSystem_mod.addIncludePath(b.path("include"));
 
     exe_mod.addImport("vertexStruct", vertexStruct_mod);
@@ -504,6 +519,7 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("rendering", rendering_mod);
     exe_mod.addImport("vulkan", vk_c_mod);
     exe_mod.addImport("math", math_mod);
+    exe_mod.addImport("mesh", mesh_mod);
     // exe_mod.addImport("cgltf", cgltf_mod);
     exe_mod.addIncludePath(b.path("include/"));
 

@@ -2084,9 +2084,8 @@ pub const commands = struct {
     fn renderingResourcePreProcess(
         self: *Self,
         pRendering: rendering.RenderingInfo_t,
-        indexBuffer: ?VkStruct.Buffer_t,
-        vertexBuffers: ?[]VkStruct.Buffer_t,
-        otherTwoQueueNode: ?[]twoQueueNode,
+        buffers: ?[]VkStruct.Buffer_t,
+        textures: ?[]texture.Texture_t,
         currentNode: **QueueNode,
         renderingNode: *?*QueueNode,
         allocator: std.mem.Allocator,
@@ -2095,40 +2094,58 @@ pub const commands = struct {
         const zone = tracy.initZone(@src(), .{ .name = "rendering resource pre process" });
         defer zone.deinit();
 
+        const renderingInfo = self.pRendering.getRenderingInfoContent(pRendering);
+        const renderingColorTextureLen = bl: {
+            var count: u32 = 0;
+            if (renderingInfo.depthAttachment != null) {
+                count += 1;
+            }
+            if (renderingInfo.stencilAttachment != null) {
+                count += 1;
+            }
+            break :bl renderingInfo.textures.len - count;
+        };
+
+        const bufferLen: u32 = if (buffers != null) @intCast(buffers.?.len) else 0;
+        const textureLen: u32 = if (textures != null) @intCast(textures.?.len) else 0;
+        const totalCount = bufferLen + renderingColorTextureLen + textureLen + 2;
+
+        var totalQueueNodes = try allocator.alloc(twoQueueNode, totalCount);
+        defer allocator.free(totalQueueNodes);
+
+        if (buffers) |bs| {
+            for (bs, 0..) |buffer, i| {
+                var bufferOffset = [_]drawC.SizeOffset{.{
+                    .offset = 0,
+                    .size = self.vulkan.buffers.getBufferSize(buffer),
+                }};
+                totalQueueNodes[i] = try self.changeBufferQueueHelper(
+                    buffer,
+                    .graphic,
+                    &bufferOffset,
+                    commandType,
+                );
+            }
+        }
+
+        if (textures) |ts| {
+            for (ts, 0..) |tex, i| {
+                totalQueueNodes[bufferLen + i] = try self.transLayoutHelper(
+                    self.pTextureSet,
+                    tex,
+                    0,
+                    1,
+                    vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                    .graphic,
+                    commandType,
+                );
+            }
+        }
+
         if (!self.pRendering.renderingIsStart(pRendering)) {
-            const renderingInfo = self.pRendering.getRenderingInfoContent(pRendering);
-            const renderingColorTextureLen = bl: {
-                var count: u32 = 0;
-                if (renderingInfo.depthAttachment != null) {
-                    count += 1;
-                }
-                if (renderingInfo.stencilAttachment != null) {
-                    count += 1;
-                }
-                break :bl renderingInfo.textures.len - count;
-            };
-
-            const totalCount = bl: {
-                var count: u32 = 0;
-
-                count += @intCast(renderingInfo.textures.len);
-                if (vertexBuffers != null) {
-                    count += @intCast(vertexBuffers.?.len);
-                }
-                if (otherTwoQueueNode != null) {
-                    count += @intCast(otherTwoQueueNode.?.len);
-                }
-                count += 3;
-
-                break :bl count;
-            };
-
-            var totalQueueNodes = try allocator.alloc(twoQueueNode, totalCount);
-            defer allocator.free(totalQueueNodes);
-
             if (renderingInfo.pColorAttachments) |v| {
                 for (renderingInfo.textures[0..renderingColorTextureLen], v, 0..) |value, attachment, i| {
-                    totalQueueNodes[i] = try self.transLayoutHelper(
+                    totalQueueNodes[bufferLen + textureLen + i] = try self.transLayoutHelper(
                         self.pTextureSet,
                         value,
                         0,
@@ -2166,37 +2183,8 @@ pub const commands = struct {
                 );
             }
 
-            const indexBufferQueueNode = blk: {
-                if (indexBuffer) |buffer| {
-                    var indexBufferOffset = [_]drawC.SizeOffset{.{
-                        .offset = 0,
-                        .size = self.vulkan.buffers.getBufferSize(buffer),
-                    }};
-                    break :blk try self.changeBufferQueueHelper(
-                        buffer,
-                        .graphic,
-                        &indexBufferOffset,
-                        commandType,
-                    );
-                } else {
-                    break :blk twoQueueNode{};
-                }
-            };
-
-            if (vertexBuffers) |buffers| {
-                for (buffers, 0..) |buffer, i| {
-                    var vertexBufferOffset = [_]drawC.SizeOffset{.{
-                        .offset = 0,
-                        .size = self.vulkan.buffers.getBufferSize(buffer),
-                    }};
-                    totalQueueNodes[renderingInfo.textures.len + i] = try self.changeBufferQueueHelper(
-                        buffer,
-                        .graphic,
-                        &vertexBufferOffset,
-                        commandType,
-                    );
-                }
-            }
+            totalQueueNodes[totalQueueNodes.len - 2] = depthImageQueueNode;
+            totalQueueNodes[totalQueueNodes.len - 1] = stencilImageQueueNode;
 
             const beginRenderingQueueNode = try self.addCommand2(
                 .{ .beginRendering = .{
@@ -2218,49 +2206,26 @@ pub const commands = struct {
 
             // std.log.debug("total {d}", .{totalQueueNodes.len});
 
-            for (otherTwoQueueNode.?, 0..) |value, i| {
-                totalQueueNodes[totalQueueNodes.len - 3 - otherTwoQueueNode.?.len + i] = value;
-            }
-
             // totalQueueNodes[totalQueueNodes.len - 4] = imageQueueNode;
-            totalQueueNodes[totalQueueNodes.len - 3] = indexBufferQueueNode;
-            totalQueueNodes[totalQueueNodes.len - 2] = depthImageQueueNode;
-            totalQueueNodes[totalQueueNodes.len - 1] = stencilImageQueueNode;
 
-            const res = try self.pipelineBarrierNodeConnect(totalQueueNodes);
-            if (res.a) |aa| {
-                if (res.b) |bb| {
-                    try bb.childrenAppend(&beginRenderingQueueNode.a.?.ID);
-                    try beginRenderingQueueNode.a.?.parentsAppend(&bb.ID);
-                } else {
-                    try aa.childrenAppend(&beginRenderingQueueNode.a.?.ID);
-                    try beginRenderingQueueNode.a.?.parentsAppend(&aa.ID);
-                }
-
-                currentNode.* = aa;
-            } else {
-                currentNode.* = renderingNode.*.?;
-            }
         } else {
             const renderingRes = try self.cacheMap.getOrPut(pRendering);
             renderingNode.* = self.nodeDag.get(renderingRes.value_ptr.*).?;
+        }
 
-            var res: twoQueueNode = .{};
-            if (otherTwoQueueNode != null) {
-                res = try self.pipelineBarrierNodeConnect(otherTwoQueueNode.?);
+        const res = try self.pipelineBarrierNodeConnect(totalQueueNodes);
+        if (res.a) |aa| {
+            if (res.b) |bb| {
+                try bb.childrenAppend(&renderingNode.*.?.ID);
+                try renderingNode.*.?.parentsAppend(&bb.ID);
+            } else {
+                try aa.childrenAppend(&renderingNode.*.?.ID);
+                try renderingNode.*.?.parentsAppend(&aa.ID);
             }
 
-            if (res.a) |aa| {
-                if (res.b) |bb| {
-                    try bb.childrenAppend(&renderingNode.*.?.ID);
-                    try renderingNode.*.?.parentsAppend(&bb.ID);
-                } else {
-                    try aa.childrenAppend(&renderingNode.*.?.ID);
-                    try renderingNode.*.?.parentsAppend(&aa.ID);
-                }
-
-                currentNode.* = aa;
-            }
+            currentNode.* = aa;
+        } else {
+            currentNode.* = renderingNode.*.?;
         }
     }
 
@@ -2275,7 +2240,7 @@ pub const commands = struct {
         }
     }
 
-    pub fn getResPack(
+    pub fn getRenderingResPack(
         self: *Self,
         pRendering: rendering.RenderingInfo_t,
         vertexBuffers: ?[]VkStruct.Buffer_t,
@@ -2775,6 +2740,8 @@ pub const commands = struct {
 
         std.debug.assert(@as(u32, @intFromEnum(commandType)) == @as(u32, @intFromEnum(std.meta.activeTag(command))));
 
+        if (command == .drawMesh) return;
+
         try self.mutex.lock(self.io);
         defer self.mutex.unlock(self.io);
 
@@ -2784,7 +2751,7 @@ pub const commands = struct {
         const ID = node.ID;
         node.listID = try self.u32Mem.create(self.allocator);
 
-        std.log.debug("{d}, {s}", .{ ID, @tagName(commandType) });
+        // std.log.debug("{d}, {s}", .{ ID, @tagName(commandType) });
 
         node.listID.?.* = 0;
 
@@ -2810,6 +2777,11 @@ pub const commands = struct {
         const zone2 = tracy.initZone(@src(), .{ .name = "infer dependency 1" });
         errdefer zone2.deinit();
         switch (command) {
+            // .drawMesh => {
+            //     node.data.commandPoolType = .graphic;
+
+            //     const drawMesh = command.drawMesh;
+            // },
             .present => {
                 node.data.commandPoolType = .graphic;
 
@@ -2838,26 +2810,10 @@ pub const commands = struct {
 
                 var renderingNode: ?*QueueNode = null;
 
-                var imageQueueNodes = try allocator.alloc(twoQueueNode, present.pTextures.len);
-                for (present.pTextures, 0..) |value, i| {
-                    imageQueueNodes[i] = try self.transLayoutHelper(
-                        self.pTextureSet,
-                        value,
-                        0,
-                        1,
-                        vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                        .graphic,
-                        @enumFromInt(@intFromEnum(std.meta.activeTag(command))),
-                    );
-                    const dependencyPtr = try dependenciesArray.addOne();
-                    dependencyPtr.* = value;
-                }
-
                 try self.renderingResourcePreProcess(
                     present.rendering,
                     null,
-                    null,
-                    imageQueueNodes,
+                    present.pTextures,
                     &currentNode,
                     &renderingNode,
                     allocator,
@@ -2870,7 +2826,7 @@ pub const commands = struct {
                 }
 
                 var lastNode: ?*QueueNode = null;
-                const resPack = try self.getResPack(
+                const resPack = try self.getRenderingResPack(
                     present.rendering,
                     null,
                     null,
@@ -2920,28 +2876,23 @@ pub const commands = struct {
 
                 const draw2D = ptr.value_ptr.command.draw2D;
 
-                const imageQueueNode = try self.transLayoutHelper(
-                    self.pTextureSet,
-                    draw2D.pTexture,
-                    0,
-                    1,
-                    vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                    .graphic,
-                    std.meta.activeTag(command),
-                );
-
-                // if (imageQueueNode.a) |aa| {
-                //     std.log.debug("ID: {d} image", .{aa.ID});
-                // }
-
-                var otherTwoQueueNodes = [_]twoQueueNode{imageQueueNode};
                 var renderingNode: ?*QueueNode = null;
+
+                var buffers = try allocator.alloc(
+                    VkStruct.Buffer_t,
+                    draw2D.vertexBuffer.len + 1,
+                );
+                for (draw2D.vertexBuffer, 0..) |buffer, i| {
+                    buffers[i] = buffer;
+                }
+                buffers[draw2D.vertexBuffer.len] = draw2D.indexBuffer;
+
+                var textures = [_]texture.Texture_t{draw2D.pTexture};
 
                 try self.renderingResourcePreProcess(
                     draw2D.rendering,
-                    draw2D.indexBuffer,
-                    draw2D.vertexBuffer,
-                    &otherTwoQueueNodes,
+                    buffers,
+                    &textures,
                     &currentNode,
                     &renderingNode,
                     allocator,
@@ -2958,7 +2909,7 @@ pub const commands = struct {
                 }
 
                 var lastNode: ?*QueueNode = null;
-                const resPack = try self.getResPack(
+                const resPack = try self.getRenderingResPack(
                     draw2D.rendering,
                     draw2D.vertexBuffer,
                     draw2D.indexBuffer,
@@ -3316,7 +3267,7 @@ pub const commands = struct {
         const ptr = try self.cachedCommand.addOne();
         ptr.* = command;
 
-        const allocator = self.stackAllocators[self.stackAllocatorsIndex].allocator();
+        const allocator = self.allocator;
 
         switch (command) {
             .copyBuffer => {
@@ -3331,8 +3282,15 @@ pub const commands = struct {
 
         defer self.cachedCommand.clearRetainingCapacity();
         for (self.cachedCommand.items) |comm| {
-            std.log.debug("{s}", .{@tagName(@as(drawC.PublicCommandType, @enumFromInt(@intFromEnum(std.meta.activeTag(comm)))))});
+            // std.log.debug("{s}", .{@tagName(@as(drawC.PublicCommandType, @enumFromInt(@intFromEnum(std.meta.activeTag(comm)))))});
             try self.addCommand(@enumFromInt(@intFromEnum(std.meta.activeTag(comm))), comm);
+
+            switch (comm) {
+                .copyBuffer => {
+                    self.allocator.free(comm.copyBuffer.regions);
+                },
+                else => {},
+            }
         }
     }
 };
@@ -3632,6 +3590,7 @@ pub const oneTimeCommand = struct {
                     .regionCount = @intCast(copyBuffer.regions.len),
                     .pRegions = @ptrCast(copyBuffer.regions.ptr),
                 };
+                // std.log.debug("{*}, {*}", .{ bufferCopyInfo.srcBuffer, bufferCopyInfo.dstBuffer });
                 vk.vkCmdCopyBuffer2(
                     commandBuffer,
                     &bufferCopyInfo,

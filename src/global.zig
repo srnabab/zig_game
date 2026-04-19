@@ -35,9 +35,9 @@ pub const StorageBufferMeshletsSize = math.round(16, @sizeOf(vertexStruct.Meshle
 pub const StorageBufferMeshletVerticesSize = math.round(16, @sizeOf(u32) * 4000);
 pub const StorageBufferMeshletTrianglesSize = math.round(16, @sizeOf(u8) * 4000);
 
-pub const StorageBufferVerticesEnd = StorageBufferVerticesSize;
-pub const StorageBufferMeshletsEnd = StorageBufferMeshletsSize + StorageBufferVerticesEnd;
-pub const StorageBufferMeshletVerticesEnd = StorageBufferMeshletVerticesSize + StorageBufferMeshletsEnd;
+pub const StorageBufferMeshletsEnd = StorageBufferMeshletsSize;
+pub const StorageBufferVerticesEnd = StorageBufferVerticesSize + StorageBufferMeshletsEnd;
+pub const StorageBufferMeshletVerticesEnd = StorageBufferMeshletVerticesSize + StorageBufferVerticesEnd;
 pub const StorageBufferMeshletTrianglesEnd = StorageBufferMeshletTrianglesSize + StorageBufferMeshletVerticesEnd;
 
 pub const MeshletStorageBufferSize = StorageBufferMeshletTrianglesEnd;

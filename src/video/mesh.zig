@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const vk = @import("vulkan");
 const VkStruct = @import("video");
 const processRender = @import("processRender");
 const Commands = processRender.commands;
@@ -7,27 +8,63 @@ const Commands = processRender.commands;
 const file = @import("fileSystem");
 const vertexStruct = @import("vertexStruct");
 
-fn loadMeshlet(ID: i32, allocator: std.mem.Allocator, vulkan: *VkStruct, commands: *Commands) !void {
-    const res = try file.getMeshLoadParam(ID);
-    defer res.file.close();
+const Self = @This();
 
-    const stat = try res.file.stat();
+meshletBuffer: ?VkStruct.Buffer_t = null,
+vertexBuffer: VkStruct.Buffer_t,
+meshletVertexBuffer: ?VkStruct.Buffer_t = null,
+meshletTriangleBuffer: ?VkStruct.Buffer_t = null,
+
+indexBuffer: ?VkStruct.Buffer_t = null,
+
+io: std.Io,
+isMeshlet: bool = false,
+
+pub fn init(
+    meshletBuffer: ?VkStruct.Buffer_t,
+    vertexBuffer: VkStruct.Buffer_t,
+    meshletVertexBuffer: ?VkStruct.Buffer_t,
+    meshletTriangleBuffer: ?VkStruct.Buffer_t,
+    indexBuffer: ?VkStruct.Buffer_t,
+    io: std.Io,
+) Self {
+    std.debug.assert(
+        (meshletBuffer == null and meshletVertexBuffer == null and meshletTriangleBuffer == null) ^ (indexBuffer == null),
+    );
+
+    return Self{
+        .meshletBuffer = meshletBuffer,
+        .vertexBuffer = vertexBuffer,
+        .meshletVertexBuffer = meshletVertexBuffer,
+        .meshletTriangleBuffer = meshletTriangleBuffer,
+        .indexBuffer = indexBuffer,
+        .isMeshlet = (indexBuffer == null),
+        .io = io,
+    };
+}
+
+pub fn loadMeshlet(self: *Self, ID: i32, allocator: std.mem.Allocator, vulkan: *VkStruct, commands: *Commands) !void {
+    const res = try file.getMeshLoadParam(self.io, ID);
+    defer res.file.close(self.io);
+
+    const stat = try res.file.stat(self.io);
 
     var buffer = [_]u8{0} ** 256;
-    var fileReader = res.file.reader(&buffer);
+    var fileReader = res.file.reader(self.io, &buffer);
     var content = try fileReader.interface.readAlloc(allocator, stat.size);
+    defer allocator.free(content);
 
-    const stride = l: {
-        var size: usize = 0;
-        switch (res.mesh.vertexType) {
-            inline else => |t| {
-                size = @sizeOf(vertexStruct.enumToType(t));
-            },
-        }
-        break :l size;
-    };
+    // const stride = l: {
+    //     var size: usize = 0;
+    //     switch (res.mesh.vertexType) {
+    //         inline else => |t| {
+    //             size = @sizeOf(vertexStruct.enumToType(t));
+    //         },
+    //     }
+    //     break :l size;
+    // };
 
-    const vertexCount = res.mesh.verticesSize / stride;
+    // const vertexCount = res.mesh.verticesSize / stride;
 
     const meshletsStart = res.mesh.verticesSize;
     const meshletVerticesStart = res.mesh.meshletsSize + meshletsStart;
@@ -39,4 +76,119 @@ fn loadMeshlet(ID: i32, allocator: std.mem.Allocator, vulkan: *VkStruct, command
     const meshletVertices = content[meshletVerticesStart..meshletTrianglesStart];
     const meshletTriangles = content[meshletTrianglesStart..indicesStart];
     const indices = content[indicesStart..];
+
+    if (self.isMeshlet) {
+        const stagingBuffer1 = try vulkan.createStagingBuffer(@intCast(vertices.len));
+        const stagingBuffer2 = try vulkan.createStagingBuffer(@intCast(meshlets.len));
+        const stagingBuffer3 = try vulkan.createStagingBuffer(@intCast(meshletVertices.len));
+        const stagingBuffer4 = try vulkan.createStagingBuffer(@intCast(meshletTriangles.len));
+
+        var bufferContent = vulkan.buffers.getBufferContent(stagingBuffer1);
+
+        const allocBuffer1 = try vulkan.createVirtualBuffer(
+            self.vertexBuffer,
+            0,
+            @intCast(vertices.len),
+            16,
+        );
+
+        var region = vk.VkBufferCopy2{
+            .sType = vk.VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+            .pNext = null,
+            .srcOffset = 0,
+            .size = @intCast(vertices.len),
+            .dstOffset = allocBuffer1.offset,
+        };
+
+        var regions = [_]vk.VkBufferCopy2{region};
+
+        try commands.cacheCommand(.{ .copyBuffer = .{
+            .srcBuffer = stagingBuffer1,
+            .dstBuffer = allocBuffer1.buffer,
+            .regions = &regions,
+        } });
+
+        bufferContent = vulkan.buffers.getBufferContent(stagingBuffer2);
+
+        const allocBuffer2 = try vulkan.createVirtualBuffer(
+            self.meshletBuffer.?,
+            0,
+            @intCast(meshlets.len),
+            16,
+        );
+
+        region = vk.VkBufferCopy2{
+            .sType = vk.VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+            .pNext = null,
+            .srcOffset = 0,
+            .size = @intCast(meshlets.len),
+            .dstOffset = allocBuffer2.offset,
+        };
+
+        regions[0] = region;
+
+        try commands.cacheCommand(.{ .copyBuffer = .{
+            .srcBuffer = stagingBuffer2,
+            .dstBuffer = allocBuffer2.buffer,
+            .regions = &regions,
+        } });
+
+        bufferContent = vulkan.buffers.getBufferContent(stagingBuffer3);
+
+        const allocBuffer3 = try vulkan.createVirtualBuffer(
+            self.meshletVertexBuffer.?,
+            0,
+            @intCast(meshletVertices.len),
+            16,
+        );
+
+        region = vk.VkBufferCopy2{
+            .sType = vk.VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+            .pNext = null,
+            .srcOffset = 0,
+            .size = @intCast(meshletVertices.len),
+            .dstOffset = allocBuffer3.offset,
+        };
+
+        regions[0] = region;
+
+        try commands.cacheCommand(.{ .copyBuffer = .{
+            .srcBuffer = stagingBuffer3,
+            .dstBuffer = allocBuffer3.buffer,
+            .regions = &regions,
+        } });
+
+        bufferContent = vulkan.buffers.getBufferContent(stagingBuffer4);
+
+        const allocBuffer4 = try vulkan.createVirtualBuffer(
+            self.meshletTriangleBuffer.?,
+            0,
+            @intCast(meshletTriangles.len),
+            16,
+        );
+
+        region = vk.VkBufferCopy2{
+            .sType = vk.VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+            .pNext = null,
+            .srcOffset = 0,
+            .size = @intCast(meshletTriangles.len),
+            .dstOffset = allocBuffer4.offset,
+        };
+
+        regions[0] = region;
+
+        try commands.cacheCommand(.{ .copyBuffer = .{
+            .srcBuffer = stagingBuffer4,
+            .dstBuffer = allocBuffer4.buffer,
+            .regions = &regions,
+        } });
+    } else {
+        const stagingBuffer1 = try vulkan.createStagingBuffer(@intCast(vertices.len));
+        const stagingBuffer2 = try vulkan.createStagingBuffer(@intCast(indices.len));
+        _ = stagingBuffer1;
+        _ = stagingBuffer2;
+        // _ = indices;
+    }
+
+    // try commands.cacheCommand(.{.copyBuffer = .{ .dstBuffer =  }})
 }
