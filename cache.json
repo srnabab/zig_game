@@ -5,7 +5,7 @@
 	},
 	{
 		"path": "Shaders\\model.mesh",
-		"hash": "21985df302607240"
+		"hash": "2ba08e7c68df64cd"
 	},
 	{
 		"path": "Pipeline\\directOut.pipe",
@@ -49,7 +49,7 @@
 	},
 	{
 		"path": "Shaders\\flat2d.frag",
-		"hash": "319e32630847731e"
+		"hash": "1b2efc43447f5146"
 	},
 	{
 		"path": "Shaders\\combine.frag",
@@ -57,7 +57,7 @@
 	},
 	{
 		"path": "Pipeline\\model.pipe",
-		"hash": "b425f7d93797c5f7"
+		"hash": "a2d4716d53ef29cd"
 	},
 	{
 		"path": "Shaders\\empty.frag",

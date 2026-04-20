@@ -197,6 +197,10 @@ pub fn render_thread_func(
     var pUIUbo: shaderStruct.UniformBufferObject = undefined;
     const ubo = vulkan.buffers.getBufferContent(ubo_test);
 
+    const ubo_test2 = try vulkan.createUniformBuffer(@sizeOf(shaderStruct.UniformBufferObject));
+    var pUIUbo2: shaderStruct.UniformBufferObject = undefined;
+    const ubo2 = vulkan.buffers.getBufferContent(ubo_test2);
+
     const aspect2: f32 = 1.0 * (@as(f32, @floatFromInt(vulkan.windowHeight)) / 600.0);
     const aspect: f32 = (@as(f32, @floatFromInt(vulkan.windowWidth)) / @as(f32, @floatFromInt(vulkan.windowHeight))) * aspect2;
     const VIEW_SCALE = 1.0;
@@ -221,6 +225,19 @@ pub fn render_thread_func(
     );
     const pData = @as(*shaderStruct.UniformBufferObject, @ptrCast(@alignCast(ubo.pMappedData)));
     pData.* = pUIUbo;
+
+    var eye2 = cglm.vec3{ 0.0, 0.0, 100.0 };
+    var center2 = cglm.vec3{ 0.0, 0.0, 0.0 };
+    var up2 = cglm.vec3{ 0.0, 1.0, 0.0 };
+    cglm.glmc_lookat(
+        &eye2,
+        &center2,
+        &up2,
+        &pUIUbo2.view,
+    );
+    cglm.glmc_perspective(std.math.rad_per_deg * 60.0, aspect * VIEW_SCALE, 0.1, 100.0, &pUIUbo2.proj);
+    const pData2 = @as(*shaderStruct.UniformBufferObject, @ptrCast(@alignCast(ubo2.pMappedData)));
+    pData2.* = pUIUbo2;
 
     const ssbo_test = try vulkan.createStorageBuffer(global.MeshletStorageBufferSize);
     const ssbo_test_meshlets = try vulkan.createVirtualBlockBuffer(
@@ -371,15 +388,18 @@ pub fn render_thread_func(
         ssbo_test,
     };
 
-    global.stopNodeDagPrint = false;
-    global.stopNodeDagDetailPrint = false;
+    // global.stopNodeDagPrint = false;
+    // global.stopNodeDagDetailPrint = false;
     // global.stopExecuteNodePrint = false;
 
     const renderStart = std.Io.Timestamp.now(io, .real).toNanoseconds();
-    global.game_end.store(1, .seq_cst);
 
     while (true) {
         const frame = vulkan.totalFrame.load(.seq_cst);
+
+        // if (frame == 4) {
+        //     global.game_end.store(1, .seq_cst);
+        // }
 
         if (frame == 100000) {
             global.stopExecuteNodePrint = true;

@@ -21,4 +21,5 @@ void main() {
     vec4 texColor = texture(textures[nonuniformEXT(PushConstants.index)], fragTexCoord);
 
     outColor = texColor;
+    // outColor = vec4(1.0);
 }

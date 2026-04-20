@@ -198,19 +198,26 @@ pub fn main(init: std.process.Init) !void {
     totalLen += @sizeOf(trans.VulkanPipelineInfo);
     // std.log.debug("total len {d}", .{totalLen});
     for (0..res.shaderCodes.len) |i| {
-        totalLen += res.shaderCodes[i].len + @sizeOf(usize);
+        totalLen += res.shaderCodes[i].len + @sizeOf(u32);
         // std.log.debug("total len {d}", .{totalLen});
     }
 
-    var buffer = [_]u8{0} ** 10240;
+    // std.log.debug("total len {d}", .{totalLen});
+
+    var buffer = [_]u8{0} ** 20480;
     var writer = outputFile.writer(init.io, buffer[0..]);
+    try outputFile.setLength(init.io, 0);
     _ = try writer.interface.write(slice);
     for (0..res.shaderCodes.len) |i| {
-        var val = std.mem.toBytes(res.shaderCodes[i].len);
+        const val_u32: u32 = @intCast(res.shaderCodes[i].len);
+        var val = std.mem.toBytes(val_u32);
+        // std.log.debug("len {d}", .{res.shaderCodes[i].len});
         _ = try writer.interface.write(&val);
         _ = try writer.interface.write(res.shaderCodes[i]);
     }
     try writer.flush();
+
+    std.debug.assert(writer.pos == totalLen);
 
     const endTime = std.Io.Timestamp.now(init.io, .real).toNanoseconds();
     std.log.info("create pipeline file {s} time: {d}ms", .{ args[3], @as(f128, @floatFromInt(endTime - start)) / @as(f128, @floatFromInt(std.time.ns_per_ms)) });

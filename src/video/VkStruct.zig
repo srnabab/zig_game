@@ -1317,6 +1317,7 @@ pub fn readPipelineFileAndAdd(self: *Self, io: std.Io, fileID: i32, setsType: de
     const fileContent = try fileReader.interface.readAlloc(self.allocator, fileSize);
     defer self.allocator.free(fileContent);
     zone2.deinit();
+    // std.log.debug("file len {d}", .{fileContent.len});
 
     var shaderCodes: [5][]u8 = undefined;
     var pos: u64 = 0;
@@ -1327,13 +1328,17 @@ pub fn readPipelineFileAndAdd(self: *Self, io: std.Io, fileID: i32, setsType: de
         fileContent[0..@sizeOf(translate.VulkanPipelineInfo)],
     ));
     pos += @sizeOf(translate.VulkanPipelineInfo);
+    // std.log.debug("pos {d}", .{pos});
     for (0..5) |i| {
         if (pos >= fileSize) break;
 
-        const len = std.mem.bytesToValue(usize, fileContent[pos .. pos + 8]);
-        pos += 8;
+        const len = std.mem.bytesToValue(u32, fileContent[pos .. pos + @sizeOf(u32)]);
+        // std.log.debug("pos {d}, len {d}", .{ pos, len });
+        pos += @sizeOf(u32);
+        // std.log.debug("pos {d}", .{pos});
         shaderCodes[i] = fileContent[pos .. pos + len];
         pos += len;
+        // std.log.debug("pos {d}", .{pos});
     }
     zone3.deinit();
 

@@ -2,6 +2,7 @@
 
 #extension GL_EXT_mesh_shader : require
 #extension GL_EXT_shader_8bit_storage : require
+#extension GL_EXT_scalar_block_layout : require
 
 layout(local_size_x = 32) in;
 layout(triangles, max_vertices = 64, max_primitives = 124) out;
@@ -25,7 +26,7 @@ layout(set = 0, binding = 0) uniform UniformBufferObject {
 } ubo;
 
 layout(set = 2, binding = 0) readonly buffer MeshletBuffer { Meshlet meshlets[]; };
-layout(set = 2, binding = 1) readonly buffer VertexBuffer { Vertex vertices[]; };
+layout(set = 2, binding = 1, scalar) readonly buffer VertexBuffer { Vertex vertices[]; };
 layout(set = 2, binding = 2) readonly buffer MeshletVertices { uint meshletVertices[]; };
 layout(set = 2, binding = 3) readonly buffer MeshletIndices { uint8_t meshletIndices[]; };
 
@@ -50,6 +51,7 @@ void main() {
         
         // c. 写入内置输出变量
         gl_MeshVerticesEXT[i].gl_Position = ubo.proj * ubo.view * vec4(pos, 1.0);
+        uv[i] = vertices[vertexIdx].uv;
     }
 
     // 4. 并行读取索引数据 (生成三角形)

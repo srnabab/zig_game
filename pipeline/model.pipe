@@ -52,7 +52,7 @@
     "depthClampEnable": false,
     "rasterizerDiscardEnable": false,
     "polygonMode": "FILL",
-    "cullMode": "BACK_BIT",
+    "cullMode": "NONE",
     "frontFace": "COUNTER_CLOCKWISE",
     "depthBiasEnable": false,
     "depthBiasConstantFactor": 0.0,

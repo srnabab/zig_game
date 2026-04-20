@@ -71,6 +71,7 @@ const featureRobustness2Need = [_][]const u8{
 const featureMeshShaderNeed = [_][]const u8{ "meshShader", "taskShader" };
 const feature8BitStorageNeed = [_][]const u8{"storageBuffer8BitAccess"};
 const featureMaintenance4Need = [_][]const u8{"maintenance4"};
+const featureScalarBlockLayoutNeed = [_][]const u8{"scalarBlockLayout"};
 
 const typeNames = struct {
     featureType: type,
@@ -87,6 +88,7 @@ const featureTypeAndNames = [_]typeNames{
     .{ .featureType = vk.VkPhysicalDeviceMeshShaderFeaturesEXT, .names = &featureMeshShaderNeed },
     .{ .featureType = vk.VkPhysicalDevice8BitStorageFeatures, .names = &feature8BitStorageNeed },
     .{ .featureType = vk.VkPhysicalDeviceMaintenance4Features, .names = &featureMaintenance4Need },
+    .{ .featureType = vk.VkPhysicalDeviceScalarBlockLayoutFeatures, .names = &featureScalarBlockLayoutNeed },
 };
 
 const VkQueueFamily = types.VkQueueFamily;
@@ -234,6 +236,7 @@ fn getSType(comptime T: type) vk.VkStructureType {
         vk.VkPhysicalDevice8BitStorageFeatures => vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES,
         vk.VkPhysicalDeviceFeatures2 => vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
         vk.VkPhysicalDeviceMaintenance4Features => vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES,
+        vk.VkPhysicalDeviceScalarBlockLayoutFeatures => vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES,
         // ... 在这里添加新类型的映射
         else => @compileError(std.fmt.comptimePrint("Unsupported feature type {s}", .{@typeName(T)})),
     };

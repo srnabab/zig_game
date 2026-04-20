@@ -794,6 +794,11 @@ const drawResourceMapGetOrPutResult = drawResourceMapType.GetOrPutResult;
 pub const commands = struct {
     const Self = @This();
 
+    const ptr_index_cache = struct {
+        ptr: *anyopaque,
+        index: u32,
+    };
+
     mutex: std.Io.Mutex = .init,
     io: std.Io,
 
@@ -1998,7 +2003,7 @@ pub const commands = struct {
             if (node.b == null) {
                 oneNodes[one] = node;
                 one += 1;
-                std.log.debug("a {d}", .{node.a.?.ID});
+                // std.log.debug("a {d}", .{node.a.?.ID});
             } else {
                 twoNodes[two] = node;
                 two += 1;
@@ -2281,7 +2286,6 @@ pub const commands = struct {
             );
 
             self.pRendering.renderingStart(pRendering);
-            try self.cacheMap.put(pRendering, beginRenderingQueueNode.a.?.ID);
 
             renderingNode.* = beginRenderingQueueNode.a.?;
 
@@ -2310,14 +2314,18 @@ pub const commands = struct {
         }
     }
 
-    pub fn cacheAttachementImageView(self: *Self, pRendering: rendering.RenderingInfo_t, lastNode: *QueueNode) !void {
+    pub fn cacheAttachementImageView(self: *Self, pRendering: rendering.RenderingInfo_t, lastNode: *QueueNode, array: *std.array_list.Managed(ptr_index_cache)) !void {
         const zone = tracy.initZone(@src(), .{ .name = "cache attachement image view" });
         defer zone.deinit();
 
         const textures = self.pRendering.getRenderingInfoContent(pRendering).textures;
 
         for (textures) |value| {
-            try self.cacheMap.put(value, lastNode.ID);
+            const ptr = try array.addOne();
+            ptr.* = .{
+                .ptr = value,
+                .index = lastNode.ID,
+            };
         }
     }
 
@@ -2438,8 +2446,6 @@ pub const commands = struct {
             }
         }
         lastNodeRes.value_ptr.* = node.ID;
-
-        try self.cacheAttachementImageView(pRendering, node);
 
         renderingPack_.value_ptr.currentHash = hash;
         pLastNode.* = lastNode;
@@ -2853,6 +2859,8 @@ pub const commands = struct {
 
         var dependenciesArray: std.array_list.Managed(*anyopaque) = .init(allocator);
 
+        var needToCacheArray: std.array_list.Managed(ptr_index_cache) = .init(allocator);
+
         // dependcy infer
         // combine memory barrier operation with same src stage mask
         // combine same image draw call
@@ -2875,6 +2883,11 @@ pub const commands = struct {
                     allocator,
                     std.meta.activeTag(command),
                 );
+                const cachePtr = try needToCacheArray.addOne();
+                cachePtr.* = .{
+                    .ptr = drawMesh.rendering,
+                    .index = renderingNode.?.ID,
+                };
 
                 // inputs may have dependency
                 for (drawMesh.usedBuffers) |buffer| {
@@ -2907,9 +2920,12 @@ pub const commands = struct {
                     &lastNode,
                 );
 
+                try self.cacheAttachementImageView(drawMesh.rendering, node, &needToCacheArray);
+
                 const pipelineContent = self.vulkan.getPipelineContent(drawMesh.pipeline);
                 const texIndex = try self.pTextureSet.getDescriptorSetIndex(drawMesh.pTextures[0]);
                 const texIndexSlice = std.mem.asBytes(&texIndex);
+                // std.log.debug("tex idx {d}", .{texIndex});
 
                 const texIndex_u8 = try allocator.dupe(u8, @alignCast(texIndexSlice));
 
@@ -2976,6 +2992,11 @@ pub const commands = struct {
                     allocator,
                     @enumFromInt(@intFromEnum(std.meta.activeTag(command))),
                 );
+                const cachePtr = try needToCacheArray.addOne();
+                cachePtr.* = .{
+                    .ptr = present.rendering,
+                    .index = renderingNode.?.ID,
+                };
 
                 // inputs may have dependency
                 for (present.pTextures) |value| {
@@ -3003,6 +3024,8 @@ pub const commands = struct {
                     node,
                     &lastNode,
                 );
+
+                try self.cacheAttachementImageView(present.rendering, node, &needToCacheArray);
 
                 const linkNode = try self.resPackNodeProcess(
                     resPack,
@@ -3063,6 +3086,11 @@ pub const commands = struct {
                     allocator,
                     std.meta.activeTag(command),
                 );
+                const cachePtr = try needToCacheArray.addOne();
+                cachePtr.* = .{
+                    .ptr = draw2D.rendering,
+                    .index = renderingNode.?.ID,
+                };
 
                 // inputs may have dependency
                 var dependencyPtr = try dependenciesArray.addOne();
@@ -3094,6 +3122,8 @@ pub const commands = struct {
                     node,
                     &lastNode,
                 );
+
+                try self.cacheAttachementImageView(draw2D.rendering, node, &needToCacheArray);
 
                 const pipelineContent = self.vulkan.getPipelineContent(draw2D.pipeline);
                 const texIndex = try self.pTextureSet.getDescriptorSetIndex(draw2D.pTexture);
@@ -3197,7 +3227,11 @@ pub const commands = struct {
                 ptr.value_ptr.*.command.copyBuffer.regions = try allocator.dupe(vk.VkBufferCopy2, tempRegions);
 
                 // cache outputs
-                try self.cacheMap.put(@ptrCast(copyBuffer.dstBuffer), ID);
+                const cachePtr = try needToCacheArray.addOne();
+                cachePtr.* = .{
+                    .ptr = copyBuffer.dstBuffer,
+                    .index = ID,
+                };
             },
             .copyBufferToImage => {
                 if (self.vulkan.queueTypeCount != 1) {
@@ -3251,7 +3285,11 @@ pub const commands = struct {
                 }
 
                 // cache outputs
-                try self.cacheMap.put(copyBufferToImage.pTexture, ID);
+                const cachePtr = try needToCacheArray.addOne();
+                cachePtr.* = .{
+                    .ptr = copyBufferToImage.pTexture,
+                    .index = ID,
+                };
             },
             else => {
                 std.debug.panic("not supported commandType {s}", .{@tagName(command)});
@@ -3262,7 +3300,7 @@ pub const commands = struct {
         const endID = self.nodeDag.innerID - 1;
         // _ = startID;
         // _ = endID;
-        std.log.debug("range {d}-{d}", .{ startID, endID });
+        // std.log.debug("range {d}-{d}", .{ startID, endID });
 
         // self.nodeDag.print();
 
@@ -3270,144 +3308,55 @@ pub const commands = struct {
         errdefer zone3.deinit();
 
         const comm = self.queue.get(currentNode.ID).?;
-        switch (comm.command) {
-            .pipelineBarrier => {
-                // const pipelineBarrier = comm.command.pipelineBarrier;
-                var dependencyLinked = false;
+        if (comm.command == .start) {
+            if (command != .present) {
+                std.debug.panic("not supported command type {s} end with start", .{@tagName(comm.command)});
+            }
+        } else {
+            var dependencyLinked = false;
 
-                if (dependenciesArray.items.len > 0) {
-                    for (dependenciesArray.items) |dependency| {
-                        const dependencyID = self.cacheMap.get(dependency);
+            if (dependenciesArray.items.len > 0) {
+                for (dependenciesArray.items) |dependency| {
+                    const dependencyID = self.cacheMap.get(dependency);
 
-                        if (dependencyID) |idx| {
-                            const dependencyNode = self.nodeDag.get(idx).?;
+                    if (dependencyID) |idx| {
+                        // std.log.debug("dependency id {d}", .{idx});
 
+                        const dependencyNode = self.nodeDag.get(idx).?;
+
+                        // std.log.debug("{d} {*}, {d} {*}", .{ dependencyNode.ID, dependencyNode, currentNode.ID, currentNode });
+
+                        if (dependencyNode.ID >= startID and dependencyNode.ID <= endID) {
                             // std.log.debug("{d} {*}, {d} {*}", .{ dependencyNode.ID, dependencyNode, currentNode.ID, currentNode });
-
-                            if (dependencyNode.ID >= startID and dependencyNode.ID <= endID) {
-                                std.log.debug("{d} {*}, {d} {*}", .{ dependencyNode.ID, dependencyNode, currentNode.ID, currentNode });
-                                continue;
-                            }
-                            if (dependencyNode.ID == currentNode.ID) {
-                                continue;
-                            }
-
-                            try dependencyNode.childrenAppend(&currentNode.ID);
-                            try currentNode.parentsAppend(&dependencyNode.ID);
-
-                            currentNode.listID.?.* = dependencyNode.listID.?.*;
-
-                            dependencyLinked = true;
+                            continue;
                         }
+                        if (dependencyNode.ID == currentNode.ID) {
+                            continue;
+                        }
+
+                        try dependencyNode.childrenAppend(&currentNode.ID);
+                        try currentNode.parentsAppend(&dependencyNode.ID);
+
+                        currentNode.listID.?.* = dependencyNode.listID.?.*;
+
+                        dependencyLinked = true;
                     }
                 }
+            }
 
-                if (!dependencyLinked) {
-                    const root = self.nodeDag.get(0).?;
-                    try root.childrenAppend(&currentNode.ID);
-                    try currentNode.parentsAppend(&root.ID);
+            if (!dependencyLinked) {
+                const root = self.nodeDag.get(0).?;
+                try root.childrenAppend(&currentNode.ID);
+                try currentNode.parentsAppend(&root.ID);
 
-                    currentNode.listID.?.* = self.nodeDag.newListID();
-                }
-
-                // if (pipelineBarrier.lastSrcStageMask == vk.VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT) {
-                //     const root = self.nodeDag.get(0).?;
-                //     try root.childrenAppend(&currentNode.ID);
-                //     try currentNode.parentsAppend(&root.ID);
-
-                //     currentNode.listID.?.* = self.nodeDag.newListID();
-                // } else {
-                //     std.debug.panic("not supported pipeline barrier srcStageMask {s} ", .{
-                //         @tagName(@as(VkStruct.vulkanType.VkPipelineStageFlagBits2, @enumFromInt(pipelineBarrier.lastSrcStageMask))),
-                //     });
-                // }
-            },
-            .copyBuffer => {
-                const copyBuffer = comm.command.copyBuffer;
-
-                const index_ = self.cacheMap.get(@ptrCast(copyBuffer.srcBuffer));
-                if (index_) |idnex| {
-                    const prev = self.nodeDag.get(idnex).?;
-                    if (prev == node) {
-                        const root = self.nodeDag.get(0).?;
-                        try root.childrenAppend(&currentNode.ID);
-                        try currentNode.parentsAppend(&root.ID);
-
-                        currentNode.listID.?.* = self.nodeDag.newListID();
-                    } else {
-                        try prev.childrenAppend(&currentNode.ID);
-                        try currentNode.parentsAppend(&prev.ID);
-
-                        currentNode.listID.?.* = prev.listID.?.*;
-                    }
-                } else {
-                    const root = self.nodeDag.get(0).?;
-                    try root.childrenAppend(&currentNode.ID);
-                    try currentNode.parentsAppend(&root.ID);
-
-                    currentNode.listID.?.* = self.nodeDag.newListID();
-                }
-            },
-            .beginRendering => {
-                const beginRendering = comm.command.beginRendering;
-
-                var linked = false;
-
-                for (beginRendering.pColorAttachments) |value| {
-                    const index_ = self.cacheMap.get(@ptrCast(value.imageView));
-                    if (index_) |idnex| {
-                        const prev = self.nodeDag.get(idnex).?;
-                        try prev.childrenAppend(&currentNode.ID);
-                        try currentNode.parentsAppend(&prev.ID);
-
-                        linked = true;
-                        currentNode.listID.?.* = prev.listID.?.*;
-                    }
-                }
-
-                if (beginRendering.depthAttachment) |value| {
-                    const index_ = self.cacheMap.get(@ptrCast(value.imageView));
-                    if (index_) |idnex| {
-                        const prev = self.nodeDag.get(idnex).?;
-                        try prev.childrenAppend(&currentNode.ID);
-                        try currentNode.parentsAppend(&prev.ID);
-
-                        linked = true;
-                        currentNode.listID.?.* = prev.listID.?.*;
-                    }
-                }
-
-                if (beginRendering.stencilAttachment) |value| {
-                    const index_ = self.cacheMap.get(@ptrCast(value.imageView));
-                    if (index_) |idnex| {
-                        const prev = self.nodeDag.get(idnex).?;
-                        try prev.childrenAppend(&currentNode.ID);
-                        try currentNode.parentsAppend(&prev.ID);
-
-                        linked = true;
-                        currentNode.listID.?.* = prev.listID.?.*;
-                    }
-                }
-
-                if (!linked) {
-                    const root = self.nodeDag.get(0).?;
-                    try root.childrenAppend(&currentNode.ID);
-                    try currentNode.parentsAppend(&root.ID);
-
-                    currentNode.listID.?.* = self.nodeDag.newListID();
-                }
-            },
-            // .draw2D => {},
-            .start => {
-                if (command != .present) {
-                    std.debug.panic("not supported command type {s} end with start", .{@tagName(comm.command)});
-                }
-            },
-            else => {
-                std.debug.panic("not supported command type {s}", .{@tagName(comm.command)});
-            },
+                currentNode.listID.?.* = self.nodeDag.newListID();
+            }
         }
         zone3.deinit();
+
+        for (needToCacheArray.items) |value| {
+            try self.cacheMap.put(value.ptr, value.index);
+        }
 
         // self.nodeDag.print();
     }
@@ -3897,7 +3846,7 @@ pub const oneTimeCommand = struct {
                 const innerZone = tracy.initZone(@src(), .{ .name = "draw mesh" });
                 defer innerZone.deinit();
 
-                VkStruct.vkCmdDrawMeshTasksEXT.?(commandBuffer, command.command.drawMesh.meshletCount, 0, 0);
+                VkStruct.vkCmdDrawMeshTasksEXT.?(commandBuffer, command.command.drawMesh.meshletCount, 1, 1);
             },
             else => {
                 std.debug.panic("unsupported command type {s}", .{@tagName(command.command)});

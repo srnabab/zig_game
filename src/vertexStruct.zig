@@ -57,7 +57,7 @@ pub fn enumToType(vType: VertexType) type {
     switch (vType) {
         .none => return void,
         inline else => {
-            const name = std.fmt.comptimePrint("Vertex_{s}", @tagName(vType));
+            const name = std.fmt.comptimePrint("Vertex_{s}", .{@tagName(vType)});
             return @field(Self, name);
         },
     }
