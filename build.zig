@@ -469,6 +469,7 @@ pub fn build(b: *std.Build) void {
     memoryPool_mod.addImport("tracy", tracy.module("tracy"));
 
     processRender_mod.addImport("video", video_mod);
+    processRender_mod.addImport("mesh", mesh_mod);
     processRender_mod.addImport("vulkan", vk_c_mod);
     processRender_mod.addImport("textureSet", textureSet_mod);
     processRender_mod.addImport("queue", queue_mod);

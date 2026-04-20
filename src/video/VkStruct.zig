@@ -1,4 +1,4 @@
-const vk = @import("vulkan");
+pub const vk = @import("vulkan");
 const sdl = @import("sdl").sdl;
 const SDL_CheckResult = @import("sdl").SDL_CheckResult;
 const std = @import("std");
@@ -244,6 +244,14 @@ const AllocationCount = struct {
 };
 const Self = @This();
 
+const dynamicFuncNeeded = [_][]const u8{
+    "vkCmdDrawMeshTasksEXT",
+    // "vkCmdDrawMeshTasksIndirectEXT",
+    // "vkCmdDrawMeshTasksIndirectCountEXT",
+};
+
+pub var vkCmdDrawMeshTasksEXT: vk.PFN_vkCmdDrawMeshTasksEXT = null;
+
 currentFrame: std.atomic.Value(u32) = .init(0),
 
 totalFrame: std.atomic.Value(u32) = .init(0),
@@ -395,6 +403,10 @@ pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet) !void {
         self.transferQueueFamily,
         self.allocator,
     );
+
+    inline for (dynamicFuncNeeded) |name| {
+        @field(Self, name) = @ptrCast(vk.vkGetDeviceProcAddr(self.device, name.ptr));
+    }
 
     var queueTypeArray = [_]i32{100} ** 3;
     queueTypeArray[0] = self.graphicQueueFamily.familyIndice;
@@ -571,16 +583,7 @@ pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet) !void {
     ptr = try self.allDescriptorSetLayouts.addOne();
     ptr.* = self.meshDrawDescriptorSetLayout[0];
 
-    self.meshDrawDescriptorSetLayout[1] = try Descriptor.createDescriptorSetLayout(
-        self.device,
-        self.pAllocCallBacks,
-        null,
-        set1SetLayoutCreateInfos.flag,
-        set1SetLayoutCreateInfos.bindingCount,
-        @constCast(&set1SetLayoutCreateInfos.bindings),
-    );
-    ptr = try self.allDescriptorSetLayouts.addOne();
-    ptr.* = self.meshDrawDescriptorSetLayout[1];
+    self.meshDrawDescriptorSetLayout[1] = self.drawDescriptorSetLayout[1];
 
     self.meshDrawDescriptorSetLayout[2] = try Descriptor.createDescriptorSetLayout(
         self.device,
@@ -593,8 +596,8 @@ pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet) !void {
     ptr = try self.allDescriptorSetLayouts.addOne();
     ptr.* = self.meshDrawDescriptorSetLayout[2];
 
-    var set0Sets: [3]vk.VkDescriptorSet = undefined;
-    var set0Setlayout = [_]vk.VkDescriptorSetLayout{ self.drawDescriptorSetLayout[0], self.drawDescriptorSetLayout[0], self.drawDescriptorSetLayout[0] };
+    var set0Sets: [2]vk.VkDescriptorSet = undefined;
+    var set0Setlayout = [_]vk.VkDescriptorSetLayout{ self.drawDescriptorSetLayout[0], self.drawDescriptorSetLayout[0] };
     try Descriptor.allocateDescriptorSets(
         self.device,
         self.globalDescriptorPool,
@@ -604,11 +607,20 @@ pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet) !void {
 
     self.globalFixed2dMVPMatrixDescriptorSet = set0Sets[0];
     self.global2dMVPMatrixDescriptorSet = set0Sets[1];
-    self.global3dMVPMatrixDescriptorSet = set0Sets[2];
 
     try self.descriptorSetShaderStages.put(self.globalFixed2dMVPMatrixDescriptorSet, vk.VK_SHADER_STAGE_VERTEX_BIT);
     try self.descriptorSetShaderStages.put(self.global2dMVPMatrixDescriptorSet, vk.VK_SHADER_STAGE_VERTEX_BIT);
-    try self.descriptorSetShaderStages.put(self.global3dMVPMatrixDescriptorSet, vk.VK_SHADER_STAGE_VERTEX_BIT);
+
+    var meshSet0Sets: [1]vk.VkDescriptorSet = undefined;
+    var meshSet0Setlayout = [_]vk.VkDescriptorSetLayout{self.meshDrawDescriptorSetLayout[0]};
+    try Descriptor.allocateDescriptorSets(
+        self.device,
+        self.globalDescriptorPool,
+        &meshSet0Setlayout,
+        &meshSet0Sets,
+    );
+    self.global3dMVPMatrixDescriptorSet = meshSet0Sets[0];
+    try self.descriptorSetShaderStages.put(self.global3dMVPMatrixDescriptorSet, vk.VK_SHADER_STAGE_MESH_BIT_EXT);
 
     var set1Sets: [1]vk.VkDescriptorSet = undefined;
     var set1Setlayout = [_]vk.VkDescriptorSetLayout{self.drawDescriptorSetLayout[1]};

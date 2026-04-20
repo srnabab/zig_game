@@ -5,8 +5,8 @@ const sdl = @import("sdl").sdl;
 const global = @import("global");
 const tracy = @import("tracy");
 
-const vk = @import("vulkan");
 const VkStruct = @import("video");
+const vk = VkStruct.vk;
 const OneTimeCommand = @import("processRender").oneTimeCommand;
 const Commands = @import("processRender").commands;
 const textureSet = @import("textureSet");
@@ -94,6 +94,12 @@ pub fn render_thread_func(
         try pTextureSet.offsetsAdd(temp, ix);
         try vertices.upload(&commands);
     }
+    const boxPng = pTextureSet.createImageTextureEnsureWithErrorImage(
+        comptime file.comptimeGetID("box.png"),
+        .pixel2d,
+        &vulkan,
+        &commands,
+    );
 
     vulkan.writeCachedDescriptorSetResources();
 
@@ -265,6 +271,16 @@ pub fn render_thread_func(
         vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
     );
 
+    try vulkan.addWriteDescriptorSetBuffer(
+        0,
+        vulkan.buffers.getVkBuffer(ubo_test),
+        0,
+        vulkan.buffers.getBufferSize(ubo_test),
+        vulkan.global3dMVPMatrixDescriptorSet,
+        0,
+        vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+    );
+
     try vulkan.addWriteDescriptorSetImage(
         0,
         pTextureSet.getVkImageView(texture_test),
@@ -342,7 +358,7 @@ pub fn render_thread_func(
     };
 
     var testMeshDescriptorSets = [_]vk.VkDescriptorSet{
-        vulkan.globalFixed2dMVPMatrixDescriptorSet,
+        vulkan.global3dMVPMatrixDescriptorSet,
         vulkan.globalTextureDescriptorSet,
         vulkan.meshletsDescriptorSet,
     };
@@ -350,14 +366,13 @@ pub fn render_thread_func(
     var presentTextures = [_]textureSet.Texture_t{texture_test};
     var presentDescriptorSets = [_]vk.VkDescriptorSet{vulkan.presentSamplerDescriptorSet};
 
-    var test_meshTextures = [_]textureSet.Texture_t{
-        pTextureSet.getTexture(@intCast(file.getID("circle.png"))).?,
-    };
+    var test_meshTextures = [_]textureSet.Texture_t{boxPng};
     var test_meshBuffers = [_]VkStruct.Buffer_t{
         ssbo_test,
     };
 
-    // global.stopNodeDagPrint = false;
+    global.stopNodeDagPrint = false;
+    global.stopNodeDagDetailPrint = false;
     // global.stopExecuteNodePrint = false;
 
     const renderStart = std.Io.Timestamp.now(io, .real).toNanoseconds();
@@ -366,7 +381,7 @@ pub fn render_thread_func(
     while (true) {
         const frame = vulkan.totalFrame.load(.seq_cst);
 
-        if (frame == 3) {
+        if (frame == 100000) {
             global.stopExecuteNodePrint = true;
             global.stopNodeDagPrint = true;
         }
@@ -393,6 +408,7 @@ pub fn render_thread_func(
             .pViewport = viewport_test,
             .pScissor = scissor_test,
             .usedBuffers = &test_meshBuffers,
+            .meshletCount = meshes.meshletCount,
         } });
         try commands.addCommand(.present, .{ .present = .{
             .pipeline = vulkan.getPipeline("directOut").?,

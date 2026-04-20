@@ -387,6 +387,7 @@ pub fn createVirtualBlockBuffer(
         .offset = offset + ptr.offset,
         .virtualBlock = block,
     };
+    std.log.debug("block offset {d}", .{offset});
 
     // std.log.debug("ptr {*}, {*}, index {d}", .{ pack.ptr.vkBuffer, ptr.vkBuffer, index });
 
@@ -439,10 +440,11 @@ pub fn createVirtualBuffer(
         .offset = ptr.offset + offset,
         .virtualBlock = ptr.virtualBlock,
     };
+    std.log.debug("2 offset {d}", .{ptr.offset});
 
     const handle = handles.createHandle(@intCast(pack.index));
 
-    return .{ .buffer = handle, .offset = offset };
+    return .{ .buffer = handle, .offset = offset + ptr.offset };
 }
 
 pub fn destroyVirtualBlockBuffer(self: *Self, buffer: Buffer_t) void {

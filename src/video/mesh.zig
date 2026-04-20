@@ -18,6 +18,8 @@ meshletTriangleBuffer: ?VkStruct.Buffer_t = null,
 indexBuffer: ?VkStruct.Buffer_t = null,
 
 io: std.Io,
+
+meshletCount: u32 = 0,
 isMeshlet: bool = false,
 
 pub fn init(
@@ -77,11 +79,18 @@ pub fn loadMeshlet(self: *Self, ID: i32, allocator: std.mem.Allocator, vulkan: *
     const meshletTriangles = content[meshletTrianglesStart..indicesStart];
     const indices = content[indicesStart..];
 
+    const meshletCount = meshlets.len / @sizeOf(vertexStruct.Meshlet);
+    self.meshletCount += @intCast(meshletCount);
+
     if (self.isMeshlet) {
         const stagingBuffer1 = try vulkan.createStagingBuffer(@intCast(vertices.len));
+        vulkan.buffers.copyDataToMapped(stagingBuffer1, u8, vertices);
         const stagingBuffer2 = try vulkan.createStagingBuffer(@intCast(meshlets.len));
+        vulkan.buffers.copyDataToMapped(stagingBuffer2, u8, meshlets);
         const stagingBuffer3 = try vulkan.createStagingBuffer(@intCast(meshletVertices.len));
+        vulkan.buffers.copyDataToMapped(stagingBuffer3, u8, meshletVertices);
         const stagingBuffer4 = try vulkan.createStagingBuffer(@intCast(meshletTriangles.len));
+        vulkan.buffers.copyDataToMapped(stagingBuffer4, u8, meshletTriangles);
 
         var bufferContent = vulkan.buffers.getBufferContent(stagingBuffer1);
 
@@ -99,6 +108,7 @@ pub fn loadMeshlet(self: *Self, ID: i32, allocator: std.mem.Allocator, vulkan: *
             .size = @intCast(vertices.len),
             .dstOffset = allocBuffer1.offset,
         };
+        std.log.debug("offset {d}", .{allocBuffer1.offset});
 
         var regions = [_]vk.VkBufferCopy2{region};
 
@@ -124,6 +134,7 @@ pub fn loadMeshlet(self: *Self, ID: i32, allocator: std.mem.Allocator, vulkan: *
             .size = @intCast(meshlets.len),
             .dstOffset = allocBuffer2.offset,
         };
+        std.log.debug("offset {d}", .{allocBuffer2.offset});
 
         regions[0] = region;
 
@@ -149,6 +160,7 @@ pub fn loadMeshlet(self: *Self, ID: i32, allocator: std.mem.Allocator, vulkan: *
             .size = @intCast(meshletVertices.len),
             .dstOffset = allocBuffer3.offset,
         };
+        std.log.debug("offset {d}", .{allocBuffer3.offset});
 
         regions[0] = region;
 
@@ -174,6 +186,7 @@ pub fn loadMeshlet(self: *Self, ID: i32, allocator: std.mem.Allocator, vulkan: *
             .size = @intCast(meshletTriangles.len),
             .dstOffset = allocBuffer4.offset,
         };
+        std.log.debug("offset {d}", .{allocBuffer4.offset});
 
         regions[0] = region;
 

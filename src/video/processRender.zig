@@ -640,9 +640,9 @@ fn nodeDagPrint(self: *QueueNodes, self2: *commands) void {
                     .pipelineBarrier => {
                         const pipelineBarrier = c.command.pipelineBarrier;
                         std.log.debug("ID {d} {s}", .{ entry.key_ptr.*, @tagName(c.command) });
-                        std.log.debug("lastSrcStageMask {s}", .{
-                            @tagName(@as(vulkanType.VkPipelineStageFlagBits2, @enumFromInt(pipelineBarrier.lastSrcStageMask))),
-                        });
+                        // std.log.debug("lastSrcStageMask {s}", .{
+                        //     @tagName(@as(vulkanType.VkPipelineStageFlagBits2, @enumFromInt(pipelineBarrier.lastSrcStageMask))),
+                        // });
                         for (pipelineBarrier.barriers) |value| {
                             switch (value) {
                                 .memory => {},
@@ -1166,7 +1166,7 @@ pub const commands = struct {
                 }
 
                 switch (commandType) {
-                    .draw2D => {
+                    .drawMesh, .draw2D => {
                         destinationStage = vk.VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
                     },
                     else => {
@@ -1254,6 +1254,8 @@ pub const commands = struct {
                 rootNode.listID = self.nodeDag.currentListID;
 
                 if (enterCommandType == .draw2D) {
+                    rootNode.data.commandPoolType = .graphic;
+                } else if (enterCommandType == .drawMesh) {
                     rootNode.data.commandPoolType = .graphic;
                 } else {
                     std.debug.panic("pushconstant unprocessed enterCommandType {s}", .{@tagName(enterCommandType)});
@@ -1958,6 +1960,12 @@ pub const commands = struct {
 
         const allocator = self.stackAllocators[self.stackAllocatorsIndex].allocator();
 
+        const twoNodes = allocator.alloc(twoQueueNode, nodes.len) catch unreachable;
+        defer allocator.free(twoNodes);
+
+        const oneNodes = allocator.alloc(twoQueueNode, nodes.len) catch unreachable;
+        defer allocator.free(oneNodes);
+
         const newNodesA = allocator.alloc(?*QueueNode, nodes.len) catch unreachable;
         defer allocator.free(newNodesA);
 
@@ -1966,12 +1974,38 @@ pub const commands = struct {
 
         var lastSrcStageMask: vk.VkPipelineStageFlags2 = std.math.maxInt(u64);
 
-        for (newNodesA, newNodesB) |*a, *b| {
+        for (newNodesA, newNodesB, twoNodes, oneNodes) |
+            *a,
+            *b,
+            *c,
+            *d,
+        | {
             a.* = null;
             b.* = null;
+            c.* = .{};
+            d.* = .{};
         }
 
+        var two: u32 = 0;
+        var one: u32 = 0;
+
         for (nodes) |node| {
+            if (node.a == null) {
+                oneNodes[one] = node;
+                one += 1;
+                continue;
+            }
+            if (node.b == null) {
+                oneNodes[one] = node;
+                one += 1;
+                std.log.debug("a {d}", .{node.a.?.ID});
+            } else {
+                twoNodes[two] = node;
+                two += 1;
+            }
+        }
+
+        for (twoNodes) |node| {
             for (newNodesA) |*value| {
                 if (value.* == null) {
                     value.* = node.a;
@@ -2028,7 +2062,53 @@ pub const commands = struct {
             }
         }
 
-        if (midA != null and midB != null and midA != lastA and midB != lastB) {
+        if (lastB) |b| {
+            var tempNode: *QueueNode = b;
+
+            for (oneNodes) |node| {
+                if (node.a == null) continue;
+
+                try tempNode.childrenAppend(&node.a.?.ID);
+                try node.a.?.parentsAppend(&tempNode.ID);
+
+                tempNode = node.a.?;
+            }
+
+            lastB = tempNode;
+        } else if (midA) |a| {
+            var tempNode: *QueueNode = a;
+
+            for (oneNodes) |node| {
+                if (node.a == null) continue;
+
+                try tempNode.childrenAppend(&node.a.?.ID);
+                try node.a.?.parentsAppend(&tempNode.ID);
+
+                tempNode = node.a.?;
+            }
+
+            midA = tempNode;
+        } else if (lastA == null) {
+            var tempNode: *QueueNode = undefined;
+
+            for (oneNodes) |node| {
+                if (node.a == null) continue;
+                if (lastA == null) {
+                    lastA = node.a;
+                    tempNode = lastA.?;
+                    continue;
+                }
+
+                try tempNode.childrenAppend(&node.a.?.ID);
+                try node.a.?.parentsAppend(&tempNode.ID);
+
+                tempNode = node.a.?;
+            }
+
+            midA = tempNode;
+        }
+
+        if (midA != null and midB != null) {
             try midA.?.childrenAppend(&midB.?.ID);
             try midB.?.parentsAppend(&midA.?.ID);
         }
@@ -2037,6 +2117,7 @@ pub const commands = struct {
             const srcStageMask = &self.queue.getPtr(lastA.?.ID).?.command.pipelineBarrier.lastSrcStageMask;
             srcStageMask.* = lastSrcStageMask;
         }
+
         return .{ .a = lastA, .b = if (lastB == null) midA else lastB };
     }
 
@@ -2740,7 +2821,7 @@ pub const commands = struct {
 
         std.debug.assert(@as(u32, @intFromEnum(commandType)) == @as(u32, @intFromEnum(std.meta.activeTag(command))));
 
-        if (command == .drawMesh) return;
+        // if (command == .drawMesh) return;
 
         try self.mutex.lock(self.io);
         defer self.mutex.unlock(self.io);
@@ -2762,6 +2843,8 @@ pub const commands = struct {
         // ptr.value_ptr.ID = ID;
         // ptr.value_ptr.timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds();
 
+        const startID = ID;
+
         ptr.value_ptr.* = drawC{
             .ID = ID,
             .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
@@ -2777,11 +2860,85 @@ pub const commands = struct {
         const zone2 = tracy.initZone(@src(), .{ .name = "infer dependency 1" });
         errdefer zone2.deinit();
         switch (command) {
-            // .drawMesh => {
-            //     node.data.commandPoolType = .graphic;
+            .drawMesh => {
+                node.data.commandPoolType = .graphic;
 
-            //     const drawMesh = command.drawMesh;
-            // },
+                const drawMesh = command.drawMesh;
+
+                var renderingNode: ?*QueueNode = null;
+                try self.renderingResourcePreProcess(
+                    drawMesh.rendering,
+                    drawMesh.usedBuffers,
+                    drawMesh.pTextures,
+                    &currentNode,
+                    &renderingNode,
+                    allocator,
+                    std.meta.activeTag(command),
+                );
+
+                // inputs may have dependency
+                for (drawMesh.usedBuffers) |buffer| {
+                    const dependencyPtr = try dependenciesArray.addOne();
+                    dependencyPtr.* = buffer;
+                }
+                for (drawMesh.pTextures) |tex| {
+                    const dependencyPtr = try dependenciesArray.addOne();
+                    dependencyPtr.* = tex;
+                }
+                {
+                    const r_ = self.pRendering.getRenderingInfoContent(drawMesh.rendering);
+                    for (r_.textures) |t| {
+                        const dependencyPtr = try dependenciesArray.addOne();
+                        dependencyPtr.* = t;
+                    }
+                }
+
+                var lastNode: ?*QueueNode = null;
+                const resPack = try self.getRenderingResPack(
+                    drawMesh.rendering,
+                    null,
+                    null,
+                    drawMesh.descriptorSets,
+                    drawMesh.pViewport,
+                    drawMesh.pScissor,
+                    drawMesh.pipeline,
+                    allocator,
+                    node,
+                    &lastNode,
+                );
+
+                const pipelineContent = self.vulkan.getPipelineContent(drawMesh.pipeline);
+                const texIndex = try self.pTextureSet.getDescriptorSetIndex(drawMesh.pTextures[0]);
+                const texIndexSlice = std.mem.asBytes(&texIndex);
+
+                const texIndex_u8 = try allocator.dupe(u8, @alignCast(texIndexSlice));
+
+                const pushConstantNode = try self.addCommand2(.{ .pushconstant = .{
+                    .layout = pipelineContent.pipelineLayout,
+                    .stageFlags = vk.VK_SHADER_STAGE_FRAGMENT_BIT,
+                    .offset = 0,
+                    .size = @sizeOf(u32),
+                    .pValues = texIndex_u8,
+                } }, std.meta.activeTag(command));
+
+                const linkNode = try self.resPackNodeProcess(
+                    resPack,
+                    null,
+                    null,
+                    drawMesh.descriptorSets,
+                    drawMesh.pViewport,
+                    drawMesh.pScissor,
+                    drawMesh.pipeline,
+                    pushConstantNode.a.?,
+                    std.meta.activeTag(command),
+                );
+
+                try lastNodeLinkNodeRenderingNodeConnect(lastNode, linkNode, node, renderingNode);
+
+                if (currentNode == node) {
+                    currentNode = self.nodeDag.get(0).?;
+                }
+            },
             .present => {
                 node.data.commandPoolType = .graphic;
 
@@ -2820,9 +2977,17 @@ pub const commands = struct {
                     @enumFromInt(@intFromEnum(std.meta.activeTag(command))),
                 );
 
+                // inputs may have dependency
                 for (present.pTextures) |value| {
                     const dependencyPtr = try dependenciesArray.addOne();
                     dependencyPtr.* = value;
+                }
+                {
+                    const r_ = self.pRendering.getRenderingInfoContent(present.rendering);
+                    for (r_.textures) |t| {
+                        const dependencyPtr = try dependenciesArray.addOne();
+                        dependencyPtr.* = t;
+                    }
                 }
 
                 var lastNode: ?*QueueNode = null;
@@ -2899,6 +3064,7 @@ pub const commands = struct {
                     std.meta.activeTag(command),
                 );
 
+                // inputs may have dependency
                 var dependencyPtr = try dependenciesArray.addOne();
                 dependencyPtr.* = draw2D.indexBuffer;
                 dependencyPtr = try dependenciesArray.addOne();
@@ -2906,6 +3072,13 @@ pub const commands = struct {
                 for (draw2D.vertexBuffer) |value| {
                     dependencyPtr = try dependenciesArray.addOne();
                     dependencyPtr.* = value;
+                }
+                {
+                    const r_ = self.pRendering.getRenderingInfoContent(draw2D.rendering);
+                    for (r_.textures) |t| {
+                        dependencyPtr = try dependenciesArray.addOne();
+                        dependencyPtr.* = t;
+                    }
                 }
 
                 var lastNode: ?*QueueNode = null;
@@ -2926,7 +3099,7 @@ pub const commands = struct {
                 const texIndex = try self.pTextureSet.getDescriptorSetIndex(draw2D.pTexture);
                 const texIndexSlice = std.mem.asBytes(&texIndex);
 
-                const texIndex_u8 = try self.allocator.dupe(u8, @alignCast(texIndexSlice));
+                const texIndex_u8 = try allocator.dupe(u8, @alignCast(texIndexSlice));
 
                 const pushConstantNode = try self.addCommand2(.{ .pushconstant = .{
                     .layout = pipelineContent.pipelineLayout,
@@ -2994,6 +3167,10 @@ pub const commands = struct {
                     std.meta.activeTag(command),
                 );
 
+                // inputs may have dependency
+                const dependencyPtr = try dependenciesArray.addOne();
+                dependencyPtr.* = copyBuffer.srcBuffer;
+
                 const dstOffsets = try allocator.alloc(drawC.SizeOffset, tempRegions.len);
                 defer allocator.free(dstOffsets);
                 for (tempRegions, dstOffsets) |region, *dstOffset| {
@@ -3019,6 +3196,7 @@ pub const commands = struct {
 
                 ptr.value_ptr.*.command.copyBuffer.regions = try allocator.dupe(vk.VkBufferCopy2, tempRegions);
 
+                // cache outputs
                 try self.cacheMap.put(@ptrCast(copyBuffer.dstBuffer), ID);
             },
             .copyBufferToImage => {
@@ -3051,6 +3229,10 @@ pub const commands = struct {
                     std.meta.activeTag(command),
                 );
 
+                // inputs may have dependency
+                const dependencyPtr = try dependenciesArray.addOne();
+                dependencyPtr.* = copyBufferToImage.buffer;
+
                 var nodes = [_]twoQueueNode{ imageQueueNode, bufferQueueNode };
 
                 const res = try self.pipelineBarrierNodeConnect(&nodes);
@@ -3063,9 +3245,12 @@ pub const commands = struct {
                         try currentNode.parentsAppend(&aa.ID);
                     }
 
+                    std.log.debug("", .{});
+
                     currentNode = aa;
                 }
 
+                // cache outputs
                 try self.cacheMap.put(copyBufferToImage.pTexture, ID);
             },
             else => {
@@ -3073,6 +3258,11 @@ pub const commands = struct {
             },
         }
         zone2.deinit();
+
+        const endID = self.nodeDag.innerID - 1;
+        // _ = startID;
+        // _ = endID;
+        std.log.debug("range {d}-{d}", .{ startID, endID });
 
         // self.nodeDag.print();
 
@@ -3091,6 +3281,16 @@ pub const commands = struct {
 
                         if (dependencyID) |idx| {
                             const dependencyNode = self.nodeDag.get(idx).?;
+
+                            // std.log.debug("{d} {*}, {d} {*}", .{ dependencyNode.ID, dependencyNode, currentNode.ID, currentNode });
+
+                            if (dependencyNode.ID >= startID and dependencyNode.ID <= endID) {
+                                std.log.debug("{d} {*}, {d} {*}", .{ dependencyNode.ID, dependencyNode, currentNode.ID, currentNode });
+                                continue;
+                            }
+                            if (dependencyNode.ID == currentNode.ID) {
+                                continue;
+                            }
 
                             try dependencyNode.childrenAppend(&currentNode.ID);
                             try currentNode.parentsAppend(&dependencyNode.ID);
@@ -3693,6 +3893,12 @@ pub const oneTimeCommand = struct {
 
                 vk.vkCmdDraw(commandBuffer, 6, 1, 0, 0);
             },
+            .drawMesh => {
+                const innerZone = tracy.initZone(@src(), .{ .name = "draw mesh" });
+                defer innerZone.deinit();
+
+                VkStruct.vkCmdDrawMeshTasksEXT.?(commandBuffer, command.command.drawMesh.meshletCount, 0, 0);
+            },
             else => {
                 std.debug.panic("unsupported command type {s}", .{@tagName(command.command)});
             },
@@ -3806,6 +4012,7 @@ pub const oneTimeCommand = struct {
             },
             .draw2D, .present, .bindVertexBuffers, .bindDescriptorSets, .setViewport => null,
             .setScissor, .bindIndexBuffer, .bindPipeline, .start, .beginRendering, .endRendering => null,
+            .drawMesh => null,
             else => {
                 std.debug.panic("not support {s}", .{@tagName(command.command)});
             },
@@ -3847,8 +4054,8 @@ pub const oneTimeCommand = struct {
                     self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
                 },
                 .pValues => {
-                    if (currentSemaphoreValue < g.semaphoreValue) continue;
-                    self.allocator.free(g.data.pValues);
+                    // if (currentSemaphoreValue < g.semaphoreValue) continue;
+                    // self.allocator.free(g.data.pValues);
                     self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
                 },
                 .descriptorSets, .vertexBuffer, .renderingInfo, .empty => {},

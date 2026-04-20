@@ -4,7 +4,7 @@ const tracy = @import("tracy");
 const vertexStruct = @import("vertexStruct");
 
 const vkStruct = @import("video");
-const vk = @import("vulkan");
+const vk = vkStruct.vk;
 const global = @import("global");
 
 const Commands = @import("processRender").commands;

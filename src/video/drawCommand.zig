@@ -1,7 +1,7 @@
 const std = @import("std");
 const texture = @import("textureSet");
-const vk = @import("vulkan");
 const VkStruct = @import("video");
+const vk = VkStruct.vk;
 const rendering = @import("rendering");
 
 pub const CommandType = enum {
@@ -354,6 +354,7 @@ pub const DrawMesh = struct {
     pViewport: VkStruct.Viewport_t,
     pScissor: VkStruct.Scissor_t,
     usedBuffers: []VkStruct.Buffer_t,
+    meshletCount: u32,
 };
 
 // pub const Output = union {
