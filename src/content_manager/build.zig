@@ -108,6 +108,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .link_libc = true,
     });
+
     const UUID_c_mod = UUID_c.createModule();
     UUID_c_mod.addCSourceFile(.{
         .file = b.path("../UUID/UUID.c"),
@@ -150,9 +151,7 @@ pub fn build(b: *std.Build) void {
     const blake3_dep = b.dependency("blake3", .{});
     const blake3_lib = blake3_dep.artifact("blake3");
 
-    // blake3_c.addIncludePath(std.Build.LazyPath{ .cwd_relative = b.pathFromRoot("C:/D/code/zig/game/include") });
     blake3_c.addIncludePath(b.path("../../include"));
-
     meshopt_mod.addImport("meshopt", meshopt_c_mod);
     meshopt_c.addIncludePath(b.path("../../include"));
 

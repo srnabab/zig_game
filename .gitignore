@@ -27,3 +27,4 @@ shaders.txt
 sampler.txt
 config/
 zig-pkg/
+.watching

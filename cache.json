@@ -49,7 +49,7 @@
 	},
 	{
 		"path": "Shaders\\flat2d.frag",
-		"hash": "1b2efc43447f5146"
+		"hash": "8cab22a3f2d8d52a"
 	},
 	{
 		"path": "Shaders\\combine.frag",
@@ -68,12 +68,12 @@
 		"hash": "02ccc3dd9a061bea"
 	},
 	{
-		"path": "Shaders\\shape.frag",
-		"hash": "d566d14d53f7aa42"
-	},
-	{
 		"path": "Shaders\\SSGI.comp",
 		"hash": "101815da1a4219ec"
+	},
+	{
+		"path": "Shaders\\shape.frag",
+		"hash": "d566d14d53f7aa42"
 	},
 	{
 		"path": "Shaders\\flat2d.vert",
