@@ -65,18 +65,18 @@ pub fn build(b: *std.Build) void {
     });
     const sqlite_c_mod = sqlite_c.createModule();
     sqlite_c_mod.addCSourceFile(.{
-        .file = b.path("../sqlite3/sqlite3.c"),
+        .file = b.path("../../shared/sqlite3/sqlite3.c"),
         .language = .c,
         .flags = &c_flags,
     });
     const sqliteModule = b.createModule(.{
-        .root_source_file = b.path("../sqlite3/sqliteDB.zig"),
+        .root_source_file = b.path("../../shared/sqlite3/sqliteDB.zig"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
     });
     const tables_mod = b.createModule(.{
-        .root_source_file = b.path("../tables.zig"),
+        .root_source_file = b.path("../../shared/tables.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -147,9 +147,16 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
     const blake3_c_mod = blake3_c.createModule();
+    const blake3_hash_mod = b.createModule(.{
+        .root_source_file = b.path("../../shared/blake3/blake_hash.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     const blake3_dep = b.dependency("blake3", .{});
     const blake3_lib = blake3_dep.artifact("blake3");
+
+    blake3_hash_mod.addImport("blake3", blake3_c_mod);
 
     blake3_c.addIncludePath(b.path("../../include"));
     meshopt_mod.addImport("meshopt", meshopt_c_mod);
@@ -179,7 +186,7 @@ pub fn build(b: *std.Build) void {
     contentManagerModule.addImport("tracy", tracy.module("tracy"));
     contentManagerModule.addImport("UUID", UUID_mod);
     contentManagerModule.addImport("meshopt", meshopt_mod);
-    contentManagerModule.addImport("blake3", blake3_c_mod);
+    contentManagerModule.addImport("blake_hash", blake3_hash_mod);
     contentManagerModule.addIncludePath(b.path("../../include"));
     contentManagerModule.addIncludePath(b.path("../../../../../../msys64/mingw64/include/"));
     contentManagerModule.addLibraryPath(b.path("../../lib"));
@@ -208,7 +215,6 @@ pub fn build(b: *std.Build) void {
     spriv_reflect_c.addIncludePath(b.path("../../include"));
     srpiv_reflect_c_mod.addIncludePath(b.path("../../include"));
 
-    sqliteModule.addImport("tracy", tracy.module("tracy"));
     sqliteModule.addImport("sqlite3", sqlite_c_mod);
     sqlite_c.addIncludePath(b.path("../../include"));
 

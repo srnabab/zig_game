@@ -87,15 +87,15 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
     const sqlite_c_mod = sqlite_c.createModule();
-    sqlite_c_mod.addCSourceFile(.{ .file = b.path("src/sqlite3/sqlite3.c"), .language = .c });
+    sqlite_c_mod.addCSourceFile(.{ .file = b.path("shared/sqlite3/sqlite3.c"), .language = .c });
     const sqliteModule = b.createModule(.{
-        .root_source_file = b.path("src/sqlite3/sqliteDB.zig"),
+        .root_source_file = b.path("shared/sqlite3/sqliteDB.zig"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
     });
     const tables_mod = b.createModule(.{
-        .root_source_file = b.path("src/tables.zig"),
+        .root_source_file = b.path("shared/tables.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -391,7 +391,6 @@ pub fn build(b: *std.Build) void {
     pipelineJsonParse_mod.addImport("reflect", spReflectModule);
     pipelineJsonParse_mod.addImport("enumFromC", enum_c_mod);
 
-    sqliteModule.addImport("tracy", tracy.module("tracy"));
     sqliteModule.addImport("sqlite3", sqlite_c_mod);
     sqlite_c.addIncludePath(b.path("include"));
 
