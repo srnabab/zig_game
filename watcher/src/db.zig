@@ -15,10 +15,61 @@ const assert = std.debug.assert;
 const ContentPath = tables.ContentPath;
 const ImageLoadParameter = tables.ImageLoadParameter;
 const ModelLoadParameter = tables.ModelLoadParameter;
+const ShaderPipelineGraphNode = tables.ShaderPipelineGraphNode;
+const ShaderPipelineGraphEdge = tables.ShaderPipelineGraphEdge;
 
 pub const FileType = Types.FileType;
 
 const tableNames = [_][]const u8{ "ImageLoadParameter", "ModelLoadParameter" };
+const CreateTriggerContentPathOnInsertInsertIntoSubTable = tt: {
+    var buffer = [_]u8{0} ** 10240;
+    var writer = std.Io.Writer.fixed(&buffer);
+
+    var count: usize = 0;
+
+    for (@typeInfo(FileType).@"enum".fields) |field| {
+        switch (@as(FileType, @enumFromInt(field.value))) {
+            // .SPV => {
+            //     count += writer.write(std.fmt.comptimePrint(
+            //         "CREATE TRIGGER IF NOT EXISTS insertInto{s} AFTER INSERT ON ContentPath " ++
+            //             " FOR EACH ROW WHEN NEW.FileType={d} BEGIN INSERT INTO ShaderLoadParameter (FileName,ContentHash,RelativePath,FileSize,FileID) VALUES " ++
+            //             "(NEW.FileName,NEW.ContentHash,NEW.RelativePath,NEW.FileSize,NEW.ID) ON CONFLICT(FileName,ContentHash) DO UPDATE SET " ++
+            //             "FileID = NEW.ID, FileName = NEW.FileName, ContentHash = NEW.ContentHash, RelativePath = NEW.RelativePath, FileSize = NEW.FileSize; END;",
+            //         .{ tableNames[1], field.value },
+            //     )) catch |err| {
+            //         @compileError(std.fmt.comptimePrint("{s}", .{@errorName(err)}));
+            //     };
+            // },
+            .PNG => {
+                count += writer.write(std.fmt.comptimePrint(
+                    "CREATE TRIGGER IF NOT EXISTS insertInto{s} AFTER INSERT ON ContentPath " ++
+                        "FOR EACH ROW WHEN NEW.FileType={d} BEGIN INSERT INTO ImageLoadParameter (ID,FileName,ContentHash,RelativePath,FileUUID) VALUES " ++
+                        "(NEW.ID,NEW.FileName,NEW.ContentHash,NEW.RelativePath,NEW.UUID) ON CONFLICT(FileName,ContentHash) DO UPDATE SET " ++
+                        "ID = NEW.ID, FileUUID = NEW.UUID, FileName = NEW.FileName, ContentHash = NEW.ContentHash, RelativePath = NEW.RelativePath; END;",
+                    .{ tableNames[0], field.value },
+                )) catch |err| {
+                    @compileError(std.fmt.comptimePrint("{s}", .{@errorName(err)}));
+                };
+            },
+            .VTX => {
+                count += writer.write(std.fmt.comptimePrint(
+                    "CREATE TRIGGER IF NOT EXISTS insertInto{s} AFTER INSERT ON ContentPath " ++
+                        "FOR EACH ROW WHEN NEW.FileType={d} BEGIN INSERT INTO ModelLoadParameter (ID,FileName,ContentHash,RelativePath,FileUUID) VALUES " ++
+                        "(NEW.ID,NEW.FileName,NEW.ContentHash,NEW.RelativePath,NEW.UUID) ON CONFLICT(FileName,ContentHash) DO UPDATE SET " ++
+                        "ID = NEW.ID, FileUUID = NEW.UUID, FileName = NEW.FileName, ContentHash = NEW.ContentHash, RelativePath = NEW.RelativePath; END;",
+                    .{ tableNames[1], field.value },
+                )) catch |err| {
+                    @compileError(std.fmt.comptimePrint("{s}", .{@errorName(err)}));
+                };
+            },
+            else => {
+                continue;
+            },
+        }
+    }
+
+    break :tt std.fmt.comptimePrint("{s}", .{buffer});
+};
 
 const createUniqueIndexFileNameAndContentHash = cu: {
     var buffer = [_]u8{0} ** 10240;
@@ -99,6 +150,14 @@ const createTriggerOnUpdateContentPathUpdateOrInsertTables = ct: {
                 "WHERE FileUUID = NEW.UUID; END;",
             .{ tableName, id_list, tableName },
         )) catch unreachable;
+
+        count += writer.write(std.fmt.comptimePrint(
+            "CREATE TRIGGER IF NOT EXISTS insertInto{s} AFTER INSERT ON ContentPath " ++
+                "FOR EACH ROW WHEN NEW.FileType IN ({s}) BEGIN INSERT INTO {s} (ID,FileName,ContentHash,RelativePath,FileUUID) VALUES " ++
+                "(NEW.ID,NEW.FileName,NEW.ContentHash,NEW.RelativePath,NEW.UUID) ON CONFLICT(FileName,ContentHash) DO UPDATE SET " ++
+                "ID = NEW.ID, FileUUID = NEW.UUID, FileName = NEW.FileName, ContentHash = NEW.ContentHash, RelativePath = NEW.RelativePath; END;",
+            .{ tableName, id_list, tableName },
+        )) catch unreachable;
     }
 
     break :ct std.fmt.comptimePrint("{s}", .{buffer});
@@ -158,6 +217,8 @@ db: ?*sqlite.sqlite3 = null,
 ContentPathT: ContentPath = undefined,
 ImageLoadParameterT: ImageLoadParameter = undefined,
 ModelLoadParameterT: ModelLoadParameter = undefined,
+ShaderPipelineGraphNodeT: ShaderPipelineGraphNode = undefined,
+ShaderPipelineGraphEdgeT: ShaderPipelineGraphEdge = undefined,
 contentPathExist: bool = false,
 dbPath: []const u8,
 
@@ -191,6 +252,11 @@ pub fn init(allocator: std.mem.Allocator, dbPath: []const u8) !*Self {
     executeSQL(createTriggerOnInsertContentPathCheckContentHash, self.db.?);
     executeSQL(createTriggerOnDeleteContentPathUpdateTablesRelativePathWhereSameContentHash, self.db.?);
     executeSQL(createTriggerOnUpdateContentPathUpdateOrInsertTables, self.db.?);
+
+    self.ShaderPipelineGraphNodeT = ShaderPipelineGraphNode.init(self.db.?);
+    try self.ShaderPipelineGraphNodeT.createTable();
+    self.ShaderPipelineGraphEdgeT = ShaderPipelineGraphEdge.init(self.db.?);
+    try self.ShaderPipelineGraphEdgeT.createTable();
 
     self.dbPath = dbPath;
 

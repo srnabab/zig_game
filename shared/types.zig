@@ -12,5 +12,10 @@ pub const FileType = enum {
     GLTF,
     VTX,
     HASHTABLE,
+    Shader,
+    Pipeline,
+    PipeB,
+    Sampler,
+    SamplerB,
     UNKNOWN,
 };

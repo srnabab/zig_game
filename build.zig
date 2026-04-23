@@ -7,6 +7,8 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{ .default_target = .{ .abi = .gnu } });
     const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .Debug });
 
+    const root_path = b.build_root.path orelse "";
+
     // modules
     const tracy_enable = b.option(bool, "tracy_enable", "Enable profiling") orelse false;
     const tracy_callstack = b.option(u8, "tracy_callstack", "Callstack depth") orelse 10;
@@ -538,7 +540,7 @@ pub fn build(b: *std.Build) void {
         .root_module = gen_fileName_ID_mod,
         .name = "genFileNameIdHashMap",
     });
-    b.installArtifact(genFileNameIDexe);
+    const genFileNameIDexeInstallStep = b.addInstallArtifact(genFileNameIDexe, .{});
 
     // const gen_exe = b.addExecutable(.{ .name = "gen", .root_module = gen_mod });
 
@@ -621,6 +623,10 @@ pub fn build(b: *std.Build) void {
         b.fmt("build_script/{s}", .{sampler_need_compile_txt}),
     });
 
+    const runGenFileNameIdExe = b.step("create hash map", "create filename id static string hash map");
+    const runGenFileNameIdExe_cmd = b.addRunArtifact(genFileNameIDexe);
+    runGenFileNameIdExe_cmd.addArg(b.fmt("{s}/{s}", .{ root_path, "src/fileSystem/fileNameID.zig" }));
+
     const waf = b.addWriteFiles();
     _ = waf.addCopyFile(exe.getEmittedAsm(), "main.asm");
 
@@ -642,6 +648,9 @@ pub fn build(b: *std.Build) void {
     const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
 
     // run task dependency
+
+    runGenFileNameIdExe.dependOn(&runGenFileNameIdExe_cmd.step);
+    runGenFileNameIdExe_cmd.step.dependOn(&genFileNameIDexeInstallStep.step);
 
     shader_compile.dependOn(&script_cmd.step);
     shader_compile.dependOn(&compile_txt_pipeline_cmd.step);
@@ -666,6 +675,7 @@ pub fn build(b: *std.Build) void {
     // exe.step.dependOn(&run_gen_exe.step);
     // exe.step.dependOn(meshopt_lib_install_step);
     exe.step.dependOn(cglm_install_step);
+    exe.step.dependOn(runGenFileNameIdExe);
 
     waf.step.dependOn(&exe.step);
     b.getInstallStep().dependOn(&waf.step);

@@ -35,6 +35,7 @@
         .blake3 = .{ .path = "../dependencies/blake3" },
         .meshoptimizer = .{ .path = "../dependencies/meshoptimizer" },
         .cglm = .{ .path = "../dependencies/cglm" },
+        .shaderc = .{ .path = "../dependencies/shaderc" },
     },
     // Specifies the set of files and directories that are included in this package.
     // Only files and directories listed here are included in the `hash` that

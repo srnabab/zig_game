@@ -66,6 +66,14 @@ const FileTypeHashTable = map: {
         .{ ".gltf", FileType.GLTF },
         .{ ".glb", FileType.GLTF },
         .{ ".vtx", FileType.VTX },
+        .{ ".frag", FileType.Shader },
+        .{ ".vert", FileType.Shader },
+        .{ ".comp", FileType.Shader },
+        .{ ".mesh", FileType.Shader },
+        .{ ".pipe", FileType.Pipeline },
+        .{ ".samp", FileType.Sampler },
+        .{ ".pipeB", FileType.PipeB },
+        .{ ".sampler", FileType.SamplerB },
     };
 
     const maps = maptype.initComptime(list);
@@ -503,7 +511,7 @@ pub fn processFile(
     var fType: FileType = .UNKNOWN;
 
     if (fileModifiedTime == -1) {
-        // 新文件：插入新记录
+        std.log.debug("1", .{});
         var uuidBuffer = [_]u8{0} ** UUID.len;
         try UUID.createNewUUID(&uuidBuffer);
         const index = std.mem.lastIndexOf(u8, name, ".") orelse name.len;
@@ -545,6 +553,7 @@ pub fn processFile(
         const isModified = (currentModifiedTime != fileModifiedTime);
         if (pathModifiedTime == -1) {
             if (isModified) {
+                std.log.debug("2", .{});
                 var fileReader = tempFile.reader(io, &fileBuffer);
                 const content = try fileReader.interface.readAlloc(gpa, metadata.size);
                 defer gpa.free(content);
@@ -579,6 +588,21 @@ pub fn processFile(
                     rPZ[0 .. rPZ.len - name.len - 1],
                 );
             } else {
+                var fType_u32: u32 = 0;
+                var getValues: [1]*anyopaque = .{@ptrCast(&fType_u32)};
+                var types = [_]sqlDB.innerType{.INTEGER};
+
+                try ContentPathT.get(
+                    "FileType",
+                    null,
+                    "FileName = ?",
+                    .{name},
+                    &getValues,
+                    &types,
+                );
+
+                fType = @enumFromInt(fType_u32);
+
                 try ContentPathT.update(
                     "RelativePath,ParentID,LastSeenTime",
                     "FileName = ?",
@@ -588,6 +612,7 @@ pub fn processFile(
         } else {
             // 已存在的文件：只更新时间和内容哈希（如果需要）
             if (isModified) {
+                std.log.debug("3", .{});
                 var fileReader = tempFile.reader(io, &fileBuffer);
                 const content = try fileReader.interface.readAlloc(gpa, metadata.size);
                 defer gpa.free(content);
@@ -621,6 +646,21 @@ pub fn processFile(
                     rPZ[0 .. rPZ.len - name.len - 1],
                 );
             } else {
+                var fType_u32: u32 = 0;
+                var getValues: [1]*anyopaque = .{@ptrCast(&fType_u32)};
+                var types = [_]sqlDB.innerType{.INTEGER32};
+
+                try ContentPathT.get(
+                    "FileType",
+                    null,
+                    "FileName = ?",
+                    .{name},
+                    &getValues,
+                    &types,
+                );
+
+                fType = @enumFromInt(fType_u32);
+
                 try ContentPathT.update("LastSeenTime", "FileName = ?", .{ time, name });
             }
         }

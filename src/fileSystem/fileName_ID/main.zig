@@ -44,8 +44,10 @@ pub fn main(init: std.process.Init) !void {
 
     std.mem.copyForwards(u8, &root, realPath);
 
-    const index = std.mem.lastIndexOf(u8, &root, slash) orelse 0;
+    const index = std.mem.findLast(u8, &root, slash) orelse 0;
     @memset(root[index..root.len], 0);
+
+    std.log.debug("{s}", .{root});
 
     const cwd = try std.Io.Dir.openDirAbsolute(init.io, &root, .{});
     try std.process.setCurrentDir(init.io, cwd);

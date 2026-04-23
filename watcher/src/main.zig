@@ -1,6 +1,8 @@
 const std = @import("std");
 const Io = std.Io;
 
+const shaderc = @import("shaderc");
+
 const db = @import("db");
 
 const configFile = ".watching";
@@ -133,6 +135,12 @@ const DirectoryWatch = struct {
         }
         // std.log.debug("watch {s}", .{self.path});
     }
+};
+
+const NotifyInformation = struct {
+    Action: windows.DWORD,
+    time: i64,
+    name: []const u8,
 };
 
 var global_iocp: ?windows.HANDLE = null;
@@ -316,6 +324,10 @@ pub fn main(init: std.process.Init) !void {
         }
     }
 
+    var arrayFirstIndex: usize = 0;
+    var notifyArray = std.array_list.Managed(NotifyInformation).init(allocator);
+    defer notifyArray.deinit();
+
     while (true) {
         var completion_key: usize = 0;
         var lp_overlapped: ?*OVERLAPPED = null;
@@ -340,7 +352,6 @@ pub fn main(init: std.process.Init) !void {
             var offset: usize = 0;
             while (true) {
                 if (breakFlag) break;
-
                 {
                     const info: *const FILE_NOTIFY_INFORMATION = @ptrCast(@alignCast(&watch.buffer[offset]));
                     defer {
@@ -351,6 +362,7 @@ pub fn main(init: std.process.Init) !void {
                     const name_slice_u16 = @as([*]const u16, &info.FileName)[0 .. info.FileNameLength / 2];
 
                     const name_utf8 = try std.unicode.wtf16LeToWtf8Alloc(allocator, name_slice_u16);
+                    errdefer allocator.free(name_utf8);
 
                     if (watch == rootW.?) {
                         const fullPath = try std.fs.path.joinZ(gpa, &[_][]const u8{ path.?, name_utf8 });
@@ -365,151 +377,264 @@ pub fn main(init: std.process.Init) !void {
                         }
                     }
 
-                    const timeRes = file_time_hashMap.getPtr(name_utf8);
-                    // std.log.debug("{}", .{timeRes.found_existing});
-                    if (timeRes != null) {
-                        const curTime = std.Io.Timestamp.now(init.io, .real).toMilliseconds();
+                    const time = std.Io.Timestamp.now(init.io, .real).toMilliseconds();
 
-                        if (curTime - timeRes.?.* < 100) {
+                    const last = notifyArray.getLastOrNull();
+                    if (last) |l| {
+                        if (l.Action == info.Action and std.mem.eql(u8, l.name, name_utf8) and time - l.time < 150) {
+                            allocator.free(name_utf8);
                             continue;
                         }
-                    } else {
-                        try file_time_hashMap.put(name_utf8, std.Io.Timestamp.now(init.io, .real).toMilliseconds());
                     }
+                    try notifyArray.append(.{
+                        .Action = info.Action,
+                        .name = name_utf8,
+                        .time = std.Io.Timestamp.now(init.io, .real).toMilliseconds(),
+                    });
+                }
+            }
 
-                    const action_str = switch (info.Action) {
-                        1 => "create",
-                        2 => "delete",
-                        3 => "modify",
-                        4 => "rename (old)",
-                        5 => "rename (new)",
-                        else => "unknown",
-                    };
+            while (true) {
+                if (arrayFirstIndex >= notifyArray.items.len) {
+                    if (notifyArray.items.len > 1000) {
+                        notifyArray.clearRetainingCapacity();
+                        arrayFirstIndex = 0;
+                    }
+                    break;
+                }
 
-                    std.log.info("[{s}] {s}", .{ action_str, name_utf8 });
+                const info = notifyArray.items[arrayFirstIndex];
+                arrayFirstIndex += 1;
 
-                    switch (info.Action) {
-                        1, 3 => {
-                            if (std.mem.eql(u8, name_utf8, watchingFilePath)) {
-                                if (watchingFile == null) {
+                if (info.Action == 100) continue;
+
+                const name_utf8 = info.name;
+                defer allocator.free(name_utf8);
+
+                const action_str = switch (info.Action) {
+                    1 => "create",
+                    2 => "delete",
+                    3 => "modify",
+                    4 => "rename (old)",
+                    5 => "rename (new)",
+                    else => "unknown",
+                };
+
+                std.log.info("[{s}] {s}", .{ action_str, name_utf8 });
+
+                switch (info.Action) {
+                    1, 3 => {
+                        if (std.mem.eql(u8, name_utf8, watchingFilePath)) {
+                            if (watchingFile == null) {
+                                continue;
+                            }
+
+                            const curTime = std.Io.Timestamp.now(init.io, .real).toMilliseconds();
+
+                            try std.Io.sleep(init.io, .fromMilliseconds(10), .real);
+
+                            const fileSize = (try watchingFile.?.stat(init.io)).size;
+
+                            _ = try watchingFileReader.seekTo(0);
+
+                            const content = try watchingFileReader.interface.readAlloc(gpa, fileSize);
+                            defer gpa.free(content);
+
+                            watchingFilePos = 0;
+                            while (watchingFilePos < fileSize) {
+                                const index = std.mem.indexOf(
+                                    u8,
+                                    content[watchingFilePos..],
+                                    "\n",
+                                ) orelse break;
+
+                                const line = content[watchingFilePos .. watchingFilePos + index];
+                                const clean_path = std.mem.trim(u8, line, "\r\t");
+                                const path_ = try allocator.dupe(u8, clean_path);
+
+                                const getRes = watchMap.getPtr(path_);
+                                if (getRes != null) {
+                                    allocator.free(path_);
+                                    getRes.?.* = curTime;
+                                } else {
+                                    const wRes = watcherPathMap.get(path_);
+
+                                    if (wRes != null) {
+                                        // std.log.debug("found", .{});
+
+                                        if (wRes.?.*.stopWatch) {
+                                            // std.log.debug("resume {s}", .{path_});
+                                            wRes.?.*.stopWatch = false;
+                                            try wRes.?.*.startWatch();
+                                        }
+                                    } else {
+                                        std.log.debug("new", .{});
+                                        const w = try addWatchFolder(
+                                            path.?,
+                                            path_,
+                                            allocator,
+                                            iocp,
+                                            FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_LAST_WRITE | FILE_NOTIFY_CHANGE_DIR_NAME,
+                                            true,
+                                        );
+                                        if (w != null) {
+                                            try watcherPathMap.put(path_, w.?);
+                                            try w.?.startWatch();
+                                        }
+                                    }
+                                    try watchMap.put(path_, curTime);
+                                }
+
+                                watchingFilePos += index + 1;
+                            }
+
+                            var it = watchMap.iterator();
+
+                            while (it.next()) |kv| {
+                                if (kv.value_ptr.* != curTime) {
+                                    try removeArray.append(kv.key_ptr.*);
                                     continue;
                                 }
+                            }
 
-                                const curTime = std.Io.Timestamp.now(init.io, .real).toMilliseconds();
+                            for (removeArray.items) |key| {
+                                _ = watchMap.remove(key);
+                                const w = watcherPathMap.get(key);
+                                if (w != null) {
+                                    w.?.stopWatch = true;
+                                }
+                            }
+                            removeArray.clearRetainingCapacity();
+                        } else {
+                            const fullPath = try std.fs.path.joinZ(
+                                gpa,
+                                &[_][]const u8{ watch.path, name_utf8 },
+                            );
+                            defer gpa.free(fullPath);
 
-                                try std.Io.sleep(init.io, .fromMilliseconds(10), .real);
+                            try std.Io.sleep(init.io, .fromMilliseconds(1), .real);
 
-                                const fileSize = (try watchingFile.?.stat(init.io)).size;
+                            const file: ?std.Io.File = std.Io.Dir.openFileAbsolute(
+                                init.io,
+                                fullPath,
+                                .{},
+                            ) catch |err| s: switch (err) {
+                                else => {
+                                    std.log.err("failed to open file {s} {s}", .{ fullPath, @errorName(err) });
+                                    break :s null;
+                                },
+                            };
 
-                                _ = try watchingFileReader.seekTo(0);
+                            if (file) |f| {
+                                defer f.close(init.io);
+                                const stat = try f.stat(init.io);
 
-                                const content = try watchingFileReader.interface.readAlloc(gpa, fileSize);
-                                defer gpa.free(content);
+                                if (stat.kind == .file) {
+                                    var startIndex = std.mem.findLast(u8, fullPath, "\\") orelse 0;
+                                    if (startIndex != 0) startIndex += 1;
+                                    const fileName = fullPath[startIndex..];
 
-                                watchingFilePos = 0;
-                                while (watchingFilePos < fileSize) {
-                                    const index = std.mem.indexOf(
-                                        u8,
-                                        content[watchingFilePos..],
-                                        "\n",
-                                    ) orelse break;
+                                    var fType = db.FileType.UNKNOWN;
 
-                                    const line = content[watchingFilePos .. watchingFilePos + index];
-                                    const clean_path = std.mem.trim(u8, line, "\r\t");
-                                    const path_ = try allocator.dupe(u8, clean_path);
+                                    if (watch == contentWatch) {
+                                        // std.log.debug("in", .{});
+                                        const dir = try std.Io.Dir.openDirAbsolute(
+                                            init.io,
+                                            fullPath[0 .. startIndex - 1],
+                                            .{},
+                                        );
+                                        defer dir.close(init.io);
 
-                                    const getRes = watchMap.getPtr(path_);
-                                    if (getRes != null) {
-                                        allocator.free(path_);
-                                        getRes.?.* = curTime;
-                                    } else {
-                                        const wRes = watcherPathMap.get(path_);
+                                        const idx = std.mem.findLast(u8, fullPath, "Content");
 
-                                        if (wRes != null) {
-                                            // std.log.debug("found", .{});
+                                        if (idx) |i| {
+                                            // std.log.debug("in in", .{});
+                                            var parentUUID = [_]u8{0} ** db.UUID.len;
+                                            var getValues: [1]*anyopaque = undefined;
+                                            getValues[0] = @ptrCast(&parentUUID);
+                                            var types = [_]db.innerType{.TEXT};
 
-                                            if (wRes.?.*.stopWatch) {
-                                                // std.log.debug("resume {s}", .{path_});
-                                                wRes.?.*.stopWatch = false;
-                                                try wRes.?.*.startWatch();
-                                            }
-                                        } else {
-                                            std.log.debug("new", .{});
-                                            const w = try addWatchFolder(
-                                                path.?,
-                                                path_,
-                                                allocator,
-                                                iocp,
-                                                FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_LAST_WRITE | FILE_NOTIFY_CHANGE_DIR_NAME,
-                                                true,
+                                            const parentPathZ = try std.fs.path.joinZ(
+                                                gpa,
+                                                &[_][]const u8{fullPath[i .. startIndex - 1]},
                                             );
-                                            if (w != null) {
-                                                try watcherPathMap.put(path_, w.?);
-                                                try w.?.startWatch();
-                                            }
+                                            defer gpa.free(parentPathZ);
+
+                                            try database.ContentPathT.get(
+                                                "UUID",
+                                                null,
+                                                "RelativePath = ?",
+                                                .{parentPathZ},
+                                                &getValues,
+                                                &types,
+                                            );
+                                            std.log.debug("{s}", .{parentPathZ});
+                                            fType = try db.iterateFolder.processFile(
+                                                init.io,
+                                                dir,
+                                                fileName,
+                                                fullPath[i..],
+                                                &parentUUID,
+                                            );
                                         }
-                                        try watchMap.put(path_, curTime);
+
+                                        if (committer.is_active) {
+                                            committer.poke();
+                                        } else {
+                                            if (future) |_| {
+                                                _ = try future.?.await(init.io);
+                                                future = null;
+                                            }
+                                            committer.activate();
+                                            future = init.io.async(db.AutoCommitter.runMonitor, .{&committer});
+                                        }
+                                    } else {
+                                        const dotIndex = std.mem.findLast(u8, fileName, ".") orelse fileName.len;
+
+                                        var readBuffer = [_]u8{0} ** 64;
+                                        var reader = f.reader(init.io, &readBuffer);
+                                        const content = try reader.interface.readAlloc(gpa, stat.size);
+                                        defer gpa.free(content);
+
+                                        fType = db.judgeFileType(fileName[dotIndex..], content);
+
+                                        switch (fType) {
+                                            .Shader => {},
+                                            .Sampler => {},
+                                            .Pipeline => {},
+                                            else => {},
+                                        }
                                     }
 
-                                    watchingFilePos += index + 1;
-                                }
+                                    std.log.debug("name {s} {s}", .{ fileName, @tagName(fType) });
+                                } else if (stat.kind == .directory) {
+                                    const dir: ?std.Io.Dir = std.Io.Dir.openDirAbsolute(
+                                        init.io,
+                                        fullPath,
+                                        .{},
+                                    ) catch |err| s: switch (err) {
+                                        else => {
+                                            std.log.err("failed to open dir {s} {s}", .{ fullPath, @errorName(err) });
+                                            break :s null;
+                                        },
+                                    };
 
-                                var it = watchMap.iterator();
+                                    var startIndex = std.mem.findLast(u8, fullPath, "\\") orelse 0;
+                                    if (startIndex != 0) startIndex += 1;
+                                    const dirname = fullPath[startIndex..];
 
-                                while (it.next()) |kv| {
-                                    if (kv.value_ptr.* != curTime) {
-                                        try removeArray.append(kv.key_ptr.*);
-                                        continue;
-                                    }
-                                }
+                                    if (dir) |d| {
+                                        defer d.close(init.io);
 
-                                for (removeArray.items) |key| {
-                                    _ = watchMap.remove(key);
-                                    const w = watcherPathMap.get(key);
-                                    if (w != null) {
-                                        w.?.stopWatch = true;
-                                    }
-                                }
-                                removeArray.clearRetainingCapacity();
-                            } else {
-                                const fullPath = try std.fs.path.joinZ(
-                                    gpa,
-                                    &[_][]const u8{ watch.path, name_utf8 },
-                                );
-                                defer gpa.free(fullPath);
-
-                                try std.Io.sleep(init.io, .fromMilliseconds(1), .real);
-
-                                const file: ?std.Io.File = std.Io.Dir.openFileAbsolute(
-                                    init.io,
-                                    fullPath,
-                                    .{},
-                                ) catch |err| s: switch (err) {
-                                    else => {
-                                        std.log.err("failed to open file {s} {s}", .{ fullPath, @errorName(err) });
-                                        break :s null;
-                                    },
-                                };
-
-                                if (file) |f| {
-                                    defer f.close(init.io);
-                                    const stat = try f.stat(init.io);
-
-                                    if (stat.kind == .file) {
-                                        var startIndex = std.mem.findLast(u8, fullPath, "\\") orelse 0;
-                                        if (startIndex != 0) startIndex += 1;
-                                        const fileName = fullPath[startIndex..];
-
-                                        var fType = db.FileType.UNKNOWN;
+                                        std.log.debug("in", .{});
 
                                         if (watch == contentWatch) {
-                                            std.log.debug("in", .{});
-                                            const dir = try std.Io.Dir.openDirAbsolute(
+                                            const parentDir = try std.Io.Dir.openDirAbsolute(
                                                 init.io,
                                                 fullPath[0 .. startIndex - 1],
                                                 .{},
                                             );
-                                            defer dir.close(init.io);
+                                            defer parentDir.close(init.io);
 
                                             const idx = std.mem.findLast(u8, fullPath, "Content");
 
@@ -535,12 +660,14 @@ pub fn main(init: std.process.Init) !void {
                                                     &types,
                                                 );
                                                 std.log.debug("{s}", .{parentPathZ});
-                                                fType = try db.iterateFolder.processFile(
+
+                                                try db.iterateFolder.processDirectory(
                                                     init.io,
-                                                    dir,
-                                                    fileName,
+                                                    parentDir,
+                                                    dirname,
                                                     fullPath[i..],
                                                     &parentUUID,
+                                                    true,
                                                 );
                                             }
 
@@ -554,195 +681,104 @@ pub fn main(init: std.process.Init) !void {
                                                 committer.activate();
                                                 future = init.io.async(db.AutoCommitter.runMonitor, .{&committer});
                                             }
-                                        } else {
-                                            const dotIndex = std.mem.findLast(u8, fileName, ".") orelse fileName.len;
-
-                                            var readBuffer = [_]u8{0} ** 64;
-                                            var reader = f.reader(init.io, &readBuffer);
-                                            const content = try reader.interface.readAlloc(gpa, stat.size);
-                                            defer gpa.free(content);
-
-                                            fType = db.judgeFileType(fileName[dotIndex..], content);
                                         }
 
-                                        std.log.debug("name {s} {s}", .{ fileName, @tagName(fType) });
-                                    } else if (stat.kind == .directory) {
-                                        const dir: ?std.Io.Dir = std.Io.Dir.openDirAbsolute(
-                                            init.io,
-                                            fullPath,
-                                            .{},
-                                        ) catch |err| s: switch (err) {
-                                            else => {
-                                                std.log.err("failed to open dir {s} {s}", .{ fullPath, @errorName(err) });
-                                                break :s null;
-                                            },
-                                        };
-
-                                        var startIndex = std.mem.findLast(u8, fullPath, "\\") orelse 0;
-                                        if (startIndex != 0) startIndex += 1;
-                                        const dirname = fullPath[startIndex..];
-
-                                        if (dir) |d| {
-                                            defer d.close(init.io);
-
-                                            std.log.debug("in", .{});
-
-                                            if (watch == contentWatch) {
-                                                const parentDir = try std.Io.Dir.openDirAbsolute(
-                                                    init.io,
-                                                    fullPath[0 .. startIndex - 1],
-                                                    .{},
-                                                );
-                                                defer parentDir.close(init.io);
-
-                                                const idx = std.mem.findLast(u8, fullPath, "Content");
-
-                                                if (idx) |i| {
-                                                    std.log.debug("in in", .{});
-                                                    var parentUUID = [_]u8{0} ** db.UUID.len;
-                                                    var getValues: [1]*anyopaque = undefined;
-                                                    getValues[0] = @ptrCast(&parentUUID);
-                                                    var types = [_]db.innerType{.TEXT};
-
-                                                    const parentPathZ = try std.fs.path.joinZ(
-                                                        gpa,
-                                                        &[_][]const u8{fullPath[i .. startIndex - 1]},
-                                                    );
-                                                    defer gpa.free(parentPathZ);
-
-                                                    try database.ContentPathT.get(
-                                                        "UUID",
-                                                        null,
-                                                        "RelativePath = ?",
-                                                        .{parentPathZ},
-                                                        &getValues,
-                                                        &types,
-                                                    );
-                                                    std.log.debug("{s}", .{parentPathZ});
-
-                                                    try db.iterateFolder.processDirectory(
-                                                        init.io,
-                                                        parentDir,
-                                                        dirname,
-                                                        fullPath[i..],
-                                                        &parentUUID,
-                                                        true,
-                                                    );
-                                                }
-
-                                                if (committer.is_active) {
-                                                    committer.poke();
-                                                } else {
-                                                    if (future) |_| {
-                                                        _ = try future.?.await(init.io);
-                                                        future = null;
-                                                    }
-                                                    committer.activate();
-                                                    future = init.io.async(db.AutoCommitter.runMonitor, .{&committer});
-                                                }
-                                            }
-
-                                            std.log.debug("dir {s}", .{dirname});
-                                        }
+                                        std.log.debug("dir {s}", .{dirname});
                                     }
                                 }
                             }
-                        },
-                        2 => {
+                        }
+                    },
+                    2 => {
+                        const fullPath = try std.fs.path.joinZ(
+                            gpa,
+                            &[_][]const u8{ watch.path, name_utf8 },
+                        );
+                        defer gpa.free(fullPath);
+
+                        var startIndex = std.mem.findLast(u8, fullPath, "\\") orelse 0;
+                        if (startIndex != 0) startIndex += 1;
+                        const fileName = fullPath[startIndex..];
+
+                        if (watch == contentWatch) {
+                            try database.ContentPathT.delete(
+                                "FileName = ?",
+                                .{fileName},
+                            );
+
+                            if (committer.is_active) {
+                                committer.poke();
+                            } else {
+                                if (future) |_| {
+                                    _ = try future.?.await(init.io);
+                                    future = null;
+                                }
+                                committer.activate();
+                                future = init.io.async(db.AutoCommitter.runMonitor, .{&committer});
+                            }
+                        }
+                    },
+                    4 => {
+                        if (pending_old_name) |old| allocator.free(old);
+                        pending_old_name = try allocator.dupe(u8, name_utf8);
+                    },
+                    5 => {
+                        if (pending_old_name) |old| {
                             const fullPath = try std.fs.path.joinZ(
                                 gpa,
                                 &[_][]const u8{ watch.path, name_utf8 },
                             );
                             defer gpa.free(fullPath);
 
-                            var startIndex = std.mem.findLast(u8, fullPath, "\\") orelse 0;
-                            if (startIndex != 0) startIndex += 1;
-                            const fileName = fullPath[startIndex..];
-
                             if (watch == contentWatch) {
-                                try database.ContentPathT.delete(
-                                    "FileName = ?",
-                                    .{fileName},
-                                );
+                                var startIndex = std.mem.findLast(u8, fullPath, "\\") orelse 0;
+                                if (startIndex != 0) startIndex += 1;
+                                const fileName = fullPath[startIndex..];
 
-                                if (committer.is_active) {
-                                    committer.poke();
-                                } else {
-                                    if (future) |_| {
-                                        _ = try future.?.await(init.io);
-                                        future = null;
-                                    }
-                                    committer.activate();
-                                    future = init.io.async(db.AutoCommitter.runMonitor, .{&committer});
+                                var oldStartIndex = std.mem.findLast(u8, old, "\\") orelse 0;
+                                if (oldStartIndex != 0) oldStartIndex += 1;
+
+                                const idx = std.mem.findLast(u8, fullPath, "Content");
+
+                                if (idx) |i| {
+                                    var parentUUID = [_]u8{0} ** db.UUID.len;
+                                    parentUUID[db.UUID.len - 2] = 0;
+                                    parentUUID[db.UUID.len - 1] = 0;
+
+                                    var getValues: [1]*anyopaque = undefined;
+                                    getValues[0] = @ptrCast(&parentUUID);
+                                    var types = [_]db.innerType{.TEXT};
+
+                                    const parentPathZ = try std.fs.path.joinZ(
+                                        gpa,
+                                        &[_][]const u8{fullPath[i .. startIndex - 1]},
+                                    );
+                                    defer gpa.free(parentPathZ);
+
+                                    std.log.debug("{s}", .{parentPathZ});
+
+                                    try database.ContentPathT.get(
+                                        "UUID",
+                                        null,
+                                        "RelativePath = ?",
+                                        .{parentPathZ},
+                                        &getValues,
+                                        &types,
+                                    );
+                                    try database.ContentPathT.update(
+                                        "FileName, RelativePath, ParentUUID",
+                                        "FileName = ?",
+                                        .{ fileName, fullPath[i..], parentUUID, old[oldStartIndex..] },
+                                    );
                                 }
                             }
-                        },
-                        4 => {
-                            if (pending_old_name) |old| allocator.free(old);
-                            pending_old_name = try allocator.dupe(u8, name_utf8);
-                        },
-                        5 => {
-                            if (pending_old_name) |old| {
-                                const fullPath = try std.fs.path.joinZ(
-                                    gpa,
-                                    &[_][]const u8{ watch.path, name_utf8 },
-                                );
-                                defer gpa.free(fullPath);
 
-                                if (watch == contentWatch) {
-                                    var startIndex = std.mem.findLast(u8, fullPath, "\\") orelse 0;
-                                    if (startIndex != 0) startIndex += 1;
-                                    const fileName = fullPath[startIndex..];
-
-                                    var oldStartIndex = std.mem.findLast(u8, old, "\\") orelse 0;
-                                    if (oldStartIndex != 0) oldStartIndex += 1;
-
-                                    const idx = std.mem.findLast(u8, fullPath, "Content");
-
-                                    if (idx) |i| {
-                                        var parentUUID = [_]u8{0} ** db.UUID.len;
-                                        parentUUID[db.UUID.len - 2] = 0;
-                                        parentUUID[db.UUID.len - 1] = 0;
-
-                                        var getValues: [1]*anyopaque = undefined;
-                                        getValues[0] = @ptrCast(&parentUUID);
-                                        var types = [_]db.innerType{.TEXT};
-
-                                        const parentPathZ = try std.fs.path.joinZ(
-                                            gpa,
-                                            &[_][]const u8{fullPath[i .. startIndex - 1]},
-                                        );
-                                        defer gpa.free(parentPathZ);
-
-                                        std.log.debug("{s}", .{parentPathZ});
-
-                                        try database.ContentPathT.get(
-                                            "UUID",
-                                            null,
-                                            "RelativePath = ?",
-                                            .{parentPathZ},
-                                            &getValues,
-                                            &types,
-                                        );
-                                        try database.ContentPathT.update(
-                                            "FileName, RelativePath, ParentUUID",
-                                            "FileName = ?",
-                                            .{ fileName, fullPath[i..], parentUUID, old[oldStartIndex..] },
-                                        );
-                                    }
-                                }
-
-                                std.log.info("rename {s} -> {s}", .{ old, name_utf8 });
-                                allocator.free(old);
-                                pending_old_name = null;
-                            }
-                        },
-                        else => {},
-                    }
-
-                    if (timeRes != null) {
-                        allocator.free(name_utf8);
-                    }
+                            std.log.info("rename {s} -> {s}", .{ old, name_utf8 });
+                            allocator.free(old);
+                            pending_old_name = null;
+                        }
+                    },
+                    else => {},
                 }
             }
             try watch.startWatch();

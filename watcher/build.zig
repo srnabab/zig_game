@@ -12,8 +12,11 @@ pub fn build(b: *std.Build) void {
     const blake3_dep = b.dependency("blake3", .{});
     const blake3_lib = blake3_dep.artifact("blake3");
 
-    const meshoptimizerModule = b.dependency("meshoptimizer", .{});
-    const meshopt_lib_install_step = meshoptimizerModule.builder.getInstallStep();
+    const meshopt_dep = b.dependency("meshoptimizer", .{});
+    const meshopt_lib_install_step = meshopt_dep.builder.getInstallStep();
+
+    const shaderc_dep = b.dependency("shaderc", .{});
+    const shaderc_lib_install_step = shaderc_dep.builder.getInstallStep();
 
     const cglm_dep = b.dependency("cglm", .{});
     const cglm_install_step = cglm_dep.builder.getInstallStep();
@@ -153,6 +156,28 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
     const cglm_mod = cglm_c.createModule();
+    const shaderc_c = b.addTranslateC(.{
+        .root_source_file = b.path("../include/shaderc/shaderc.h"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    const shaderc_c_mod = shaderc_c.createModule();
+    const shaderC_mod = b.createModule(.{
+        .root_source_file = b.path("src/shaderc/shaderc.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    // const sampler_mod = b.createModule(.{
+    //     .root_source_file = b.path("src/sampler/sampler.zig"),
+    //     .target = target,
+    //     .optimize = optimize,
+    // });
+
+    shaderC_mod.addImport("shaderc", shaderc_c_mod);
+    shaderc_c.addIncludePath(b.path("../include"));
 
     cglm_c.addIncludePath(b.path("../include"));
 
@@ -198,13 +223,16 @@ pub fn build(b: *std.Build) void {
     db_mod.addImport("cgltf", cgltf_mod);
 
     exe_mod.addImport("db", db_mod);
-    exe_mod.addLibraryPath(meshoptimizerModule.path("install/lib"));
+    exe_mod.addImport("shaderc", shaderC_mod);
+    exe_mod.addLibraryPath(meshopt_dep.path("install/lib"));
     exe_mod.linkSystemLibrary("meshoptimizer", .{ .preferred_link_mode = .static });
 
     exe_mod.addLibraryPath(cglm_dep.path("install/lib"));
+    exe_mod.addLibraryPath(shaderc_dep.path("install/lib"));
     exe_mod.linkSystemLibrary("setupapi", .{ .preferred_link_mode = .static });
     exe_mod.linkSystemLibrary("cglm", .{ .preferred_link_mode = .static });
     exe_mod.linkSystemLibrary("Rpcrt4", .{ .preferred_link_mode = .static });
+    exe_mod.linkSystemLibrary("shaderc_combined", .{ .preferred_link_mode = .static });
 
     const exe = b.addExecutable(.{
         .name = "watcher",
@@ -214,6 +242,7 @@ pub fn build(b: *std.Build) void {
 
     exe.step.dependOn(meshopt_lib_install_step);
     exe.step.dependOn(cglm_install_step);
+    exe.step.dependOn(shaderc_lib_install_step);
 
     b.installArtifact(exe);
 

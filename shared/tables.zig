@@ -20,6 +20,16 @@ pub const ModelLoadParameter = sqlDB.Table(
     "ModelLoadParameter",
     false,
 );
+pub const ShaderPipelineGraphNode = sqlDB.Table(
+    "CREATE TABLE IF NOT EXISTS ShaderPipelineGraphNode (ID INTEGER PRIMARY KEY AUTOINCREMENT, Name TEXT, Type INTEGER);",
+    "ShaderPipelineGraphNode",
+    false,
+);
+pub const ShaderPipelineGraphEdge = sqlDB.Table(
+    "CREATE TABLE IF NOT EXISTS ShaderPipelineGraphEdge (ID INTEGER PRIMARY KEY AUTOINCREMENT, FromNodeID INTEGER, ToNodeID INTEGER);",
+    "ShaderPipelineGraphEdge",
+    false,
+);
 // pub const ShaderLoadParameter = sqlDB.Table(
 //     "CREATE TABLE IF NOT EXISTS ShaderLoadParameter (FileName TEXT PRIMARY KEY, ContentHash BLOB UNIQUE, RelativePath TEXT UNIQUE, FileSize INTEGER" ++
 //         ", EntryName TEXT, Stage INTEGER, SetCount INTEGER, BindingCount INTEGER, Bindings BLOB, PushConstantSize INTEGER" ++
