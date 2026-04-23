@@ -470,6 +470,15 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                             sqlite.SQLITE_STATIC,
                         );
                     },
+                    [:0]u8, []const u8 => {
+                        _ = sqlite.sqlite3_bind_text(
+                            stmt,
+                            ii,
+                            @ptrCast(@field(values, fields_info[i].name).ptr),
+                            -1,
+                            sqlite.SQLITE_STATIC,
+                        );
+                    },
                     else => {
                         const yes: bool = comptime l: {
                             break :l isCompileTimeString(fields_info[i].type);

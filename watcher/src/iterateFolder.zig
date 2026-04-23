@@ -2,164 +2,19 @@ const sqlDB = @import("sqlDb");
 const sqlite = sqlDB.sqlite;
 const std = @import("std");
 const builtin = @import("builtin");
-const UUID = @import("UUID");
+pub const UUID = @import("UUID");
 const hash = @import("blake_hash");
 const reflect = @import("reflect");
 const vk = reflect.vk;
 const tables = @import("tables");
-const tracy = @import("tracy");
-const options = @import("options");
 const cgltf = @import("cgltf");
 const vertexStruct = @import("vertexStruct");
 const meshopt = @import("meshopt");
-const Types = @import("types.zig");
+const Types = @import("types");
 
 const assert = std.debug.assert;
 
-const ContentPath = tables.ContentPath;
-const ImageLoadParameter = tables.ImageLoadParameter;
-const ModelLoadParameter = tables.ModelLoadParameter;
-
 const SceneFileName = "Scenes.json";
-const tableNames = [_][]const u8{ "ImageLoadParameter", "ModelLoadParameter" };
-
-const CreateTriggerContentPathOnInsertInsertIntoSubTable = tt: {
-    var buffer = [_]u8{0} ** 10240;
-    var writer = std.Io.Writer.fixed(&buffer);
-
-    var count: usize = 0;
-
-    for (@typeInfo(FileType).@"enum".fields) |field| {
-        switch (@as(FileType, @enumFromInt(field.value))) {
-            // .SPV => {
-            //     count += writer.write(std.fmt.comptimePrint(
-            //         "CREATE TRIGGER IF NOT EXISTS insertInto{s} AFTER INSERT ON ContentPath " ++
-            //             " FOR EACH ROW WHEN NEW.FileType={d} BEGIN INSERT INTO ShaderLoadParameter (FileName,ContentHash,RelativePath,FileSize,FileID) VALUES " ++
-            //             "(NEW.FileName,NEW.ContentHash,NEW.RelativePath,NEW.FileSize,NEW.ID) ON CONFLICT(FileName,ContentHash) DO UPDATE SET " ++
-            //             "FileID = NEW.ID, FileName = NEW.FileName, ContentHash = NEW.ContentHash, RelativePath = NEW.RelativePath, FileSize = NEW.FileSize; END;",
-            //         .{ tableNames[1], field.value },
-            //     )) catch |err| {
-            //         @compileError(std.fmt.comptimePrint("{s}", .{@errorName(err)}));
-            //     };
-            // },
-            .PNG => {
-                count += writer.write(std.fmt.comptimePrint(
-                    "CREATE TRIGGER IF NOT EXISTS insertInto{s} AFTER INSERT ON ContentPath " ++
-                        "FOR EACH ROW WHEN NEW.FileType={d} BEGIN INSERT INTO ImageLoadParameter (ID,FileName,ContentHash,RelativePath,FileUUID) VALUES " ++
-                        "(NEW.ID,NEW.FileName,NEW.ContentHash,NEW.RelativePath,NEW.UUID) ON CONFLICT(FileName,ContentHash) DO UPDATE SET " ++
-                        "ID = NEW.ID, FileUUID = NEW.UUID, FileName = NEW.FileName, ContentHash = NEW.ContentHash, RelativePath = NEW.RelativePath; END;",
-                    .{ tableNames[0], field.value },
-                )) catch |err| {
-                    @compileError(std.fmt.comptimePrint("{s}", .{@errorName(err)}));
-                };
-            },
-            .VTX => {
-                count += writer.write(std.fmt.comptimePrint(
-                    "CREATE TRIGGER IF NOT EXISTS insertInto{s} AFTER INSERT ON ContentPath " ++
-                        "FOR EACH ROW WHEN NEW.FileType={d} BEGIN INSERT INTO ModelLoadParameter (ID,FileName,ContentHash,RelativePath,FileUUID) VALUES " ++
-                        "(NEW.ID,NEW.FileName,NEW.ContentHash,NEW.RelativePath,NEW.UUID) ON CONFLICT(FileName,ContentHash) DO UPDATE SET " ++
-                        "ID = NEW.ID, FileUUID = NEW.UUID, FileName = NEW.FileName, ContentHash = NEW.ContentHash, RelativePath = NEW.RelativePath; END;",
-                    .{ tableNames[1], field.value },
-                )) catch |err| {
-                    @compileError(std.fmt.comptimePrint("{s}", .{@errorName(err)}));
-                };
-            },
-            else => {
-                continue;
-            },
-        }
-    }
-
-    break :tt std.fmt.comptimePrint("{s}", .{buffer});
-};
-
-const createTriggerOnUpdateCascadeBetweenContentPathAndTablesOnContentHash = ct: {
-    var buffer = [_]u8{0} ** 10240;
-    var writer = std.Io.Writer.fixed(&buffer);
-    var count: usize = 0;
-
-    for (tableNames) |name| {
-        count += writer.write(std.fmt.comptimePrint("CREATE TRIGGER IF NOT EXISTS cascadeContentHash{s} AFTER UPDATE OF ContentHash ON ContentPath " ++
-            "FOR EACH ROW BEGIN UPDATE {s} SET ContentHash = NEW.ContentHash WHERE FileUUID = OLD.UUID; END;", .{ name, name })) catch |err| {
-            @compileError(std.fmt.comptimePrint("{s}", .{@errorName(err)}));
-        };
-    }
-
-    break :ct std.fmt.comptimePrint("{s}", .{buffer});
-};
-
-const createTriggerOnUpdateCascadeBetweenContentPathAndTablesOnRelativePath = ct: {
-    var buffer = [_]u8{0} ** 10240;
-    var writer = std.Io.Writer.fixed(&buffer);
-    var count: usize = 0;
-
-    for (tableNames) |name| {
-        count += writer.write(std.fmt.comptimePrint(
-            "CREATE TRIGGER IF NOT EXISTS cascadeRelativePath{s} AFTER UPDATE OF RelativePath ON ContentPath " ++
-                "FOR EACH ROW WHEN OLD.RelativePath IS NOT NEW.RelativePath BEGIN UPDATE {s} SET RelativePath = NEW.RelativePath WHERE FileUUID = NEW.UUID; END;",
-            .{ name, name },
-        )) catch |err| {
-            @compileError(std.fmt.comptimePrint("{s}", .{@errorName(err)}));
-        };
-    }
-
-    break :ct std.fmt.comptimePrint("{s}", .{buffer});
-};
-
-const createTriggerOnUpdateCascadeBetweenContentPathAndTablesOnID = ct: {
-    var buffer = [_]u8{0} ** 10240;
-    var writer = std.Io.Writer.fixed(&buffer);
-    var count: usize = 0;
-
-    for (tableNames) |name| {
-        count += writer.write(std.fmt.comptimePrint(
-            "CREATE TRIGGER IF NOT EXISTS cascadeID{s} AFTER UPDATE OF ID ON ContentPath " ++
-                "FOR EACH ROW BEGIN UPDATE {s} SET ID = NEW.ID WHERE FileUUID = NEW.UUID; END;",
-            .{ name, name },
-        )) catch |err| {
-            @compileError(std.fmt.comptimePrint("{s}", .{@errorName(err)}));
-        };
-    }
-
-    break :ct std.fmt.comptimePrint("{s}", .{buffer});
-};
-
-const createUniqueIndexFileNameAndContentHash = cu: {
-    var buffer = [_]u8{0} ** 10240;
-    var writer = std.Io.Writer.fixed(&buffer);
-    var count: usize = 0;
-
-    for (tableNames) |name| {
-        count += writer.write(
-            std.fmt.comptimePrint("CREATE UNIQUE INDEX IF NOT EXISTS index{s}FileNameHashTable ON {s}(FileName,ContentHash);", .{ name, name }),
-        ) catch |err| {
-            @compileError(std.fmt.comptimePrint("{s}", .{@errorName(err)}));
-        };
-    }
-
-    break :cu std.fmt.comptimePrint("{s}", .{buffer});
-};
-
-const createTriggerOnDeleteContentPathUpdateTablesRelativePathWhereSameContentHash = cto: {
-    var buffer = [_]u8{0} ** 10240;
-    var writer = std.Io.Writer.fixed(&buffer);
-    var count: usize = 0;
-
-    for (tableNames) |name| {
-        count += writer.write(std.fmt.comptimePrint(
-            "CREATE TRIGGER IF NOT EXISTS onDeleteUpdataRelativePath{s} AFTER DELETE ON ContentPath FOR EACH ROW " ++
-                "WHEN OLD.ContentHash IS NOT NULL BEGIN UPDATE {s} SET RelativePath = NULL,FileUUID = NULL WHERE ContentHash = OLD.ContentHash; END;",
-            .{ name, name },
-        )) catch |err| {
-            @compileError(std.fmt.comptimePrint("{s}", .{@errorName(err)}));
-        };
-    }
-
-    break :cto std.fmt.comptimePrint("{s}", .{buffer});
-};
-
-const createTriggerOnInsertContentPathCheckContentHash = "CREATE TRIGGER IF NOT EXISTS onInsertUpdateContentPath BEFORE INSERT ON ContentPath FOR EACH ROW BEGIN " ++
-    "DELETE FROM ContentPath WHERE ContentHash = NEW.ContentHash; END;";
 
 const ShaderLoad = struct { subPath: []const u8, len: usize };
 
@@ -218,9 +73,6 @@ const FileTypeHashTable = map: {
 };
 
 fn executeSQL(SQL: []const u8, db_: *sqlite.sqlite3) void {
-    const zone = tracy.initZone(@src(), .{ .name = "execute sql" });
-    defer zone.deinit();
-
     const res = sqlite.sqlite3_exec(db_, @ptrCast(SQL.ptr), null, null, null);
 
     if (res != sqlite.SQLITE_OK) {
@@ -325,9 +177,6 @@ fn updateLoadParameter(
     fileName: []const u8,
     rpZ: []const u8,
 ) !void {
-    const zone = tracy.initZone(@src(), .{ .name = "update load parameter" });
-    defer zone.deinit();
-
     switch (tp) {
         .PNG => {
             const format: vk.VkFormat, const tiling: vk.VkImageTiling, const usage: vk.VkImageUsageFlags, const properties: vk.VkMemoryPropertyFlags = try judgeImageLoadParameter(fileName);
@@ -593,8 +442,8 @@ fn judgeFileTypeByContent(content: []u8) FileType {
     }
 }
 
-fn judgeFileType(name: []const u8, content: []u8) FileType {
-    const fType = FileTypeHashTable.get(name) orelse FileType.UNKNOWN;
+pub fn judgeFileType(suffix: []const u8, content: []u8) FileType {
+    const fType = FileTypeHashTable.get(suffix) orelse FileType.UNKNOWN;
 
     switch (fType) {
         .PNG => {
@@ -619,9 +468,6 @@ fn judgeFileType(name: []const u8, content: []u8) FileType {
 }
 
 fn getDbModifiedTime(comptime where_clause: []const u8, params: anytype) !i64 {
-    const zone = tracy.initZone(@src(), .{ .name = "get db modified time" });
-    defer zone.deinit();
-
     var modifiedTime: i64 = -1;
     var getValues: [1]*anyopaque = .{@ptrCast(&modifiedTime)};
     var types = [_]sqlDB.innerType{.INTEGER};
@@ -634,18 +480,13 @@ fn getDbModifiedTime(comptime where_clause: []const u8, params: anytype) !i64 {
     return modifiedTime;
 }
 
-fn processFile(
+pub fn processFile(
     io: std.Io,
     dir: std.Io.Dir,
     name: []const u8,
     rPZ: []const u8,
     parentID: []const u8,
-    fileModifiedTime: i64,
-    pathModifiedTime: i64,
-) !void {
-    const zone = tracy.initZone(@src(), .{ .name = "process file" });
-    defer zone.deinit();
-
+) !FileType {
     const time: i64 = @truncate(std.Io.Timestamp.now(io, .real).toNanoseconds());
     // std.log.debug("time {d} {s}", .{ time, name });
     var tempFile = try dir.openFile(io, name, .{});
@@ -654,7 +495,12 @@ fn processFile(
     const metadata = try tempFile.stat(io);
     const currentModifiedTime: i64 = @truncate(metadata.mtime.toNanoseconds());
 
+    const fileModifiedTime = try getDbModifiedTime("FileName = ?", .{name});
+    const pathModifiedTime = try getDbModifiedTime("RelativePath = ?", .{rPZ});
+
     var fileBuffer = [_]u8{0} ** 256;
+
+    var fType: FileType = .UNKNOWN;
 
     if (fileModifiedTime == -1) {
         // 新文件：插入新记录
@@ -669,7 +515,7 @@ fn processFile(
 
         var hashh = hash.blake3HashContent(content[0..metadata.size]);
 
-        const fType = judgeFileType(name[index..], content);
+        fType = judgeFileType(name[index..], content);
 
         try ContentPathT.insert(.{
             .ID = @intCast(getInsertID()),
@@ -696,9 +542,8 @@ fn processFile(
             rPZ[0 .. rPZ.len - name.len - 1],
         );
     } else {
-        const isModified = (currentModifiedTime != fileModifiedTime) or forceUpdate;
+        const isModified = (currentModifiedTime != fileModifiedTime);
         if (pathModifiedTime == -1) {
-            // 文件被移动：更新路径和父ID
             if (isModified) {
                 var fileReader = tempFile.reader(io, &fileBuffer);
                 const content = try fileReader.interface.readAlloc(gpa, metadata.size);
@@ -721,7 +566,7 @@ fn processFile(
                 );
 
                 const index = std.mem.lastIndexOf(u8, name, ".") orelse name.len;
-                const fType = judgeFileType(name[index..], content);
+                fType = judgeFileType(name[index..], content);
 
                 try updateLoadParameter(
                     io,
@@ -762,9 +607,7 @@ fn processFile(
                 );
 
                 const index = std.mem.lastIndexOf(u8, name, ".") orelse name.len;
-                // const fType = nameToFileType(name[index..]);
-                const fType = judgeFileType(name[index..], content);
-
+                fType = judgeFileType(name[index..], content);
                 // std.log.debug("{s}", .{@tagName(fType)});
 
                 try updateLoadParameter(
@@ -782,12 +625,11 @@ fn processFile(
             }
         }
     }
+
+    return fType;
 }
 
 fn hashFileContent(file: *std.fs.File, size: u64) !sqlDB.BLOB {
-    const zone = tracy.initZone(@src(), .{ .name = "hash file content" });
-    defer zone.deinit();
-
     const content = try gpa.alloc(u8, size);
     defer gpa.free(content);
     _ = try file.readAll(content);
@@ -795,18 +637,14 @@ fn hashFileContent(file: *std.fs.File, size: u64) !sqlDB.BLOB {
     return sqlDB.BLOB{ .data = &contentHash, .len = hash.blake3.BLAKE3_OUT_LEN };
 }
 
-fn processDirectory(
+pub fn processDirectory(
     io: std.Io,
     dir: std.Io.Dir,
     name: []const u8,
     rPZ: []const u8,
     parentID: []const u8,
-    fileModifiedTime: i64,
-    pathModifiedTime: i64,
+    skipIterate: bool,
 ) anyerror!void {
-    const zone = tracy.initZone(@src(), .{ .name = "process directory" });
-    defer zone.deinit();
-
     const time: i64 = @truncate(std.Io.Timestamp.now(io, .real).toNanoseconds());
     // std.log.debug("time {d} {s}", .{ time, name });
     var tempDir = try dir.openDir(io, name, .{ .iterate = true });
@@ -817,6 +655,9 @@ fn processDirectory(
     var currentID: [UUID.len]u8 = undefined;
     currentID[UUID.len - 2] = 0;
     currentID[UUID.len - 1] = 0;
+
+    const fileModifiedTime = try getDbModifiedTime("FileName = ?", .{name});
+    const pathModifiedTime = try getDbModifiedTime("RelativePath = ?", .{rPZ});
 
     if (fileModifiedTime == -1) {
         // 新目录：插入记录并获取新ID
@@ -837,7 +678,6 @@ fn processDirectory(
     } else {
         const isModified = (currentModifiedTime != fileModifiedTime);
         if (pathModifiedTime == -1) {
-            // 目录被移动：更新路径和父ID
             if (isModified) {
                 try ContentPathT.update(
                     "RelativePath,ParentUUID,ModifiedTime,LastSeenTime",
@@ -852,7 +692,6 @@ fn processDirectory(
                 );
             }
         } else {
-            // 已存在的目录：更新时间
             if (isModified) {
                 try ContentPathT.update(
                     "ModifiedTime,LastSeenTime",
@@ -867,20 +706,17 @@ fn processDirectory(
                 );
             }
         }
-        // 对于已存在的目录，需要获取其ID以进行递归
+
         var ptrs = [_]*anyopaque{&currentID};
         var types = [_]sqlDB.innerType{.TEXT};
         try ContentPathT.get("UUID", null, "RelativePath = ?", .{rPZ}, &ptrs, &types);
     }
 
-    // 对子目录进行递归
-    try iterateFolderUpdate(io, tempDir, rPZ, &currentID);
+    if (!skipIterate)
+        try iterateFolderUpdate(io, tempDir, rPZ, &currentID);
 }
 
 fn iterateFolderUpdate(io: std.Io, dir: std.Io.Dir, dirName: []const u8, parentID: []const u8) !void {
-    const zone = tracy.initZone(@src(), .{ .name = "iterate folder" });
-    defer zone.deinit();
-
     var contentIt = dir.iterate();
     while (try contentIt.next(io)) |entry| {
         var relativePathBuffer = [_]u8{0} ** 256;
@@ -889,13 +725,9 @@ fn iterateFolderUpdate(io: std.Io, dir: std.Io.Dir, dirName: []const u8, parentI
         var bufferZ = [_]u8{0} ** 128;
         const nameZ = try std.fmt.bufPrintZ(&bufferZ, "{s}", .{entry.name});
 
-        // 提前获取两种可能存在的时间戳
-        const fileModifiedTime = try getDbModifiedTime("FileName = ?", .{nameZ});
-        const pathModifiedTime = try getDbModifiedTime("RelativePath = ?", .{rPZ});
-
         switch (entry.kind) {
-            .file => try processFile(io, dir, nameZ, rPZ, parentID, fileModifiedTime, pathModifiedTime),
-            .directory => try processDirectory(io, dir, nameZ, rPZ, parentID, fileModifiedTime, pathModifiedTime),
+            .file => _ = try processFile(io, dir, nameZ, rPZ, parentID),
+            .directory => try processDirectory(io, dir, nameZ, rPZ, parentID, false),
             else => {},
         }
     }
@@ -923,145 +755,54 @@ fn getInsertID() u32 {
     return @intCast(missing_id);
 }
 
-var db: ?*sqlite.sqlite3 = null;
+const AllTable = struct {
+    db: ?*sqlite.sqlite3,
+    ContentPath: tables.ContentPath,
+    ImageLoadParameter: tables.ImageLoadParameter,
+    ModelLoadParameter: tables.ModelLoadParameter,
+    contentPathExist: bool,
+};
 
-var ContentPathT: ContentPath = undefined;
-var ImageLoadParameterT: ImageLoadParameter = undefined;
-var ModelLoadParameterT: ModelLoadParameter = undefined;
+var db: ?*sqlite.sqlite3 = undefined;
+var ContentPathT: tables.ContentPath = undefined;
+var ImageLoadParameterT: tables.ImageLoadParameter = undefined;
+var ModelLoadParameterT: tables.ModelLoadParameter = undefined;
+
 var SceneJson: std.json.Parsed(?[]cgltf.Scene) = undefined;
 var SceneNameStringMap: std.StringHashMap(u32) = undefined;
 var SceneNodeNames: []std.StringHashMap(u32) = undefined;
 
-var forceUpdate = options.force_update;
-
 var gpa: std.mem.Allocator = undefined;
-pub fn main(init: std.process.Init) !void {
-    tracy.startupProfiler();
-    // std.Thread.sleep(std.time.ns_per_ms * 100);
-    defer tracy.shutdownProfiler();
+pub fn processContentFolder(content: std.Io.Dir, io: std.Io, tablePack: AllTable, allocator: std.mem.Allocator) !void {
+    gpa = allocator;
+    db = tablePack.db;
+    ContentPathT = tablePack.ContentPath;
+    ImageLoadParameterT = tablePack.ImageLoadParameter;
+    ModelLoadParameterT = tablePack.ModelLoadParameter;
 
-    tracy.setThreadName("main");
-    defer tracy.message("main thread exit");
-
-    const zone = tracy.initZone(@src(), .{ .name = "main" });
-    defer zone.deinit();
-
-    const start = std.Io.Timestamp.now(init.io, .real).toNanoseconds();
-
-    gpa = init.gpa;
-
-    var it = try init.minimal.args.iterateAllocator(gpa);
-    defer it.deinit();
-
-    const rootExe = it.next().?;
-    // std.log.info("exe: {s}", .{rootExe});
-
-    var root: [256:0]u8 = undefined;
-
-    @memset(root[0..root.len], 0);
-    std.mem.copyForwards(u8, &root, rootExe);
-
-    const index = std.mem.lastIndexOf(u8, &root, slash) orelse 0;
-    @memset(root[index..root.len], 0);
-
-    var cwd = try std.Io.Dir.openDirAbsolute(init.io, &root, .{});
-    try std.process.setCurrentDir(init.io, cwd);
-
-    while (it.next()) |arg| {
-        if (std.mem.eql(u8, arg, "-f")) {
-            forceUpdate = true;
-        }
-    }
-
-    {
-        const zone2 = tracy.initZone(@src(), .{ .name = "init database to memory" });
-        defer zone2.deinit();
-
-        var disk_db: ?*sqlite.sqlite3 = null;
-        var backup: ?*sqlite.sqlite3_backup = null;
-        var res = sqlite.sqlite3_open("Content.db", @ptrCast(&disk_db));
-        defer _ = sqlite.sqlite3_close(disk_db);
-        assert(res == sqlite.SQLITE_OK);
-
-        res = sqlite.sqlite3_open(":memory:", @ptrCast(&db));
-        assert(res == sqlite.SQLITE_OK);
-
-        backup = sqlite.sqlite3_backup_init(db, "main", disk_db, "main");
-        assert(backup != null);
-
-        res = sqlite.sqlite3_backup_step(backup, -1);
-        defer _ = sqlite.sqlite3_backup_finish(backup);
-        assert(res == sqlite.SQLITE_DONE);
-    }
-    defer {
-        const zone2 = tracy.initZone(@src(), .{ .name = "save database to disk" });
-        defer zone2.deinit();
-
-        var disk_db: ?*sqlite.sqlite3 = null;
-        var backup: ?*sqlite.sqlite3_backup = null;
-
-        var res = sqlite.sqlite3_open("Content.db", @ptrCast(&disk_db));
-        defer _ = sqlite.sqlite3_close(disk_db);
-        assert(res == sqlite.SQLITE_OK);
-
-        backup = sqlite.sqlite3_backup_init(disk_db, "main", db, "main");
-        assert(backup != null);
-
-        res = sqlite.sqlite3_backup_step(backup, -1);
-        defer _ = sqlite.sqlite3_backup_finish(backup);
-        assert(res == sqlite.SQLITE_DONE);
-
-        _ = sqlite.sqlite3_close(db.?);
-    }
-
-    _ = sqlite.sqlite3_exec(db, "BEGIN TRANSACTION", null, null, null);
-    errdefer {
-        std.debug.print("Detecting error, rolling back all changes...\n", .{});
-        _ = sqlite.sqlite3_exec(db, "ROLLBACK;", null, null, null);
-    }
-
-    ContentPathT = ContentPath.init(db.?);
-    const exist = ContentPathT.exist();
-    try ContentPathT.createTable();
-    ImageLoadParameterT = ImageLoadParameter.init(db.?);
-    try ImageLoadParameterT.createTable();
-    ModelLoadParameterT = ModelLoadParameter.init(db.?);
-    try ModelLoadParameterT.createTable();
-    executeSQL(createUniqueIndexFileNameAndContentHash, db.?);
-    executeSQL(createTriggerOnInsertContentPathCheckContentHash, db.?);
-    executeSQL(CreateTriggerContentPathOnInsertInsertIntoSubTable, db.?);
-    executeSQL(createTriggerOnUpdateCascadeBetweenContentPathAndTablesOnContentHash, db.?);
-    executeSQL(createTriggerOnDeleteContentPathUpdateTablesRelativePathWhereSameContentHash, db.?);
-    executeSQL(createTriggerOnUpdateCascadeBetweenContentPathAndTablesOnRelativePath, db.?);
-    executeSQL(createTriggerOnUpdateCascadeBetweenContentPathAndTablesOnID, db.?);
-
-    var content = try cwd.openDir(init.io, "Content", .{ .iterate = true });
-    defer content.close(init.io);
+    const exist = tablePack.contentPathExist;
 
     var buffer = [_]u8{0} ** UUID.len;
-    const time: i64 = @truncate(std.Io.Timestamp.now(init.io, .real).toNanoseconds());
+    const time: i64 = @truncate(std.Io.Timestamp.now(io, .real).toNanoseconds());
     // std.log.debug("time {d}", .{time});
 
-    var haveSceneFile = false;
-    var sceneFile = content.openFile(init.io, SceneFileName, .{ .mode = .read_write }) catch |err| blk: switch (err) {
-        error.FileNotFound => break :blk try content.createFile(init.io, SceneFileName, .{ .read = true }),
+    var sceneFile = content.openFile(io, SceneFileName, .{ .mode = .read_write }) catch |err| blk: switch (err) {
+        error.FileNotFound => break :blk try content.createFile(io, SceneFileName, .{ .read = true }),
         else => return err,
     };
     {
-        errdefer sceneFile.close(init.io);
-        const sceneFileStat = try sceneFile.stat(init.io);
+        errdefer sceneFile.close(io);
+        const sceneFileStat = try sceneFile.stat(io);
         var cacheBuffer = [_]u8{0} ** 256;
-        var sceneFileReader = sceneFile.reader(init.io, &cacheBuffer);
+        var sceneFileReader = sceneFile.reader(io, &cacheBuffer);
         const sceneContent = try sceneFileReader.interface.readAlloc(gpa, sceneFileStat.size);
         defer gpa.free(sceneContent);
 
         SceneNameStringMap = .init(gpa);
 
         if (sceneFileStat.size != 0) {
-            try sceneFile.setLength(init.io, 0);
+            try sceneFile.setLength(io, 0);
             try sceneFileReader.seekTo(0);
-
-            haveSceneFile = true;
 
             SceneJson = try std.json.parseFromSlice(?[]cgltf.Scene, gpa, sceneContent, .{});
 
@@ -1090,7 +831,7 @@ pub fn main(init: std.process.Init) !void {
             SceneJson.arena.* = std.heap.ArenaAllocator.init(gpa);
         }
     }
-    errdefer sceneFile.close(init.io);
+    errdefer sceneFile.close(io);
     defer {
         SceneNameStringMap.deinit();
 
@@ -1098,7 +839,7 @@ pub fn main(init: std.process.Init) !void {
     }
 
     if (exist) {
-        const cc = try content.stat(init.io);
+        const cc = try content.stat(io);
         var modifiedTime: i64 = 0;
 
         var getValues: [2]*anyopaque = undefined;
@@ -1116,7 +857,7 @@ pub fn main(init: std.process.Init) !void {
             try ContentPathT.update("LastSeenTime", "UUID = ?", .{ time, buffer });
         }
     } else {
-        const cc = try content.stat(init.io);
+        const cc = try content.stat(io);
         try UUID.createNewUUID(&buffer);
 
         try ContentPathT.insert(.{
@@ -1134,11 +875,11 @@ pub fn main(init: std.process.Init) !void {
         });
     }
 
-    try iterateFolderUpdate(init.io, content, "Content", &buffer);
+    try iterateFolderUpdate(io, content, "Content", &buffer);
 
     if (SceneJson.value.?.len > 0) {
         var cacheBuffer = [_]u8{0} ** 1024;
-        var sceneFileWriter = sceneFile.writer(init.io, &cacheBuffer);
+        var sceneFileWriter = sceneFile.writer(io, &cacheBuffer);
         var sceneJsonWrite = std.json.Stringify{
             .writer = &sceneFileWriter.interface,
             .options = .{ .whitespace = .indent_tab },
@@ -1146,44 +887,16 @@ pub fn main(init: std.process.Init) !void {
         try sceneJsonWrite.write(SceneJson.value);
         try sceneFileWriter.interface.flush();
 
-        sceneFile.close(init.io);
+        sceneFile.close(io);
 
-        if (haveSceneFile) {
-            const fileModifiedTime = try getDbModifiedTime("FileName = ?", .{SceneFileName});
-            const pathModifiedTime = try getDbModifiedTime("RelativePath = ?", .{"Content" ++ slash ++ SceneFileName});
-
-            try processFile(
-                init.io,
-                content,
-                SceneFileName,
-                "Content" ++ slash ++ SceneFileName,
-                &buffer,
-                fileModifiedTime,
-                pathModifiedTime,
-            );
-        } else {
-            try processFile(
-                init.io,
-                content,
-                SceneFileName,
-                "Content" ++ slash ++ SceneFileName,
-                &buffer,
-                -1,
-                -1,
-            );
-        }
+        _ = try processFile(
+            io,
+            content,
+            SceneFileName,
+            "Content" ++ slash ++ SceneFileName,
+            &buffer,
+        );
     }
 
     try ContentPathT.delete("LastSeenTime < ?", .{time});
-
-    const rc = sqlite.sqlite3_exec(db, "COMMIT;", null, null, null);
-
-    if (rc != sqlite.SQLITE_OK) {
-        std.log.err("commit failed", .{});
-        return error.CommitError;
-    }
-
-    const end = std.Io.Timestamp.now(init.io, .real).toNanoseconds();
-
-    std.log.info("update content database time: {d}ms", .{@as(f128, @floatFromInt(end - start)) / @as(f128, @floatFromInt(std.time.ns_per_ms))});
 }

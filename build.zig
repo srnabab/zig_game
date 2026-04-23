@@ -19,19 +19,14 @@ pub fn build(b: *std.Build) void {
         .tracy_manual_lifetime = true,
     });
 
-    const force_update = b.option(bool, "force_update", "force contentManager update all resources") orelse false;
-    const contentManagerModule = b.dependency("contentManager", .{});
-    const contenManager = contentManagerModule.artifact("ContentManager");
-    const contenManager_install = b.addInstallArtifact(contenManager, .{ .dest_dir = .default });
-
     const sdl3Module = b.dependency("sdl3", .{});
     const sdl3_lib_install_step = sdl3Module.builder.getInstallStep();
 
     const selectModifiedFileToTxtModule = b.dependency("selectModifiedFileToTxt", .{});
     const selectModifiedFileToTxt = selectModifiedFileToTxtModule.artifact("selectModifiedFileToTxt");
 
-    const meshoptimizerModule = b.dependency("meshoptimizer", .{});
-    const meshopt_lib_install_step = meshoptimizerModule.builder.getInstallStep();
+    // const meshoptimizerModule = b.dependency("meshoptimizer", .{});
+    // const meshopt_lib_install_step = meshoptimizerModule.builder.getInstallStep();
 
     const cglm_dep = b.dependency("cglm", .{});
     const cglm_install_step = cglm_dep.builder.getInstallStep();
@@ -45,7 +40,7 @@ pub fn build(b: *std.Build) void {
     const vma_mod = vma_c.createModule();
     vma_mod.addCSourceFile(.{ .file = b.path("src/vma/vma_impl.cpp"), .language = .cpp });
     const enum_c_mod = b.createModule(.{
-        .root_source_file = b.path("src/enumFromC.zig"),
+        .root_source_file = b.path("shared/enumFromC.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -69,12 +64,12 @@ pub fn build(b: *std.Build) void {
     });
     const vk_c_mod = vk_c.createModule();
     const spReflectModule = b.createModule(.{
-        .root_source_file = b.path("src/sprivReflect/reflect.zig"),
+        .root_source_file = b.path("shared/sprivReflect/reflect.zig"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
     });
-    spReflectModule.addCSourceFile(.{ .file = b.path("src/sprivReflect/spirv_reflect.c"), .language = .c });
+    spReflectModule.addCSourceFile(.{ .file = b.path("shared/sprivReflect/spirv_reflect.c"), .language = .c });
     const pipelineJsonParse_mod = b.createModule(.{
         .root_source_file = b.path("src/video/pipeline/main.zig"),
         .target = target,
@@ -289,27 +284,18 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    // const cgltf_mod = b.createModule(.{
-    //     .root_source_file = b.path("src/cgltf/cgltf.zig"),
+    // const meshopt_mod = b.createModule(.{
+    //     .root_source_file = b.path("src/meshopt/meshopt.zig"),
     //     .target = target,
     //     .optimize = optimize,
     // });
-    // cgltf_mod.addCSourceFile(.{
-    //     .file = b.path("include/cgltf/cgltf_namespace.h"),
-    //     .language = .c,
-    // });
-    const meshopt_mod = b.createModule(.{
-        .root_source_file = b.path("src/meshopt/meshopt.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
     const vertexStruct_mod = b.createModule(.{
-        .root_source_file = b.path("src/vertexStruct.zig"),
+        .root_source_file = b.path("shared/vertexStruct.zig"),
         .target = target,
         .optimize = optimize,
     });
     const fileTypes_mod = b.createModule(.{
-        .root_source_file = b.path("src/content_manager/src/types.zig"),
+        .root_source_file = b.path("shared/types.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -330,12 +316,7 @@ pub fn build(b: *std.Build) void {
 
     vertexStruct_mod.addImport("cglm", cglm_mod);
 
-    meshopt_mod.addIncludePath(b.path("include"));
-
-    // cgltf_mod.addImport("enumFromC", enum_c_mod);
-    // cgltf_mod.addImport("fileSystem", fileSystem_mod);
-    // cgltf_mod.addImport("vertexStruct", vertexStruct_mod);
-    // cgltf_mod.addIncludePath(b.path("include"));
+    // meshopt_mod.addIncludePath(b.path("include"));
 
     input_mod.addImport("sdl", sdl_mod);
 
@@ -520,12 +501,11 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("vulkan", vk_c_mod);
     exe_mod.addImport("math", math_mod);
     exe_mod.addImport("mesh", mesh_mod);
-    // exe_mod.addImport("cgltf", cgltf_mod);
     exe_mod.addIncludePath(b.path("include/"));
 
     exe_mod.addLibraryPath(b.path("lib/"));
-    exe_mod.addLibraryPath(meshoptimizerModule.path("install/lib"));
-    exe_mod.linkSystemLibrary("meshoptimizer", .{ .preferred_link_mode = .static });
+    // exe_mod.addLibraryPath(meshoptimizerModule.path("install/lib"));
+    // exe_mod.linkSystemLibrary("meshoptimizer", .{ .preferred_link_mode = .static });
     exe_mod.addLibraryPath(sdl3Module.path("install/lib"));
     exe_mod.addLibraryPath(cglm_dep.path("install/lib"));
     exe_mod.linkSystemLibrary("cglm", .{ .preferred_link_mode = .static });
@@ -569,47 +549,32 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(exe);
 
     // run task
-    const preKillContentManagerProcessCmd = b.addSystemCommand(if (builtin.target.os.tag == .windows) &.{
-        "cmd",
-        "/c",
-        "taskkill",
-        "/F",
-        "/IM",
-        "ContentManager.exe",
-        "2>nul",
-        "||",
-        "exit",
-        "/b",
-        "0",
-    } else unreachable);
-    const preKillPipelineParseProcessCmd = b.addSystemCommand(if (builtin.target.os.tag == .windows) &.{
-        "cmd",
-        "/c",
-        "taskkill",
-        "/F",
-        "/IM",
-        "pipelineJsonParse.exe",
-        "2>nul",
-        "||",
-        "exit",
-        "/b",
-        "0",
-    } else unreachable);
-    const preKillGameProcessCmd = b.addSystemCommand(if (builtin.target.os.tag == .windows) &.{
-        "cmd",
-        "/c",
-        "taskkill",
-        "/F",
-        "/IM",
-        "game.exe",
-        "2>nul",
-        "||",
-        "exit",
-        "/b",
-        "0",
-    } else unreachable);
-
-    const root_path = b.build_root.path orelse "";
+    // const preKillPipelineParseProcessCmd = b.addSystemCommand(if (builtin.target.os.tag == .windows) &.{
+    //     "cmd",
+    //     "/c",
+    //     "taskkill",
+    //     "/F",
+    //     "/IM",
+    //     "pipelineJsonParse.exe",
+    //     "2>nul",
+    //     "||",
+    //     "exit",
+    //     "/b",
+    //     "0",
+    // } else unreachable);
+    // const preKillGameProcessCmd = b.addSystemCommand(if (builtin.target.os.tag == .windows) &.{
+    //     "cmd",
+    //     "/c",
+    //     "taskkill",
+    //     "/F",
+    //     "/IM",
+    //     "game.exe",
+    //     "2>nul",
+    //     "||",
+    //     "exit",
+    //     "/b",
+    //     "0",
+    // } else unreachable);
 
     // const compile_txt_generate = b.step("generate compile txt", "produce txt");
 
@@ -656,19 +621,6 @@ pub fn build(b: *std.Build) void {
         b.fmt("build_script/{s}", .{sampler_need_compile_txt}),
     });
 
-    const runContenManager = b.step("run content manager", "collect resources");
-    const runContenManager_cmd = b.addRunArtifact(contenManager);
-    if (force_update)
-        runContenManager_cmd.addArg("-f");
-    // runContenManager_cmd.addArg(b.getInstallPath(.bin, "ContentManager"));
-
-    const runGenFileNameIdExe = b.step("create hash map", "create filename id static string hash map");
-    const runGenFileNameIdExe_cmd = b.addRunArtifact(genFileNameIDexe);
-    runGenFileNameIdExe_cmd.addArg(b.fmt("{s}/{s}", .{ root_path, "src/fileSystem/fileNameID.zig" }));
-
-    // const run_gen_exe = b.addRunArtifact(gen_exe);
-    // run_gen_exe.addArg(b.fmt("{s}/{s}", .{ root_path, "src/video/resultToError.zig" }));
-
     const waf = b.addWriteFiles();
     _ = waf.addCopyFile(exe.getEmittedAsm(), "main.asm");
 
@@ -690,10 +642,7 @@ pub fn build(b: *std.Build) void {
     const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
 
     // run task dependency
-    preKillContentManagerProcessCmd.step.dependOn(&preKillGameProcessCmd.step);
 
-    shader_compile.dependOn(&preKillContentManagerProcessCmd.step);
-    shader_compile.dependOn(&preKillPipelineParseProcessCmd.step);
     shader_compile.dependOn(&script_cmd.step);
     shader_compile.dependOn(&compile_txt_pipeline_cmd.step);
     shader_compile.dependOn(&compile_txt_sampler_cmd.step);
@@ -708,15 +657,6 @@ pub fn build(b: *std.Build) void {
     sampler_script_cmd.step.dependOn(&samplerJsonPrase_exe.step);
     sampler_compile.dependOn(&sampler_script_cmd.step);
 
-    // contenManager.step.dependOn(&copy_blake3_header.step);
-    runContenManager.dependOn(&runContenManager_cmd.step);
-    runContenManager_cmd.step.dependOn(pipeline_compile);
-    runContenManager_cmd.step.dependOn(sampler_compile);
-    runContenManager_cmd.step.dependOn(&contenManager_install.step);
-
-    runGenFileNameIdExe.dependOn(&runGenFileNameIdExe_cmd.step);
-    runGenFileNameIdExe_cmd.step.dependOn(runContenManager);
-
     // run_gen_exe.step.dependOn(&gen_exe.step);
 
     // copy_sdl3_header.step.dependOn(sdl3_lib_install_step);
@@ -724,9 +664,7 @@ pub fn build(b: *std.Build) void {
     // exe.step.dependOn(&copy_sdl3_header.step);
     exe.step.dependOn(sdl3_lib_install_step);
     // exe.step.dependOn(&run_gen_exe.step);
-    exe.step.dependOn(runGenFileNameIdExe);
-    exe.step.dependOn(runContenManager);
-    exe.step.dependOn(meshopt_lib_install_step);
+    // exe.step.dependOn(meshopt_lib_install_step);
     exe.step.dependOn(cglm_install_step);
 
     waf.step.dependOn(&exe.step);
