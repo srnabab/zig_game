@@ -175,11 +175,21 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const pipelinParse_mod = b.createModule(.{
+        .root_source_file = b.path("../shared/pipeline/parse.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     //
+    pipelinParse_mod.addImport("enumFromC", enum_c_mod);
+    pipelinParse_mod.addImport("reflect", spReflectModule);
+    pipelinParse_mod.addImport("vulkan", vk_c_mod);
+
     sampler_mod.addImport("vulkan", vk_c_mod);
 
     shaderC_mod.addImport("shaderc", shaderc_c_mod);
+    shaderC_mod.addImport("enumFromC", enum_c_mod);
     shaderc_c.addIncludePath(b.path("../include"));
 
     cglm_c.addIncludePath(b.path("../include"));
@@ -228,6 +238,7 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("db", db_mod);
     exe_mod.addImport("shaderc", shaderC_mod);
     exe_mod.addImport("sampler", sampler_mod);
+    exe_mod.addImport("pipelinrParse", pipelinParse_mod);
     exe_mod.addLibraryPath(meshopt_dep.path("install/lib"));
     exe_mod.linkSystemLibrary("meshoptimizer", .{ .preferred_link_mode = .static });
 

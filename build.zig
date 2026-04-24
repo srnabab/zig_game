@@ -24,9 +24,6 @@ pub fn build(b: *std.Build) void {
     const sdl3Module = b.dependency("sdl3", .{});
     const sdl3_lib_install_step = sdl3Module.builder.getInstallStep();
 
-    const selectModifiedFileToTxtModule = b.dependency("selectModifiedFileToTxt", .{});
-    const selectModifiedFileToTxt = selectModifiedFileToTxtModule.artifact("selectModifiedFileToTxt");
-
     // const meshoptimizerModule = b.dependency("meshoptimizer", .{});
     // const meshopt_lib_install_step = meshoptimizerModule.builder.getInstallStep();
 
@@ -72,11 +69,6 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
     spReflectModule.addCSourceFile(.{ .file = b.path("shared/sprivReflect/spirv_reflect.c"), .language = .c });
-    const pipelineJsonParse_mod = b.createModule(.{
-        .root_source_file = b.path("src/video/pipeline/main.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
     const sqlite_c = b.addTranslateC(.{
         .root_source_file = b.path("include/sqlite3/sqlite3.h"),
         .target = target,
@@ -135,7 +127,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     const translate_mod = b.createModule(.{
-        .root_source_file = b.path("src/video/pipeline/translate.zig"),
+        .root_source_file = b.path("shared/pipeline/translate.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -362,11 +354,6 @@ pub fn build(b: *std.Build) void {
     spReflectModule.addImport("vulkan", vk_c_mod);
     spReflectModule.addIncludePath(b.path("include"));
 
-    pipelineJsonParse_mod.addIncludePath(b.path("include"));
-    pipelineJsonParse_mod.addImport("vulkan", vk_c_mod);
-    pipelineJsonParse_mod.addImport("reflect", spReflectModule);
-    pipelineJsonParse_mod.addImport("enumFromC", enum_c_mod);
-
     sqliteModule.addImport("sqlite3", sqlite_c_mod);
     sqlite_c.addIncludePath(b.path("include"));
 
@@ -518,12 +505,6 @@ pub fn build(b: *std.Build) void {
 
     // exe
 
-    const pipelineJsonParse_exe = b.addExecutable(.{
-        .name = "pipelineJsonParse",
-        .root_module = pipelineJsonParse_mod,
-    });
-    b.installArtifact(pipelineJsonParse_exe);
-
     const genFileNameIDexe = b.addExecutable(.{
         .root_module = gen_fileName_ID_mod,
         .name = "genFileNameIdHashMap",
@@ -539,49 +520,19 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(exe);
 
     // run task
-    // const preKillPipelineParseProcessCmd = b.addSystemCommand(if (builtin.target.os.tag == .windows) &.{
-    //     "cmd",
-    //     "/c",
-    //     "taskkill",
-    //     "/F",
-    //     "/IM",
-    //     "pipelineJsonParse.exe",
-    //     "2>nul",
-    //     "||",
-    //     "exit",
-    //     "/b",
-    //     "0",
-    // } else unreachable);
-    // const preKillGameProcessCmd = b.addSystemCommand(if (builtin.target.os.tag == .windows) &.{
-    //     "cmd",
-    //     "/c",
-    //     "taskkill",
-    //     "/F",
-    //     "/IM",
-    //     "game.exe",
-    //     "2>nul",
-    //     "||",
-    //     "exit",
-    //     "/b",
-    //     "0",
-    // } else unreachable);
-
-    // const compile_txt_generate = b.step("generate compile txt", "produce txt");
-
-    const pipeline_need_compile_txt = "pipeline.txt";
-    const compile_txt_pipeline_cmd = b.addRunArtifact(selectModifiedFileToTxt);
-    compile_txt_pipeline_cmd.addArg(b.build_root.path.?);
-    compile_txt_pipeline_cmd.addArg("Pipeline");
-    compile_txt_pipeline_cmd.addArg(b.fmt("build_script/{s}", .{pipeline_need_compile_txt}));
-
-    const pipeline_compile = b.step("pipeline parse", "parse pipeline json");
-    const pipeline_script_cmd = b.addSystemCommand(&[_][]const u8{
-        "build_script/pipelineParse.bat",
-        "Pipeline",
-        "zig-out/bin/Content/Shaders",
-        "zig-out/bin/Content/Pipeline",
-        b.fmt("build_script/{s}", .{pipeline_need_compile_txt}),
-    });
+    const preKillGameProcessCmd = b.addSystemCommand(if (builtin.target.os.tag == .windows) &.{
+        "cmd",
+        "/c",
+        "taskkill",
+        "/F",
+        "/IM",
+        "game.exe",
+        "2>nul",
+        "||",
+        "exit",
+        "/b",
+        "0",
+    } else unreachable);
 
     const runGenFileNameIdExe = b.step("create hash map", "create filename id static string hash map");
     const runGenFileNameIdExe_cmd = b.addRunArtifact(genFileNameIDexe);
@@ -612,16 +563,13 @@ pub fn build(b: *std.Build) void {
     runGenFileNameIdExe.dependOn(&runGenFileNameIdExe_cmd.step);
     runGenFileNameIdExe_cmd.step.dependOn(&genFileNameIDexeInstallStep.step);
 
-    pipeline_script_cmd.step.dependOn(&pipelineJsonParse_exe.step);
-    pipeline_script_cmd.step.dependOn(&compile_txt_pipeline_cmd.step);
-    pipeline_compile.dependOn(&pipeline_script_cmd.step);
-
     exe.step.dependOn(sdl3_lib_install_step);
     exe.step.dependOn(cglm_install_step);
     exe.step.dependOn(runGenFileNameIdExe);
 
     waf.step.dependOn(&exe.step);
     b.getInstallStep().dependOn(&waf.step);
+    b.getInstallStep().dependOn(&preKillGameProcessCmd.step);
 
     run_cmd.step.dependOn(b.getInstallStep());
     run_cmd.step.dependOn(&pre_run_message_cmd.step);

@@ -557,25 +557,8 @@ fn parseRendering(jsonValue: json.Value, info: *pipelineInfo) void {
     }
 }
 
-pub fn parse(io: std.Io, pipelineFileName: []const u8, allocator: std.mem.Allocator) !pipelineInfo {
-    const pipelineFile = ps: {
-        if (std.fs.path.isAbsolute(pipelineFileName)) {
-            break :ps try std.Io.Dir.openFileAbsolute(io, pipelineFileName, .{});
-        } else {
-            break :ps try std.Io.Dir.cwd().openFile(io, pipelineFileName, .{});
-        }
-    };
-
-    defer pipelineFile.close(io);
-
+pub fn parse(content: []const u8, allocator: std.mem.Allocator) !pipelineInfo {
     var res: pipelineInfo = undefined;
-
-    const metadata = try pipelineFile.stat(io);
-
-    var buffer = [_]u8{0} ** 256;
-    var fileReader = pipelineFile.reader(io, &buffer);
-    const content = try fileReader.interface.readAlloc(allocator, metadata.size);
-    defer allocator.free(content);
 
     const parser = try json.parseFromSlice(json.Value, allocator, content, .{});
     res.parser = parser;

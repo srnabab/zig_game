@@ -3,6 +3,7 @@ const Io = std.Io;
 
 const shaderc = @import("shaderc");
 const sampler = @import("sampler");
+const pipelineParse = @import("pipelinrParse");
 
 const db = @import("db");
 
@@ -331,7 +332,13 @@ pub fn main(init: std.process.Init) !void {
     var notifyTimeMap: std.StringHashMap(i64) = .init(gpa);
     defer notifyTimeMap.deinit();
 
-    const shaderCompiler = shaderc.Compiler.init(null, null, 2);
+    const shaderCompiler = shaderc.Compiler.init(
+        null,
+        null,
+        .shaderc_optimization_level_zero,
+        .shaderc_target_env_vulkan,
+        .shaderc_env_version_vulkan_1_4,
+    );
 
     var fileWriterBuffer = [_]u8{0} ** 1024;
 
@@ -657,6 +664,10 @@ pub fn main(init: std.process.Init) !void {
                                                     std.log.err("write file {s} failed", .{spvFullPath});
                                                     continue;
                                                 };
+                                                writer.interface.flush() catch {
+                                                    std.log.err("write file {s} failed", .{spvFullPath});
+                                                    continue;
+                                                };
 
                                                 const nodeType_u32: u32 = @intFromEnum(db.NodeType.Shader);
                                                 try database.ShaderPipelineGraphNodeT.insert(.{
@@ -683,7 +694,50 @@ pub fn main(init: std.process.Init) !void {
                                                     continue;
                                                 };
                                             },
-                                            .Pipeline => {},
+                                            .Pipeline => {
+                                                const pipebName = try std.fmt.allocPrint(gpa, "{s}b", .{fileName});
+                                                defer gpa.free(pipebName);
+
+                                                const pipebFullPath = try std.fs.path.joinZ(
+                                                    gpa,
+                                                    &[_][]const u8{
+                                                        contentDatabaseRelativePathStart.?,
+                                                        "Pipeline",
+                                                        pipebName,
+                                                    },
+                                                );
+                                                defer gpa.free(pipebFullPath);
+
+                                                const shaderFolderFullPath = try std.fs.path.joinZ(
+                                                    gpa,
+                                                    &[_][]const u8{
+                                                        contentDatabaseRelativePathStart.?,
+                                                        "Shaders",
+                                                    },
+                                                );
+                                                defer gpa.free(shaderFolderFullPath);
+
+                                                const shaderNames = pipelineParse.pipelineJsonParse(
+                                                    init.io,
+                                                    content,
+                                                    shaderFolderFullPath,
+                                                    pipebFullPath,
+                                                    gpa,
+                                                ) catch {
+                                                    std.log.err("pipeline json parse failed", .{});
+                                                    continue;
+                                                };
+                                                defer {
+                                                    for (shaderNames) |value| {
+                                                        gpa.free(value);
+                                                    }
+                                                    gpa.free(shaderNames);
+                                                }
+
+                                                for (shaderNames) |shaderName| {
+                                                    std.log.debug("{s}", .{shaderName});
+                                                }
+                                            },
                                             else => {},
                                         }
                                     }

@@ -1,5 +1,6 @@
 const std = @import("std");
 const shaderc = @import("shaderc");
+const enumFromC = @import("enumFromC");
 
 const shaderSuffixToShaderKind = a: {
     const maptype = std.StaticStringMap(shaderc.shaderc_shader_kind);
@@ -17,13 +18,41 @@ const shaderSuffixToShaderKind = a: {
     break :a maptype.initComptime(list);
 };
 
+const shaderc_target_env = enum(u32) {
+    shaderc_target_env_vulkan = 0,
+    shaderc_target_env_opengl = 1,
+    shaderc_target_env_opengl_compat = 2,
+    shaderc_target_env_webgpu = 3,
+};
+
+const shaderc_env_version = enum(u32) {
+    shaderc_env_version_vulkan_1_0 = 4194304,
+    shaderc_env_version_vulkan_1_1 = 4198400,
+    shaderc_env_version_vulkan_1_2 = 4202496,
+    shaderc_env_version_vulkan_1_3 = 4206592,
+    shaderc_env_version_vulkan_1_4 = 4210688,
+    shaderc_env_version_opengl_4_5 = 450,
+    shaderc_env_version_webgpu = 451,
+};
+const shaderc_optimization_level = enum(u32) {
+    shaderc_optimization_level_zero = 0,
+    shaderc_optimization_level_size = 1,
+    shaderc_optimization_level_performance = 2,
+};
+
 pub const Compiler = struct {
     const Self = @This();
 
     compiler: shaderc.shaderc_compiler_t,
     options: shaderc.shaderc_compile_options_t,
 
-    pub fn init(macroNames: ?[][]const u8, macroValues: ?[][]const u8, optimizationLevel: shaderc.shaderc_optimization_level) Self {
+    pub fn init(
+        macroNames: ?[][]const u8,
+        macroValues: ?[][]const u8,
+        optimizationLevel: shaderc_optimization_level,
+        targeEnv: shaderc_target_env,
+        targetEnvVersion: shaderc_env_version,
+    ) Self {
         const compiler = shaderc.shaderc_compiler_initialize();
         const options = shaderc.shaderc_compile_options_initialize();
 
@@ -39,7 +68,13 @@ pub const Compiler = struct {
             }
         }
 
-        shaderc.shaderc_compile_options_set_optimization_level(options, optimizationLevel);
+        shaderc.shaderc_compile_options_set_target_env(
+            options,
+            @intFromEnum(targeEnv),
+            @intFromEnum(targetEnvVersion),
+        );
+
+        shaderc.shaderc_compile_options_set_optimization_level(options, @intFromEnum(optimizationLevel));
 
         return .{
             .compiler = compiler,
@@ -82,6 +117,9 @@ pub const Compiler = struct {
 
                 const data = try allocator.alloc(u8, length);
                 @memcpy(data, bytes[0..length]);
+
+                // std.log.debug("code length {d}", .{length});
+                std.log.debug("shader kind {d}", .{shaderKind});
 
                 std.log.debug("shader {s} compiled", .{fileName});
 

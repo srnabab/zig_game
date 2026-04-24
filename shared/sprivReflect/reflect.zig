@@ -65,14 +65,15 @@ const shaderInfo = struct {
     }
 };
 
-pub fn reflect(allocator: std.mem.Allocator, cc: std.Io.File.Stat, content: []const u8) !shaderInfo {
+pub fn reflect(allocator: std.mem.Allocator, content: []const u8) !shaderInfo {
     var res: shaderInfo = undefined;
 
     var spv_result: s.SpvReflectResult = 0;
     var module: s.SpvReflectShaderModule = undefined;
 
-    spv_result = s.spvReflectCreateShaderModule(@intCast(cc.size), @ptrCast(content.ptr), @ptrCast(&module));
+    spv_result = s.spvReflectCreateShaderModule(@intCast(content.len), @ptrCast(content.ptr), @ptrCast(&module));
     defer s.spvReflectDestroyShaderModule(@ptrCast(&module));
+    std.log.debug("spv result {d}", .{spv_result});
     assert(spv_result == s.SPV_REFLECT_RESULT_SUCCESS);
 
     _ = try std.fmt.bufPrintZ(&res.name, "{s}", .{module.entry_point_name});
@@ -100,12 +101,15 @@ pub fn reflect(allocator: std.mem.Allocator, cc: std.Io.File.Stat, content: []co
         }
         res.bindingCount = var_count;
         res.bindings = bs;
+
+        // std.log.debug("binding count {d}", .{res.bindingCount});
     } else {
         res.bindingCount = 0;
         res.bindings = null;
     }
 
     res.setCount = @intCast(biggerstSet + 1);
+    // std.log.debug("max set {d}", .{res.setCount});
 
     var_count = 0;
     spv_result = s.spvReflectEnumeratePushConstantBlocks(@ptrCast(&module), @ptrCast(&var_count), null);
