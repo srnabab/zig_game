@@ -170,11 +170,14 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
         .link_libcpp = true,
     });
-    // const sampler_mod = b.createModule(.{
-    //     .root_source_file = b.path("src/sampler/sampler.zig"),
-    //     .target = target,
-    //     .optimize = optimize,
-    // });
+    const sampler_mod = b.createModule(.{
+        .root_source_file = b.path("src/sampler/sampler.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    //
+    sampler_mod.addImport("vulkan", vk_c_mod);
 
     shaderC_mod.addImport("shaderc", shaderc_c_mod);
     shaderc_c.addIncludePath(b.path("../include"));
@@ -224,6 +227,7 @@ pub fn build(b: *std.Build) void {
 
     exe_mod.addImport("db", db_mod);
     exe_mod.addImport("shaderc", shaderC_mod);
+    exe_mod.addImport("sampler", sampler_mod);
     exe_mod.addLibraryPath(meshopt_dep.path("install/lib"));
     exe_mod.linkSystemLibrary("meshoptimizer", .{ .preferred_link_mode = .static });
 

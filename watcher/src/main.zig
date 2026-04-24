@@ -328,6 +328,8 @@ pub fn main(init: std.process.Init) !void {
     var arrayFirstIndex: usize = 0;
     var notifyArray = std.array_list.Managed(NotifyInformation).init(allocator);
     defer notifyArray.deinit();
+    var notifyTimeMap: std.StringHashMap(i64) = .init(gpa);
+    defer notifyTimeMap.deinit();
 
     const shaderCompiler = shaderc.Compiler.init(null, null, 2);
 
@@ -386,9 +388,20 @@ pub fn main(init: std.process.Init) !void {
 
                     const last = notifyArray.getLastOrNull();
                     if (last) |l| {
+                        // std.log.debug("{}, {}, {d}ms", .{ l.Action == info.Action, std.mem.eql(u8, l.name, name_utf8), time - l.time });
                         if (l.Action == info.Action and std.mem.eql(u8, l.name, name_utf8) and time - l.time < 500) {
+                            // std.log.debug("name {s} 2", .{name_utf8});
                             allocator.free(name_utf8);
                             continue;
+                        } else {
+                            if (notifyTimeMap.get(name_utf8)) |t| {
+                                // std.log.debug("{d}ms", .{time - t});
+                                if (time - t < 500) {
+                                    // std.log.debug("name {s} 1", .{name_utf8});
+                                    allocator.free(name_utf8);
+                                    continue;
+                                }
+                            }
                         }
                     }
                     try notifyArray.append(.{
@@ -396,12 +409,16 @@ pub fn main(init: std.process.Init) !void {
                         .name = name_utf8,
                         .time = std.Io.Timestamp.now(init.io, .real).toMilliseconds(),
                     });
+                    try notifyTimeMap.put(name_utf8, time);
                 }
             }
 
             while (true) {
                 if (arrayFirstIndex >= notifyArray.items.len) {
                     if (notifyArray.items.len > 1000) {
+                        for (notifyArray.items) |value| {
+                            allocator.free(value.name);
+                        }
                         notifyArray.clearRetainingCapacity();
                         arrayFirstIndex = 0;
                     }
@@ -414,7 +431,6 @@ pub fn main(init: std.process.Init) !void {
                 if (info.Action == 100) continue;
 
                 const name_utf8 = info.name;
-                defer allocator.free(name_utf8);
 
                 const action_str = switch (info.Action) {
                     1 => "create",
@@ -641,10 +657,33 @@ pub fn main(init: std.process.Init) !void {
                                                     std.log.err("write file {s} failed", .{spvFullPath});
                                                     continue;
                                                 };
+
+                                                const nodeType_u32: u32 = @intFromEnum(db.NodeType.Shader);
+                                                try database.ShaderPipelineGraphNodeT.insert(.{
+                                                    .Name = @constCast(spvName.ptr),
+                                                    .Type = nodeType_u32,
+                                                });
                                             },
-                                            .Sampler => {},
+                                            .Sampler => {
+                                                const samplerName = try std.fmt.allocPrint(gpa, "{s}ler", .{fileName});
+                                                defer gpa.free(samplerName);
+
+                                                const samplerFullPath = try std.fs.path.joinZ(
+                                                    gpa,
+                                                    &[_][]const u8{
+                                                        contentDatabaseRelativePathStart.?,
+                                                        "Sampler",
+                                                        samplerName,
+                                                    },
+                                                );
+                                                defer gpa.free(samplerFullPath);
+
+                                                sampler.praseSampler(init.io, content, samplerFullPath, gpa) catch |err| {
+                                                    std.log.err("write file {s} failed {s}", .{ samplerFullPath, @errorName(err) });
+                                                    continue;
+                                                };
+                                            },
                                             .Pipeline => {},
-                                            .SPV => {},
                                             else => {},
                                         }
                                     }
@@ -702,7 +741,7 @@ pub fn main(init: std.process.Init) !void {
                                                     &getValues,
                                                     &types,
                                                 );
-                                                std.log.debug("{s}", .{parentPathZ});
+                                                // std.log.debug("{s}", .{parentPathZ});
 
                                                 try db.iterateFolder.processDirectory(
                                                     init.io,

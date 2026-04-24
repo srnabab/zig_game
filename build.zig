@@ -209,11 +209,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    const sampler_mod = b.createModule(.{
-        .root_source_file = b.path("src/sampler/main.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
     const sampler_read_mod = b.createModule(.{
         .root_source_file = b.path("src/sampler/read.zig"),
         .target = target,
@@ -349,8 +344,6 @@ pub fn build(b: *std.Build) void {
     sampler_read_mod.addImport("vulkan", vk_c_mod);
     sampler_read_mod.addImport("fileSystem", fileSystem_mod);
     sampler_read_mod.addImport("tracy", tracy.module("tracy"));
-
-    sampler_mod.addImport("vulkan", vk_c_mod);
 
     vk_c.addIncludePath(b.path("include"));
 
@@ -524,11 +517,6 @@ pub fn build(b: *std.Build) void {
     exe_mod.linkLibrary(tracy.artifact("tracy"));
 
     // exe
-    const samplerJsonPrase_exe = b.addExecutable(.{
-        .name = "samplerJsonPrase",
-        .root_module = sampler_mod,
-    });
-    b.installArtifact(samplerJsonPrase_exe);
 
     const pipelineJsonParse_exe = b.addExecutable(.{
         .name = "pipelineJsonParse",
@@ -580,31 +568,11 @@ pub fn build(b: *std.Build) void {
 
     // const compile_txt_generate = b.step("generate compile txt", "produce txt");
 
-    const shader_need_compile_txt = "shaders.txt";
-    const compile_txt_shaders_cmd = b.addRunArtifact(selectModifiedFileToTxt);
-    compile_txt_shaders_cmd.addArg(b.build_root.path.?);
-    compile_txt_shaders_cmd.addArg("Shaders");
-    compile_txt_shaders_cmd.addArg(b.fmt("build_script/{s}", .{shader_need_compile_txt}));
-
     const pipeline_need_compile_txt = "pipeline.txt";
     const compile_txt_pipeline_cmd = b.addRunArtifact(selectModifiedFileToTxt);
     compile_txt_pipeline_cmd.addArg(b.build_root.path.?);
     compile_txt_pipeline_cmd.addArg("Pipeline");
     compile_txt_pipeline_cmd.addArg(b.fmt("build_script/{s}", .{pipeline_need_compile_txt}));
-
-    const sampler_need_compile_txt = "sampler.txt";
-    const compile_txt_sampler_cmd = b.addRunArtifact(selectModifiedFileToTxt);
-    compile_txt_sampler_cmd.addArg(b.build_root.path.?);
-    compile_txt_sampler_cmd.addArg("Pipeline");
-    compile_txt_sampler_cmd.addArg(b.fmt("build_script/{s}", .{sampler_need_compile_txt}));
-
-    const shader_compile = b.step("shader compile", "compile shader");
-    const script_cmd = b.addSystemCommand(&[_][]const u8{
-        "build_script/shaderCompile.bat",
-        "Shaders",
-        "zig-out/bin/Content/Shaders",
-        b.fmt("build_script/{s}", .{shader_need_compile_txt}),
-    });
 
     const pipeline_compile = b.step("pipeline parse", "parse pipeline json");
     const pipeline_script_cmd = b.addSystemCommand(&[_][]const u8{
@@ -613,14 +581,6 @@ pub fn build(b: *std.Build) void {
         "zig-out/bin/Content/Shaders",
         "zig-out/bin/Content/Pipeline",
         b.fmt("build_script/{s}", .{pipeline_need_compile_txt}),
-    });
-
-    const sampler_compile = b.step("sampler compile", "compile sampler");
-    const sampler_script_cmd = b.addSystemCommand(&[_][]const u8{
-        "build_script/samplerParse.bat",
-        "Sampler",
-        "zig-out/bin/Content/Sampler",
-        b.fmt("build_script/{s}", .{sampler_need_compile_txt}),
     });
 
     const runGenFileNameIdExe = b.step("create hash map", "create filename id static string hash map");
@@ -652,28 +612,11 @@ pub fn build(b: *std.Build) void {
     runGenFileNameIdExe.dependOn(&runGenFileNameIdExe_cmd.step);
     runGenFileNameIdExe_cmd.step.dependOn(&genFileNameIDexeInstallStep.step);
 
-    shader_compile.dependOn(&script_cmd.step);
-    shader_compile.dependOn(&compile_txt_pipeline_cmd.step);
-    shader_compile.dependOn(&compile_txt_sampler_cmd.step);
-    script_cmd.step.dependOn(&compile_txt_shaders_cmd.step);
-
-    pipeline_script_cmd.step.dependOn(shader_compile);
     pipeline_script_cmd.step.dependOn(&pipelineJsonParse_exe.step);
     pipeline_script_cmd.step.dependOn(&compile_txt_pipeline_cmd.step);
     pipeline_compile.dependOn(&pipeline_script_cmd.step);
 
-    sampler_script_cmd.step.dependOn(&compile_txt_sampler_cmd.step);
-    sampler_script_cmd.step.dependOn(&samplerJsonPrase_exe.step);
-    sampler_compile.dependOn(&sampler_script_cmd.step);
-
-    // run_gen_exe.step.dependOn(&gen_exe.step);
-
-    // copy_sdl3_header.step.dependOn(sdl3_lib_install_step);
-
-    // exe.step.dependOn(&copy_sdl3_header.step);
     exe.step.dependOn(sdl3_lib_install_step);
-    // exe.step.dependOn(&run_gen_exe.step);
-    // exe.step.dependOn(meshopt_lib_install_step);
     exe.step.dependOn(cglm_install_step);
     exe.step.dependOn(runGenFileNameIdExe);
 

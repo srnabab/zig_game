@@ -436,13 +436,6 @@ fn updateLoadParameter(
                 }
             }
         },
-        .SPV => {
-            const nodeType_u32: u32 = @intFromEnum(Types.NodeType.Shader);
-            try ShaderPipelineGraphNodeT.insert(.{
-                .Name = @constCast(fileName.ptr),
-                .Type = nodeType_u32,
-            });
-        },
         else => {},
     }
 }
