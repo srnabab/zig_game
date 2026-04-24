@@ -3,7 +3,7 @@ const builtin = @import("builtin");
 const parse = @import("pipeline.zig");
 const trans = @import("translate2.zig");
 
-pub fn pipelineJsonParse(io: std.Io, pipelineContent: []const u8, shaderFolder: []const u8, outputPath: []const u8, gpa: std.mem.Allocator) ![][]u8 {
+pub fn pipelineJsonParse(io: std.Io, pipelineContent: []const u8, shaderFolder: []const u8, outputPath: []const u8, gpa: std.mem.Allocator) ![][:0]u8 {
     var jsonP = try parse.parse(pipelineContent, gpa);
     defer jsonP.deinit();
 
@@ -53,12 +53,14 @@ pub fn pipelineJsonParse(io: std.Io, pipelineContent: []const u8, shaderFolder: 
     }
     try writer.flush();
 
-    var shaderNames = try gpa.alloc([]u8, res.shaderCodes.len);
+    var shaderNames = try gpa.alloc([:0]u8, res.shaderCodes.len);
     for (0..res.shaderCodes.len) |i| {
         const len = std.mem.len(@as([*c]u8, @ptrCast(&res.info.shaderName[i])));
-        shaderNames[i] = try gpa.alloc(u8, len);
+        shaderNames[i] = try gpa.allocSentinel(u8, len, 0);
         @memcpy(shaderNames[i], res.info.shaderName[i][0..len]);
     }
+
+    std.log.debug("parse {s}", .{outputPath});
 
     return shaderNames;
 }

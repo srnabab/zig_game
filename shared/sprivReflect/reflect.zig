@@ -73,7 +73,7 @@ pub fn reflect(allocator: std.mem.Allocator, content: []const u8) !shaderInfo {
 
     spv_result = s.spvReflectCreateShaderModule(@intCast(content.len), @ptrCast(content.ptr), @ptrCast(&module));
     defer s.spvReflectDestroyShaderModule(@ptrCast(&module));
-    std.log.debug("spv result {d}", .{spv_result});
+    // std.log.debug("spv result {d}", .{spv_result});
     assert(spv_result == s.SPV_REFLECT_RESULT_SUCCESS);
 
     _ = try std.fmt.bufPrintZ(&res.name, "{s}", .{module.entry_point_name});

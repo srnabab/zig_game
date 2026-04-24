@@ -80,9 +80,9 @@ fn getPipelineShaderInfos(io: std.Io, shaders: [5][]const u8, count: u32, shader
             var frag = false;
             if (std.mem.endsWith(u8, shaders[i], ".frag.spv")) {
                 frag = true;
-                std.log.debug("{s}", .{shaders[i]});
+                // std.log.debug("{s}", .{shaders[i]});
             } else {
-                std.log.debug("{s}", .{shaders[i]});
+                // std.log.debug("{s}", .{shaders[i]});
             }
 
             file = try folder.openFile(io, shaders[i], .{});
@@ -198,7 +198,7 @@ fn createPipelineLayoutCreateInfo(shaderInfos: []PipelineShaderInfo, pipeRes: *V
         }
         break :sc max;
     };
-    std.log.debug("set count {d}", .{setCount});
+    // std.log.debug("set count {d}", .{setCount});
     for (shaderInfos) |sInfo| {
         if (sInfo.pushConstantSize > 0) {
             pushConstants.*[pushConstantCount.*].stageFlags = sInfo.stage;

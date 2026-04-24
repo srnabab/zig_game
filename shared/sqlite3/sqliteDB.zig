@@ -147,6 +147,10 @@ fn getParamFromSQL(comptime SQL: []const u8, comptime skipID: bool) ParamsPack {
                     addSkip = true;
                     break;
                 }
+                if (std.mem.eql(u8, bbb, "PRIMARY")) {
+                    addSkip = true;
+                    break;
+                }
                 params[paramsCount].paramName = bbb;
             } else if (count == 1) {
                 params[paramsCount].paramType = stringToType(bbb);
@@ -557,7 +561,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                     i64 => {
                         _ = sqlite.sqlite3_bind_int64(stmt, ii, @field(values, fields_info[i].name));
                     },
-                    i32 => {
+                    i32, u32 => {
                         _ = sqlite.sqlite3_bind_int64(stmt, ii, @field(values, fields_info[i].name));
                     },
                     BLOB => {
@@ -673,9 +677,20 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
             }
         }
 
-        pub fn gets(self: *Self, comptime targets: []const u8, comptime others: ?[]const u8, comptime constraint: ?[]const u8, values: anytype, getValues: [][]*anyopaque, types: []innerType) sqliteError!void {
-            if (getValues[0].len != types.len) {
-                return sqliteError.SQLError;
+        pub fn gets(
+            self: *Self,
+            comptime targets: []const u8,
+            comptime others: ?[]const u8,
+            comptime constraint: ?[]const u8,
+            values: anytype,
+            getValues: ?[][]*anyopaque,
+            types: ?[]innerType,
+            getCount: *u32,
+        ) sqliteError!void {
+            if (getValues != null and types != null) {
+                if (getValues.?[0].len != types.?.len) {
+                    return sqliteError.SQLError;
+                }
             }
 
             const ArgsType = @TypeOf(values);
@@ -687,6 +702,20 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
             const fields_info = args_type_info.@"struct".fields;
 
             @setEvalBranchQuota(2000000);
+
+            const countSql = comptime ss: {
+                if (constraint != null) {
+                    break :ss std.fmt.comptimePrint(
+                        "SELECT COUNT(*) FROM {s} {s} WHERE {s};",
+                        .{ if (others != null) others.? else "", tableName, constraint.? },
+                    );
+                } else {
+                    break :ss std.fmt.comptimePrint(
+                        "SELECT COUNT(*) FROM {s} {s};",
+                        .{ if (others != null) others.? else "", tableName },
+                    );
+                }
+            };
 
             const ssql = comptime ss: {
                 if (constraint != null) {
@@ -704,7 +733,11 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
             // std.log.info("{s}", .{ssql});
 
             var stmt: ?*sqlite.sqlite3_stmt = null;
-            try prepare_v2(self.db, @ptrCast(ssql), -1, @ptrCast(&stmt), null);
+            if (getValues != null and types != null) {
+                try prepare_v2(self.db, @ptrCast(ssql), -1, @ptrCast(&stmt), null);
+            } else {
+                try prepare_v2(self.db, @ptrCast(countSql), -1, @ptrCast(&stmt), null);
+            }
             defer _ = sqlite.sqlite3_finalize(stmt);
 
             // std.log.info("fields len {d}", .{fields_info.len});
@@ -797,38 +830,44 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
             var res = sqlite.sqlite3_step(stmt);
             var count: u32 = 0;
 
-            while (res == sqlite.SQLITE_ROW) {
-                for (0..types.len) |i| {
-                    const ii: c_int = @intCast(i);
+            if (getValues != null and types != null) {
+                while (res == sqlite.SQLITE_ROW) {
+                    for (0..types.?.len) |i| {
+                        const ii: c_int = @intCast(i);
 
-                    switch (types[i]) {
-                        .INTEGER => {
-                            //     const ptr = @as(*i32, @ptrCast(getValues[i]));
-                            //     ptr = @as(i32, sqlite.sqlite3_column_int(stmt, i));
-                            // },
-                            // => {
-                            const ptr = @as(*i64, @ptrCast(@alignCast(getValues[count][i])));
-                            ptr.* = @as(i64, sqlite.sqlite3_column_int64(stmt, ii));
-                        },
-                        .INTEGER32 => {
-                            const ptr = @as(*i32, @ptrCast(@alignCast(getValues[count][i])));
-                            ptr.* = @as(i32, sqlite.sqlite3_column_int(stmt, ii));
-                        },
-                        .TEXT => {
-                            const ptr = @as([*]u8, @ptrCast(@alignCast(getValues[count][i])));
-                            const str = sqlite.sqlite3_column_text(stmt, ii);
-                            const len = std.mem.len(str);
-                            @memcpy(ptr, str[0..len]);
-                            // std.log.info("ptr {s}", .{ptr[0..len]});
-                        },
-                        .BLOB => {
-                            const ptr = @as(*BLOBForGet, @ptrCast(@alignCast(getValues[count][i]))).*;
-                            const str = @as([*]u8, @ptrCast(@constCast(sqlite.sqlite3_column_blob(stmt, ii).?)));
-                            @memcpy(ptr.data, str[0..ptr.len]);
-                        },
+                        switch (types.?[i]) {
+                            .INTEGER => {
+                                //     const ptr = @as(*i32, @ptrCast(getValues[i]));
+                                //     ptr = @as(i32, sqlite.sqlite3_column_int(stmt, i));
+                                // },
+                                // => {
+                                const ptr = @as(*i64, @ptrCast(@alignCast(getValues.?[count][i])));
+                                ptr.* = @as(i64, sqlite.sqlite3_column_int64(stmt, ii));
+                            },
+                            .INTEGER32 => {
+                                const ptr = @as(*i32, @ptrCast(@alignCast(getValues.?[count][i])));
+                                ptr.* = @as(i32, sqlite.sqlite3_column_int(stmt, ii));
+                            },
+                            .TEXT => {
+                                const ptr = @as([*]u8, @ptrCast(@alignCast(getValues.?[count][i])));
+                                const str = sqlite.sqlite3_column_text(stmt, ii);
+                                const len = std.mem.len(str);
+                                @memcpy(ptr, str[0..len]);
+                                // std.log.info("ptr {s}", .{ptr[0..len]});
+                            },
+                            .BLOB => {
+                                const ptr = @as(*BLOBForGet, @ptrCast(@alignCast(getValues.?[count][i]))).*;
+                                const str = @as([*]u8, @ptrCast(@constCast(sqlite.sqlite3_column_blob(stmt, ii).?)));
+                                @memcpy(ptr.data, str[0..ptr.len]);
+                            },
+                        }
                     }
+                    count += 1;
+                    res = sqlite.sqlite3_step(stmt);
                 }
-                count += 1;
+            } else {
+                const rowCount = sqlite.sqlite3_column_int(stmt, 0);
+                getCount.* = @intCast(rowCount);
                 res = sqlite.sqlite3_step(stmt);
             }
             if (res != sqlite.SQLITE_DONE) {

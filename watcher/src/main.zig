@@ -624,6 +624,8 @@ pub fn main(init: std.process.Init) !void {
                                         const content = try reader.interface.readAlloc(gpa, stat.size);
                                         defer gpa.free(content);
 
+                                        reader.seekTo(0) catch continue;
+
                                         fType = db.judgeFileType(fileName[dotIndex..], content);
 
                                         switch (fType) {
@@ -636,7 +638,12 @@ pub fn main(init: std.process.Init) !void {
                                                 ) catch continue;
                                                 defer gpa.free(spv);
 
-                                                const spvName = try std.fmt.allocPrint(gpa, "{s}.spv", .{fileName});
+                                                const spvName = try std.fmt.allocPrintSentinel(
+                                                    gpa,
+                                                    "{s}.spv",
+                                                    .{fileName},
+                                                    0,
+                                                );
                                                 defer gpa.free(spvName);
 
                                                 const spvFullPath = try std.fs.path.joinZ(
@@ -671,9 +678,164 @@ pub fn main(init: std.process.Init) !void {
 
                                                 const nodeType_u32: u32 = @intFromEnum(db.NodeType.Shader);
                                                 try database.ShaderPipelineGraphNodeT.insert(.{
-                                                    .Name = @constCast(spvName.ptr),
+                                                    .Name = fileName.ptr,
+                                                    .Path = fullPath.ptr,
                                                     .Type = nodeType_u32,
                                                 });
+
+                                                var fromNodeID: i32 = -1;
+                                                var gets = [_]*anyopaque{@ptrCast(&fromNodeID)};
+                                                var types = [_]db.innerType{.INTEGER32};
+                                                database.ShaderPipelineGraphNodeT.get(
+                                                    "ID",
+                                                    null,
+                                                    "Name = ?",
+                                                    .{fileName},
+                                                    &gets,
+                                                    &types,
+                                                ) catch {
+                                                    std.log.err("get shader id failed", .{});
+                                                    continue;
+                                                };
+
+                                                var pipelineCount: u32 = 0;
+
+                                                database.ShaderPipelineGraphEdgeT.gets(
+                                                    "ToNodeID",
+                                                    null,
+                                                    "FromNodeID = ?",
+                                                    .{fromNodeID},
+                                                    null,
+                                                    null,
+                                                    &pipelineCount,
+                                                ) catch {
+                                                    std.log.err("get pipeline count failed", .{});
+                                                    continue;
+                                                };
+
+                                                if (pipelineCount > 0) {
+                                                    const getValues = gpa.alloc([]*anyopaque, pipelineCount) catch continue;
+                                                    defer gpa.free(getValues);
+                                                    const ToNodeIDs = gpa.alloc(u32, pipelineCount) catch continue;
+                                                    defer gpa.free(ToNodeIDs);
+                                                    for (getValues, 0..) |*value, i| {
+                                                        value.* = gpa.alloc(*anyopaque, 1) catch continue;
+                                                        value.*[0] = @ptrCast(&ToNodeIDs[i]);
+                                                    }
+                                                    defer for (getValues) |value| gpa.free(value);
+
+                                                    database.ShaderPipelineGraphEdgeT.gets(
+                                                        "ToNodeID",
+                                                        null,
+                                                        "FromNodeID = ?",
+                                                        .{fromNodeID},
+                                                        getValues,
+                                                        &types,
+                                                        &pipelineCount,
+                                                    ) catch {
+                                                        std.log.err("get pipeline count failed", .{});
+                                                        continue;
+                                                    };
+
+                                                    for (ToNodeIDs) |value| {
+                                                        var pipelinePath = [_]u8{0} ** 256;
+                                                        var pipelineGets = [_]*anyopaque{&pipelinePath};
+                                                        var pipelineTypes = [_]db.innerType{.TEXT};
+                                                        database.ShaderPipelineGraphNodeT.get(
+                                                            "Path",
+                                                            null,
+                                                            "ID = ?",
+                                                            .{value},
+                                                            &pipelineGets,
+                                                            &pipelineTypes,
+                                                        ) catch {
+                                                            std.log.err("get pipeline path failed", .{});
+                                                            continue;
+                                                        };
+
+                                                        const pipelinePathLen = std.mem.len(@as([*c]u8, @ptrCast(&pipelinePath)));
+
+                                                        var pipelineNameStart = std.mem.findLast(
+                                                            u8,
+                                                            pipelinePath[0..pipelinePathLen],
+                                                            "\\",
+                                                        );
+                                                        if (pipelineNameStart == null) {
+                                                            pipelineNameStart = 0;
+                                                        } else {
+                                                            pipelineNameStart.? += 1;
+                                                        }
+
+                                                        const pipebName = try std.fmt.allocPrintSentinel(
+                                                            gpa,
+                                                            "{s}b",
+                                                            .{pipelinePath[pipelineNameStart.?..pipelinePathLen]},
+                                                            0,
+                                                        );
+                                                        defer gpa.free(pipebName);
+
+                                                        const pipebFullPath = try std.fs.path.joinZ(
+                                                            gpa,
+                                                            &[_][]const u8{
+                                                                contentDatabaseRelativePathStart.?,
+                                                                "Pipeline",
+                                                                pipebName,
+                                                            },
+                                                        );
+                                                        defer gpa.free(pipebFullPath);
+
+                                                        const shaderFolderFullPath = try std.fs.path.joinZ(
+                                                            gpa,
+                                                            &[_][]const u8{
+                                                                contentDatabaseRelativePathStart.?,
+                                                                "Shaders",
+                                                            },
+                                                        );
+                                                        defer gpa.free(shaderFolderFullPath);
+
+                                                        const pipelineFile = std.Io.Dir.openFileAbsolute(
+                                                            init.io,
+                                                            pipelinePath[0..pipelinePathLen],
+                                                            .{},
+                                                        ) catch |err| {
+                                                            std.log.err(
+                                                                "failed to open pipeline file {s} {s}",
+                                                                .{ pipelinePath[0..pipelinePathLen], @errorName(err) },
+                                                            );
+                                                            continue;
+                                                        };
+
+                                                        const pipelineFileStat = pipelineFile.stat(init.io) catch |err| {
+                                                            std.log.err(
+                                                                "failed to stat pipeline file {s} {s}",
+                                                                .{ pipelinePath[0..pipelinePathLen], @errorName(err) },
+                                                            );
+                                                            continue;
+                                                        };
+
+                                                        var pipelineReader = pipelineFile.reader(init.io, &readBuffer);
+                                                        const pipelineContent = try pipelineReader.interface.readAlloc(gpa, pipelineFileStat.size);
+                                                        defer gpa.free(pipelineContent);
+
+                                                        const shaderNames = pipelineParse.pipelineJsonParse(
+                                                            init.io,
+                                                            pipelineContent,
+                                                            shaderFolderFullPath,
+                                                            pipebFullPath,
+                                                            gpa,
+                                                        ) catch |err| {
+                                                            std.log.err("pipeline json parse failed {s}", .{@errorName(err)});
+                                                            continue;
+                                                        };
+                                                        defer {
+                                                            for (shaderNames) |shaderName| {
+                                                                gpa.free(shaderName);
+                                                            }
+                                                            gpa.free(shaderNames);
+                                                        }
+                                                        // std.log.debug("ID {d}", .{value});
+                                                    }
+                                                }
                                             },
                                             .Sampler => {
                                                 const samplerName = try std.fmt.allocPrint(gpa, "{s}ler", .{fileName});
@@ -695,7 +857,12 @@ pub fn main(init: std.process.Init) !void {
                                                 };
                                             },
                                             .Pipeline => {
-                                                const pipebName = try std.fmt.allocPrint(gpa, "{s}b", .{fileName});
+                                                const pipebName = try std.fmt.allocPrintSentinel(
+                                                    gpa,
+                                                    "{s}b",
+                                                    .{fileName},
+                                                    0,
+                                                );
                                                 defer gpa.free(pipebName);
 
                                                 const pipebFullPath = try std.fs.path.joinZ(
@@ -734,7 +901,60 @@ pub fn main(init: std.process.Init) !void {
                                                     gpa.free(shaderNames);
                                                 }
 
+                                                database.ShaderPipelineGraphNodeT.insert(.{
+                                                    .Name = fileName.ptr,
+                                                    .Path = fullPath.ptr,
+                                                    .Type = @as(u32, @intFromEnum(db.NodeType.Pipeline)),
+                                                }) catch {
+                                                    std.log.err("insert pipeline failed", .{});
+                                                    continue;
+                                                };
+
+                                                var nodeID: i32 = -1;
+                                                var gets = [_]*anyopaque{@ptrCast(&nodeID)};
+                                                var types = [_]db.innerType{.INTEGER32};
+                                                database.ShaderPipelineGraphNodeT.get(
+                                                    "ID",
+                                                    null,
+                                                    "Name = ?",
+                                                    .{fileName},
+                                                    &gets,
+                                                    &types,
+                                                ) catch {
+                                                    std.log.err("get pipeline id failed", .{});
+                                                    continue;
+                                                };
                                                 for (shaderNames) |shaderName| {
+                                                    const shaderNameNoSpv = gpa.allocSentinel(
+                                                        u8,
+                                                        shaderName.len - 4,
+                                                        0,
+                                                    ) catch continue;
+                                                    defer gpa.free(shaderNameNoSpv);
+                                                    @memcpy(shaderNameNoSpv, shaderName[0 .. shaderName.len - 4]);
+
+                                                    var shaderID: i32 = -1;
+                                                    var gets2 = [_]*anyopaque{@ptrCast(&shaderID)};
+                                                    var types2 = [_]db.innerType{.INTEGER32};
+                                                    database.ShaderPipelineGraphNodeT.get(
+                                                        "ID",
+                                                        null,
+                                                        "Name = ?",
+                                                        .{shaderNameNoSpv},
+                                                        &gets2,
+                                                        &types2,
+                                                    ) catch {
+                                                        std.log.err("insert pipeline failed", .{});
+                                                        continue;
+                                                    };
+
+                                                    database.ShaderPipelineGraphEdgeT.insert(.{
+                                                        .FromNodeID = shaderID,
+                                                        .ToNodeID = nodeID,
+                                                    }) catch {
+                                                        std.log.err("insert pipeline failed", .{});
+                                                        continue;
+                                                    };
                                                     std.log.debug("{s}", .{shaderName});
                                                 }
                                             },

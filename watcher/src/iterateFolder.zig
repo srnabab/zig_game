@@ -72,7 +72,7 @@ const FileTypeHashTable = map: {
         .{ ".mesh", FileType.Shader },
         .{ ".pipe", FileType.Pipeline },
         .{ ".samp", FileType.Sampler },
-        .{ ".pipeB", FileType.PipeB },
+        .{ ".pipeb", FileType.PipeB },
         .{ ".sampler", FileType.SamplerB },
     };
 

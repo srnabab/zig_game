@@ -21,7 +21,7 @@ pub const ModelLoadParameter = sqlDB.Table(
     false,
 );
 pub const ShaderPipelineGraphNode = sqlDB.Table(
-    "CREATE TABLE IF NOT EXISTS ShaderPipelineGraphNode (ID INTEGER PRIMARY KEY AUTOINCREMENT, Name TEXT UNIQUE, Type INTEGER);",
+    "CREATE TABLE IF NOT EXISTS ShaderPipelineGraphNode (ID INTEGER PRIMARY KEY AUTOINCREMENT, Path TEXT UNIQUE, Name TEXT UNIQUE, Type INTEGER);",
     "ShaderPipelineGraphNode",
     true,
 );
