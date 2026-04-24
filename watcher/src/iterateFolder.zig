@@ -436,6 +436,13 @@ fn updateLoadParameter(
                 }
             }
         },
+        .SPV => {
+            const nodeType_u32: u32 = @intFromEnum(Types.NodeType.Shader);
+            try ShaderPipelineGraphNodeT.insert(.{
+                .Name = @constCast(fileName.ptr),
+                .Type = nodeType_u32,
+            });
+        },
         else => {},
     }
 }
@@ -511,7 +518,7 @@ pub fn processFile(
     var fType: FileType = .UNKNOWN;
 
     if (fileModifiedTime == -1) {
-        std.log.debug("1", .{});
+        // std.log.debug("1", .{});
         var uuidBuffer = [_]u8{0} ** UUID.len;
         try UUID.createNewUUID(&uuidBuffer);
         const index = std.mem.lastIndexOf(u8, name, ".") orelse name.len;
@@ -553,7 +560,7 @@ pub fn processFile(
         const isModified = (currentModifiedTime != fileModifiedTime);
         if (pathModifiedTime == -1) {
             if (isModified) {
-                std.log.debug("2", .{});
+                // std.log.debug("2", .{});
                 var fileReader = tempFile.reader(io, &fileBuffer);
                 const content = try fileReader.interface.readAlloc(gpa, metadata.size);
                 defer gpa.free(content);
@@ -612,7 +619,7 @@ pub fn processFile(
         } else {
             // 已存在的文件：只更新时间和内容哈希（如果需要）
             if (isModified) {
-                std.log.debug("3", .{});
+                // std.log.debug("3", .{});
                 var fileReader = tempFile.reader(io, &fileBuffer);
                 const content = try fileReader.interface.readAlloc(gpa, metadata.size);
                 defer gpa.free(content);
@@ -800,6 +807,9 @@ const AllTable = struct {
     ContentPath: tables.ContentPath,
     ImageLoadParameter: tables.ImageLoadParameter,
     ModelLoadParameter: tables.ModelLoadParameter,
+    ShaderPipelineGraphNodeT: tables.ShaderPipelineGraphNode,
+    ShaderPipelineGraphEdgeT: tables.ShaderPipelineGraphEdge,
+
     contentPathExist: bool,
 };
 
@@ -807,6 +817,8 @@ var db: ?*sqlite.sqlite3 = undefined;
 var ContentPathT: tables.ContentPath = undefined;
 var ImageLoadParameterT: tables.ImageLoadParameter = undefined;
 var ModelLoadParameterT: tables.ModelLoadParameter = undefined;
+var ShaderPipelineGraphNodeT: tables.ShaderPipelineGraphNode = undefined;
+var ShaderPipelineGraphEdgeT: tables.ShaderPipelineGraphEdge = undefined;
 
 var SceneJson: std.json.Parsed(?[]cgltf.Scene) = undefined;
 var SceneNameStringMap: std.StringHashMap(u32) = undefined;
@@ -819,6 +831,8 @@ pub fn processContentFolder(content: std.Io.Dir, io: std.Io, tablePack: AllTable
     ContentPathT = tablePack.ContentPath;
     ImageLoadParameterT = tablePack.ImageLoadParameter;
     ModelLoadParameterT = tablePack.ModelLoadParameter;
+    ShaderPipelineGraphNodeT = tablePack.ShaderPipelineGraphNodeT;
+    ShaderPipelineGraphEdgeT = tablePack.ShaderPipelineGraphEdgeT;
 
     const exist = tablePack.contentPathExist;
 

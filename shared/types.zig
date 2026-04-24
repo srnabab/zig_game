@@ -19,3 +19,8 @@ pub const FileType = enum {
     SamplerB,
     UNKNOWN,
 };
+
+pub const NodeType = enum {
+    Pipeline,
+    Shader,
+};

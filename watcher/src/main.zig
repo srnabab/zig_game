@@ -2,6 +2,7 @@ const std = @import("std");
 const Io = std.Io;
 
 const shaderc = @import("shaderc");
+const sampler = @import("sampler");
 
 const db = @import("db");
 
@@ -328,6 +329,10 @@ pub fn main(init: std.process.Init) !void {
     var notifyArray = std.array_list.Managed(NotifyInformation).init(allocator);
     defer notifyArray.deinit();
 
+    const shaderCompiler = shaderc.Compiler.init(null, null, 2);
+
+    var fileWriterBuffer = [_]u8{0} ** 1024;
+
     while (true) {
         var completion_key: usize = 0;
         var lp_overlapped: ?*OVERLAPPED = null;
@@ -381,7 +386,7 @@ pub fn main(init: std.process.Init) !void {
 
                     const last = notifyArray.getLastOrNull();
                     if (last) |l| {
-                        if (l.Action == info.Action and std.mem.eql(u8, l.name, name_utf8) and time - l.time < 150) {
+                        if (l.Action == info.Action and std.mem.eql(u8, l.name, name_utf8) and time - l.time < 500) {
                             allocator.free(name_utf8);
                             continue;
                         }
@@ -599,9 +604,47 @@ pub fn main(init: std.process.Init) !void {
                                         fType = db.judgeFileType(fileName[dotIndex..], content);
 
                                         switch (fType) {
-                                            .Shader => {},
+                                            .Shader => {
+                                                const spv = shaderCompiler.compileShader(
+                                                    content,
+                                                    fileName,
+                                                    "main",
+                                                    gpa,
+                                                ) catch continue;
+                                                defer gpa.free(spv);
+
+                                                const spvName = try std.fmt.allocPrint(gpa, "{s}.spv", .{fileName});
+                                                defer gpa.free(spvName);
+
+                                                const spvFullPath = try std.fs.path.joinZ(
+                                                    gpa,
+                                                    &[_][]const u8{
+                                                        contentDatabaseRelativePathStart.?,
+                                                        "Shaders",
+                                                        spvName,
+                                                    },
+                                                );
+                                                defer gpa.free(spvFullPath);
+
+                                                const spvFile = std.Io.Dir.createFileAbsolute(
+                                                    init.io,
+                                                    spvFullPath,
+                                                    .{},
+                                                ) catch {
+                                                    std.log.err("create file {s} failed", .{spvFullPath});
+                                                    continue;
+                                                };
+                                                defer spvFile.close(init.io);
+
+                                                var writer = spvFile.writer(init.io, &fileWriterBuffer);
+                                                writer.interface.writeAll(spv) catch {
+                                                    std.log.err("write file {s} failed", .{spvFullPath});
+                                                    continue;
+                                                };
+                                            },
                                             .Sampler => {},
                                             .Pipeline => {},
+                                            .SPV => {},
                                             else => {},
                                         }
                                     }

@@ -19,6 +19,7 @@ const ShaderPipelineGraphNode = tables.ShaderPipelineGraphNode;
 const ShaderPipelineGraphEdge = tables.ShaderPipelineGraphEdge;
 
 pub const FileType = Types.FileType;
+pub const NodeType = Types.NodeType;
 
 const tableNames = [_][]const u8{ "ImageLoadParameter", "ModelLoadParameter" };
 const CreateTriggerContentPathOnInsertInsertIntoSubTable = tt: {
@@ -296,6 +297,8 @@ pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
     _ = sqlite.sqlite3_close(self.db.?);
 
     allocator.destroy(self);
+
+    std.log.debug("database deinit", .{});
 }
 
 fn executeSQL(SQL: []const u8, db_: *sqlite.sqlite3) void {
@@ -318,6 +321,8 @@ pub fn processFolder(self: *Self, content: std.Io.Dir, io: std.Io, allocator: st
             .ContentPath = self.ContentPathT,
             .ImageLoadParameter = self.ImageLoadParameterT,
             .ModelLoadParameter = self.ModelLoadParameterT,
+            .ShaderPipelineGraphEdgeT = self.ShaderPipelineGraphEdgeT,
+            .ShaderPipelineGraphNodeT = self.ShaderPipelineGraphNodeT,
             .contentPathExist = self.contentPathExist,
         },
         allocator,

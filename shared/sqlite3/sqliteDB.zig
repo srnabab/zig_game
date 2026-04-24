@@ -240,6 +240,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
             return false;
         }
 
+        /// insert(.{.Key = value, .Key2 = value2 ...})
         pub fn insert(self: *Self, T: insertStruct) !void {
             const ssql = comptime blk: {
                 var buffer = [_]u8{0} ** 256;
