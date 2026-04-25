@@ -2821,6 +2821,11 @@ pub const commands = struct {
         }
     }
 
+    fn addBuffer_tDependency(self: *Self, ptr: **anyopaque, buffer: VkStruct.Buffer_t) void {
+        const vkBuffer = self.vulkan.buffers.getVkBuffer(buffer);
+        ptr.* = @ptrCast(vkBuffer);
+    }
+
     pub fn addCommand(self: *Self, commandType: drawC.PublicCommandType, command: drawC.comm) !void {
         const zone = tracy.initZone(@src(), .{ .name = "add command" });
         defer zone.deinit();
@@ -2892,7 +2897,7 @@ pub const commands = struct {
                 // inputs may have dependency
                 for (drawMesh.usedBuffers) |buffer| {
                     const dependencyPtr = try dependenciesArray.addOne();
-                    dependencyPtr.* = buffer;
+                    self.addBuffer_tDependency(dependencyPtr, buffer);
                 }
                 for (drawMesh.pTextures) |tex| {
                     const dependencyPtr = try dependenciesArray.addOne();
@@ -3094,12 +3099,12 @@ pub const commands = struct {
 
                 // inputs may have dependency
                 var dependencyPtr = try dependenciesArray.addOne();
-                dependencyPtr.* = draw2D.indexBuffer;
+                self.addBuffer_tDependency(dependencyPtr, draw2D.indexBuffer);
                 dependencyPtr = try dependenciesArray.addOne();
                 dependencyPtr.* = draw2D.pTexture;
                 for (draw2D.vertexBuffer) |value| {
                     dependencyPtr = try dependenciesArray.addOne();
-                    dependencyPtr.* = value;
+                    self.addBuffer_tDependency(dependencyPtr, value);
                 }
                 {
                     const r_ = self.pRendering.getRenderingInfoContent(draw2D.rendering);
@@ -3199,7 +3204,7 @@ pub const commands = struct {
 
                 // inputs may have dependency
                 const dependencyPtr = try dependenciesArray.addOne();
-                dependencyPtr.* = copyBuffer.srcBuffer;
+                self.addBuffer_tDependency(dependencyPtr, copyBuffer.srcBuffer);
 
                 const dstOffsets = try allocator.alloc(drawC.SizeOffset, tempRegions.len);
                 defer allocator.free(dstOffsets);
@@ -3229,7 +3234,7 @@ pub const commands = struct {
                 // cache outputs
                 const cachePtr = try needToCacheArray.addOne();
                 cachePtr.* = .{
-                    .ptr = copyBuffer.dstBuffer,
+                    .ptr = @ptrCast(self.vulkan.buffers.getVkBuffer(copyBuffer.dstBuffer)),
                     .index = ID,
                 };
             },
@@ -3265,6 +3270,8 @@ pub const commands = struct {
 
                 // inputs may have dependency
                 const dependencyPtr = try dependenciesArray.addOne();
+
+                self.addBuffer_tDependency(dependencyPtr, copyBufferToImage.buffer);
                 dependencyPtr.* = copyBufferToImage.buffer;
 
                 var nodes = [_]twoQueueNode{ imageQueueNode, bufferQueueNode };
@@ -4078,128 +4085,135 @@ pub const oneTimeCommand = struct {
             return;
         }
 
-        var iterateCount: u64 = 0;
-        while (true) {
-            iterateCount += 1;
-            const pTotalSize = prepareToExecuteQueue.totalSize;
+        // var iterateCount: u64 = 0;
+        // while (true) {
+        //     iterateCount += 1;
+        //     const pTotalSize = prepareToExecuteQueue.totalSize;
 
-            if (pTotalSize == 0) break;
+        //     if (pTotalSize == 0) break;
 
-            var pNode = prepareToExecuteQueue.popFirst(self.io);
+        //     var pNode = prepareToExecuteQueue.popFirst(self.io);
 
-            var executeCount: u32 = 0;
+        //     var executeCount: u32 = 0;
 
-            while (pNode) |nn| {
-                // if (!global.stopExecuteNodePrint)
-                //     if (pNode != null)
-                //         std.log.debug("p ID {d}", .{pNode.?.queueNode.ID});
+        //     while (pNode) |nn| {
+        //         if (!global.stopExecuteNodePrint)
+        //             if (pNode != null)
+        //                 std.log.debug("p ID {d}", .{pNode.?.queueNode.ID});
 
-                const zone2 = tracy.initZone(@src(), .{ .name = "execute a" });
-                errdefer zone2.deinit(); // std.log.debug("1", .{});
+        //         const zone2 = tracy.initZone(@src(), .{ .name = "execute a" });
+        //         errdefer zone2.deinit(); // std.log.debug("1", .{});
 
-                if (executeCount >= pTotalSize) {
-                    zone2.deinit();
-                    break;
-                }
+        //         if (executeCount >= pTotalSize) {
+        //             zone2.deinit();
+        //             break;
+        //         }
 
-                // judge dependencies first
-                if (nn.queueNode.parentsDone < nn.queueNode.parentsLen) {
-                    // std.log.debug("1", .{});
+        //         // judge dependencies first
+        //         if (nn.queueNode.parentsDone < nn.queueNode.parentsLen) {
+        //             // std.log.debug("1", .{});
 
-                    try prepareToExecuteQueue.pushLast(self.io, nn);
-                    executeCount += 1;
-                    try inferNodeNextTaskQueue.pushLast(self.io, nn);
+        //             try prepareToExecuteQueue.pushLast(self.io, nn);
+        //             executeCount += 1;
+        //             try inferNodeNextTaskQueue.pushLast(self.io, nn);
 
-                    pNode = prepareToExecuteQueue.popFirst(self.io);
+        //             pNode = prepareToExecuteQueue.popFirst(self.io);
 
-                    continue;
-                }
+        //             std.log.debug("nn {}, pNode {}", .{ nn.queueNode.ID, pNode.?.queueNode.ID });
 
-                var ctx: ?*ThreadContext = null;
-                if (nn.threadCtx == null) {
-                    if (nn.queueNode.data.startThread) {
-                        ctx = try self.threadPool.getFreeThread(
-                            commandBufferss,
-                            nn.queueNode.data.commandPoolType,
-                            self.vulkan,
-                            pCommands.pTextureSet,
-                        );
+        //             continue;
+        //         }
 
-                        pNode.?.threadCtx = ctx;
-                    }
+        //         var ctx: ?*ThreadContext = null;
+        //         if (nn.threadCtx == null) {
+        //             if (nn.queueNode.data.startThread) {
+        //                 ctx = try self.threadPool.getFreeThread(
+        //                     commandBufferss,
+        //                     nn.queueNode.data.commandPoolType,
+        //                     self.vulkan,
+        //                     pCommands.pTextureSet,
+        //                 );
 
-                    nn.queueNode.data.commandBufferID = std.math.maxInt(u32);
+        //                 pNode.?.threadCtx = ctx;
+        //             }
 
-                    if (!nn.queueNode.data.isSecondary) {
-                        const temp = try finalPrimaryTaskQueue.addOne();
-                        temp.* = nn.queueNode;
+        //             nn.queueNode.data.commandBufferID = std.math.maxInt(u32);
 
-                        // if (!global.stopExecuteNodePrint)
-                        //     std.log.debug("f ID {d}", .{temp.*.ID});
-                    }
-                } else {
-                    try nn.threadCtx.?.mutex.lock(self.io);
-                    defer nn.threadCtx.?.mutex.unlock(self.io);
+        //             if (!nn.queueNode.data.isSecondary) {
+        //                 const temp = try finalPrimaryTaskQueue.addOne();
+        //                 temp.* = nn.queueNode;
 
-                    // nn.queueNode.data.commandBufferID = nn.threadCtx.?.commandBufferID.*;
-                    try nn.threadCtx.?.taskQueue.pushLast(
-                        self.io,
-                        .{ .com = pCommands.queue.getPtr(nn.queueNode.ID).?, .node = nn.queueNode },
-                    );
+        //                 if (!global.stopExecuteNodePrint) std.log.debug("f ID {d}", .{temp.*.ID});
+        //             }
+        //         } else {
+        //             try nn.threadCtx.?.mutex.lock(self.io);
+        //             defer nn.threadCtx.?.mutex.unlock(self.io);
 
-                    nn.threadCtx.?.semaphore.post(self.io);
-                }
+        //             // nn.queueNode.data.commandBufferID = nn.threadCtx.?.commandBufferID.*;
+        //             try nn.threadCtx.?.taskQueue.pushLast(
+        //                 self.io,
+        //                 .{ .com = pCommands.queue.getPtr(nn.queueNode.ID).?, .node = nn.queueNode },
+        //             );
 
-                nn.queueNode.nodeDone();
+        //             nn.threadCtx.?.semaphore.post(self.io);
+        //         }
 
-                executeCount += 1;
-                try inferNodeNextTaskQueue.pushLast(self.io, pNode.?);
-                pNode = prepareToExecuteQueue.popFirst(self.io);
+        //         nn.queueNode.nodeDone();
 
-                // std.log.debug("3", .{});
+        //         executeCount += 1;
+        //         try inferNodeNextTaskQueue.pushLast(self.io, pNode.?);
+        //         pNode = prepareToExecuteQueue.popFirst(self.io);
 
-                zone2.deinit();
-            }
+        //         // std.log.debug("3", .{});
 
-            var iNode = inferNodeNextTaskQueue.popFirst(self.io);
-            while (iNode) |nn| {
-                // std.log.debug("2", .{});
-                const zone2 = tracy.initZone(@src(), .{ .name = "execute b" });
-                errdefer zone2.deinit();
+        //         zone2.deinit();
+        //     }
 
-                const node = nn.queueNode;
+        //     var iNode = inferNodeNextTaskQueue.popFirst(self.io);
+        //     while (iNode) |nn| {
+        //         // std.log.debug("2", .{});
+        //         const zone2 = tracy.initZone(@src(), .{ .name = "execute b" });
+        //         errdefer zone2.deinit();
 
-                // if (!global.stopExecuteNodePrint) std.log.debug("i ID {d}", .{node.ID});
+        //         const node = nn.queueNode;
 
-                for (node.children.list.items) |ID| {
-                    const zone3 = tracy.initZone(@src(), .{ .name = "execute c" });
-                    errdefer zone3.deinit();
+        //         if (!global.stopExecuteNodePrint) std.log.debug("i ID {d}", .{node.ID});
 
-                    var first = prepareToExecuteQueue.list.first;
-                    const ccc: *QueueNode = @alignCast(@fieldParentPtr("ID", ID));
+        //         for (node.children.list.items) |ID| {
+        //             // std.log.debug("1", .{});
+        //             const zone3 = tracy.initZone(@src(), .{ .name = "execute c" });
+        //             errdefer zone3.deinit();
 
-                    // de-duplicate
-                    while (first) |jjj| {
-                        const aaa: *Queue(taskQueueStruct).DataNode = @fieldParentPtr("node", jjj);
-                        if (aaa.data.queueNode == ccc) {
-                            prepareToExecuteQueue.remove(aaa.data);
-                            break;
-                        }
-                        first = jjj.next;
-                    }
+        //             var first = prepareToExecuteQueue.list.first;
+        //             const ccc: *QueueNode = @alignCast(@fieldParentPtr("ID", ID));
 
-                    try prepareToExecuteQueue.pushLast(self.io, .{
-                        .queueNode = ccc,
-                        .threadCtx = if (ccc.data.isSecondary) nn.threadCtx else null,
-                    });
+        //             // de-duplicate
+        //             while (first) |jjj| {
+        //                 const aaa: *Queue(taskQueueStruct).DataNode = @fieldParentPtr("node", jjj);
+        //                 // std.log.debug("1", .{});
+        //                 if (aaa.data.queueNode == ccc) {
+        //                     // std.log.debug("3", .{});
 
-                    zone3.deinit();
-                }
-                iNode = inferNodeNextTaskQueue.popFirst(self.io);
-                zone2.deinit();
-            }
-            // std.log.debug("", .{});
-        }
+        //                     prepareToExecuteQueue.remove(aaa.data);
+        //                     break;
+        //                 }
+        //                 // std.log.debug("2", .{});
+
+        //                 first = jjj.next;
+        //             }
+
+        //             try prepareToExecuteQueue.pushLast(self.io, .{
+        //                 .queueNode = ccc,
+        //                 .threadCtx = if (ccc.data.isSecondary) nn.threadCtx else null,
+        //             });
+
+        //             zone3.deinit();
+        //         }
+        //         iNode = inferNodeNextTaskQueue.popFirst(self.io);
+        //         zone2.deinit();
+        //     }
+        //     // std.log.debug("", .{});
+        // }
 
         // std.log.debug("iterateCount: {d}", .{iterateCount});
 

@@ -388,9 +388,10 @@ pub fn render_thread_func(
         ssbo_test,
     };
 
-    // global.stopNodeDagPrint = false;
+    global.stopNodeDagPrint = false;
     // global.stopNodeDagDetailPrint = false;
     // global.stopExecuteNodePrint = false;
+    global.game_end.store(1, .seq_cst);
 
     const renderStart = std.Io.Timestamp.now(io, .real).toNanoseconds();
 
