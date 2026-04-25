@@ -58,11 +58,23 @@ pub fn main(init: std.process.Init) !void {
 
     ContentPathT = ContentPath.init(db.?);
 
-    var types = [_]sqlDB.innerType{ .INTEGER32, .TEXT };
-    var kvs: [1000]kv = undefined;
-    @memset(kvs[0..kvs.len], kv{ .ID = -1, .fileName = std.mem.zeroes([128]u8) });
-    var ptrs: [1000][]*anyopaque = undefined;
+    var count: u32 = 0;
+    try ContentPathT.gets(
+        "ID,FileName",
+        null,
+        null,
+        .{},
+        null,
+        null,
+        &count,
+    );
     var arena = std.heap.ArenaAllocator.init(gpa);
+    defer arena.deinit();
+
+    var types = [_]sqlDB.innerType{ .INTEGER32, .TEXT };
+    var kvs: []kv = try arena.allocator().alloc(kv, count);
+    @memset(kvs[0..kvs.len], kv{ .ID = -1, .fileName = std.mem.zeroes([128]u8) });
+    var ptrs: [][]*anyopaque = try arena.allocator().alloc([]*anyopaque, count);
 
     for (0..kvs.len) |i| {
         ptrs[i] = try arena.allocator().alloc(*anyopaque, 2);
@@ -70,9 +82,16 @@ pub fn main(init: std.process.Init) !void {
         ptrs[i][0] = @ptrCast(&kvs[i].ID);
         ptrs[i][1] = @ptrCast(&kvs[i].fileName);
     }
-    defer arena.deinit();
 
-    try ContentPathT.gets("ID,FileName", null, null, .{}, ptrs[0..kvs.len], &types);
+    try ContentPathT.gets(
+        "ID,FileName",
+        null,
+        null,
+        .{},
+        ptrs[0..kvs.len],
+        &types,
+        &count,
+    );
 
     const file = try std.Io.Dir.createFileAbsolute(init.io, outputPath, .{ .read = true });
     defer file.close(init.io);

@@ -22,7 +22,7 @@ void main() {
     // 使用 nonuniformEXT 来访问纹理数组
     vec4 texColor = texture(textures[nonuniformEXT(PushConstants.index)], fragTexCoord);
 
-    // outColor = texColor;
+    outColor = texColor;
     // outColor = vec4(1.0);
-    outColor = vec4(random(fragTexCoord), random(fragTexCoord + vec2(1.0)), random(fragTexCoord + vec2(2.0)), random(fragTexCoord + vec2(3.0)));
+    // outColor = vec4(random(fragTexCoord), random(fragTexCoord + vec2(1.0)), random(fragTexCoord + vec2(2.0)), random(fragTexCoord + vec2(3.0)));
 }
