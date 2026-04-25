@@ -11,6 +11,7 @@ const configFile = ".watching";
 const databaseFile = "Content.db";
 
 const EXIT_COMPLETION_KEY = 0xDEADBEEF;
+const SAVE_COMPLETION_KEY = 0xCAFEBABE;
 
 pub const watches_recursively = true; // ReadDirectoryChangesW with bWatchSubtree=1
 pub const detects_file_modifications = true;
@@ -53,6 +54,9 @@ const FILE_SHARE_WRITE: windows.DWORD = 0x00000002;
 const FILE_SHARE_DELETE: windows.DWORD = 0x00000004;
 const OPEN_EXISTING: windows.DWORD = 3;
 const INFINITE: windows.DWORD = 0xFFFFFFFF;
+
+const CTRL_C_EVENT: windows.DWORD = 0;
+const CTRL_BREAK_EVENT: windows.DWORD = 1;
 
 const PHANDLER_ROUTINE = *const fn (windows.DWORD) callconv(.winapi) windows.BOOL;
 
@@ -286,6 +290,7 @@ pub fn main(init: std.process.Init) !void {
             );
 
             if (w != null) {
+                std.log.debug("{s}, {s}", .{ w.?.path, contentDatabaseRelativePathStart.? });
                 if (std.mem.eql(u8, w.?.path, contentDatabaseRelativePathStart.?)) {
                     contentWatch = w.?;
                 }
@@ -356,7 +361,18 @@ pub fn main(init: std.process.Init) !void {
         );
 
         if (completion_key == EXIT_COMPLETION_KEY) {
+            std.log.debug("Exit", .{});
             break;
+        }
+
+        if (completion_key == SAVE_COMPLETION_KEY) {
+            if (future) |_| {
+                _ = future.?.await(init.io) catch |err| std.log.err("AutoCommitter.runMonitor failed: {}", .{err});
+                future = null;
+            }
+            database.saveToDrive();
+            std.log.debug("Saved", .{});
+            continue;
         }
 
         if (res != windows.BOOL.FALSE and lp_overlapped != null) {
@@ -1057,6 +1073,7 @@ pub fn main(init: std.process.Init) !void {
                         const fileName = fullPath[startIndex..];
 
                         if (watch == contentWatch) {
+                            std.log.debug("delete", .{});
                             try database.ContentPathT.delete(
                                 "FileName = ?",
                                 .{fileName},
@@ -1180,10 +1197,20 @@ fn addWatchFolder(rootPath: []const u8, path: []const u8, allocator: std.mem.All
 }
 
 fn consoleCtrlHandler(ctrl_type: windows.DWORD) callconv(.winapi) windows.BOOL {
-    _ = ctrl_type;
     if (global_iocp) |iocp| {
-        std.debug.print("\nShutting down...\n", .{});
-        _ = win32.PostQueuedCompletionStatus(iocp, 0, EXIT_COMPLETION_KEY, null);
+        switch (ctrl_type) {
+            CTRL_BREAK_EVENT => {
+                std.log.debug("\nSaving...\n", .{});
+                _ = win32.PostQueuedCompletionStatus(iocp, 0, SAVE_COMPLETION_KEY, null);
+                return windows.BOOL.fromBool(true);
+            },
+            CTRL_C_EVENT => {
+                std.log.debug("\nShutting down...\n", .{});
+                _ = win32.PostQueuedCompletionStatus(iocp, 0, EXIT_COMPLETION_KEY, null);
+                return windows.BOOL.fromBool(true);
+            },
+            else => return windows.BOOL.fromBool(true),
+        }
     }
     return windows.BOOL.fromBool(true);
 }

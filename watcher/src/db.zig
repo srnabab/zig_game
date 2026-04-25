@@ -169,6 +169,7 @@ pub const AutoCommitter = struct {
     db_conn: *Self,
     io: std.Io,
     is_active: bool,
+    unsaved: bool = false,
     wait: i64 = 2000,
 
     pub fn init(db: *Self, io: std.Io, wait: i64) AutoCommitter {
@@ -280,19 +281,7 @@ pub fn commit(self: *Self) void {
 }
 
 pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
-    var disk_db: ?*sqlite.sqlite3 = null;
-    var backup: ?*sqlite.sqlite3_backup = null;
-
-    var res = sqlite.sqlite3_open(self.dbPath.ptr, @ptrCast(&disk_db));
-    defer _ = sqlite.sqlite3_close(disk_db);
-    assert(res == sqlite.SQLITE_OK);
-
-    backup = sqlite.sqlite3_backup_init(disk_db, "main", self.db, "main");
-    assert(backup != null);
-
-    res = sqlite.sqlite3_backup_step(backup, -1);
-    defer _ = sqlite.sqlite3_backup_finish(backup);
-    assert(res == sqlite.SQLITE_DONE);
+    self.saveToDrive();
 
     _ = sqlite.sqlite3_close(self.db.?);
 
@@ -327,4 +316,26 @@ pub fn processFolder(self: *Self, content: std.Io.Dir, io: std.Io, allocator: st
         },
         allocator,
     );
+}
+
+pub fn saveToDrive(self: *Self) void {
+    var disk_db: ?*sqlite.sqlite3 = null;
+    var backup: ?*sqlite.sqlite3_backup = null;
+
+    var res = sqlite.sqlite3_open(self.dbPath.ptr, @ptrCast(&disk_db));
+    defer _ = sqlite.sqlite3_close(disk_db);
+    if (res != sqlite.SQLITE_OK) {
+        std.log.err("\n{s}\n", .{sqlite.sqlite3_errmsg(disk_db)});
+    }
+
+    backup = sqlite.sqlite3_backup_init(disk_db, "main", self.db, "main");
+    if (backup == null) {
+        std.log.err("\n{s}\n", .{sqlite.sqlite3_errmsg(disk_db)});
+    }
+
+    res = sqlite.sqlite3_backup_step(backup, -1);
+    defer _ = sqlite.sqlite3_backup_finish(backup);
+    if (res != sqlite.SQLITE_DONE) {
+        std.log.err("\n{s}\n", .{sqlite.sqlite3_errmsg(disk_db)});
+    }
 }
