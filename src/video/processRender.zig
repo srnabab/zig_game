@@ -624,6 +624,72 @@ fn DAG(T: type) type {
         }
     };
 }
+pub fn iterate(self: *QueueNodes, startSemaphoreValue: u64) !QueueNodeIterator {
+    const node = self.get(0);
+
+    return .{
+        .hm = self,
+        .nextNodeQueue = try .init(self.arena.allocator()),
+        .currentNode = node,
+        .semaphoreValue = startSemaphoreValue,
+    };
+}
+
+const QueueNodeIterator = struct {
+    const queueNodeSemaphoreValue = struct {
+        node: *QueueNode,
+        semaphoreValue: u64,
+    };
+    hm: *const QueueNodes,
+    nextNodeQueue: Queue(queueNodeSemaphoreValue),
+    currentNode: ?*QueueNode,
+    semaphoreValue: u64,
+    begin: bool = true,
+
+    pub fn next(it: *QueueNodeIterator, io: std.Io, currentSemaphoreValue: u64) ?*QueueNode {
+        if (it.begin) {
+            it.begin = false;
+            return it.currentNode;
+        }
+
+        if (it.currentNode != null) {
+            if (it.currentNode.?.childrenLen > 1) {
+                it.nextNodeQueue.pushLast(
+                    io,
+                    .{
+                        .node = it.currentNode.?,
+                        .semaphoreValue = currentSemaphoreValue,
+                    },
+                ) catch unreachable;
+            }
+
+            it.currentNode = it.currentNode.?.getFirstUndoneChild();
+        }
+
+        if (it.currentNode == null or it.currentNode.?.parentsDone < it.currentNode.?.parentsLen) {
+            var node = it.nextNodeQueue.peekLast();
+            while (node) |value| {
+                // std.log.debug("peek ID {d}", .{value.node.ID});
+                it.currentNode = value.node.getFirstUndoneChild();
+                if (it.currentNode == null) {
+                    _ = it.nextNodeQueue.popLast(io);
+                    node = it.nextNodeQueue.peekLast();
+                } else {
+                    it.semaphoreValue = value.semaphoreValue;
+                    break;
+                }
+            } else {
+                it.currentNode = null;
+            }
+        }
+
+        return it.currentNode;
+    }
+
+    pub fn deinit(it: *QueueNodeIterator) void {
+        it.nextNodeQueue.deinit();
+    }
+};
 
 fn nodeDagPrint(self: *QueueNodes, self2: *commands) void {
     const zone = tracy.initZone(@src(), .{ .name = "dag print" });
@@ -4076,155 +4142,8 @@ pub const oneTimeCommand = struct {
 
         // xxx
         const root = pCommands.nodeDag.get(0);
-        if (root) |rr| {
-            try prepareToExecuteQueue.pushLast(self.io, taskQueueStruct{
-                .queueNode = rr,
-                .threadCtx = null,
-            });
-        } else {
-            return;
-        }
-
-        // var iterateCount: u64 = 0;
-        // while (true) {
-        //     iterateCount += 1;
-        //     const pTotalSize = prepareToExecuteQueue.totalSize;
-
-        //     if (pTotalSize == 0) break;
-
-        //     var pNode = prepareToExecuteQueue.popFirst(self.io);
-
-        //     var executeCount: u32 = 0;
-
-        //     while (pNode) |nn| {
-        //         if (!global.stopExecuteNodePrint)
-        //             if (pNode != null)
-        //                 std.log.debug("p ID {d}", .{pNode.?.queueNode.ID});
-
-        //         const zone2 = tracy.initZone(@src(), .{ .name = "execute a" });
-        //         errdefer zone2.deinit(); // std.log.debug("1", .{});
-
-        //         if (executeCount >= pTotalSize) {
-        //             zone2.deinit();
-        //             break;
-        //         }
-
-        //         // judge dependencies first
-        //         if (nn.queueNode.parentsDone < nn.queueNode.parentsLen) {
-        //             // std.log.debug("1", .{});
-
-        //             try prepareToExecuteQueue.pushLast(self.io, nn);
-        //             executeCount += 1;
-        //             try inferNodeNextTaskQueue.pushLast(self.io, nn);
-
-        //             pNode = prepareToExecuteQueue.popFirst(self.io);
-
-        //             std.log.debug("nn {}, pNode {}", .{ nn.queueNode.ID, pNode.?.queueNode.ID });
-
-        //             continue;
-        //         }
-
-        //         var ctx: ?*ThreadContext = null;
-        //         if (nn.threadCtx == null) {
-        //             if (nn.queueNode.data.startThread) {
-        //                 ctx = try self.threadPool.getFreeThread(
-        //                     commandBufferss,
-        //                     nn.queueNode.data.commandPoolType,
-        //                     self.vulkan,
-        //                     pCommands.pTextureSet,
-        //                 );
-
-        //                 pNode.?.threadCtx = ctx;
-        //             }
-
-        //             nn.queueNode.data.commandBufferID = std.math.maxInt(u32);
-
-        //             if (!nn.queueNode.data.isSecondary) {
-        //                 const temp = try finalPrimaryTaskQueue.addOne();
-        //                 temp.* = nn.queueNode;
-
-        //                 if (!global.stopExecuteNodePrint) std.log.debug("f ID {d}", .{temp.*.ID});
-        //             }
-        //         } else {
-        //             try nn.threadCtx.?.mutex.lock(self.io);
-        //             defer nn.threadCtx.?.mutex.unlock(self.io);
-
-        //             // nn.queueNode.data.commandBufferID = nn.threadCtx.?.commandBufferID.*;
-        //             try nn.threadCtx.?.taskQueue.pushLast(
-        //                 self.io,
-        //                 .{ .com = pCommands.queue.getPtr(nn.queueNode.ID).?, .node = nn.queueNode },
-        //             );
-
-        //             nn.threadCtx.?.semaphore.post(self.io);
-        //         }
-
-        //         nn.queueNode.nodeDone();
-
-        //         executeCount += 1;
-        //         try inferNodeNextTaskQueue.pushLast(self.io, pNode.?);
-        //         pNode = prepareToExecuteQueue.popFirst(self.io);
-
-        //         // std.log.debug("3", .{});
-
-        //         zone2.deinit();
-        //     }
-
-        //     var iNode = inferNodeNextTaskQueue.popFirst(self.io);
-        //     while (iNode) |nn| {
-        //         // std.log.debug("2", .{});
-        //         const zone2 = tracy.initZone(@src(), .{ .name = "execute b" });
-        //         errdefer zone2.deinit();
-
-        //         const node = nn.queueNode;
-
-        //         if (!global.stopExecuteNodePrint) std.log.debug("i ID {d}", .{node.ID});
-
-        //         for (node.children.list.items) |ID| {
-        //             // std.log.debug("1", .{});
-        //             const zone3 = tracy.initZone(@src(), .{ .name = "execute c" });
-        //             errdefer zone3.deinit();
-
-        //             var first = prepareToExecuteQueue.list.first;
-        //             const ccc: *QueueNode = @alignCast(@fieldParentPtr("ID", ID));
-
-        //             // de-duplicate
-        //             while (first) |jjj| {
-        //                 const aaa: *Queue(taskQueueStruct).DataNode = @fieldParentPtr("node", jjj);
-        //                 // std.log.debug("1", .{});
-        //                 if (aaa.data.queueNode == ccc) {
-        //                     // std.log.debug("3", .{});
-
-        //                     prepareToExecuteQueue.remove(aaa.data);
-        //                     break;
-        //                 }
-        //                 // std.log.debug("2", .{});
-
-        //                 first = jjj.next;
-        //             }
-
-        //             try prepareToExecuteQueue.pushLast(self.io, .{
-        //                 .queueNode = ccc,
-        //                 .threadCtx = if (ccc.data.isSecondary) nn.threadCtx else null,
-        //             });
-
-        //             zone3.deinit();
-        //         }
-        //         iNode = inferNodeNextTaskQueue.popFirst(self.io);
-        //         zone2.deinit();
-        //     }
-        //     // std.log.debug("", .{});
-        // }
-
-        // std.log.debug("iterateCount: {d}", .{iterateCount});
 
         pCommands.nodeDag.undoneAllNodes();
-
-        const nextNodeQueueSemaphoreValue = struct {
-            node: *QueueNode,
-            semaphoreValue: u64,
-        };
-        var nextNodeQueue: Queue(nextNodeQueueSemaphoreValue) = try .init(self.allocator);
-        defer nextNodeQueue.deinit();
 
         var cbIdxs = std.array_list.Managed(u32).init(self.allocator);
         defer cbIdxs.deinit();
@@ -4275,25 +4194,16 @@ pub const oneTimeCommand = struct {
             var firstSubmit = true;
             var firstGraphicSubmit = true;
 
-            var firstNode = pCommands.nodeDag.get(0);
+            // var firstNode = pCommands.nodeDag.get(0);
             const startComm = pCommands.queue.get(0).?;
             const present = startComm.command.start.present;
             var currentIndex = startComm.command.start.currentIndex;
 
-            var timelinewaitValue: u64 = currentSemaphoreValue;
-            while (firstNode) |nn| {
-                // var it = self.nodeDag.map.valueIterator();
-                // while (it.next()) |value| {
-                //     std.log.debug("ID: {d} {*}, childrenLen: {d}, childrenDone: {d}, parentLen: {d}, parentDone: {d}, done: {}", .{ value.*.ID, &value.*.node, value.*.childrenLen, value.*.childrenDone, value.*.parentsLen, value.*.parentsDone, value.*.done });
-                // }
-                // std.log.debug("\n\n", .{});
+            var iterator = try iterate(&pCommands.nodeDag, currentSemaphoreValue);
+            defer iterator.deinit();
 
-                if (nn.childrenLen > 1) {
-                    try nextNodeQueue.pushLast(self.io, .{
-                        .node = nn,
-                        .semaphoreValue = currentSemaphoreValue,
-                    });
-                }
+            while (iterator.next(self.io, currentSemaphoreValue)) |nn| {
+                // std.log.debug("ID {d}", .{nn.ID});
 
                 if (begin and nn.data.commandPoolType != currentType) {
                     defer signalSemaphoreSubmitInfos.clearRetainingCapacity();
@@ -4313,8 +4223,12 @@ pub const oneTimeCommand = struct {
                     } else {
                         temp.stageMask = vk.VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
                     }
-                    temp.value = timelinewaitValue;
-                    // std.log.debug("wait timeline semaphore value {d}", .{temp.value});
+
+                    //
+                    //
+                    temp.value = iterator.semaphoreValue;
+                    //
+                    //
 
                     const temp2 = try signalSemaphoreSubmitInfos.addOne();
                     temp2.sType = vk.VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
@@ -4409,73 +4323,41 @@ pub const oneTimeCommand = struct {
                     first = true;
                 }
 
-                if (nn.parentsDone >= nn.parentsLen) {
-                    nn.nodeDone();
+                nn.nodeDone();
 
-                    const command = pCommands.queue.getPtr(nn.ID).?;
-                    try self.collectGarbage(command, currentSemaphoreValue);
-                    if (first) {
-                        first = false;
-                    }
+                const command = pCommands.queue.getPtr(nn.ID).?;
+                try self.collectGarbage(command, currentSemaphoreValue);
+                if (first) {
+                    first = false;
+                }
 
-                    if (nn.data.isSecondary) {
-                        if (!bs: {
-                            for (cbIdxs.items) |id| {
-                                if (id == nn.data.commandBufferID) break :bs true;
-                            }
-                            break :bs false;
-                        }) {
-                            const ptr = try cbIdxs.addOne();
-                            ptr.* = nn.data.commandBufferID;
-                        }
-                        continue;
-                    } else {
+                if (nn.data.isSecondary) {
+                    if (!bs: {
                         for (cbIdxs.items) |id| {
-                            const cb = commandBufferss.get(id);
-                            if (cb) |cbb| {
-                                const cbPtr = try cbs.addOne();
-                                cbPtr.* = cbb.data.commandBufer;
-
-                                try cbb.data.semaphore.wait(self.io);
-                            }
+                            if (id == nn.data.commandBufferID) break :bs true;
                         }
-                        if (cbs.items.len > 0)
-                            vk.vkCmdExecuteCommands(currentCommandBuffer, @intCast(cbs.items.len), @ptrCast(cbs.items.ptr));
-
-                        record(pCommands.queue.getPtr(nn.ID).?, currentCommandBuffer, allocator, self.vulkan, pCommands.pTextureSet);
-
-                        if (!global.stopExecuteNodePrint) std.log.debug("e ID {d}", .{nn.ID});
+                        break :bs false;
+                    }) {
+                        const ptr = try cbIdxs.addOne();
+                        ptr.* = nn.data.commandBufferID;
                     }
-                    firstNode = nn.getFirstUndoneChild();
-                    if (firstNode == null) {
-                        var node = nextNodeQueue.peekLast();
-                        while (node) |value| {
-                            firstNode = value.node.getFirstUndoneChild();
-                            if (firstNode == null) {
-                                _ = nextNodeQueue.popLast(self.io);
-                                node = nextNodeQueue.peekLast();
-                            } else {
-                                timelinewaitValue = value.semaphoreValue;
-                                break;
-                            }
-                        } else {
-                            firstNode = null;
-                        }
-                    }
+                    continue;
                 } else {
-                    var node = nextNodeQueue.peekLast();
-                    while (node) |value| {
-                        firstNode = value.node.getFirstUndoneChild();
-                        if (firstNode == null) {
-                            _ = nextNodeQueue.popLast(self.io);
-                            node = nextNodeQueue.peekLast();
-                        } else {
-                            timelinewaitValue = value.semaphoreValue;
-                            break;
+                    for (cbIdxs.items) |id| {
+                        const cb = commandBufferss.get(id);
+                        if (cb) |cbb| {
+                            const cbPtr = try cbs.addOne();
+                            cbPtr.* = cbb.data.commandBufer;
+
+                            try cbb.data.semaphore.wait(self.io);
                         }
-                    } else {
-                        firstNode = null;
                     }
+                    if (cbs.items.len > 0)
+                        vk.vkCmdExecuteCommands(currentCommandBuffer, @intCast(cbs.items.len), @ptrCast(cbs.items.ptr));
+
+                    record(pCommands.queue.getPtr(nn.ID).?, currentCommandBuffer, allocator, self.vulkan, pCommands.pTextureSet);
+
+                    if (!global.stopExecuteNodePrint) std.log.debug("e ID {d}", .{nn.ID});
                 }
             }
             // var it = self.nodeDag.map.valueIterator();
