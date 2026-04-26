@@ -276,9 +276,6 @@ pub const Draw2D = struct {
     indexBuffer: VkStruct.Buffer_t,
     descriptorSets: []vk.VkDescriptorSet,
     pTexture: texture.Texture_t,
-
-    pViewport: VkStruct.Viewport_t,
-    pScissor: VkStruct.Scissor_t,
 };
 
 pub const CopyBuffer = struct {
@@ -334,8 +331,6 @@ pub const Present = struct {
     rendering: rendering.RenderingInfo_t,
     descriptorSets: []vk.VkDescriptorSet,
     pTextures: []texture.Texture_t,
-    pViewport: VkStruct.Viewport_t,
-    pScissor: VkStruct.Scissor_t,
 };
 
 pub const PushConstant = struct {
@@ -351,8 +346,6 @@ pub const DrawMesh = struct {
     rendering: rendering.RenderingInfo_t,
     descriptorSets: []vk.VkDescriptorSet,
     pTextures: []texture.Texture_t,
-    pViewport: VkStruct.Viewport_t,
-    pScissor: VkStruct.Scissor_t,
     usedBuffers: []VkStruct.Buffer_t,
     meshletCount: u32,
 };

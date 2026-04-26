@@ -871,6 +871,8 @@ pub const commands = struct {
     vulkan: *VkStruct,
     pRendering: *rendering,
     pTextureSet: *texture,
+    pViewport: ?VkStruct.Viewport_t = null,
+    pScissor: ?VkStruct.Scissor_t = null,
 
     queue: std.hash_map.AutoHashMap(u32, drawC),
     nodeDag: QueueNodes,
@@ -997,6 +999,14 @@ pub const commands = struct {
             .copyBufferToImage => 100,
             .transLayout => 100,
         };
+    }
+
+    pub fn setViewport(self: *Self, viewPort: ?VkStruct.Viewport_t) void {
+        self.pViewport = viewPort;
+    }
+
+    pub fn setScissor(self: *Self, scissor: ?VkStruct.Scissor_t) void {
+        self.pScissor = scissor;
     }
 
     fn inferAcquirePipelinBarrierInfoByCommandTypeAndBufferUsage(
@@ -2983,8 +2993,8 @@ pub const commands = struct {
                     null,
                     null,
                     drawMesh.descriptorSets,
-                    drawMesh.pViewport,
-                    drawMesh.pScissor,
+                    self.pViewport,
+                    self.pScissor,
                     drawMesh.pipeline,
                     allocator,
                     node,
@@ -3013,8 +3023,8 @@ pub const commands = struct {
                     null,
                     null,
                     drawMesh.descriptorSets,
-                    drawMesh.pViewport,
-                    drawMesh.pScissor,
+                    self.pViewport,
+                    self.pScissor,
                     drawMesh.pipeline,
                     pushConstantNode.a.?,
                     std.meta.activeTag(command),
@@ -3088,8 +3098,8 @@ pub const commands = struct {
                     null,
                     null,
                     present.descriptorSets,
-                    present.pViewport,
-                    present.pScissor,
+                    self.pViewport,
+                    self.pScissor,
                     present.pipeline,
                     allocator,
                     node,
@@ -3103,8 +3113,8 @@ pub const commands = struct {
                     null,
                     null,
                     present.descriptorSets,
-                    present.pViewport,
-                    present.pScissor,
+                    self.pViewport,
+                    self.pScissor,
                     present.pipeline,
                     null,
                     std.meta.activeTag(command),
@@ -3186,8 +3196,8 @@ pub const commands = struct {
                     draw2D.vertexBuffer,
                     draw2D.indexBuffer,
                     draw2D.descriptorSets,
-                    draw2D.pViewport,
-                    draw2D.pScissor,
+                    self.pViewport,
+                    self.pScissor,
                     draw2D.pipeline,
                     allocator,
                     node,
@@ -3215,8 +3225,8 @@ pub const commands = struct {
                     draw2D.vertexBuffer,
                     draw2D.indexBuffer,
                     draw2D.descriptorSets,
-                    draw2D.pViewport,
-                    draw2D.pScissor,
+                    self.pViewport,
+                    self.pScissor,
                     draw2D.pipeline,
                     pushConstantNode.a,
                     std.meta.activeTag(command),
@@ -4139,6 +4149,9 @@ pub const oneTimeCommand = struct {
 
         var commandBufferss = try commandBufferDAG.init(self.allocator);
         defer commandBufferss.deinit();
+
+        // start secondary commandbuffer
+        {}
 
         // xxx
         const root = pCommands.nodeDag.get(0);

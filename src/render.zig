@@ -393,6 +393,9 @@ pub fn render_thread_func(
     // global.stopExecuteNodePrint = false;
     global.game_end.store(1, .seq_cst);
 
+    commands.setViewport(viewport_test);
+    commands.setScissor(scissor_test);
+
     const renderStart = std.Io.Timestamp.now(io, .real).toNanoseconds();
 
     while (true) {
@@ -418,16 +421,12 @@ pub fn render_thread_func(
             .vertexBuffer = &testBuffers,
             .indexBuffer = vertices.indexBuffer2D,
             .descriptorSets = &testDescriptorSets,
-            .pViewport = viewport_test,
-            .pScissor = scissor_test,
         } });
         try commands.addCommand(.drawMesh, .{ .drawMesh = .{
             .pipeline = vulkan.getPipeline("model").?,
             .rendering = rendering_mesh_test,
             .descriptorSets = &testMeshDescriptorSets,
             .pTextures = &test_meshTextures,
-            .pViewport = viewport_test,
-            .pScissor = scissor_test,
             .usedBuffers = &test_meshBuffers,
             .meshletCount = meshes.meshletCount,
         } });
@@ -436,8 +435,6 @@ pub fn render_thread_func(
             .pTextures = &presentTextures,
             .rendering = present_rendering_test,
             .descriptorSets = &presentDescriptorSets,
-            .pViewport = viewport_test,
-            .pScissor = scissor_test,
         } });
         try commands.addCommandEnd();
 
