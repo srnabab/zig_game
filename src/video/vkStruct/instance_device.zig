@@ -18,9 +18,14 @@ pub const VkError = vulkanType.VkError;
 
 const layerNeeded = layer: {
     break :layer switch (builtin.mode) {
-        .Debug, .ReleaseSafe => [_][*c]const u8{"VK_LAYER_KHRONOS_validation"},
+        .Debug, .ReleaseSafe => [_][*c]const u8{
+            "VK_LAYER_KHRONOS_validation",
+        },
         .ReleaseFast, .ReleaseSmall => [_][*c]const u8{},
     };
+};
+const validationFeature = [_]vk.VkValidationFeatureEnableEXT{
+    vk.VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT,
 };
 const extensionNeeded = [_][*c]const u8{ "VK_KHR_surface", "VK_KHR_win32_surface" };
 const deviceExtensionNeeded = [_][*c]const u8{
@@ -245,9 +250,16 @@ pub fn createInstance(pAllocCallBacks: [*c]vk.VkAllocationCallbacks, allocator: 
     );
     defer extension.deinit();
 
+    var features = vk.VkValidationFeaturesEXT{
+        .sType = vk.VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT,
+        .pNext = null,
+        .enabledValidationFeatureCount = @intCast(validationFeature.len),
+        .pEnabledValidationFeatures = &validationFeature,
+    };
+
     const createInfo = vk.VkInstanceCreateInfo{
         .sType = vk.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-        .pNext = null,
+        .pNext = &features,
         .flags = 0,
         .pApplicationInfo = &appInfo,
         .enabledLayerCount = @truncate(layers.items.len),

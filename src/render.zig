@@ -75,8 +75,8 @@ pub fn render_thread_func(
         std.debug.panic("error {s}", .{@errorName(err)});
     };
 
-    try vertices.init(&vulkan, &commands);
-    defer vertices.deinit();
+    try vertices.init(&vulkan, &commands, &pTextureSet, allocator_t.*);
+    defer vertices.deinit(allocator_t.*);
 
     _ = try pTextureSet.createImageTexture(
         comptime file.comptimeGetID("non_exist.png"),
@@ -107,6 +107,7 @@ pub fn render_thread_func(
     try vulkan.readPipelineFileAndAdd(io, comptime file.comptimeGetID("flat2d.pipeb"), .draw);
     try vulkan.readPipelineFileAndAdd(io, comptime file.comptimeGetID("directOut.pipeb"), .present);
     try vulkan.readPipelineFileAndAdd(io, comptime file.comptimeGetID("model.pipeb"), .meshDraw);
+    try vulkan.readPipelineFileAndAdd(io, comptime file.comptimeGetID("indirectDraw.pipeb"), .draw);
 
     try vulkan.createAllPipelinesAdded();
 
@@ -202,7 +203,7 @@ pub fn render_thread_func(
     var pUIUbo2: shaderStruct.UniformBufferObject = undefined;
     const ubo2 = vulkan.buffers.getBufferContent(ubo_test2);
 
-    const aspect2: f32 = 1.0 * (@as(f32, @floatFromInt(vulkan.windowHeight)) / 600.0);
+    const aspect2: f32 = 1.0 * (@as(f32, @floatFromInt(vulkan.windowHeight))) / 2;
     const aspect: f32 = (@as(f32, @floatFromInt(vulkan.windowWidth)) / @as(f32, @floatFromInt(vulkan.windowHeight))) * aspect2;
     const VIEW_SCALE = 1.0;
 
@@ -227,6 +228,14 @@ pub fn render_thread_func(
     const pData = @as(*shaderStruct.UniformBufferObject, @ptrCast(@alignCast(ubo.pMappedData)));
     pData.* = pUIUbo;
 
+    // var testMatrix: vertexStruct.mat4 align(16) = undefined;
+    // var res: vertexStruct.vec4 align(16) = undefined;
+    // var value: vertexStruct.vec4 align(16) = vertexStruct.vec4{ 300, 0, 0.1, 1.0 };
+    // cglm.glmc_mul(&pUIUbo.proj, &pUIUbo.view, &testMatrix);
+    // cglm.glmc_mat4_mulv(&testMatrix, &value, &res);
+
+    // std.log.debug("{d}, {d}, {d}, {d}", .{ res[0], res[1], res[2], res[3] });
+
     var eye2 = cglm.vec3{ 0.0, 0.0, 100.0 };
     var center2 = cglm.vec3{ 0.0, 0.0, 0.0 };
     var up2 = cglm.vec3{ 0.0, 1.0, 0.0 };
@@ -240,7 +249,7 @@ pub fn render_thread_func(
     const pData2 = @as(*shaderStruct.UniformBufferObject, @ptrCast(@alignCast(ubo2.pMappedData)));
     pData2.* = pUIUbo2;
 
-    const ssbo_test = try vulkan.createStorageBuffer(global.MeshletStorageBufferSize);
+    const ssbo_test = try vulkan.createStorageBuffer(global.MeshletStorageBufferSize, false);
     const ssbo_test_meshlets = try vulkan.createVirtualBlockBuffer(
         0,
         global.StorageBufferMeshletsSize,
@@ -389,10 +398,19 @@ pub fn render_thread_func(
         ssbo_test,
     };
 
-    // global.stopNodeDagPrint = false;
-    // global.stopNodeDagDetailPrint = false;
-    // global.stopExecuteNodePrint = false;
-    global.game_end.store(1, .seq_cst);
+    var test_indirectBuffers = [_]VkStruct.Buffer_t{
+        vertices.instanceBuffer2D,
+    };
+
+    const box1 = try vertices.addInstance(0, 0, 48, 32, 0.1, boxPng);
+    _ = try vertices.addInstance(400, 0, 48, 32, 0.1, boxPng);
+    _ = try vertices.addInstance(0, 300, 48, 32, 0.1, boxPng);
+    _ = try vertices.addInstance(-400, 0, 48, 32, 0.1, boxPng);
+    _ = try vertices.addInstance(0, -300, 48, 32, 0.1, boxPng);
+    _ = try vertices.addInstance(345, -438, 48, 32, 0.1, boxPng);
+    _ = box1;
+
+    try vertices.uploadInstance(&commands);
 
     commands.setViewport(viewport_test);
     commands.setScissor(scissor_test);
@@ -402,6 +420,9 @@ pub fn render_thread_func(
     const circleTexture = pTextureSet.getTexture(@intCast(file.getID("circle.png"))).?;
     var circleIndex = pTextureSet.getDescriptorSetIndex(circleTexture);
     var vertexBufferAddress = vulkan.getBufferAddress(vulkan.buffers.getVkBuffer(vertices.vertexBuffer2D));
+    var instanceBufferAddress = vulkan.getBufferAddress(vulkan.buffers.getVkBuffer(vertices.instanceBuffer2D));
+
+    var boxIndex = pTextureSet.getDescriptorSetIndex(boxPng);
 
     var draw2dPushConstants = [_]processRender.drawC.PushConstantPack{
         .{
@@ -417,6 +438,29 @@ pub fn render_thread_func(
             .stageFlag = vk.VK_SHADER_STAGE_FRAGMENT_BIT,
         },
     };
+    var drawMeshPushConstants = [_]processRender.drawC.PushConstantPack{
+        .{
+            .pValues = &boxIndex,
+            .size = @sizeOf(u32),
+            .offset = @sizeOf(u64),
+            .stageFlag = vk.VK_SHADER_STAGE_FRAGMENT_BIT,
+        },
+    };
+    var drawIndirectPushConstants = [_]processRender.drawC.PushConstantPack{
+        .{
+            .pValues = &instanceBufferAddress,
+            .size = @sizeOf(u64),
+            .offset = 0,
+            .stageFlag = vk.VK_SHADER_STAGE_VERTEX_BIT,
+        },
+    };
+
+    // global.stopNodeDagPrint = false;
+    // global.stopNodeDagDetailPrint = false;
+    // global.stopExecuteNodePrint = false;
+    global.game_end.store(1, .seq_cst);
+
+    // vulkan.logBufferPtr();
 
     while (true) {
         const frame = vulkan.totalFrame.load(.seq_cst);
@@ -443,6 +487,15 @@ pub fn render_thread_func(
             .descriptorSets = &testDescriptorSets,
             .pushConstants = &draw2dPushConstants,
         } });
+        try commands.addCommand(.drawIndirect, .{ .drawIndirect = .{
+            .pipeline = vulkan.getPipeline("indirectDraw").?,
+            .rendering = rendering_mesh_test,
+            .descriptorSets = &testDescriptorSets,
+            .pTextures = &test_meshTextures,
+            .usedBuffers = &test_indirectBuffers,
+            .indirectBuffer = vertices.indirectDrawCommandBuffer,
+            .pushConstants = &drawIndirectPushConstants,
+        } });
         try commands.addCommand(.drawMesh, .{ .drawMesh = .{
             .pipeline = vulkan.getPipeline("model").?,
             .rendering = rendering_mesh_test,
@@ -450,6 +503,7 @@ pub fn render_thread_func(
             .pTextures = &test_meshTextures,
             .usedBuffers = &test_meshBuffers,
             .meshletCount = meshes.meshletCount,
+            .pushConstants = &drawMeshPushConstants,
         } });
         try commands.addCommand(.present, .{ .present = .{
             .pipeline = vulkan.getPipeline("directOut").?,

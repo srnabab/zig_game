@@ -81,18 +81,18 @@ pub fn loadMeshlet(self: *Self, ID: i32, allocator: std.mem.Allocator, vulkan: *
     const meshletTriangles = content[meshletTrianglesStart..indicesStart];
     const indices = content[indicesStart..];
 
-    std.log.debug("pos 1311 {d}, {d}, {d}, {d}, {d}, {d}, {d}, {d}", .{
-        vertices[stride * 1311 + 0],
-        vertices[stride * 1311 + 1],
-        vertices[stride * 1311 + 2],
-        vertices[stride * 1311 + 3],
-        vertices[stride * 1311 + 4],
-        vertices[stride * 1311 + 5],
-        vertices[stride * 1311 + 6],
-        vertices[stride * 1311 + 7],
-    });
+    // std.log.debug("pos 1311 {d}, {d}, {d}, {d}, {d}, {d}, {d}, {d}", .{
+    //     vertices[stride * 1311 + 0],
+    //     vertices[stride * 1311 + 1],
+    //     vertices[stride * 1311 + 2],
+    //     vertices[stride * 1311 + 3],
+    //     vertices[stride * 1311 + 4],
+    //     vertices[stride * 1311 + 5],
+    //     vertices[stride * 1311 + 6],
+    //     vertices[stride * 1311 + 7],
+    // });
 
-    std.log.debug("len {d}", .{vertices.len});
+    // std.log.debug("len {d}", .{vertices.len});
 
     const meshletCount = meshlets.len / @sizeOf(vertexStruct.Meshlet);
     self.meshletCount += @intCast(meshletCount);
@@ -108,7 +108,7 @@ pub fn loadMeshlet(self: *Self, ID: i32, allocator: std.mem.Allocator, vulkan: *
         vulkan.buffers.copyDataToMapped(stagingBuffer4, u8, meshletTriangles);
 
         var bufferContent = vulkan.buffers.getBufferContent(stagingBuffer1);
-        std.log.debug("buffer size {d}", .{bufferContent.size});
+        // std.log.debug("buffer size {d}", .{bufferContent.size});
 
         const allocBuffer1 = try vulkan.createVirtualBuffer(
             self.vertexBuffer,

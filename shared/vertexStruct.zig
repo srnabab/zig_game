@@ -10,6 +10,12 @@ pub const mat4 = cglm.mat4;
 
 const Self = @This();
 
+pub const Instance = extern struct {
+    position: vec3,
+    scale: vec2,
+    textureIndex: u32,
+};
+
 pub const Meshlet = extern struct {
     vertexOffset: u32,
     primitiveOffset: u32,

@@ -393,6 +393,11 @@ pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet) !void {
         const res = try Queue.setQueueFamilies(self.physicalDevice, self.allocator, self.surface);
         break :kl .{ res.graphic, res.compute, res.transfer };
     };
+    std.log.debug("graphic {d}, compute {d}, transfer {d}", .{
+        self.graphicQueueFamily.familyIndice,
+        self.computeQueueFamily.familyIndice,
+        self.transferQueueFamily.familyIndice,
+    });
 
     self.device = try InstanceDevice.createDevice(
         deviceGroup.count,
@@ -431,6 +436,12 @@ pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet) !void {
         &self.transferQueue,
         self.device,
     );
+
+    std.log.debug("graphic {*}, compute {*}, transfer {*}", .{
+        self.graphicQueue.queue,
+        self.computeQueue.queue,
+        self.transferQueue.queue,
+    });
 
     self.vmaS = try vmaStruct.createVmaAllocator(
         self.physicalDevice,
@@ -738,6 +749,7 @@ pub fn deinit(self: *Self) void {
     while (shaderCodes.next()) |code| {
         // std.log.debug("module ptr {*}", .{code.value_ptr});
         vk.vkDestroyShaderModule(self.device, code.value_ptr.*, self.pAllocCallBacks);
+        self.allocator.free(code.key_ptr.*);
     }
     self.shaderModules.deinit();
 
@@ -854,7 +866,10 @@ pub fn collectEntryName(self: *Self, entryName: []const u8) !*[]const u8 {
 }
 
 pub fn createShaderModule(self: *Self, shaderCode: []const u8, shaderName: []const u8) !vk.VkShaderModule {
-    const res = try self.shaderModules.getOrPut(shaderName);
+    const name = try self.allocator.dupe(u8, shaderName);
+    errdefer self.allocator.free(name);
+
+    const res = try self.shaderModules.getOrPut(name);
 
     if (!res.found_existing) {
         var info = vk.VkShaderModuleCreateInfo{
@@ -871,6 +886,8 @@ pub fn createShaderModule(self: *Self, shaderCode: []const u8, shaderName: []con
             self.pAllocCallBacks,
             @ptrCast(res.value_ptr),
         ));
+    } else {
+        self.allocator.free(name);
     }
 
     return res.value_ptr.*;
@@ -1210,7 +1227,7 @@ pub fn queueSubmit(self: *Self, io: std.Io, kind: CommandPoolType, submitCount: 
     //     return err;
     // };
 
-    // std.log.debug("submit {s}", .{@tagName(kind)});
+    std.log.debug("submit {s}", .{@tagName(kind)});
 }
 
 pub fn presentSubmit(self: *Self, io: std.Io, pPresentInfo: [*c]vk.VkPresentInfoKHR) !void {
@@ -1550,8 +1567,8 @@ pub fn createUniformBuffer(self: *Self, bufferSize: vk.VkDeviceSize) !Buffer_t {
     return self.buffers.createUniformBuffer(&self.vmaS, bufferSize, self.handles);
 }
 
-pub fn createStorageBuffer(self: *Self, bufferSize: vk.VkDeviceSize) !Buffer_t {
-    return self.buffers.createStorageBuffer(&self.vmaS, bufferSize, self.handles);
+pub fn createStorageBuffer(self: *Self, bufferSize: vk.VkDeviceSize, indirect: bool) !Buffer_t {
+    return self.buffers.createStorageBuffer(&self.vmaS, bufferSize, self.handles, indirect);
 }
 
 pub fn createVirtualBlockBuffer(
@@ -1628,8 +1645,11 @@ pub fn destroyScissor(self: *Self, scissor: Scissor_t) void {
 
 pub fn logBufferPtr(self: *Self) void {
     for (self.buffers.buffers.items.items) |v| {
-        if (v == .data) {
-            std.log.debug("{*} {s}", .{ v.data.vkBuffer, @tagName(v.data.usage) });
+        if (v == .data and v.data.allocation == .real) {
+            std.log.debug("{*} {s} {s}", .{ v.data.vkBuffer, @tagName(v.data.usage), @tagName(switch (v.data.queue) {
+                .have => |have| have,
+                .ref => |ref| self.buffers.getBufferQueueType(ref),
+            }) });
         }
     }
 }

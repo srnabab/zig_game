@@ -31,21 +31,24 @@ pub const Allocation = union(AllocationType) {
 };
 
 pub const Buffer = struct {
+    const haveOrRef = enum { have, ref };
+
     pMappedData: ?*anyopaque = @import("std").mem.zeroes(?*anyopaque),
     virtualBlock: vma.VmaVirtualBlock = null,
+
+    queue: union(haveOrRef) {
+        have: QueueType,
+        ref: Buffer_t,
+    },
+
     vkBuffer: vk.VkBuffer,
 
     /// VmaAllocation, VmaVirtualAllocation
     allocation: Allocation,
     size: vk.VkDeviceSize,
     stride: vk.VkDeviceSize = 0,
-    queueIndex: QueueType = .init,
     usage: Usage = .none,
     offset: vk.VkDeviceSize = 0,
-
-    pub fn changeQueueIndex(self: *Buffer, queueType: QueueType) void {
-        self.queueIndex = queueType;
-    }
 };
 
 pub const Buffer_t = Handle;
@@ -105,6 +108,8 @@ fn inferUsage(usage: vk.VkBufferUsageFlags) Usage {
         return .vertex;
     } else if (usage & vk.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT != 0) {
         return .uniform;
+    } else if (usage & vk.VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT != 0) {
+        return .indirect;
     } else if (usage & vk.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT != 0) {
         return .storage;
     } else if (usage & vk.VK_BUFFER_USAGE_TRANSFER_SRC_BIT != 0) {
@@ -158,12 +163,12 @@ pub fn _createBuffer(
 
     const pack = try self.buffers.addOne();
     pack.ptr.* = Buffer{
-        .vkBuffer = pBuffer,
+        .queue = .{ .have = .init },
         .allocation = .{ .real = pAllocation },
         // .info = allocationInfo,
+        .vkBuffer = pBuffer,
         .size = allocationInfo.size,
         .pMappedData = allocationInfo.pMappedData,
-        .queueIndex = .init,
         .usage = inferUsage(usage),
         .stride = stride,
     };
@@ -275,7 +280,10 @@ pub fn createStorageBuffer(
     vmaa: *vmaStruct,
     size: vk.VkDeviceSize,
     handles: *global.HandlesType,
+    indirect: bool,
 ) !Buffer_t {
+    var usage = vk.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | vk.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | vk.VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    if (indirect) usage |= vk.VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
     return self._createBuffer(
         vmaa,
         0,
@@ -283,7 +291,7 @@ pub fn createStorageBuffer(
         vk.VK_SHARING_MODE_EXCLUSIVE,
         @intCast(math.round(BufferAlign, size)),
         0,
-        vk.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | vk.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        @intCast(usage),
         vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
         vma.VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
         handles,
@@ -300,14 +308,29 @@ pub fn copyDataToMapped(self: *Self, buffer: Buffer_t, srcType: type, src: []con
 pub fn getBufferQueueType(self: *Self, buffer: Buffer_t) QueueType {
     const index = getIndex(buffer);
     const ptr = self.buffers.get(index);
-    return ptr.queueIndex;
+    return switch (ptr.queue) {
+        .have => |h| h,
+        .ref => |r| self.getBufferQueueType(r),
+    };
 }
 
 pub fn changeQueueType(self: *Self, buffer: Buffer_t, queueType: QueueType) void {
     const index = getIndex(buffer);
     const ptr = self.buffers.get(index);
 
-    ptr.queueIndex = queueType;
+    // std.log.debug("{*} {s} -> {s}", .{
+    //     ptr.vkBuffer,
+    //     @tagName(switch (ptr.queue) {
+    //         .ref => |ref| self.getBufferQueueType(ref),
+    //         .have => |have| have,
+    //     }),
+    //     @tagName(queueType),
+    // });
+
+    switch (ptr.queue) {
+        .have => ptr.queue.have = queueType,
+        .ref => self.changeQueueType(ptr.queue.ref, queueType),
+    }
 }
 
 // pub fn changeUsage(self: *Self, buffer: Buffer_t, usage: Usage) void {
@@ -375,19 +398,23 @@ pub fn createVirtualBlockBuffer(
 
     const index = getIndex(buffer);
     const ptr = self.buffers.get(index);
+    // std.log.debug("queue have ptr {*}", .{&ptr.queue.have});
 
     pack.ptr.* = Buffer{
+        .queue = .{ .ref = buffer },
         .vkBuffer = ptr.vkBuffer,
         .allocation = .{ .block = void{} },
         .size = size,
         .pMappedData = ptr.pMappedData,
-        .queueIndex = ptr.queueIndex,
         .usage = ptr.usage,
         .stride = stride,
         .offset = offset + ptr.offset,
         .virtualBlock = block,
     };
-    std.log.debug("block offset {d}", .{offset});
+    // std.log.debug("block offset {d}", .{offset});
+
+    // std.log.debug("virtual block {*} queue {s}", .{ pack.ptr.vkBuffer, @tagName(self.getBufferQueueType(pack.ptr.queue.ref)) });
+    // std.log.debug("queue ptr {*}", .{pack.ptr.queue.ref});
 
     // std.log.debug("ptr {*}, {*}, index {d}", .{ pack.ptr.vkBuffer, ptr.vkBuffer, index });
 
@@ -414,6 +441,8 @@ pub fn createVirtualBuffer(
     const index = getIndex(blockBuffer);
     const ptr = self.buffers.get(index);
 
+    // std.log.debug("buffer {*}, queue {s}", .{ ptr.vkBuffer, @tagName(self.getBufferQueueType(ptr.queue.ref)) });
+
     assert(ptr.virtualBlock != null);
 
     var allocation: vma.VmaVirtualAllocation = null;
@@ -430,17 +459,20 @@ pub fn createVirtualBuffer(
     );
 
     pack.ptr.* = Buffer{
+        .queue = .{ .ref = ptr.queue.ref },
         .vkBuffer = ptr.vkBuffer,
         .allocation = .{ .virtual = allocation },
         .size = size,
         .pMappedData = ptr.pMappedData,
-        .queueIndex = ptr.queueIndex,
         .usage = ptr.usage,
         .stride = ptr.stride,
         .offset = ptr.offset + offset,
         .virtualBlock = ptr.virtualBlock,
     };
-    std.log.debug("2 offset {d}", .{ptr.offset});
+    // std.log.debug("2 offset {d}", .{ptr.offset});
+
+    // std.log.debug("virtual buffer queue {s}", .{@tagName(self.getBufferQueueType(pack.ptr.queue.ref))});
+    // std.log.debug("queue ptr {*}", .{pack.ptr.queue.ref});
 
     const handle = handles.createHandle(@intCast(pack.index));
 

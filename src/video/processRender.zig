@@ -892,7 +892,7 @@ pub const commands = struct {
 
     pub fn init(io: std.Io, allocator: std.mem.Allocator, buffers: []u8, vulkan: *VkStruct, pRendering: *rendering, pTextureSet: *texture) !Self {
         logStructSize(drawC);
-        std.log.debug("command size {d}", .{@sizeOf(drawC.comm)});
+        std.log.debug("command size {d}", .{@sizeOf(drawC.comm2)});
         std.log.debug("drawc size {d}", .{@sizeOf(drawC)});
 
         var stackAllocators: [global.MaxFrameInFlight]std.heap.FixedBufferAllocator = undefined;
@@ -951,6 +951,8 @@ pub const commands = struct {
         const zone = tracy.initZone(@src(), .{ .name = "start vulkan commands" });
         defer zone.deinit();
 
+        self.end = false;
+
         self.stackAllocatorsIndex = (self.stackAllocatorsIndex + 1) % @as(u32, @intCast(self.stackAllocators.len));
 
         self.stackAllocators[self.stackAllocatorsIndex].reset();
@@ -990,7 +992,7 @@ pub const commands = struct {
     //     };
     // }
 
-    fn commandCost(commandType: drawC.CommandType) u32 {
+    fn commandCost(commandType: drawC.CommandType2) u32 {
         const zone = tracy.initZone(@src(), .{ .name = "calculate command cost" });
         defer zone.deinit();
 
@@ -1023,7 +1025,6 @@ pub const commands = struct {
         const zone = tracy.initZone(@src(), .{ .name = "infer acquire pipelin barrier info" });
         defer zone.deinit();
 
-        _ = commandType;
         const srcAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_2_NONE;
         var dstAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_2_NONE;
         const sourceStage: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
@@ -1039,6 +1040,19 @@ pub const commands = struct {
                     .index => {
                         destinationStage = vk.VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
                         dstAccessMask = vk.VK_ACCESS_INDEX_READ_BIT;
+                    },
+                    .indirect => {
+                        destinationStage = vk.VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
+                        dstAccessMask = vk.VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
+                    },
+                    .storage => {
+                        if (commandType == .drawMesh) {
+                            destinationStage = vk.VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT;
+                        } else {
+                            std.debug.panic("unsupported command type {s}", .{@tagName(commandType)});
+                        }
+
+                        dstAccessMask = vk.VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
                     },
                     else => std.debug.panic("unsupported buffer usage {s}", .{@tagName(bufferUsage)}),
                 }
@@ -1057,7 +1071,7 @@ pub const commands = struct {
         };
     }
 
-    fn inferTransLayoutFlagsByOldLayoutAndNewLayout(command: *drawC.comm) struct {
+    fn inferTransLayoutFlagsByOldLayoutAndNewLayout(command: *drawC.comm2) struct {
         srcAccessMask: vk.VkAccessFlags2,
         dstAccessMask: vk.VkAccessFlags2,
         aspectMask: vk.VkImageAspectFlags,
@@ -1077,6 +1091,11 @@ pub const commands = struct {
             vk.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, vk.VK_IMAGE_LAYOUT_UNDEFINED => {
                 srcAccessMask = vk.VK_ACCESS_2_NONE;
                 sourceStage = vk.VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+
+                if (command.transLayout.newLayout == vk.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
+                    sourceStage = vk.VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT | vk.VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
+                }
+
                 aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
             },
 
@@ -1142,8 +1161,8 @@ pub const commands = struct {
             },
 
             vk.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR => {
-                dstAccessMask = vk.VK_ACCESS_2_NONE;
-                destinationStage = vk.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+                dstAccessMask = vk.VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+                destinationStage = vk.VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
                 aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
             },
 
@@ -1247,7 +1266,7 @@ pub const commands = struct {
                 }
 
                 switch (commandType) {
-                    .drawMesh, .draw2D => {
+                    .drawMesh, .draw2D, .drawIndirect => {
                         destinationStage = vk.VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
                     },
                     else => {
@@ -1310,7 +1329,7 @@ pub const commands = struct {
         };
     }
 
-    fn addCommand2(self: *Self, command: drawC.comm, enterCommandType: drawC.CommandType) !twoQueueNode {
+    fn addCommand2(self: *Self, command: drawC.comm2, enterCommandType: drawC.CommandType) !twoQueueNode {
         const zone = tracy.initZone(@src(), .{ .name = "add command 2" });
         defer zone.deinit();
 
@@ -1337,6 +1356,8 @@ pub const commands = struct {
                 if (enterCommandType == .draw2D) {
                     rootNode.data.commandPoolType = .graphic;
                 } else if (enterCommandType == .drawMesh) {
+                    rootNode.data.commandPoolType = .graphic;
+                } else if (enterCommandType == .drawIndirect) {
                     rootNode.data.commandPoolType = .graphic;
                 } else {
                     std.debug.panic("pushconstant unprocessed enterCommandType {s}", .{@tagName(enterCommandType)});
@@ -1961,7 +1982,10 @@ pub const commands = struct {
                     .regions = regions,
                 } }, commandType);
             }
+            // std.log.debug("queue {s}", .{@tagName(oldSrcQueueType)});
             self.vulkan.buffers.changeQueueType(pBuffer, newQueue);
+        } else {
+            // std.log.debug("old {s}, new {s}", .{ @tagName(oldSrcQueueType), @tagName(newQueue) });
         }
 
         return resNode;
@@ -2915,13 +2939,15 @@ pub const commands = struct {
         ptr.* = @ptrCast(vkBuffer);
     }
 
-    pub fn addCommand(self: *Self, commandType: drawC.PublicCommandType, command: drawC.comm) !void {
+    pub fn addCommand(self: *Self, commandType: drawC.CommandType, command: drawC.comm) !void {
         const zone = tracy.initZone(@src(), .{ .name = "add command" });
         defer zone.deinit();
 
         std.debug.assert(@as(u32, @intFromEnum(commandType)) == @as(u32, @intFromEnum(std.meta.activeTag(command))));
 
-        // if (command == .drawMesh) return;
+        // self.vulkan.logBufferPtr();
+        if (command == .drawMesh) return;
+        // if (command == .drawIndirect) return;
 
         try self.mutex.lock(self.io);
         defer self.mutex.unlock(self.io);
@@ -2948,7 +2974,8 @@ pub const commands = struct {
         ptr.value_ptr.* = drawC{
             .ID = ID,
             // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
-            .command = command,
+            // .command = command,
+            .command = .{ .empty = void{} },
         };
 
         var dependenciesArray: std.array_list.Managed(*anyopaque) = .init(allocator);
@@ -2962,10 +2989,102 @@ pub const commands = struct {
         const zone2 = tracy.initZone(@src(), .{ .name = "infer dependency 1" });
         errdefer zone2.deinit();
         switch (command) {
+            .drawIndirect => {
+                node.data.commandPoolType = .graphic;
+
+                const drawIndirect = command.drawIndirect;
+
+                ptr.value_ptr.command = .{
+                    .drawIndirectRecord = .{
+                        .buffer = self.vulkan.buffers.getVkBuffer(drawIndirect.indirectBuffer),
+                        .offset = 0,
+                    },
+                };
+                var buffers = try allocator.alloc(
+                    VkStruct.Buffer_t,
+                    drawIndirect.usedBuffers.len + 1,
+                );
+                for (buffers[0..drawIndirect.usedBuffers.len], 0..drawIndirect.usedBuffers.len) |*value, i| {
+                    value.* = drawIndirect.usedBuffers[i];
+                }
+                buffers[buffers.len - 1] = drawIndirect.indirectBuffer;
+
+                var renderingNode: ?*QueueNode = null;
+                try self.renderingResourcePreProcess(
+                    drawIndirect.rendering,
+                    buffers,
+                    drawIndirect.pTextures,
+                    &currentNode,
+                    &renderingNode,
+                    allocator,
+                    std.meta.activeTag(command),
+                );
+                const cachePtr = try needToCacheArray.addOne();
+                cachePtr.* = .{
+                    .ptr = drawIndirect.rendering,
+                    .index = renderingNode.?.ID,
+                };
+
+                // inputs may have dependency
+                for (buffers) |buffer| {
+                    const dependencyPtr = try dependenciesArray.addOne();
+                    self.addBuffer_tDependency(dependencyPtr, buffer);
+                }
+                for (drawIndirect.pTextures) |tex| {
+                    const dependencyPtr = try dependenciesArray.addOne();
+                    dependencyPtr.* = tex;
+                }
+                {
+                    const r_ = self.pRendering.getRenderingInfoContent(drawIndirect.rendering);
+                    for (r_.textures) |t| {
+                        const dependencyPtr = try dependenciesArray.addOne();
+                        dependencyPtr.* = t;
+                    }
+                }
+
+                var lastNode: ?*QueueNode = null;
+                const resPack = try self.getRenderingResPack(
+                    drawIndirect.rendering,
+                    null,
+                    null,
+                    drawIndirect.descriptorSets,
+                    self.pViewport,
+                    self.pScissor,
+                    drawIndirect.pipeline,
+                    allocator,
+                    node,
+                    &lastNode,
+                );
+
+                try self.cacheAttachementImageView(drawIndirect.rendering, node, &needToCacheArray);
+
+                const linkNode = try self.resPackNodeProcess(
+                    resPack,
+                    null,
+                    null,
+                    drawIndirect.descriptorSets,
+                    self.pViewport,
+                    self.pScissor,
+                    drawIndirect.pipeline,
+                    drawIndirect.pushConstants,
+                    std.meta.activeTag(command),
+                    allocator,
+                );
+
+                try lastNodeLinkNodeRenderingNodeConnect(lastNode, linkNode, node, renderingNode);
+
+                if (currentNode == node) {
+                    currentNode = self.nodeDag.get(0).?;
+                }
+            },
             .drawMesh => {
                 node.data.commandPoolType = .graphic;
 
                 const drawMesh = command.drawMesh;
+
+                ptr.value_ptr.command = .{
+                    .drawMeshRecord = .{ .meshletCount = drawMesh.meshletCount },
+                };
 
                 var renderingNode: ?*QueueNode = null;
                 try self.renderingResourcePreProcess(
@@ -3016,20 +3135,6 @@ pub const commands = struct {
 
                 try self.cacheAttachementImageView(drawMesh.rendering, node, &needToCacheArray);
 
-                // const pipelineContent = self.vulkan.getPipelineContent(drawMesh.pipeline);
-                var texIndex = self.pTextureSet.getDescriptorSetIndex(drawMesh.pTextures[0]);
-
-                // std.log.debug("tex idx {d}", .{texIndex});
-
-                var pushConstants = [_]drawC.PushConstantPack{
-                    .{
-                        .stageFlag = vk.VK_SHADER_STAGE_FRAGMENT_BIT,
-                        .size = @sizeOf(u32),
-                        .pValues = @ptrCast(&texIndex),
-                        .offset = 8,
-                    },
-                };
-
                 const linkNode = try self.resPackNodeProcess(
                     resPack,
                     null,
@@ -3038,7 +3143,7 @@ pub const commands = struct {
                     self.pViewport,
                     self.pScissor,
                     drawMesh.pipeline,
-                    &pushConstants,
+                    drawMesh.pushConstants,
                     std.meta.activeTag(command),
                     allocator,
                 );
@@ -3057,7 +3162,11 @@ pub const commands = struct {
                 var currentIndex: u32 = 0;
                 try self.vulkan.acquireNextImage(&currentIndex);
 
-                const present = ptr.value_ptr.command.present;
+                const present = command.present;
+
+                ptr.value_ptr.command = .{
+                    .presentRecord = .{ .empty = void{} },
+                };
 
                 rootCommand.command.start.present = true;
                 rootCommand.command.start.currentIndex = currentIndex;
@@ -3157,17 +3266,29 @@ pub const commands = struct {
             .draw2D => {
                 node.data.commandPoolType = .graphic;
 
-                const draw2D = ptr.value_ptr.command.draw2D;
+                const draw2D = command.draw2D;
+
+                const offsets = try self.pTextureSet.getTextureOffsets(draw2D.pTexture);
+                ptr.value_ptr.command = .{ .draw2DRecord = .{
+                    .offsets = offsets,
+                } };
 
                 var renderingNode: ?*QueueNode = null;
 
-                var buffers = [_]VkStruct.Buffer_t{draw2D.indexBuffer};
+                var buffers = try allocator.alloc(
+                    VkStruct.Buffer_t,
+                    draw2D.vertexBuffer.len + 1,
+                );
+                for (buffers[0..draw2D.vertexBuffer.len], 0..draw2D.vertexBuffer.len) |*value, i| {
+                    value.* = draw2D.vertexBuffer[i];
+                }
+                buffers[buffers.len - 1] = draw2D.indexBuffer;
 
                 var textures = [_]texture.Texture_t{draw2D.pTexture};
 
                 try self.renderingResourcePreProcess(
                     draw2D.rendering,
-                    &buffers,
+                    buffers,
                     &textures,
                     &currentNode,
                     &renderingNode,
@@ -3266,7 +3387,9 @@ pub const commands = struct {
                     node.data.commandPoolType = .graphic;
                 }
 
-                const copyBuffer = ptr.value_ptr.command.copyBuffer;
+                const copyBuffer = command.copyBuffer;
+                ptr.value_ptr.command = .{ .copyBuffer = copyBuffer };
+
                 const tempRegions = copyBuffer.regions;
                 var srcBufferNode: twoQueueNode = .{};
                 var dstBufferNode: twoQueueNode = .{};
@@ -3277,6 +3400,7 @@ pub const commands = struct {
                     srcOffset.offset = region.srcOffset;
                     srcOffset.size = region.size;
                 }
+                // std.log.debug("src buffer", .{});
                 srcBufferNode = try self.changeBufferQueueHelper(
                     copyBuffer.srcBuffer,
                     .transfer,
@@ -3288,12 +3412,18 @@ pub const commands = struct {
                 const dependencyPtr = try dependenciesArray.addOne();
                 self.addBuffer_tDependency(dependencyPtr, copyBuffer.srcBuffer);
 
+                // {
+                //     const buffer = self.vulkan.buffers.getVkBuffer(copyBuffer.dstBuffer);
+                //     std.log.debug("{*}", .{buffer});
+                // }
+
                 const dstOffsets = try allocator.alloc(drawC.SizeOffset, tempRegions.len);
                 defer allocator.free(dstOffsets);
                 for (tempRegions, dstOffsets) |region, *dstOffset| {
                     dstOffset.offset = region.dstOffset;
                     dstOffset.size = region.size;
                 }
+                // std.log.debug("dst buffer", .{});
                 dstBufferNode = try self.changeBufferQueueHelper(
                     copyBuffer.dstBuffer,
                     .transfer,
@@ -3327,7 +3457,8 @@ pub const commands = struct {
                     node.data.commandPoolType = .graphic;
                 }
 
-                const copyBufferToImage = ptr.value_ptr.command.copyBufferToImage;
+                const copyBufferToImage = command.copyBufferToImage;
+                ptr.value_ptr.command = .{ .copyBufferToImage = copyBufferToImage };
 
                 const imageQueueNode = try self.transLayoutHelper(
                     self.pTextureSet,
@@ -3618,13 +3749,12 @@ pub const oneTimeCommand = struct {
                     pushConstant.pValues.ptr,
                 );
             },
-            .draw2D => {
+            .draw2DRecord => {
                 const innerZone = tracy.initZone(@src(), .{ .name = "draw 2D" });
                 defer innerZone.deinit();
 
-                const draw2D = command.command.draw2D;
+                const offsets = command.command.draw2DRecord.offsets;
 
-                const offsets = try pTextureSet.getTextureOffsets(draw2D.pTexture);
                 // std.log.debug("{}", .{offsets[0]});
 
                 for (offsets) |offset| {
@@ -3726,6 +3856,12 @@ pub const oneTimeCommand = struct {
                     }
                 }
 
+                // std.log.debug("image{d}, buffer{d}, memory{d}", .{
+                //     imageMemoryBarrierCount,
+                //     bufferMemoryBarrierCount,
+                //     memoryBarrierCount,
+                // });
+
                 var imageMemoryBarriers = std.ArrayList(vk.VkImageMemoryBarrier2).initCapacity(stackAllocator, imageMemoryBarrierCount) catch |err| {
                     std.log.err("stack alloc error {s}\n", .{@errorName(err)});
                     std.debug.panic("stack alloc error", .{});
@@ -3785,6 +3921,7 @@ pub const oneTimeCommand = struct {
                                 .offset = barrier.bufferMemory.offset,
                                 .size = barrier.bufferMemory.size,
                             };
+                            // std.log.debug("{}", .{ptr.*});
                         },
                         .memory => {
                             const ptr = memoryBarriers.addOneAssumeCapacity();
@@ -3925,17 +4062,26 @@ pub const oneTimeCommand = struct {
 
                 vk.vkCmdSetScissor(commandBuffer, 0, 1, &command.command.setScissor);
             },
-            .present => {
+            .presentRecord => {
                 const innerZone = tracy.initZone(@src(), .{ .name = "present" });
                 defer innerZone.deinit();
 
                 vk.vkCmdDraw(commandBuffer, 6, 1, 0, 0);
             },
-            .drawMesh => {
+            .drawMeshRecord => {
                 const innerZone = tracy.initZone(@src(), .{ .name = "draw mesh" });
                 defer innerZone.deinit();
 
-                VkStruct.vkCmdDrawMeshTasksEXT.?(commandBuffer, command.command.drawMesh.meshletCount, 1, 1);
+                VkStruct.vkCmdDrawMeshTasksEXT.?(commandBuffer, command.command.drawMeshRecord.meshletCount, 1, 1);
+            },
+            .drawIndirectRecord => {
+                vk.vkCmdDrawIndirect(
+                    commandBuffer,
+                    command.command.drawIndirectRecord.buffer,
+                    command.command.drawIndirectRecord.offset,
+                    1,
+                    0,
+                );
             },
             else => {
                 std.debug.panic("unsupported command type {s}", .{@tagName(command.command)});
@@ -4048,9 +4194,9 @@ pub const oneTimeCommand = struct {
             .pushconstant => {
                 break :rs garbageData{ .pValues = command.command.pushconstant.pValues };
             },
-            .draw2D, .present, .bindVertexBuffers, .bindDescriptorSets, .setViewport => null,
+            .draw2DRecord, .presentRecord, .bindVertexBuffers, .bindDescriptorSets, .setViewport => null,
             .setScissor, .bindIndexBuffer, .bindPipeline, .start, .beginRendering, .endRendering => null,
-            .drawMesh => null,
+            .drawMeshRecord, .drawIndirectRecord => null,
             else => {
                 std.debug.panic("not support {s}", .{@tagName(command.command)});
             },
@@ -4313,12 +4459,10 @@ pub const oneTimeCommand = struct {
                                 temp.pNext = null;
                                 temp.deviceIndex = 0;
                                 temp.semaphore = self.vulkan.imageAvailableSemaphore[currentFrame];
-                                temp.stageMask = vk.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+                                temp.stageMask = vk.VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
                                 temp.value = 0;
 
                                 firstGraphicSubmit = false;
-
-                                // std.log.debug("a", .{});
                             }
                             try self.vulkan.waitSemaphore(1, &self.vulkan.globalTimelineSemaphore, &graphicSemaphoreValue);
                             // std.log.debug("graphic", .{});

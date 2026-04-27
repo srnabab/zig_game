@@ -5,6 +5,26 @@ const vk = VkStruct.vk;
 const rendering = @import("rendering");
 
 pub const CommandType = enum {
+    copyBuffer,
+    copyBufferToImage,
+    draw2D,
+    drawIndirect,
+    drawMesh,
+    empty,
+    present,
+};
+
+pub const comm = union(CommandType) {
+    copyBuffer: CopyBuffer,
+    copyBufferToImage: CopyBufferToImage,
+    draw2D: Draw2D,
+    drawIndirect: DrawIndirect,
+    drawMesh: DrawMesh,
+    empty: void,
+    present: Present,
+};
+
+pub const CommandType2 = enum {
     beginRendering,
     beginSecondaryRecord,
     bindDescriptorSets,
@@ -14,24 +34,23 @@ pub const CommandType = enum {
     changeBufferQueue,
     copyBuffer,
     copyBufferToImage,
-    draw2D,
-    drawMesh,
+    draw2DRecord,
+    drawIndirectRecord,
+    drawMeshRecord,
     empty,
     end,
     endRecord,
     endRendering,
-    // graphicTransfer,
     pipelineBarrier,
-    present,
+    presentRecord,
     pushconstant,
     setScissor,
     setViewport,
     start,
-    // transfer,
     transLayout,
 };
 
-pub const comm = union(CommandType) {
+pub const comm2 = union(CommandType2) {
     beginRendering: BeginRendering,
     beginSecondaryRecord: BeginSecondaryRecord,
     bindDescriptorSets: BindDescriptorSets,
@@ -41,108 +60,21 @@ pub const comm = union(CommandType) {
     changeBufferQueue: ChangeBufferQueue,
     copyBuffer: CopyBuffer,
     copyBufferToImage: CopyBufferToImage,
-    draw2D: Draw2D,
-    drawMesh: DrawMesh,
+    draw2DRecord: Draw2DRecord,
+    drawIndirectRecord: DrawIndirectRecord,
+    drawMeshRecord: DrawMeshRecord,
     empty: void,
     end: void,
     endRecord: void,
     endRendering: void,
     pipelineBarrier: PipelineBarrier,
-    present: Present,
+    presentRecord: PresentRecord,
     pushconstant: PushConstant,
     setScissor: vk.VkRect2D,
     setViewport: vk.VkViewport,
     start: Start,
     transLayout: TransLayout,
 };
-
-const privateEnum = [_]CommandType{
-    .beginRendering,
-    .beginSecondaryRecord,
-    .bindDescriptorSets,
-    .bindIndexBuffer,
-    .bindPipeline,
-    .bindVertexBuffers,
-    .changeBufferQueue,
-    .end,
-    .endRecord,
-    .endRendering,
-    .pipelineBarrier,
-    .setScissor,
-    .setViewport,
-    .start,
-    .transLayout,
-};
-
-pub const PrivateCommandType: type = blk: {
-    const ct = @typeInfo(CommandType).@"enum";
-    var pe_names: [1024][]const u8 = undefined;
-    var pe_values: [1024]u32 = undefined;
-
-    var count: usize = 0;
-
-    for (ct.fields) |value| {
-        if (count < privateEnum.len) {
-            for (privateEnum) |ee| {
-                if (@intFromEnum(ee) == value.value) {
-                    pe_names[count] = value.name;
-                    pe_values[count] = value.value;
-
-                    count += 1;
-                    break;
-                }
-            }
-            continue;
-        }
-        break;
-    }
-
-    break :blk @Enum(
-        u32,
-        .exhaustive,
-        pe_names[0..count],
-        pe_values[0..count],
-    );
-};
-
-pub const PublicCommandType: type = blk: {
-    const ct = @typeInfo(CommandType).@"enum";
-    var pe_names: [1024][]const u8 = undefined;
-    var pe_values: [1024]u32 = undefined;
-
-    var count: usize = 0;
-    var i: usize = 0;
-
-    a: for (ct.fields) |value| {
-        if (count < privateEnum.len) {
-            for (privateEnum) |ee| {
-                if (@intFromEnum(ee) == value.value) {
-                    count += 1;
-                    continue :a;
-                }
-            }
-        }
-
-        pe_names[i] = value.name;
-        pe_values[i] = value.value;
-        i += 1;
-    }
-
-    break :blk @Enum(
-        u32,
-        .exhaustive,
-        pe_names[0..i],
-        pe_values[0..i],
-    );
-};
-
-pub fn PublicCommandTypeToCommandType(a: PublicCommandType) CommandType {
-    return @enumFromInt(@intFromEnum(a));
-}
-
-pub fn PrivateCommandTypeToCommandType(a: PrivateCommandType) CommandType {
-    return @enumFromInt(@intFromEnum(a));
-}
 
 pub const TransLayout = struct {
     // pTexture: texture.Texture_t,
@@ -286,6 +218,10 @@ pub const Draw2D = struct {
     pushConstants: []PushConstantPack,
 };
 
+pub const Draw2DRecord = struct {
+    offsets: []texture.Offsets,
+};
+
 pub const CopyBuffer = struct {
     srcBuffer: VkStruct.Buffer_t,
     dstBuffer: VkStruct.Buffer_t,
@@ -341,6 +277,10 @@ pub const Present = struct {
     pTextures: []texture.Texture_t,
 };
 
+pub const PresentRecord = struct {
+    empty: void,
+};
+
 pub const PushConstant = struct {
     layout: vk.VkPipelineLayout,
     stageFlags: vk.VkShaderStageFlags,
@@ -355,7 +295,27 @@ pub const DrawMesh = struct {
     descriptorSets: []vk.VkDescriptorSet,
     pTextures: []texture.Texture_t,
     usedBuffers: []VkStruct.Buffer_t,
+    pushConstants: []PushConstantPack,
     meshletCount: u32,
+};
+
+pub const DrawMeshRecord = struct {
+    meshletCount: u32,
+};
+
+pub const DrawIndirect = struct {
+    pipeline: VkStruct.Pipeline_t,
+    rendering: rendering.RenderingInfo_t,
+    descriptorSets: []vk.VkDescriptorSet,
+    pTextures: []texture.Texture_t,
+    usedBuffers: []VkStruct.Buffer_t,
+    indirectBuffer: VkStruct.Buffer_t,
+    pushConstants: []PushConstantPack,
+};
+
+pub const DrawIndirectRecord = struct {
+    buffer: vk.VkBuffer,
+    offset: vk.VkDeviceSize,
 };
 
 // pub const Output = union {
@@ -368,6 +328,7 @@ pub const BufferUsage = enum {
     none,
     vertex,
     index,
+    indirect,
     uniform,
     // transfer,
     storage,
@@ -382,4 +343,4 @@ pub const BufferUsage = enum {
 
 // timestamp: i96,
 ID: u32,
-command: comm,
+command: comm2,

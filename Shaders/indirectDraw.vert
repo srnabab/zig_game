@@ -1,6 +1,6 @@
 #version 460
 
-// #extension GL_EXT_scalar_block_layout : require
+#extension GL_EXT_scalar_block_layout : require
 #extension GL_EXT_buffer_reference : require
 
 struct Instance {
@@ -9,7 +9,7 @@ struct Instance {
     uint textureIndex;
 };
 
-layout(buffer_reference) readonly buffer InstanceBuffer {
+layout(buffer_reference, scalar) readonly buffer InstanceBuffer {
     Instance instances[]; 
 };
 

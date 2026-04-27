@@ -17,7 +17,7 @@ const hash = std.hash;
 
 const Self = @This();
 
-const Offsets = struct {
+pub const Offsets = struct {
     offset: u32,
     count: u32,
 };

@@ -85,6 +85,9 @@ const list = [_]KV{
 .{ "tileSet1.tsd", 77 },
 .{ "empty.frag.spv", 78 },
 .{ "direct.frag.spv", 79 },
+.{ "indirectDraw.vert.spv", 80 },
+.{ "indirectDraw.frag.spv", 81 },
+.{ "indirectDraw.pipeb", 82 },
 };
 
 break: map std.StaticStringMap(i32).initComptime(list);

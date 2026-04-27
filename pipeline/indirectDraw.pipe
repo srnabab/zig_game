@@ -1,5 +1,5 @@
 {
-  "Name": "flat2d",
+  "Name": "indirectDraw",
   "PipelineType": "Graphics",
   "Shaders": [
     "indirectDraw.vert.spv",

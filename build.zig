@@ -329,6 +329,7 @@ pub fn build(b: *std.Build) void {
     vertices_mod.addImport("global", global_mod);
     vertices_mod.addImport("video", video_mod);
     vertices_mod.addImport("cglm", cglm_mod);
+    vertices_mod.addImport("textureSet", textureSet_mod);
     vertices_mod.addImport("processRender", processRender_mod);
 
     objectPool_mod.addImport("tracy", tracy.module("tracy"));
