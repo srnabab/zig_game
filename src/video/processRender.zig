@@ -310,7 +310,7 @@ fn SpecialThreadPool(maxThreads: u32) type {
             for (0..self.threads.len) |i| {
                 var end = drawC{
                     .ID = 1234124142,
-                    .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
+                    // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                     .command = .{ .end = void{} },
                 };
                 var emptyQueueNode: QueueNode = .{
@@ -962,7 +962,7 @@ pub const commands = struct {
         const ptr = try self.queue.getOrPut(node.ID);
         ptr.value_ptr.* = drawC{
             .ID = node.ID,
-            .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
+            // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
             .command = .{ .start = .{} },
         };
     }
@@ -1329,7 +1329,7 @@ pub const commands = struct {
                 const ptr = try self.queue.getOrPut(rootNode.ID);
                 ptr.value_ptr.* = drawC{
                     .ID = rootNode.ID,
-                    .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
+                    // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                     .command = .{ .pushconstant = command.pushconstant },
                 };
                 rootNode.listID = self.nodeDag.currentListID;
@@ -1403,7 +1403,7 @@ pub const commands = struct {
                             const ptr = try self.queue.getOrPut(node.ID);
                             ptr.value_ptr.* = drawC{
                                 .ID = node.ID,
-                                .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
+                                // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                                 .command = .{
                                     .pipelineBarrier = .{
                                         .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
@@ -1484,7 +1484,7 @@ pub const commands = struct {
                             const ptr = try self.queue.getOrPut(node.ID);
                             ptr.value_ptr.* = drawC{
                                 .ID = node.ID,
-                                .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
+                                // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                                 .command = .{
                                     .pipelineBarrier = .{
                                         .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
@@ -1567,7 +1567,7 @@ pub const commands = struct {
                             const ptr = try self.queue.getOrPut(node.ID);
                             ptr.value_ptr.* = drawC{
                                 .ID = node.ID,
-                                .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
+                                // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                                 .command = .{
                                     .pipelineBarrier = .{
                                         .lastSrcStageMask = flags.sourceStage,
@@ -1655,7 +1655,7 @@ pub const commands = struct {
                         const ptr = try self.queue.getOrPut(node.ID);
                         ptr.value_ptr.* = drawC{
                             .ID = node.ID,
-                            .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
+                            // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                             .command = .{
                                 .pipelineBarrier = .{
                                     .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
@@ -1729,7 +1729,7 @@ pub const commands = struct {
                         const ptr = try self.queue.getOrPut(node.ID);
                         ptr.value_ptr.* = drawC{
                             .ID = node.ID,
-                            .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
+                            // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                             .command = .{
                                 .pipelineBarrier = .{
                                     .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
@@ -1782,7 +1782,7 @@ pub const commands = struct {
                 const ptr = try self.queue.getOrPut(rootNode.ID);
                 ptr.value_ptr.* = drawC{
                     .ID = rootNode.ID,
-                    .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
+                    // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                     .command = .{ .beginRendering = command.beginRendering },
                 };
                 rootNode.listID = self.nodeDag.currentListID;
@@ -1800,7 +1800,7 @@ pub const commands = struct {
                 const ptr = try self.queue.getOrPut(rootNode.ID);
                 ptr.value_ptr.* = drawC{
                     .ID = rootNode.ID,
-                    .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
+                    // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                     .command = .{ .bindPipeline = bindPipeline },
                 };
                 rootNode.listID = self.nodeDag.currentListID;
@@ -1818,7 +1818,7 @@ pub const commands = struct {
                 const ptr = try self.queue.getOrPut(rootNode.ID);
                 ptr.value_ptr.* = drawC{
                     .ID = rootNode.ID,
-                    .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
+                    // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                     .command = .{ .bindIndexBuffer = bindIndexBuffer },
                 };
                 rootNode.listID = self.nodeDag.currentListID;
@@ -1836,7 +1836,7 @@ pub const commands = struct {
                 const ptr = try self.queue.getOrPut(rootNode.ID);
                 ptr.value_ptr.* = drawC{
                     .ID = rootNode.ID,
-                    .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
+                    // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                     .command = .{ .bindVertexBuffers = bindVertexBuffers },
                 };
                 rootNode.listID = self.nodeDag.currentListID;
@@ -1854,7 +1854,7 @@ pub const commands = struct {
                 const ptr = try self.queue.getOrPut(rootNode.ID);
                 ptr.value_ptr.* = drawC{
                     .ID = rootNode.ID,
-                    .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
+                    // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                     .command = .{ .bindDescriptorSets = bindDescriptorSets },
                 };
                 rootNode.listID = self.nodeDag.currentListID;
@@ -1870,7 +1870,7 @@ pub const commands = struct {
                 const ptr = try self.queue.getOrPut(rootNode.ID);
                 ptr.value_ptr.* = drawC{
                     .ID = rootNode.ID,
-                    .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
+                    // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                     .command = .{ .endRendering = void{} },
                 };
                 rootNode.listID = self.nodeDag.currentListID;
@@ -1886,7 +1886,7 @@ pub const commands = struct {
                 const ptr = try self.queue.getOrPut(rootNode.ID);
                 ptr.value_ptr.* = drawC{
                     .ID = rootNode.ID,
-                    .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
+                    // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                     .command = .{ .setScissor = command.setScissor },
                 };
                 rootNode.listID = self.nodeDag.currentListID;
@@ -1902,7 +1902,7 @@ pub const commands = struct {
                 const ptr = try self.queue.getOrPut(rootNode.ID);
                 ptr.value_ptr.* = drawC{
                     .ID = rootNode.ID,
-                    .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
+                    // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                     .command = .{ .setViewport = command.setViewport },
                 };
                 rootNode.listID = self.nodeDag.currentListID;
@@ -2551,8 +2551,9 @@ pub const commands = struct {
         pViewport: ?VkStruct.Viewport_t,
         pScissor: ?VkStruct.Scissor_t,
         pipeline: VkStruct.Pipeline_t,
-        pushConstants: ?*QueueNode,
+        pushConstants: ?[]drawC.PushConstantPack,
         commandType: drawC.CommandType,
+        allocator: std.mem.Allocator,
     ) !twoQueueNode {
         const vertexBufferLen = if (vertexBuffers != null) vertexBuffers.?.len else 0;
         const descriptorsetLen = if (pDescriptorSets != null) pDescriptorSets.?.len else 0;
@@ -2813,15 +2814,27 @@ pub const commands = struct {
             }
         }
 
-        if (pushConstants) |pNode| {
-            if (linkNodeEnd == null) {
-                linkNodeEnd = pNode;
-                linkNodeStart = linkNodeEnd;
-            } else {
-                try linkNodeEnd.?.parentsAppend(&pNode.ID);
-                try pNode.childrenAppend(&linkNodeEnd.?.ID);
+        if (pushConstants) |pushs| {
+            for (pushs) |value| {
+                const pushConstantMem = try allocator.alloc(u8, value.size);
+                @memcpy(pushConstantMem, @as([*]u8, @ptrCast(@alignCast(value.pValues)))[0..pushConstantMem.len]);
+                const pushConstantNode = try self.addCommand2(.{ .pushconstant = .{
+                    .layout = self.vulkan.getPipelineContent(pipeline).pipelineLayout,
+                    .stageFlags = value.stageFlag,
+                    .offset = value.offset,
+                    .size = value.size,
+                    .pValues = pushConstantMem,
+                } }, commandType);
 
-                linkNodeEnd = pNode;
+                if (linkNodeEnd == null) {
+                    linkNodeEnd = pushConstantNode.a;
+                    linkNodeStart = linkNodeEnd;
+                } else {
+                    try linkNodeEnd.?.parentsAppend(&pushConstantNode.a.?.ID);
+                    try pushConstantNode.a.?.childrenAppend(&linkNodeEnd.?.ID);
+
+                    linkNodeEnd = pushConstantNode.a.?;
+                }
             }
         }
 
@@ -2934,7 +2947,7 @@ pub const commands = struct {
 
         ptr.value_ptr.* = drawC{
             .ID = ID,
-            .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
+            // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
             .command = command,
         };
 
@@ -3003,20 +3016,19 @@ pub const commands = struct {
 
                 try self.cacheAttachementImageView(drawMesh.rendering, node, &needToCacheArray);
 
-                const pipelineContent = self.vulkan.getPipelineContent(drawMesh.pipeline);
-                const texIndex = try self.pTextureSet.getDescriptorSetIndex(drawMesh.pTextures[0]);
-                const texIndexSlice = std.mem.asBytes(&texIndex);
+                // const pipelineContent = self.vulkan.getPipelineContent(drawMesh.pipeline);
+                var texIndex = self.pTextureSet.getDescriptorSetIndex(drawMesh.pTextures[0]);
+
                 // std.log.debug("tex idx {d}", .{texIndex});
 
-                const texIndex_u8 = try allocator.dupe(u8, @alignCast(texIndexSlice));
-
-                const pushConstantNode = try self.addCommand2(.{ .pushconstant = .{
-                    .layout = pipelineContent.pipelineLayout,
-                    .stageFlags = vk.VK_SHADER_STAGE_FRAGMENT_BIT,
-                    .offset = 0,
-                    .size = @sizeOf(u32),
-                    .pValues = texIndex_u8,
-                } }, std.meta.activeTag(command));
+                var pushConstants = [_]drawC.PushConstantPack{
+                    .{
+                        .stageFlag = vk.VK_SHADER_STAGE_FRAGMENT_BIT,
+                        .size = @sizeOf(u32),
+                        .pValues = @ptrCast(&texIndex),
+                        .offset = 8,
+                    },
+                };
 
                 const linkNode = try self.resPackNodeProcess(
                     resPack,
@@ -3026,8 +3038,9 @@ pub const commands = struct {
                     self.pViewport,
                     self.pScissor,
                     drawMesh.pipeline,
-                    pushConstantNode.a.?,
+                    &pushConstants,
                     std.meta.activeTag(command),
+                    allocator,
                 );
 
                 try lastNodeLinkNodeRenderingNodeConnect(lastNode, linkNode, node, renderingNode);
@@ -3118,6 +3131,7 @@ pub const commands = struct {
                     present.pipeline,
                     null,
                     std.meta.activeTag(command),
+                    allocator,
                 );
 
                 try lastNodeLinkNodeRenderingNodeConnect(lastNode, linkNode, node, renderingNode);
@@ -3147,20 +3161,13 @@ pub const commands = struct {
 
                 var renderingNode: ?*QueueNode = null;
 
-                var buffers = try allocator.alloc(
-                    VkStruct.Buffer_t,
-                    draw2D.vertexBuffer.len + 1,
-                );
-                for (draw2D.vertexBuffer, 0..) |buffer, i| {
-                    buffers[i] = buffer;
-                }
-                buffers[draw2D.vertexBuffer.len] = draw2D.indexBuffer;
+                var buffers = [_]VkStruct.Buffer_t{draw2D.indexBuffer};
 
                 var textures = [_]texture.Texture_t{draw2D.pTexture};
 
                 try self.renderingResourcePreProcess(
                     draw2D.rendering,
-                    buffers,
+                    &buffers,
                     &textures,
                     &currentNode,
                     &renderingNode,
@@ -3193,7 +3200,7 @@ pub const commands = struct {
                 var lastNode: ?*QueueNode = null;
                 const resPack = try self.getRenderingResPack(
                     draw2D.rendering,
-                    draw2D.vertexBuffer,
+                    null,
                     draw2D.indexBuffer,
                     draw2D.descriptorSets,
                     self.pViewport,
@@ -3206,30 +3213,29 @@ pub const commands = struct {
 
                 try self.cacheAttachementImageView(draw2D.rendering, node, &needToCacheArray);
 
-                const pipelineContent = self.vulkan.getPipelineContent(draw2D.pipeline);
-                const texIndex = try self.pTextureSet.getDescriptorSetIndex(draw2D.pTexture);
-                const texIndexSlice = std.mem.asBytes(&texIndex);
+                // const pipelineContent = self.vulkan.getPipelineContent(draw2D.pipeline);
 
-                const texIndex_u8 = try allocator.dupe(u8, @alignCast(texIndexSlice));
-
-                const pushConstantNode = try self.addCommand2(.{ .pushconstant = .{
-                    .layout = pipelineContent.pipelineLayout,
-                    .stageFlags = vk.VK_SHADER_STAGE_FRAGMENT_BIT,
-                    .offset = 0,
-                    .size = @sizeOf(u32),
-                    .pValues = texIndex_u8,
-                } }, std.meta.activeTag(command));
+                // const pushConstantMem = try allocator.alloc(u8, draw2D.pushConstantSize);
+                // @memcpy(pushConstantMem, @as([*]u8, @ptrCast(@alignCast(draw2D.pPushConstantValue)))[0..pushConstantMem.len]);
+                // const pushConstantNode = try self.addCommand2(.{ .pushconstant = .{
+                //     .layout = pipelineContent.pipelineLayout,
+                //     .stageFlags = vk.VK_SHADER_STAGE_FRAGMENT_BIT,
+                //     .offset = 0,
+                //     .size = draw2D.pushConstantSize,
+                //     .pValues = pushConstantMem,
+                // } }, std.meta.activeTag(command));
 
                 const linkNode = try self.resPackNodeProcess(
                     resPack,
-                    draw2D.vertexBuffer,
+                    null,
                     draw2D.indexBuffer,
                     draw2D.descriptorSets,
                     self.pViewport,
                     self.pScissor,
                     draw2D.pipeline,
-                    pushConstantNode.a,
+                    draw2D.pushConstants,
                     std.meta.activeTag(command),
+                    allocator,
                 );
 
                 // std.log.debug("linkNode end {d} {s} ", .{

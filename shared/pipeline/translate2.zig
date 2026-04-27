@@ -28,7 +28,7 @@ pub const PipelineShaderInfo = struct {
     bindingCount: u32,
     bindings: ?[]binding,
     pushConstantSize: u64,
-    pushConstants: ?PushConstants,
+    // pushConstants: ?PushConstants,
     outputCount: u32,
     outputs: ?[]reflect.input,
 
@@ -135,16 +135,16 @@ fn getPipelineShaderInfos(io: std.Io, shaders: [5][]const u8, count: u32, shader
                 .shaderCode = content,
                 .outputCount = if (frag) res.outputCount else 0,
                 .outputs = if (frag) try allocator.dupe(reflect.input, res.outputs.?) else null,
-                .pushConstants = if (res.pushConstantSize > 0) blk: {
-                    break :blk PushConstants{
-                        .stage = res.stage,
-                        .pushConstantName = undefined,
-                        .pushConstantMembers = res.pushConstantMembers.?,
-                    };
-                } else null,
+                // .pushConstants = if (res.pushConstantSize > 0) blk: {
+                //     break :blk PushConstants{
+                //         .stage = res.stage,
+                //         .pushConstantName = undefined,
+                //         .pushConstantMembers = res.pushConstantMembers.?,
+                //     };
+                // } else null,
             };
 
-            if (infos[i].pushConstants) |_| @memcpy(&infos[i].pushConstants.?.pushConstantName, &res.pushConstantName);
+            // if (infos[i].pushConstants) |_| @memcpy(&infos[i].pushConstants.?.pushConstantName, &res.pushConstantName);
             @memcpy(&infos[i].entryName, &res.name);
         }
     }
@@ -227,7 +227,7 @@ fn createPipelineLayout(pipeRes: *VulkanPipelineInfo) !void {
 pub fn toVulkan2(io: std.Io, info: *pipeline.pipelineInfo, shaderFolder: []const u8, allocator: std.mem.Allocator) !struct {
     info: *VulkanPipelineInfo,
     shaderCodes: [][]u8,
-    pushConstantInfo: ?[]PushConstants,
+    // pushConstantInfo: ?[]PushConstants,
 } {
     var res = try allocator.create(VulkanPipelineInfo);
     errdefer allocator.destroy(res);
@@ -268,29 +268,29 @@ pub fn toVulkan2(io: std.Io, info: *pipeline.pipelineInfo, shaderFolder: []const
     }
     // std.log.debug("point 4", .{});
 
-    const pushconstantCount = sc: {
-        var count: u32 = 0;
-        for (shaderInfos) |value| {
-            if (value.pushConstants) |_| {
-                count += 1;
-                // std.log.debug("var type {}", .{value.pushConstants.?.pushConstantMembers[0].varType});
-            }
-        }
-        break :sc count;
-    };
-    var pushConstantInfos: ?[]PushConstants = null;
+    // const pushconstantCount = sc: {
+    //     var count: u32 = 0;
+    //     for (shaderInfos) |value| {
+    //         if (value.pushConstantSize > 0) {
+    //             count += 1;
+    //             // std.log.debug("var type {}", .{value.pushConstants.?.pushConstantMembers[0].varType});
+    //         }
+    //     }
+    //     break :sc count;
+    // };
+    // var pushConstantInfos: ?[]PushConstants = null;
 
-    if (pushconstantCount > 0) {
-        pushConstantInfos = try allocator.alloc(PushConstants, pushconstantCount);
-        var pushConstantInfoCount: u32 = 0;
+    // if (pushconstantCount > 0) {
+    // pushConstantInfos = try allocator.alloc(PushConstants, pushconstantCount);
+    // var pushConstantInfoCount: u32 = 0;
 
-        for (shaderInfos) |value| {
-            if (value.pushConstants) |pushConstant| {
-                pushConstantInfos.?[pushConstantInfoCount] = pushConstant;
-                pushConstantInfoCount += 1;
-            }
-        }
-    }
+    // for (shaderInfos) |value| {
+    // if (value.pushConstants) |pushConstant| {
+    // pushConstantInfos.?[pushConstantInfoCount] = pushConstant;
+    // pushConstantInfoCount += 1;
+    // }
+    // }
+    // }
 
     var codes = try allocator.alloc([]u8, info.shaderCount);
     for (0..codes.len) |i| {
@@ -334,6 +334,6 @@ pub fn toVulkan2(io: std.Io, info: *pipeline.pipelineInfo, shaderFolder: []const
     return .{
         .info = res,
         .shaderCodes = codes,
-        .pushConstantInfo = pushConstantInfos,
+        // .pushConstantInfo = pushConstantInfos,
     };
 }

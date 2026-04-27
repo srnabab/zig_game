@@ -1633,3 +1633,12 @@ pub fn logBufferPtr(self: *Self) void {
         }
     }
 }
+
+pub fn getBufferAddress(self: *Self, buffer: vk.VkBuffer) u64 {
+    var info = vk.VkBufferDeviceAddressInfo{
+        .sType = vk.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+        .pNext = null,
+        .buffer = buffer,
+    };
+    return vk.vkGetBufferDeviceAddress(self.device, &info);
+}

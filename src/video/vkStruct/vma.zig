@@ -48,7 +48,7 @@ pub fn createVmaAllocator(physicalDevice: vk.VkPhysicalDevice, device: vk.VkDevi
     var allocator: vma.VmaAllocator = null;
 
     var allocatorCreateInfo = vma.VmaAllocatorCreateInfo{
-        .flags = 0,
+        .flags = vma.VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT,
         .physicalDevice = @ptrCast(@alignCast(physicalDevice)),
         .device = @ptrCast(device),
         .pAllocationCallbacks = @ptrCast(pAllocCallBacks),

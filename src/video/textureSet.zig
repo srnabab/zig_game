@@ -358,13 +358,13 @@ fn acquireDescriptorSetIndex(self: *Self, ID: u32) !u32 {
     return self.descriptorSetIndex;
 }
 
-pub fn getDescriptorSetIndex(self: *Self, texture: Texture_t) !u32 {
+pub fn getDescriptorSetIndex(self: *Self, texture: Texture_t) u32 {
     const ID = self.getTextureCotent(texture).ID;
 
     self.mutex.lock(self.io) catch unreachable;
     defer self.mutex.unlock(self.io);
 
-    const index = self.descriptorSetIndices.get(ID) orelse return error.not_found;
+    const index = self.descriptorSetIndices.get(ID) orelse return 0;
 
     return index;
 }

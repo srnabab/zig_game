@@ -14,12 +14,12 @@ pub fn pipelineJsonParse(io: std.Io, pipelineContent: []const u8, shaderFolder: 
             gpa.free(value);
         }
         gpa.free(res.shaderCodes);
-        if (res.pushConstantInfo) |_| {
-            for (res.pushConstantInfo.?) |value| {
-                gpa.free(value.pushConstantMembers);
-            }
-            gpa.free(res.pushConstantInfo.?);
-        }
+        // if (res.pushConstantInfo) |_| {
+        //     for (res.pushConstantInfo.?) |value| {
+        //         gpa.free(value.pushConstantMembers);
+        //     }
+        //     gpa.free(res.pushConstantInfo.?);
+        // }
     }
 
     var outputFile = try std.Io.Dir.createFileAbsolute(

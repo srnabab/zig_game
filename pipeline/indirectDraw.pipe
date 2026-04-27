@@ -2,8 +2,8 @@
   "Name": "flat2d",
   "PipelineType": "Graphics",
   "Shaders": [
-    "flat2d.vert.spv",
-    "flat2d.frag.spv"
+    "indirectDraw.vert.spv",
+    "indirectDraw.frag.spv"
   ],
   "VersionCount": 0,
   "VertexInput": {},

@@ -72,6 +72,7 @@ const featureMeshShaderNeed = [_][]const u8{ "meshShader", "taskShader" };
 const feature8BitStorageNeed = [_][]const u8{"storageBuffer8BitAccess"};
 const featureMaintenance4Need = [_][]const u8{"maintenance4"};
 const featureScalarBlockLayoutNeed = [_][]const u8{"scalarBlockLayout"};
+const featureBufferDeviceAddressNeed = [_][]const u8{"bufferDeviceAddress"};
 
 const typeNames = struct {
     featureType: type,
@@ -89,6 +90,7 @@ const featureTypeAndNames = [_]typeNames{
     .{ .featureType = vk.VkPhysicalDevice8BitStorageFeatures, .names = &feature8BitStorageNeed },
     .{ .featureType = vk.VkPhysicalDeviceMaintenance4Features, .names = &featureMaintenance4Need },
     .{ .featureType = vk.VkPhysicalDeviceScalarBlockLayoutFeatures, .names = &featureScalarBlockLayoutNeed },
+    .{ .featureType = vk.VkPhysicalDeviceBufferDeviceAddressFeatures, .names = &featureBufferDeviceAddressNeed },
 };
 
 const VkQueueFamily = types.VkQueueFamily;
@@ -154,75 +156,6 @@ const Features: type = t: {
     );
 };
 
-// fn getVkStructType(sType: type) []const u8 {
-//     comptime {
-//         @setEvalBranchQuota(100000);
-//         const KeywordList = [_][]const u8{
-//             "Vk",
-//             "Physical",
-//             "Device",
-//             "Features",
-//             "2",
-//             "Descriptor",
-//             "Indexing",
-//             "Timeline",
-//             "Semaphore",
-//             "Dynamic",
-//             "Rendering",
-//             "Synchronization",
-//             "Maintenance",
-//             "3",
-//             "4",
-//             "5",
-//             "Robustness",
-//             "Mesh",
-//             "Shader",
-//             "8Bit",
-//             "Storage",
-//             "EXT",
-//         };
-//         const Head = "VK_STRUCTURE_TYPE_";
-
-//         var name = @typeName(sType);
-
-//         const index_vk = std.mem.indexOf(u8, name, "Vk");
-//         var pureName = name[index_vk.?..];
-
-//         var StructTypeName = [_]u8{0} ** 512;
-//         @memcpy(StructTypeName[0..Head.len], Head);
-
-//         var name_cur = index_vk.?;
-//         var sName_cur = Head.len;
-
-//         while (name_cur < pureName.len) {
-//             for (KeywordList) |keyword| {
-//                 if (std.mem.indexOf(u8, pureName[name_cur..], keyword)) |sIdx| {
-//                     if (sIdx == name_cur) {
-//                         var upperBuffer = [_]u8{0} ** 64;
-//                         for (keyword, 0..) |value, i| {
-//                             upperBuffer[i] = std.ascii.toUpper(value);
-//                         }
-
-//                         @memcpy(StructTypeName[sName_cur .. sName_cur + keyword.len], upperBuffer[0..keyword.len]);
-//                         name_cur += keyword.len;
-//                         sName_cur += keyword.len;
-
-//                         StructTypeName[sName_cur] = '_';
-//                         sName_cur += 1;
-
-//                         break;
-//                     }
-//                 }
-//             }
-//         }
-
-//         StructTypeName[sName_cur] = 0;
-//         sName_cur -= 1;
-
-//         return StructTypeName[0..sName_cur];
-//     }
-// }
-
 fn getSType(comptime T: type) vk.VkStructureType {
     return switch (T) {
         vk.VkPhysicalDeviceFeatures => vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES,
@@ -237,6 +170,7 @@ fn getSType(comptime T: type) vk.VkStructureType {
         vk.VkPhysicalDeviceFeatures2 => vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
         vk.VkPhysicalDeviceMaintenance4Features => vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES,
         vk.VkPhysicalDeviceScalarBlockLayoutFeatures => vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES,
+        vk.VkPhysicalDeviceBufferDeviceAddressFeatures => vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES,
         // ... 在这里添加新类型的映射
         else => @compileError(std.fmt.comptimePrint("Unsupported feature type {s}", .{@typeName(T)})),
     };

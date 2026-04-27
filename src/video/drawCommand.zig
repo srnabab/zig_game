@@ -269,6 +269,13 @@ pub const PipelineBarrier = struct {
     barriers: []Barrier,
 };
 
+pub const PushConstantPack = struct {
+    stageFlag: vk.VkShaderStageFlags,
+    size: u16,
+    offset: u16,
+    pValues: *anyopaque,
+};
+
 pub const Draw2D = struct {
     pipeline: VkStruct.Pipeline_t,
     rendering: rendering.RenderingInfo_t,
@@ -276,6 +283,7 @@ pub const Draw2D = struct {
     indexBuffer: VkStruct.Buffer_t,
     descriptorSets: []vk.VkDescriptorSet,
     pTexture: texture.Texture_t,
+    pushConstants: []PushConstantPack,
 };
 
 pub const CopyBuffer = struct {
@@ -372,6 +380,6 @@ pub const BufferUsage = enum {
 //     shader,
 // };
 
-timestamp: i96,
+// timestamp: i96,
 ID: u32,
 command: comm,

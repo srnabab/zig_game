@@ -7,8 +7,9 @@ const tracy = @import("tracy");
 
 const VkStruct = @import("video");
 const vk = VkStruct.vk;
-const OneTimeCommand = @import("processRender").oneTimeCommand;
-const Commands = @import("processRender").commands;
+const processRender = @import("processRender");
+const OneTimeCommand = processRender.oneTimeCommand;
+const Commands = processRender.commands;
 const textureSet = @import("textureSet");
 const rendering = @import("rendering");
 const vertices = @import("vertices");
@@ -388,7 +389,7 @@ pub fn render_thread_func(
         ssbo_test,
     };
 
-    global.stopNodeDagPrint = false;
+    // global.stopNodeDagPrint = false;
     // global.stopNodeDagDetailPrint = false;
     // global.stopExecuteNodePrint = false;
     global.game_end.store(1, .seq_cst);
@@ -397,6 +398,25 @@ pub fn render_thread_func(
     commands.setScissor(scissor_test);
 
     const renderStart = std.Io.Timestamp.now(io, .real).toNanoseconds();
+
+    const circleTexture = pTextureSet.getTexture(@intCast(file.getID("circle.png"))).?;
+    var circleIndex = pTextureSet.getDescriptorSetIndex(circleTexture);
+    var vertexBufferAddress = vulkan.getBufferAddress(vulkan.buffers.getVkBuffer(vertices.vertexBuffer2D));
+
+    var draw2dPushConstants = [_]processRender.drawC.PushConstantPack{
+        .{
+            .pValues = &vertexBufferAddress,
+            .size = @sizeOf(u64),
+            .offset = 0,
+            .stageFlag = vk.VK_SHADER_STAGE_VERTEX_BIT,
+        },
+        .{
+            .pValues = &circleIndex,
+            .size = @sizeOf(u32),
+            .offset = @sizeOf(u64),
+            .stageFlag = vk.VK_SHADER_STAGE_FRAGMENT_BIT,
+        },
+    };
 
     while (true) {
         const frame = vulkan.totalFrame.load(.seq_cst);
@@ -416,11 +436,12 @@ pub fn render_thread_func(
         try commands.addCachedCommand();
         try commands.addCommand(.draw2D, .{ .draw2D = .{
             .pipeline = vulkan.getPipeline("flat2d").?,
-            .pTexture = pTextureSet.getTexture(@intCast(file.getID("circle.png"))).?,
+            .pTexture = circleTexture,
             .rendering = rendering_test,
             .vertexBuffer = &testBuffers,
             .indexBuffer = vertices.indexBuffer2D,
             .descriptorSets = &testDescriptorSets,
+            .pushConstants = &draw2dPushConstants,
         } });
         try commands.addCommand(.drawMesh, .{ .drawMesh = .{
             .pipeline = vulkan.getPipeline("model").?,

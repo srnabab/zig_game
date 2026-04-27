@@ -128,6 +128,7 @@ pub fn reflect(allocator: std.mem.Allocator, content: []const u8) !shaderInfo {
         res.pushConstantMemberCount = pushconstants[0].*.type_description.*.member_count;
 
         res.pushConstantMembers = try allocator.alloc(pushConstantMember, res.pushConstantMemberCount);
+        defer allocator.free(res.pushConstantMembers.?);
         for (0..res.pushConstantMemberCount) |j| {
             @memset(&res.pushConstantMembers.?[j].name, 0);
             const nameLen2 = std.mem.len(pushconstants[0].*.type_description.*.members[j].struct_member_name);
@@ -158,7 +159,8 @@ pub fn reflect(allocator: std.mem.Allocator, content: []const u8) !shaderInfo {
             } else if (pushconstants[0].*.type_description.*.members[j].type_flags == s.SPV_REFLECT_TYPE_FLAG_INT) {
                 res.pushConstantMembers.?[j].varType = pushConstantMemberType.int;
             } else {
-                std.debug.panic("not supported type", .{});
+                // std.debug.panic("not supported type {d}", .{pushconstants[0].*.type_description.*.members[j].type_flags});
+                res.pushConstantMembers.?[j].varType = pushConstantMemberType.mat4;
             }
             // std.log.debug("var type {}", .{res.pushConstantMembers.?[j].varType});
         }
