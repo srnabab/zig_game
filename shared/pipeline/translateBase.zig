@@ -153,6 +153,20 @@ const Output = extern struct {
 pub const VulkanPipelineInfo = extern struct {
     const Self = @This();
 
+    compute: bool,
+    shaderStageCount: u32,
+
+    name: [64:0]u8 = std.mem.zeroes([64:0]u8),
+    shaderName: [5][64:0]u8 = std.mem.zeroes([5][64:0]u8),
+
+    /// need create runtime resources
+    shaderStageCreateInfo: [5]vk.VkPipelineShaderStageCreateInfo,
+    entryNames: [5][64]u8,
+    /// need create runtime resources
+    pipelineCreateInfoInfo: pipelineLayoutCreateInfo,
+    /// need create runtime resources
+    pipelineLayout: pipelineLayout,
+
     // compile time comfirmed need runtime pointer
     vertexInputInfo: VulkanVertexInputInfo,
     haveTessella: bool,
@@ -166,19 +180,8 @@ pub const VulkanPipelineInfo = extern struct {
     colorBlendInfo: VulkanColorBlendInfo,
     dynamicStateInfo: VulkanDynamicStateInfo,
     renderingInfo: vulkanRenderingInfo,
-    name: [64:0]u8 = std.mem.zeroes([64:0]u8),
-    shaderName: [5][64:0]u8 = std.mem.zeroes([5][64:0]u8),
     outputCount: u32,
-    shaderStageCount: u32,
     outputs: [10]Output,
-
-    /// need create runtime resources
-    shaderStageCreateInfo: [5]vk.VkPipelineShaderStageCreateInfo,
-    entryNames: [5][64]u8,
-    /// need create runtime resources
-    pipelineCreateInfoInfo: pipelineLayoutCreateInfo,
-    /// need create runtime resources
-    pipelineLayout: pipelineLayout,
 };
 
 pub fn createVertexInputInfo(info: *const pipeline.vertexInputState, pipeRes: *VulkanPipelineInfo) void {

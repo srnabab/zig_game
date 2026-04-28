@@ -88,6 +88,8 @@ const list = [_]KV{
 .{ "indirectDraw.vert.spv", 80 },
 .{ "indirectDraw.frag.spv", 81 },
 .{ "indirectDraw.pipeb", 82 },
+.{ "indirectDraw.comp.spv", 83 },
+.{ "indirectDrawCompute.pipeb", 84 },
 };
 
 break: map std.StaticStringMap(i32).initComptime(list);

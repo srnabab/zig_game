@@ -191,6 +191,7 @@ pub const Out = struct {
 };
 
 pub const Pipeline = struct {
+    compute: bool = false,
     setCount: u32,
     vertexBindingCount: u32,
     pipelineLayout: vk.VkPipelineLayout,
@@ -219,6 +220,7 @@ const descriptorSetsType = enum {
     present,
     draw,
     meshDraw,
+    compute,
 };
 
 const AllocationCount = struct {
@@ -294,6 +296,10 @@ pipelineCache: vk.VkPipelineCache = null,
 graphicPipelineCreateInfo: [10]vk.VkGraphicsPipelineCreateInfo = undefined,
 preGraphicInfoPtrs: [10]VulkanPipelineInfo = undefined,
 graphicInfoCount: u32 = 0,
+
+computePipelineCreateInfo: [10]vk.VkComputePipelineCreateInfo = undefined,
+preComputeicInfoPtrs: [10]VulkanPipelineInfo = undefined,
+computeInfoCount: u32 = 0,
 
 pipelineMap: std.StringHashMap(Pipeline_t),
 pipelines: std.array_list.Managed(Pipeline),
@@ -916,68 +922,87 @@ pub fn addPipelineCreateInfo(self: *Self, info: *VulkanPipelineInfo) !void {
     const zone = tracy.initZone(@src(), .{ .name = "add pipeline create info" });
     defer zone.deinit();
 
-    if (self.graphicInfoCount > self.graphicPipelineCreateInfo.len) {
-        return error.OutOfCapacity;
+    if (info.compute) {
+        if (self.computeInfoCount > self.computePipelineCreateInfo.len) {
+            return error.OutOfCapacity;
+        }
+        var tempInfo = [1]VulkanPipelineInfo{info.*};
+        @memcpy(self.preComputeicInfoPtrs[self.computeInfoCount .. self.computeInfoCount + 1], tempInfo[0..1]);
+
+        self.computePipelineCreateInfo[self.computeInfoCount] = vk.VkComputePipelineCreateInfo{
+            .sType = vk.VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+            .pNext = null,
+            .flags = 0,
+            .stage = self.preComputeicInfoPtrs[self.computeInfoCount].shaderStageCreateInfo[0],
+            .layout = self.preComputeicInfoPtrs[self.computeInfoCount].pipelineLayout.layout,
+            .basePipelineHandle = null,
+            .basePipelineIndex = -1,
+        };
+        self.computeInfoCount += 1;
+    } else {
+        if (self.graphicInfoCount > self.graphicPipelineCreateInfo.len) {
+            return error.OutOfCapacity;
+        }
+        var tempInfo = [1]VulkanPipelineInfo{info.*};
+        @memcpy(self.preGraphicInfoPtrs[self.graphicInfoCount .. self.graphicInfoCount + 1], tempInfo[0..1]);
+
+        self.preGraphicInfoPtrs[self.graphicInfoCount].vertexInputInfo.createInfo.pVertexAttributeDescriptions = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].vertexInputInfo.attributes);
+        self.preGraphicInfoPtrs[self.graphicInfoCount].vertexInputInfo.createInfo.pVertexBindingDescriptions = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].vertexInputInfo.bindings);
+
+        self.preGraphicInfoPtrs[self.graphicInfoCount].viewportInfo.info.pScissors = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].viewportInfo.scissors);
+        self.preGraphicInfoPtrs[self.graphicInfoCount].viewportInfo.info.pViewports = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].viewportInfo.viewports);
+
+        self.preGraphicInfoPtrs[self.graphicInfoCount].colorBlendInfo.createInfo.pAttachments = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].colorBlendInfo.attachments);
+
+        self.preGraphicInfoPtrs[self.graphicInfoCount].dynamicStateInfo.createInfo.pDynamicStates = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].dynamicStateInfo.states);
+
+        if (self.preGraphicInfoPtrs[self.graphicInfoCount].hasRendering) {
+            self.preGraphicInfoPtrs[self.graphicInfoCount].renderingInfo.info.pColorAttachmentFormats = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].renderingInfo.colorAttachment);
+        }
+
+        self.graphicPipelineCreateInfo[self.graphicInfoCount] = vk.VkGraphicsPipelineCreateInfo{
+            .sType = vk.VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+            .pNext = pn: {
+                if (self.preGraphicInfoPtrs[self.graphicInfoCount].hasRendering) {
+                    break :pn @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].renderingInfo.info);
+                }
+                break :pn null;
+            },
+            .flags = 0,
+            .basePipelineHandle = null,
+            .basePipelineIndex = -1,
+            .layout = self.preGraphicInfoPtrs[self.graphicInfoCount].pipelineLayout.layout,
+            .pColorBlendState = @ptrCast(
+                &self.preGraphicInfoPtrs[self.graphicInfoCount].colorBlendInfo.createInfo,
+            ),
+            .pDepthStencilState = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].depthStencilInfo),
+            .pDynamicState = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].dynamicStateInfo),
+            .pInputAssemblyState = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].inputAssemblyInfo),
+            .pMultisampleState = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].multisampleInfo),
+            .pRasterizationState = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].rasterizationInfo),
+            .pStages = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].shaderStageCreateInfo),
+            .pTessellationState = tn: {
+                if (self.preGraphicInfoPtrs[self.graphicInfoCount].haveTessella) {
+                    break :tn @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].tessellationInfo);
+                } else {
+                    break :tn null;
+                }
+            },
+            .pVertexInputState = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].vertexInputInfo.createInfo),
+            .pViewportState = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].viewportInfo.info),
+            .stageCount = @intCast(self.preGraphicInfoPtrs[self.graphicInfoCount].shaderStageCount),
+            .renderPass = null,
+            .subpass = 0,
+        };
+        self.graphicInfoCount += 1;
     }
-    var tempInfo = [1]VulkanPipelineInfo{info.*};
-    @memcpy(self.preGraphicInfoPtrs[self.graphicInfoCount .. self.graphicInfoCount + 1], tempInfo[0..1]);
-
-    self.preGraphicInfoPtrs[self.graphicInfoCount].vertexInputInfo.createInfo.pVertexAttributeDescriptions = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].vertexInputInfo.attributes);
-    self.preGraphicInfoPtrs[self.graphicInfoCount].vertexInputInfo.createInfo.pVertexBindingDescriptions = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].vertexInputInfo.bindings);
-
-    self.preGraphicInfoPtrs[self.graphicInfoCount].viewportInfo.info.pScissors = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].viewportInfo.scissors);
-    self.preGraphicInfoPtrs[self.graphicInfoCount].viewportInfo.info.pViewports = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].viewportInfo.viewports);
-
-    self.preGraphicInfoPtrs[self.graphicInfoCount].colorBlendInfo.createInfo.pAttachments = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].colorBlendInfo.attachments);
-
-    self.preGraphicInfoPtrs[self.graphicInfoCount].dynamicStateInfo.createInfo.pDynamicStates = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].dynamicStateInfo.states);
-
-    if (self.preGraphicInfoPtrs[self.graphicInfoCount].hasRendering) {
-        self.preGraphicInfoPtrs[self.graphicInfoCount].renderingInfo.info.pColorAttachmentFormats = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].renderingInfo.colorAttachment);
-    }
-
-    self.graphicPipelineCreateInfo[self.graphicInfoCount] = vk.VkGraphicsPipelineCreateInfo{
-        .sType = vk.VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-        .pNext = pn: {
-            if (self.preGraphicInfoPtrs[self.graphicInfoCount].hasRendering) {
-                break :pn @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].renderingInfo.info);
-            }
-            break :pn null;
-        },
-        .flags = 0,
-        .basePipelineHandle = null,
-        .basePipelineIndex = -1,
-        .layout = self.preGraphicInfoPtrs[self.graphicInfoCount].pipelineLayout.layout,
-        .pColorBlendState = @ptrCast(
-            &self.preGraphicInfoPtrs[self.graphicInfoCount].colorBlendInfo.createInfo,
-        ),
-        .pDepthStencilState = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].depthStencilInfo),
-        .pDynamicState = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].dynamicStateInfo),
-        .pInputAssemblyState = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].inputAssemblyInfo),
-        .pMultisampleState = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].multisampleInfo),
-        .pRasterizationState = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].rasterizationInfo),
-        .pStages = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].shaderStageCreateInfo),
-        .pTessellationState = tn: {
-            if (self.preGraphicInfoPtrs[self.graphicInfoCount].haveTessella) {
-                break :tn @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].tessellationInfo);
-            } else {
-                break :tn null;
-            }
-        },
-        .pVertexInputState = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].vertexInputInfo.createInfo),
-        .pViewportState = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].viewportInfo.info),
-        .stageCount = @intCast(self.preGraphicInfoPtrs[self.graphicInfoCount].shaderStageCount),
-        .renderPass = null,
-        .subpass = 0,
-    };
-    self.graphicInfoCount += 1;
 }
 
 pub fn createAllPipelinesAdded(self: *Self) !void {
     const zone = tracy.initZone(@src(), .{ .name = "create pipelines" });
     defer zone.deinit();
 
-    var temp = [_]vk.VkPipeline{null} ** 10;
+    var temp = [_]vk.VkPipeline{null} ** 20;
 
     try checkVkResult(vk.vkCreateGraphicsPipelines(
         self.device,
@@ -986,6 +1011,15 @@ pub fn createAllPipelinesAdded(self: *Self) !void {
         @ptrCast(&self.graphicPipelineCreateInfo),
         self.pAllocCallBacks,
         @ptrCast(&temp),
+    ));
+
+    try checkVkResult(vk.vkCreateComputePipelines(
+        self.device,
+        self.pipelineCache,
+        self.computeInfoCount,
+        &self.computePipelineCreateInfo,
+        self.pAllocCallBacks,
+        @ptrCast(&temp[10]),
     ));
 
     var pp: *Pipeline = undefined;
@@ -1014,6 +1048,28 @@ pub fn createAllPipelinesAdded(self: *Self) !void {
         std.log.debug("{s}", .{self.preGraphicInfoPtrs[i].name});
     }
     self.graphicInfoCount = 0;
+
+    for (0.., 10..self.computeInfoCount + 10) |i, j| {
+        pp = try self.pipelines.addOne();
+        pp.* = Pipeline{
+            .compute = true,
+            .vertexBindingCount = 0,
+            .setCount = 0,
+            .pipelineLayout = self.preComputeicInfoPtrs[i].pipelineLayout.layout,
+            .pipeline = temp[j],
+            .outputs = &.{},
+        };
+        const index = self.pipelines.items.len - 1;
+        const handle = self.handles.createHandle(@intCast(index));
+
+        const len = std.mem.len(@as([*c]u8, @ptrCast(&self.preComputeicInfoPtrs[i].name)));
+        const name = try self.allocator.alloc(u8, len);
+        @memcpy(name, self.preComputeicInfoPtrs[i].name[0..len]);
+
+        try self.pipelineMap.put(name, handle);
+        std.log.debug("{s}", .{self.preComputeicInfoPtrs[i].name});
+    }
+    self.computeInfoCount = 0;
 }
 
 pub fn destroyPipeline(self: *Self, name: []const u8) !void {
@@ -1227,7 +1283,7 @@ pub fn queueSubmit(self: *Self, io: std.Io, kind: CommandPoolType, submitCount: 
     //     return err;
     // };
 
-    std.log.debug("submit {s}", .{@tagName(kind)});
+    // std.log.debug("submit {s}", .{@tagName(kind)});
 }
 
 pub fn presentSubmit(self: *Self, io: std.Io, pPresentInfo: [*c]vk.VkPresentInfoKHR) !void {
@@ -1363,6 +1419,7 @@ pub fn readPipelineFileAndAdd(self: *Self, io: std.Io, fileID: i32, setsType: de
         .draw => break :blk @constCast(&self.drawDescriptorSetLayout),
         .meshDraw => break :blk @constCast(&self.meshDrawDescriptorSetLayout),
         .present => break :blk @constCast(&self.presentDescriptorSetLayout),
+        .compute => break :blk &.{},
     }, self);
 
     try self.addPipelineCreateInfo(pipelineInfo);

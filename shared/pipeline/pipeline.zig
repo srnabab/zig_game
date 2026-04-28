@@ -22,12 +22,12 @@ const attribute = struct {
 
 pub const vertexInputStatepNext = union {};
 pub const vertexInputState = struct {
-    pNext: ?vertexInputStatepNext,
-    flag: u32,
-    vertexBindingDescriptionCount: u32,
-    bindings: ?[]binding,
-    vertexAttributeDescriptionCount: u32,
-    attributes: ?[]attribute,
+    pNext: ?vertexInputStatepNext = null,
+    flag: u32 = 0,
+    vertexBindingDescriptionCount: u32 = 0,
+    bindings: ?[]binding = null,
+    vertexAttributeDescriptionCount: u32 = 0,
+    attributes: ?[]attribute = null,
 };
 
 pub const inputAssemblyPNext = union {}; // New union for inputAssembly
@@ -570,17 +570,21 @@ pub fn parse(content: []const u8, allocator: std.mem.Allocator) !pipelineInfo {
         parseName(jsonValue, &res);
         parsePipelineType(jsonValue, &res);
         try parseShaders(jsonValue, &res);
-        try parseVertexInput(jsonValue, &res);
-        parseInputState(jsonValue, &res);
-        parseInputAssembly(jsonValue, &res);
-        parseTessellationState(jsonValue, &res);
-        try parseViewportState(jsonValue, &res);
-        parseRasterizationState(jsonValue, &res);
-        parseMultisampleState(jsonValue, &res);
-        parseDepthStencilState(jsonValue, &res);
-        try parseColorBlendState(jsonValue, &res);
-        try parseDynamicStates(jsonValue, &res);
-        parseRendering(jsonValue, &res);
+        if (res.pipeType == .Graphics) {
+            try parseVertexInput(jsonValue, &res);
+            parseInputState(jsonValue, &res);
+            parseInputAssembly(jsonValue, &res);
+            parseTessellationState(jsonValue, &res);
+            try parseViewportState(jsonValue, &res);
+            parseRasterizationState(jsonValue, &res);
+            parseMultisampleState(jsonValue, &res);
+            parseDepthStencilState(jsonValue, &res);
+            try parseColorBlendState(jsonValue, &res);
+            try parseDynamicStates(jsonValue, &res);
+            parseRendering(jsonValue, &res);
+        } else if (res.pipeType == .Compute) {} else {
+            return error.UnknownPipelineType;
+        }
     }
 
     return res;

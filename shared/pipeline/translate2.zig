@@ -266,62 +266,41 @@ pub fn toVulkan2(io: std.Io, info: *pipeline.pipelineInfo, shaderFolder: []const
             break;
         }
     }
-    // std.log.debug("point 4", .{});
-
-    // const pushconstantCount = sc: {
-    //     var count: u32 = 0;
-    //     for (shaderInfos) |value| {
-    //         if (value.pushConstantSize > 0) {
-    //             count += 1;
-    //             // std.log.debug("var type {}", .{value.pushConstants.?.pushConstantMembers[0].varType});
-    //         }
-    //     }
-    //     break :sc count;
-    // };
-    // var pushConstantInfos: ?[]PushConstants = null;
-
-    // if (pushconstantCount > 0) {
-    // pushConstantInfos = try allocator.alloc(PushConstants, pushconstantCount);
-    // var pushConstantInfoCount: u32 = 0;
-
-    // for (shaderInfos) |value| {
-    // if (value.pushConstants) |pushConstant| {
-    // pushConstantInfos.?[pushConstantInfoCount] = pushConstant;
-    // pushConstantInfoCount += 1;
-    // }
-    // }
-    // }
 
     var codes = try allocator.alloc([]u8, info.shaderCount);
     for (0..codes.len) |i| {
         codes[i] = shaderInfos[i].shaderCode;
     }
 
+    res.compute = (info.pipeType == .Compute);
+
     try createShaderStageCreateInfo(shaderInfos, res);
     try createPipelineLayoutCreateInfo(shaderInfos, res);
     try createPipelineLayout(res);
 
-    s.createVertexInputInfo(&info.vertexInputstatee, res);
-    res.vertexInputInfo.createInfo.pVertexAttributeDescriptions = null;
-    res.vertexInputInfo.createInfo.pVertexBindingDescriptions = null;
+    if (info.pipeType == .Graphics) {
+        s.createVertexInputInfo(&info.vertexInputstatee, res);
+        res.vertexInputInfo.createInfo.pVertexAttributeDescriptions = null;
+        res.vertexInputInfo.createInfo.pVertexBindingDescriptions = null;
 
-    res.inputAssemblyInfo = s.createInputAssemblyInfo(&info.inputAssemblyy);
-    s.createTessellationInfo(info.tessellationStatee, res);
-    s.createViewportInfo(&info.viewportStatee, res);
-    res.viewportInfo.info.pScissors = null;
-    res.viewportInfo.info.pViewports = null;
+        res.inputAssemblyInfo = s.createInputAssemblyInfo(&info.inputAssemblyy);
+        s.createTessellationInfo(info.tessellationStatee, res);
+        s.createViewportInfo(&info.viewportStatee, res);
+        res.viewportInfo.info.pScissors = null;
+        res.viewportInfo.info.pViewports = null;
 
-    res.rasterizationInfo = s.createRasterizationInfo(&info.rasterizationStatee);
-    res.multisampleInfo = s.createMultisampleInfo(&info.multisampleStatee);
-    res.depthStencilInfo = s.createDepthStencilInfo(&info.depthStencilStatee);
+        res.rasterizationInfo = s.createRasterizationInfo(&info.rasterizationStatee);
+        res.multisampleInfo = s.createMultisampleInfo(&info.multisampleStatee);
+        res.depthStencilInfo = s.createDepthStencilInfo(&info.depthStencilStatee);
 
-    s.createColorBlendInfo(&info.colorBlendStatee, res);
-    res.colorBlendInfo.createInfo.pAttachments = null;
+        s.createColorBlendInfo(&info.colorBlendStatee, res);
+        res.colorBlendInfo.createInfo.pAttachments = null;
 
-    s.createDynamicStateInfo(&info.dynamicStatess, res);
-    res.dynamicStateInfo.createInfo.pDynamicStates = null;
+        s.createDynamicStateInfo(&info.dynamicStatess, res);
+        res.dynamicStateInfo.createInfo.pDynamicStates = null;
 
-    s.createRenderingInfo(info.rendering, res);
+        s.createRenderingInfo(info.rendering, res);
+    }
 
     std.mem.copyForwards(u8, &res.name, info.name);
     res.shaderStageCount = info.shaderCount;

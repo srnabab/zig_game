@@ -1,0 +1,8 @@
+{
+  "Name": "indirectDrawCompute",
+  "PipelineType": "Compute",
+  "Shaders": [
+    "indirectDraw.comp.spv"
+  ],
+  "VersionCount": 0
+}

@@ -108,8 +108,12 @@ pub fn render_thread_func(
     try vulkan.readPipelineFileAndAdd(io, comptime file.comptimeGetID("directOut.pipeb"), .present);
     try vulkan.readPipelineFileAndAdd(io, comptime file.comptimeGetID("model.pipeb"), .meshDraw);
     try vulkan.readPipelineFileAndAdd(io, comptime file.comptimeGetID("indirectDraw.pipeb"), .draw);
+    try vulkan.readPipelineFileAndAdd(io, comptime file.comptimeGetID("indirectDrawCompute.pipeb"), .compute);
 
     try vulkan.createAllPipelinesAdded();
+
+    // vk.vkCreateComputePipelines(device: ?*struct_VkDevice_T, pipelineCache: ?*struct_VkPipelineCache_T, createInfoCount: u32, pCreateInfos: [*c]const struct_VkComputePipelineCreateInfo, pAllocator: [*c]const struct_VkAllocationCallbacks, pPipelines: [*c]?*struct_VkPipeline_T)
+    // vk.VkComputePipelineCreateInfo
 
     const o1 = try vulkan.getPipelineOut("flat2d");
     for (o1) |value| {
@@ -236,7 +240,7 @@ pub fn render_thread_func(
 
     // std.log.debug("{d}, {d}, {d}, {d}", .{ res[0], res[1], res[2], res[3] });
 
-    var eye2 = cglm.vec3{ 0.0, 0.0, 100.0 };
+    var eye2 = cglm.vec3{ 0.0, 0.0, 10.0 };
     var center2 = cglm.vec3{ 0.0, 0.0, 0.0 };
     var up2 = cglm.vec3{ 0.0, 1.0, 0.0 };
     cglm.glmc_lookat(
@@ -245,7 +249,7 @@ pub fn render_thread_func(
         &up2,
         &pUIUbo2.view,
     );
-    cglm.glmc_perspective(std.math.rad_per_deg * 60.0, aspect * VIEW_SCALE, 0.1, 100.0, &pUIUbo2.proj);
+    cglm.glmc_perspective(std.math.rad_per_deg * 60.0, (aspect / 300) * VIEW_SCALE, 0.1, 100.0, &pUIUbo2.proj);
     const pData2 = @as(*shaderStruct.UniformBufferObject, @ptrCast(@alignCast(ubo2.pMappedData)));
     pData2.* = pUIUbo2;
 
@@ -300,9 +304,9 @@ pub fn render_thread_func(
 
     try vulkan.addWriteDescriptorSetBuffer(
         0,
-        vulkan.buffers.getVkBuffer(ubo_test),
+        vulkan.buffers.getVkBuffer(ubo_test2),
         0,
-        vulkan.buffers.getBufferSize(ubo_test),
+        vulkan.buffers.getBufferSize(ubo_test2),
         vulkan.global3dMVPMatrixDescriptorSet,
         0,
         vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
@@ -458,7 +462,7 @@ pub fn render_thread_func(
     // global.stopNodeDagPrint = false;
     // global.stopNodeDagDetailPrint = false;
     // global.stopExecuteNodePrint = false;
-    global.game_end.store(1, .seq_cst);
+    // global.game_end.store(1, .seq_cst);
 
     // vulkan.logBufferPtr();
 
@@ -478,6 +482,7 @@ pub fn render_thread_func(
 
         try commands.startCommand();
         try commands.addCachedCommand();
+        // std.log.debug("draw2d", .{});
         try commands.addCommand(.draw2D, .{ .draw2D = .{
             .pipeline = vulkan.getPipeline("flat2d").?,
             .pTexture = circleTexture,
@@ -487,6 +492,7 @@ pub fn render_thread_func(
             .descriptorSets = &testDescriptorSets,
             .pushConstants = &draw2dPushConstants,
         } });
+        // std.log.debug("drawindirect", .{});
         try commands.addCommand(.drawIndirect, .{ .drawIndirect = .{
             .pipeline = vulkan.getPipeline("indirectDraw").?,
             .rendering = rendering_mesh_test,
@@ -496,6 +502,7 @@ pub fn render_thread_func(
             .indirectBuffer = vertices.indirectDrawCommandBuffer,
             .pushConstants = &drawIndirectPushConstants,
         } });
+        // std.log.debug("drawmesh", .{});
         try commands.addCommand(.drawMesh, .{ .drawMesh = .{
             .pipeline = vulkan.getPipeline("model").?,
             .rendering = rendering_mesh_test,
@@ -505,6 +512,7 @@ pub fn render_thread_func(
             .meshletCount = meshes.meshletCount,
             .pushConstants = &drawMeshPushConstants,
         } });
+        // std.log.debug("present", .{});
         try commands.addCommand(.present, .{ .present = .{
             .pipeline = vulkan.getPipeline("directOut").?,
             .pTextures = &presentTextures,

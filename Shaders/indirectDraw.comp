@@ -1,0 +1,68 @@
+#version 460
+
+#extension GL_EXT_scalar_block_layout : require
+#extension GL_EXT_buffer_reference : require
+
+layout(local_size_x = 256) in;
+
+struct VkDrawIndirectCommand {
+    uint vertexCount;
+    uint instanceCount;
+    uint firstVertex;
+    uint firstInstance;
+};
+
+struct Instance {
+    vec3 pos;
+    vec2 scale;
+    uint textureIndex;
+    uint flags;
+};
+
+layout(buffer_reference, scalar) readonly buffer InstanceBuffer {
+    Instance instances[]; 
+};
+layout(buffer_reference, scalar) buffer IndirectBuffer { 
+    VkDrawIndirectCommand cmd;
+};
+layout(buffer_reference) buffer InstanceIDBuffer {
+    uint instanceIDs[];
+};
+
+layout(push_constant) uniform PushConstants {
+    InstanceBuffer instanceBuffer;
+    IndirectBuffer indirectAddress;
+    InstanceIDBuffer instanceIDs;
+    vec4 viewBounds;
+    uint totalSpriteCount;
+} pc;
+
+shared uint instanceCount;
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx == 0) instanceCount = 0;
+    barrier();
+
+    if (idx >= pc.totalSpriteCount) return;
+
+    Instance instance = pc.instanceBuffer.instances[idx];
+
+    bool visible = true;
+    if (instance.pos.x + instance.scale.x < pc.viewBounds.x || // 左右
+        instance.pos.x > pc.viewBounds.z ||
+        instance.pos.y + instance.scale.y < pc.viewBounds.y || // 上下
+        instance.pos.y > pc.viewBounds.w) {
+        visible = false;
+    }
+
+    if (visible) {
+        IndirectBuffer indirect = IndirectBuffer(pc.indirectAddress);
+        
+        uint writeIdx = atomicAdd(instanceCount, 1);
+        pc.instanceIDs.instanceIDs[writeIdx] = idx;
+    }
+
+    barrier();
+    if (idx == 0) pc.indirectAddress.cmd.instanceCount = instanceCount;
+}

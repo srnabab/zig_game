@@ -5,6 +5,7 @@ const vk = VkStruct.vk;
 const rendering = @import("rendering");
 
 pub const CommandType = enum {
+    compute,
     copyBuffer,
     copyBufferToImage,
     draw2D,
@@ -15,6 +16,7 @@ pub const CommandType = enum {
 };
 
 pub const comm = union(CommandType) {
+    compute: Compute,
     copyBuffer: CopyBuffer,
     copyBufferToImage: CopyBufferToImage,
     draw2D: Draw2D,
@@ -316,6 +318,14 @@ pub const DrawIndirect = struct {
 pub const DrawIndirectRecord = struct {
     buffer: vk.VkBuffer,
     offset: vk.VkDeviceSize,
+};
+
+pub const Compute = struct {
+    pipeline: VkStruct.Pipeline_t,
+    descriptorSets: []vk.VkDescriptorSet,
+    pTextures: []texture.Texture_t,
+    usedBuffers: []VkStruct.Buffer_t,
+    pushConstants: []PushConstantPack,
 };
 
 // pub const Output = union {
