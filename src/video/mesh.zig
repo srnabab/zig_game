@@ -57,18 +57,18 @@ pub fn loadMeshlet(self: *Self, ID: i32, allocator: std.mem.Allocator, vulkan: *
     var content = try fileReader.interface.readAlloc(allocator, stat.size);
     defer allocator.free(content);
 
-    const stride = l: {
-        var size: usize = 0;
-        switch (res.mesh.vertexType) {
-            inline else => |t| {
-                size = @sizeOf(vertexStruct.enumToType(t));
-            },
-        }
-        break :l size;
-    };
+    // const stride = l: {
+    //     var size: usize = 0;
+    //     switch (res.mesh.vertexType) {
+    //         inline else => |t| {
+    //             size = @sizeOf(vertexStruct.enumToType(t));
+    //         },
+    //     }
+    //     break :l size;
+    // };
 
-    const vertexCount = res.mesh.verticesSize / stride;
-    std.log.debug("vertex count {d}", .{vertexCount});
+    // const vertexCount = res.mesh.verticesSize / stride;
+    // std.log.debug("vertex count {d}", .{vertexCount});
 
     const meshletsStart = res.mesh.verticesSize;
     const meshletVerticesStart = res.mesh.meshletsSize + meshletsStart;
@@ -124,7 +124,7 @@ pub fn loadMeshlet(self: *Self, ID: i32, allocator: std.mem.Allocator, vulkan: *
             .size = @intCast(vertices.len),
             .dstOffset = allocBuffer1.offset,
         };
-        std.log.debug("offset {d}", .{allocBuffer1.offset});
+        // std.log.debug("offset {d}", .{allocBuffer1.offset});
 
         var regions = [_]vk.VkBufferCopy2{region};
 
@@ -150,7 +150,7 @@ pub fn loadMeshlet(self: *Self, ID: i32, allocator: std.mem.Allocator, vulkan: *
             .size = @intCast(meshlets.len),
             .dstOffset = allocBuffer2.offset,
         };
-        std.log.debug("offset {d}", .{allocBuffer2.offset});
+        // std.log.debug("offset {d}", .{allocBuffer2.offset});
 
         regions[0] = region;
 
@@ -176,7 +176,7 @@ pub fn loadMeshlet(self: *Self, ID: i32, allocator: std.mem.Allocator, vulkan: *
             .size = @intCast(meshletVertices.len),
             .dstOffset = allocBuffer3.offset,
         };
-        std.log.debug("offset {d}", .{allocBuffer3.offset});
+        // std.log.debug("offset {d}", .{allocBuffer3.offset});
 
         regions[0] = region;
 
@@ -202,7 +202,7 @@ pub fn loadMeshlet(self: *Self, ID: i32, allocator: std.mem.Allocator, vulkan: *
             .size = @intCast(meshletTriangles.len),
             .dstOffset = allocBuffer4.offset,
         };
-        std.log.debug("offset {d}", .{allocBuffer4.offset});
+        // std.log.debug("offset {d}", .{allocBuffer4.offset});
 
         regions[0] = region;
 

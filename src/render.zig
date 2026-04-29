@@ -402,13 +402,21 @@ pub fn render_thread_func(
         ssbo_test,
     };
 
+    var test_computeBuffers = [_]VkStruct.Buffer_t{
+        vertices.instanceBuffer2D,
+        vertices.indirectDrawCommandBuffer,
+        vertices.instanceIDsBuffer,
+    };
+    // var test_computeDescriptorSets =
+
     var test_indirectBuffers = [_]VkStruct.Buffer_t{
         vertices.instanceBuffer2D,
+        vertices.instanceIDsBuffer,
     };
 
     const box1 = try vertices.addInstance(0, 0, 48, 32, 0.1, boxPng);
-    _ = try vertices.addInstance(400, 0, 48, 32, 0.1, boxPng);
-    _ = try vertices.addInstance(0, 300, 48, 32, 0.1, boxPng);
+    _ = try vertices.addInstance(300, 0, 48, 32, 0.1, boxPng);
+    _ = try vertices.addInstance(0, 200, 48, 32, 0.1, boxPng);
     _ = try vertices.addInstance(-400, 0, 48, 32, 0.1, boxPng);
     _ = try vertices.addInstance(0, -300, 48, 32, 0.1, boxPng);
     _ = try vertices.addInstance(345, -438, 48, 32, 0.1, boxPng);
@@ -425,6 +433,8 @@ pub fn render_thread_func(
     var circleIndex = pTextureSet.getDescriptorSetIndex(circleTexture);
     var vertexBufferAddress = vulkan.getBufferAddress(vulkan.buffers.getVkBuffer(vertices.vertexBuffer2D));
     var instanceBufferAddress = vulkan.getBufferAddress(vulkan.buffers.getVkBuffer(vertices.instanceBuffer2D));
+    var instanceIDsBufferAddress = vulkan.getBufferAddress(vulkan.buffers.getVkBuffer(vertices.instanceIDsBuffer));
+    const indirectBufferAddress = vulkan.getBufferAddress(vulkan.buffers.getVkBuffer(vertices.indirectDrawCommandBuffer));
 
     var boxIndex = pTextureSet.getDescriptorSetIndex(boxPng);
 
@@ -457,21 +467,41 @@ pub fn render_thread_func(
             .offset = 0,
             .stageFlag = vk.VK_SHADER_STAGE_VERTEX_BIT,
         },
+        .{
+            .pValues = &instanceIDsBufferAddress,
+            .size = @sizeOf(u64),
+            .offset = @sizeOf(u64),
+            .stageFlag = vk.VK_SHADER_STAGE_VERTEX_BIT,
+        },
+    };
+    var constants = vertexStruct.IndirectDrawComputePushConstants{
+        .instanceBuffer = instanceBufferAddress,
+        .indirectAddress = indirectBufferAddress,
+        .instanceIDs = instanceIDsBufferAddress,
+        .viewBounds = vertexStruct.vec4{ -300, 300, -400, 400 },
+        .totalSpriteCount = @intCast(vertices.instances2D.items.len),
+    };
+    const computeIndirectDrawPushConstants = processRender.drawC.PushConstantPack{
+        .pValues = &constants,
+        .size = @sizeOf(vertexStruct.IndirectDrawComputePushConstants),
+        .offset = 0,
+        .stageFlag = vk.VK_SHADER_STAGE_COMPUTE_BIT,
     };
 
-    // global.stopNodeDagPrint = false;
+    global.stopNodeDagPrint = false;
     // global.stopNodeDagDetailPrint = false;
     // global.stopExecuteNodePrint = false;
     // global.game_end.store(1, .seq_cst);
 
     // vulkan.logBufferPtr();
+    // vulkan.logPipeline();
 
     while (true) {
         const frame = vulkan.totalFrame.load(.seq_cst);
 
-        // if (frame == 4) {
-        //     global.game_end.store(1, .seq_cst);
-        // }
+        if (frame == 1) {
+            global.game_end.store(1, .seq_cst);
+        }
 
         if (frame == 100000) {
             global.stopExecuteNodePrint = true;
@@ -492,7 +522,14 @@ pub fn render_thread_func(
             .descriptorSets = &testDescriptorSets,
             .pushConstants = &draw2dPushConstants,
         } });
-        // std.log.debug("drawindirect", .{});
+        try commands.addCommand(.compute, .{ .compute = .{
+            .pipeline = vulkan.getPipeline("indirectDrawCompute").?,
+            .pTextures = &.{},
+            .usedBuffers = &test_computeBuffers,
+            .descriptorSets = &.{},
+            .groupCount = 1,
+            .pushConstants = computeIndirectDrawPushConstants,
+        } });
         try commands.addCommand(.drawIndirect, .{ .drawIndirect = .{
             .pipeline = vulkan.getPipeline("indirectDraw").?,
             .rendering = rendering_mesh_test,

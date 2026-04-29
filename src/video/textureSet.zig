@@ -138,7 +138,7 @@ pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Sample
 
     const ID = fileID;
 
-    std.log.debug("ID {d}", .{ID});
+    // std.log.debug("ID {d}", .{ID});
 
     if (self.map.get(ID)) |value| {
         return value;
@@ -165,7 +165,7 @@ pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Sample
         const fileMem = try fileReader.interface.readAlloc(self.allocator, imgStat.size);
         defer self.allocator.free(fileMem);
 
-        std.log.debug("img size {d}", .{fileMem.len});
+        // std.log.debug("img size {d}", .{fileMem.len});
 
         const imageMem = stb_image.stbi_load_from_memory(
             @ptrCast(fileMem.ptr),
@@ -177,7 +177,7 @@ pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Sample
         );
         const pixelSize: u64 = @intCast(@sizeOf(u8) * imgWidth * imgHeight * channel);
 
-        std.log.debug("width {d}, height {d}", .{ imgWidth, imgHeight });
+        // std.log.debug("width {d}, height {d}", .{ imgWidth, imgHeight });
 
         stagingBuffer = try vulkan.createStagingBuffer(pixelSize);
         errdefer vulkan.destroyBuffer(stagingBuffer);
@@ -238,7 +238,7 @@ pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Sample
     texture.imageView = try vulkan.createImageView2D(texture.image.vkImage, texture.format);
 
     const dstArrayElement = try self.acquireDescriptorSetIndex(ID);
-    std.log.debug("dst {d}", .{dstArrayElement});
+    // std.log.debug("dst {d}", .{dstArrayElement});
     try vulkan.addWriteDescriptorSetImage(
         dstArrayElement,
         texture.imageView,

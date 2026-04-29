@@ -24,6 +24,7 @@ pub var vertexBuffer2D: vkStruct.Buffer_t = undefined;
 pub var indexBuffer2D: vkStruct.Buffer_t = undefined;
 var updated2D = false;
 
+pub var instanceIDsBuffer: vkStruct.Buffer_t = undefined;
 const indirectDrawCommand = vk.VkDrawIndirectCommand{
     .vertexCount = 6,
     .instanceCount = 6,
@@ -56,6 +57,7 @@ pub fn init(vulkan_t: *vkStruct, graphic: *Commands, pTextureSet_t: *textureSet,
     indirectDrawCommandBuffer = try vulkan.createStorageBuffer(@sizeOf(vk.VkDrawIndirectCommand), true);
 
     instanceBuffer2D = try vulkan.createVertexBuffer(1000 * @sizeOf(vertexStruct.Instance), @sizeOf(vertexStruct.Instance));
+    instanceIDsBuffer = try vulkan.createStorageBuffer(1000 * @sizeOf(u32), false);
 
     instances2D = .init(allocator);
     positions2D = .init(allocator);
@@ -192,9 +194,9 @@ pub fn vertexInitialize2D(io: std.Io, width: u32, height: u32, x: u32, y: u32, d
 
     vertexCount2D += 1;
 
-    for (0..4) |i| {
-        std.log.debug("{}", .{vertices2D[vertexCount2D - 4 + i]});
-    }
+    // for (0..4) |i| {
+    //     std.log.debug("{}", .{vertices2D[vertexCount2D - 4 + i]});
+    // }
 
     updated2D = true;
 
@@ -243,6 +245,7 @@ pub fn addInstance(x: f32, y: f32, width: f32, height: f32, depth: f32, texture:
         .position = [3]f32{ x, y, depth },
         .scale = [2]f32{ width, height },
         .textureIndex = pTextureSet.getDescriptorSetIndex(texture),
+        .flags = 0,
     };
     instanceUpdated = true;
 

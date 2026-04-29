@@ -443,11 +443,11 @@ pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet) !void {
         self.device,
     );
 
-    std.log.debug("graphic {*}, compute {*}, transfer {*}", .{
-        self.graphicQueue.queue,
-        self.computeQueue.queue,
-        self.transferQueue.queue,
-    });
+    // std.log.debug("graphic {*}, compute {*}, transfer {*}", .{
+    //     self.graphicQueue.queue,
+    //     self.computeQueue.queue,
+    //     self.transferQueue.queue,
+    // });
 
     self.vmaS = try vmaStruct.createVmaAllocator(
         self.physicalDevice,
@@ -1718,4 +1718,10 @@ pub fn getBufferAddress(self: *Self, buffer: vk.VkBuffer) u64 {
         .buffer = buffer,
     };
     return vk.vkGetBufferDeviceAddress(self.device, &info);
+}
+
+pub fn logPipeline(self: *Self) void {
+    for (self.pipelines.items) |value| {
+        std.log.debug("pipeline {*}, {}", .{ value.pipeline, value.compute });
+    }
 }

@@ -7,14 +7,19 @@ struct Instance {
     vec3 pos;
     vec2 scale;
     uint textureIndex;
+    uint flag;
 };
 
 layout(buffer_reference, scalar) readonly buffer InstanceBuffer {
     Instance instances[]; 
 };
+layout(buffer_reference) buffer InstanceIDBuffer {
+    uint instanceIDs[];
+};
 
 layout(push_constant) uniform PushConstants {
     InstanceBuffer instanceBuffer;
+    InstanceIDBuffer instanceIDs;
 } pc;
 
 layout(set = 0, binding = 0) uniform UniformBufferObject {
@@ -26,7 +31,8 @@ layout(location = 0) out vec2 outUV;
 layout(location = 1) flat out uint outTexIndex;
 
 void main() {
-    Instance sprite = pc.instanceBuffer.instances[gl_InstanceIndex];
+    uint idx = pc.instanceIDs.instanceIDs[gl_InstanceIndex];
+    Instance sprite = pc.instanceBuffer.instances[idx];
 
     vec2 positions[4] = vec2[](vec2(0,0), vec2(1,0), vec2(1,1), vec2(0,1));
     vec2 uvs[4]       = vec2[](vec2(0,0), vec2(1,0), vec2(1,1), vec2(0,1));

@@ -35,7 +35,7 @@ pub fn getImageLoadParam(io: std.Io, id: i32) !imageLoad {
     const ptr = @as([*c]u8, @constCast(&res.relativePath));
     const len = std.mem.len(ptr);
 
-    std.log.debug("file {s}", .{res.relativePath});
+    // std.log.debug("file {s}", .{res.relativePath});
 
     return imageLoad{
         .file = try std.Io.Dir.cwd().openFile(io, res.relativePath[0..len], .{}),
@@ -56,7 +56,7 @@ pub fn getMeshLoadParam(io: std.Io, id: i32) !meshLoad {
     const ptr = @as([*c]u8, @constCast(&res.relativePath));
     const len = std.mem.len(ptr);
 
-    std.log.debug("file {s}", .{res.relativePath});
+    // std.log.debug("file {s}", .{res.relativePath});
 
     return meshLoad{
         .file = try std.Io.Dir.cwd().openFile(io, res.relativePath[0..len], .{}),

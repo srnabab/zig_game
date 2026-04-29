@@ -29,12 +29,13 @@ layout(buffer_reference) buffer InstanceIDBuffer {
     uint instanceIDs[];
 };
 
-layout(push_constant) uniform PushConstants {
+layout(push_constant, scalar) uniform PushConstants {
     InstanceBuffer instanceBuffer;
     IndirectBuffer indirectAddress;
     InstanceIDBuffer instanceIDs;
     vec4 viewBounds;
     uint totalSpriteCount;
+    uint padding;
 } pc;
 
 shared uint instanceCount;
@@ -49,16 +50,14 @@ void main() {
     Instance instance = pc.instanceBuffer.instances[idx];
 
     bool visible = true;
-    if (instance.pos.x + instance.scale.x < pc.viewBounds.x || // 左右
-        instance.pos.x > pc.viewBounds.z ||
-        instance.pos.y + instance.scale.y < pc.viewBounds.y || // 上下
-        instance.pos.y > pc.viewBounds.w) {
+    if (instance.pos.x + instance.scale.x < pc.viewBounds.z || 
+        instance.pos.x > pc.viewBounds.w ||
+        instance.pos.y + instance.scale.y < pc.viewBounds.x ||
+        instance.pos.y > pc.viewBounds.y) {
         visible = false;
     }
 
     if (visible) {
-        IndirectBuffer indirect = IndirectBuffer(pc.indirectAddress);
-        
         uint writeIdx = atomicAdd(instanceCount, 1);
         pc.instanceIDs.instanceIDs[writeIdx] = idx;
     }

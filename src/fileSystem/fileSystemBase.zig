@@ -61,7 +61,7 @@ pub fn getFile(io: std.Io, id: i64, cwd: std.Io.Dir) !std.Io.File {
     const ptr = @as([*c]u8, buffer[0..256]);
     const len = std.mem.len(ptr);
 
-    std.log.debug("open file {s}", .{buffer[0..len]});
+    // std.log.debug("open file {s}", .{buffer[0..len]});
 
     return cwd.openFile(io, buffer[0..len], .{});
 }

@@ -24,7 +24,7 @@ pub fn toVulkan(partialFillInfo: *VulkanPipelineInfo, shaderCodes: [5][]u8, setL
         const pEntryName = try vulkan.collectEntryName(&partialFillInfo.entryNames[i]);
         // std.log.debug("entry name {s} outer", .{pEntryName.*});
         partialFillInfo.shaderStageCreateInfo[i].pName = @ptrCast(pEntryName.ptr);
-        std.log.debug("{s}", .{partialFillInfo.shaderName[i]});
+        // std.log.debug("{s}", .{partialFillInfo.shaderName[i]});
         partialFillInfo.shaderStageCreateInfo[i].module = try vulkan.createShaderModule(shaderCodes[i], &partialFillInfo.shaderName[i]);
     }
     // for (0..partialFillInfo.descriptorSetLayouts.setLayoutCount) |i| {

@@ -34,6 +34,7 @@ pub const CommandType2 = enum {
     bindPipeline,
     bindVertexBuffers,
     changeBufferQueue,
+    computeRecord,
     copyBuffer,
     copyBufferToImage,
     draw2DRecord,
@@ -60,6 +61,7 @@ pub const comm2 = union(CommandType2) {
     bindPipeline: BindPipeline,
     bindVertexBuffers: BindVertexBuffers,
     changeBufferQueue: ChangeBufferQueue,
+    computeRecord: ComputeRecord,
     copyBuffer: CopyBuffer,
     copyBufferToImage: CopyBufferToImage,
     draw2DRecord: Draw2DRecord,
@@ -325,7 +327,12 @@ pub const Compute = struct {
     descriptorSets: []vk.VkDescriptorSet,
     pTextures: []texture.Texture_t,
     usedBuffers: []VkStruct.Buffer_t,
-    pushConstants: []PushConstantPack,
+    pushConstants: PushConstantPack,
+    groupCount: u32,
+};
+
+pub const ComputeRecord = struct {
+    groupCount: u32,
 };
 
 // pub const Output = union {
