@@ -199,11 +199,21 @@ pub fn render_thread_func(
         null,
     );
 
-    const ubo_test = try vulkan.createUniformBuffer(@sizeOf(shaderStruct.UniformBufferObject));
+    const ubo_test = try vulkan.createBufferByUsage(
+        @sizeOf(shaderStruct.UniformBufferObject),
+        0,
+        .uniform,
+        false,
+    );
     var pUIUbo: shaderStruct.UniformBufferObject = undefined;
     const ubo = vulkan.buffers.getBufferContent(ubo_test);
 
-    const ubo_test2 = try vulkan.createUniformBuffer(@sizeOf(shaderStruct.UniformBufferObject));
+    const ubo_test2 = try vulkan.createBufferByUsage(
+        @sizeOf(shaderStruct.UniformBufferObject),
+        0,
+        .uniform,
+        false,
+    );
     var pUIUbo2: shaderStruct.UniformBufferObject = undefined;
     const ubo2 = vulkan.buffers.getBufferContent(ubo_test2);
 
@@ -253,7 +263,12 @@ pub fn render_thread_func(
     const pData2 = @as(*shaderStruct.UniformBufferObject, @ptrCast(@alignCast(ubo2.pMappedData)));
     pData2.* = pUIUbo2;
 
-    const ssbo_test = try vulkan.createStorageBuffer(global.MeshletStorageBufferSize, false);
+    const ssbo_test = try vulkan.createBufferByUsage(
+        global.MeshletStorageBufferSize,
+        0,
+        .storage,
+        false,
+    );
     const ssbo_test_meshlets = try vulkan.createVirtualBlockBuffer(
         0,
         global.StorageBufferMeshletsSize,
@@ -488,7 +503,7 @@ pub fn render_thread_func(
         .stageFlag = vk.VK_SHADER_STAGE_COMPUTE_BIT,
     };
 
-    global.stopNodeDagPrint = false;
+    // global.stopNodeDagPrint = false;
     // global.stopNodeDagDetailPrint = false;
     // global.stopExecuteNodePrint = false;
     // global.game_end.store(1, .seq_cst);
@@ -499,9 +514,9 @@ pub fn render_thread_func(
     while (true) {
         const frame = vulkan.totalFrame.load(.seq_cst);
 
-        if (frame == 1) {
-            global.game_end.store(1, .seq_cst);
-        }
+        // if (frame == 3) {
+        //     global.game_end.store(1, .seq_cst);
+        // }
 
         if (frame == 100000) {
             global.stopExecuteNodePrint = true;

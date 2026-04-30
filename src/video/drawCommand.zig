@@ -11,6 +11,7 @@ pub const CommandType = enum {
     draw2D,
     drawIndirect,
     drawMesh,
+    drawMeshIndirect,
     empty,
     present,
 };
@@ -22,6 +23,7 @@ pub const comm = union(CommandType) {
     draw2D: Draw2D,
     drawIndirect: DrawIndirect,
     drawMesh: DrawMesh,
+    drawMeshIndirect: DrawMeshIndirect,
     empty: void,
     present: Present,
 };
@@ -40,6 +42,7 @@ pub const CommandType2 = enum {
     draw2DRecord,
     drawIndirectRecord,
     drawMeshRecord,
+    drawMeshIndirectRecord,
     empty,
     end,
     endRecord,
@@ -67,6 +70,7 @@ pub const comm2 = union(CommandType2) {
     draw2DRecord: Draw2DRecord,
     drawIndirectRecord: DrawIndirectRecord,
     drawMeshRecord: DrawMeshRecord,
+    drawMeshIndirectRecord: DrawMeshIndirectRecord,
     empty: void,
     end: void,
     endRecord: void,
@@ -303,8 +307,22 @@ pub const DrawMesh = struct {
     meshletCount: u32,
 };
 
+pub const DrawMeshIndirect = struct {
+    pipeline: VkStruct.Pipeline_t,
+    rendering: rendering.RenderingInfo_t,
+    descriptorSets: []vk.VkDescriptorSet,
+    pTextures: []texture.Texture_t,
+    usedBuffers: []VkStruct.Buffer_t,
+    pushConstants: []PushConstantPack,
+    meshletCount: u32,
+};
+
 pub const DrawMeshRecord = struct {
     meshletCount: u32,
+};
+
+pub const DrawMeshIndirectRecord = struct {
+    e: void,
 };
 
 pub const DrawIndirect = struct {
@@ -348,6 +366,7 @@ pub const BufferUsage = enum {
     indirect,
     uniform,
     // transfer,
+    storageRead,
     storage,
     staging,
 };

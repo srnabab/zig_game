@@ -98,13 +98,33 @@ pub fn loadMeshlet(self: *Self, ID: i32, allocator: std.mem.Allocator, vulkan: *
     self.meshletCount += @intCast(meshletCount);
 
     if (self.isMeshlet) {
-        const stagingBuffer1 = try vulkan.createStagingBuffer(@intCast(vertices.len));
+        const stagingBuffer1 = try vulkan.createBufferByUsage(
+            @intCast(vertices.len),
+            0,
+            .staging,
+            false,
+        );
         vulkan.buffers.copyDataToMapped(stagingBuffer1, u8, vertices);
-        const stagingBuffer2 = try vulkan.createStagingBuffer(@intCast(meshlets.len));
+        const stagingBuffer2 = try vulkan.createBufferByUsage(
+            @intCast(meshlets.len),
+            0,
+            .staging,
+            false,
+        );
         vulkan.buffers.copyDataToMapped(stagingBuffer2, u8, meshlets);
-        const stagingBuffer3 = try vulkan.createStagingBuffer(@intCast(meshletVertices.len));
+        const stagingBuffer3 = try vulkan.createBufferByUsage(
+            @intCast(meshletVertices.len),
+            0,
+            .staging,
+            false,
+        );
         vulkan.buffers.copyDataToMapped(stagingBuffer3, u8, meshletVertices);
-        const stagingBuffer4 = try vulkan.createStagingBuffer(@intCast(meshletTriangles.len));
+        const stagingBuffer4 = try vulkan.createBufferByUsage(
+            @intCast(meshletTriangles.len),
+            0,
+            .staging,
+            false,
+        );
         vulkan.buffers.copyDataToMapped(stagingBuffer4, u8, meshletTriangles);
 
         var bufferContent = vulkan.buffers.getBufferContent(stagingBuffer1);
@@ -212,8 +232,18 @@ pub fn loadMeshlet(self: *Self, ID: i32, allocator: std.mem.Allocator, vulkan: *
             .regions = &regions,
         } });
     } else {
-        const stagingBuffer1 = try vulkan.createStagingBuffer(@intCast(vertices.len));
-        const stagingBuffer2 = try vulkan.createStagingBuffer(@intCast(indices.len));
+        const stagingBuffer1 = try vulkan.createBufferByUsage(
+            @intCast(vertices.len),
+            0,
+            .staging,
+            false,
+        );
+        const stagingBuffer2 = try vulkan.createBufferByUsage(
+            @intCast(indices.len),
+            0,
+            .staging,
+            false,
+        );
         _ = stagingBuffer1;
         _ = stagingBuffer2;
         // _ = indices;

@@ -179,13 +179,19 @@ pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Sample
 
         // std.log.debug("width {d}, height {d}", .{ imgWidth, imgHeight });
 
-        stagingBuffer = try vulkan.createStagingBuffer(pixelSize);
+        stagingBuffer = try vulkan.createBufferByUsage(pixelSize, 0, .staging, false);
         errdefer vulkan.destroyBuffer(stagingBuffer);
 
         vulkan.buffers.copyDataToMapped(stagingBuffer, u8, imageMem[0..pixelSize]);
         // @memcpy(@as([*c]u8, @ptrCast(stagingBuffer.pMappedData.?)), imageMem[0..pixelSize]);
 
-        const image = try vulkan.createImage2D(imgWidth, imgHeight, img.image.format, img.image.tiling, img.image.usage);
+        const image = try vulkan.createImage2D(
+            imgWidth,
+            imgHeight,
+            img.image.format,
+            img.image.tiling,
+            img.image.usage,
+        );
         errdefer vulkan.destroyImage(image);
 
         // texture = try self.memory.create();

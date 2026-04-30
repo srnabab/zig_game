@@ -308,6 +308,7 @@ pipelines: std.array_list.Managed(Pipeline),
 imageAvailableSemaphore: [global.MaxFrameInFlight]vk.VkSemaphore = undefined,
 /// binary semaphore
 renderFinishSemaphore: [global.MaxFrameInFlight]vk.VkSemaphore = undefined,
+presentDoneFence: [global.MaxFrameInFlight]vk.VkFence = undefined,
 globalTimelineSemaphore: vk.VkSemaphore = null,
 globalTimelineValue: std.atomic.Value(u64) = .init(0),
 
@@ -443,43 +444,17 @@ pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet) !void {
         self.device,
     );
 
-    // std.log.debug("graphic {*}, compute {*}, transfer {*}", .{
-    //     self.graphicQueue.queue,
-    //     self.computeQueue.queue,
-    //     self.transferQueue.queue,
-    // });
+    std.log.debug("graphic {*}, compute {*}, transfer {*}", .{
+        self.graphicQueue.queue,
+        self.computeQueue.queue,
+        self.transferQueue.queue,
+    });
 
     self.vmaS = try vmaStruct.createVmaAllocator(
         self.physicalDevice,
         self.device,
         self.instance,
         self.pAllocCallBacks,
-    );
-
-    var semaphores: [global.MaxFrameInFlight * 2]vk.VkSemaphore = undefined;
-    try Semaphore.createBinarySemaphore(self.device, self.pAllocCallBacks, 0, &semaphores);
-    self.imageAvailableSemaphore[0] = semaphores[0];
-    self.imageAvailableSemaphore[1] = semaphores[1];
-    self.imageAvailableSemaphore[2] = semaphores[4];
-    self.renderFinishSemaphore[0] = semaphores[2];
-    self.renderFinishSemaphore[1] = semaphores[3];
-    self.renderFinishSemaphore[2] = semaphores[5];
-
-    var semaphores2: [1]vk.VkSemaphore = undefined;
-    try Semaphore.createTimelineSemaphore(
-        self.device,
-        self.pAllocCallBacks,
-        0,
-        &semaphores2,
-        0,
-    );
-    self.globalTimelineSemaphore = semaphores2[0];
-
-    try self._createFence(
-        null,
-        vk.VK_FENCE_CREATE_SIGNALED_BIT,
-        &self.endFence,
-        @intCast(self.endFence.len),
     );
 
     self.surfaceFormats = try Swapchain.getSurfaceFormat(
@@ -551,6 +526,47 @@ pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet) !void {
             imageView,
             &name,
         );
+    }
+
+    var semaphores: [global.MaxFrameInFlight * 2]vk.VkSemaphore = undefined;
+    try Semaphore.createBinarySemaphore(self.device, self.pAllocCallBacks, 0, &semaphores);
+    for (semaphores) |value| {
+        std.log.debug("semaphore {*}", .{value});
+    }
+    self.imageAvailableSemaphore[0] = semaphores[0];
+    self.imageAvailableSemaphore[1] = semaphores[1];
+    self.imageAvailableSemaphore[2] = semaphores[4];
+    self.renderFinishSemaphore[0] = semaphores[2];
+    self.renderFinishSemaphore[1] = semaphores[3];
+    self.renderFinishSemaphore[2] = semaphores[5];
+
+    var semaphores2: [1]vk.VkSemaphore = undefined;
+    try Semaphore.createTimelineSemaphore(
+        self.device,
+        self.pAllocCallBacks,
+        0,
+        &semaphores2,
+        0,
+    );
+    self.globalTimelineSemaphore = semaphores2[0];
+
+    try self._createFence(
+        null,
+        vk.VK_FENCE_CREATE_SIGNALED_BIT,
+        &self.endFence,
+        @intCast(self.endFence.len),
+    );
+    for (self.endFence) |value| {
+        std.log.debug("fence {*}", .{value});
+    }
+    try self._createFence(
+        null,
+        vk.VK_FENCE_CREATE_SIGNALED_BIT,
+        &self.presentDoneFence,
+        @intCast(self.presentDoneFence.len),
+    );
+    for (self.presentDoneFence) |value| {
+        std.log.debug("fence {*}", .{value});
     }
 
     self.globalDescriptorPool = try Descriptor._createDescriptorPool(
@@ -774,6 +790,9 @@ pub fn deinit(self: *Self) void {
     self.destroySemaphore(self.globalTimelineSemaphore);
 
     for (self.endFence) |value| {
+        vk.vkDestroyFence(self.device, value, self.pAllocCallBacks);
+    }
+    for (self.presentDoneFence) |value| {
         vk.vkDestroyFence(self.device, value, self.pAllocCallBacks);
     }
 
@@ -1585,47 +1604,14 @@ pub fn destroyImageView(self: *Self, imageView: vk.VkImageView) void {
     vk.vkDestroyImageView(self.device, imageView, self.pAllocCallBacks);
 }
 
-pub fn _createBuffer(
+pub fn createBufferByUsage(
     self: *Self,
-    flags: u32,
-    pNext: ?*anyopaque,
-    sharingMode: vk.VkSharingMode,
-    bufferSize: vk.VkDeviceSize,
-    usage: vk.VkBufferUsageFlags,
-    vmaFlags: u32,
-    vmaUsage: vma.VmaMemoryUsage,
+    size: vk.VkDeviceSize,
+    stride: vk.VkDeviceSize,
+    usage: bufferStruct.Usage,
+    bda: bool,
 ) !Buffer_t {
-    return self.buffers._createBuffer(
-        &self.vmaS,
-        flags,
-        pNext,
-        sharingMode,
-        bufferSize,
-        usage,
-        vmaFlags,
-        vmaUsage,
-        self.handles,
-    );
-}
-
-pub fn createStagingBuffer(self: *Self, bufferSize: vk.VkDeviceSize) !Buffer_t {
-    return self.buffers.createStagingBuffer(&self.vmaS, bufferSize, self.handles);
-}
-
-pub fn createVertexBuffer(self: *Self, bufferSize: vk.VkDeviceSize, stride: vk.VkDeviceSize) !Buffer_t {
-    return self.buffers.createVertexBuffer(&self.vmaS, bufferSize, stride, self.handles);
-}
-
-pub fn createIndexBuffer(self: *Self, bufferSize: vk.VkDeviceSize) !Buffer_t {
-    return self.buffers.createIndexBuffer(&self.vmaS, bufferSize, self.handles);
-}
-
-pub fn createUniformBuffer(self: *Self, bufferSize: vk.VkDeviceSize) !Buffer_t {
-    return self.buffers.createUniformBuffer(&self.vmaS, bufferSize, self.handles);
-}
-
-pub fn createStorageBuffer(self: *Self, bufferSize: vk.VkDeviceSize, indirect: bool) !Buffer_t {
-    return self.buffers.createStorageBuffer(&self.vmaS, bufferSize, self.handles, indirect);
+    return self.buffers.createBufferByUsage(&self.vmaS, size, self.handles, stride, usage, bda);
 }
 
 pub fn createVirtualBlockBuffer(

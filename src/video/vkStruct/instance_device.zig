@@ -78,6 +78,7 @@ const feature8BitStorageNeed = [_][]const u8{"storageBuffer8BitAccess"};
 const featureMaintenance4Need = [_][]const u8{"maintenance4"};
 const featureScalarBlockLayoutNeed = [_][]const u8{"scalarBlockLayout"};
 const featureBufferDeviceAddressNeed = [_][]const u8{"bufferDeviceAddress"};
+const featureSwapchainMaintenance1Need = [_][]const u8{"swapchainMaintenance1"};
 
 const typeNames = struct {
     featureType: type,
@@ -90,12 +91,13 @@ const featureTypeAndNames = [_]typeNames{
     .{ .featureType = vk.VkPhysicalDeviceDynamicRenderingFeatures, .names = &featureDynamicRenderingNeed },
     .{ .featureType = vk.VkPhysicalDeviceSynchronization2Features, .names = &featureSynchronization2Need },
     .{ .featureType = vk.VkPhysicalDeviceMaintenance5Features, .names = &featureMaintenance5Need },
-    .{ .featureType = vk.VkPhysicalDeviceRobustness2FeaturesEXT, .names = &featureRobustness2Need },
+    .{ .featureType = vk.VkPhysicalDeviceRobustness2FeaturesKHR, .names = &featureRobustness2Need },
     .{ .featureType = vk.VkPhysicalDeviceMeshShaderFeaturesEXT, .names = &featureMeshShaderNeed },
     .{ .featureType = vk.VkPhysicalDevice8BitStorageFeatures, .names = &feature8BitStorageNeed },
     .{ .featureType = vk.VkPhysicalDeviceMaintenance4Features, .names = &featureMaintenance4Need },
     .{ .featureType = vk.VkPhysicalDeviceScalarBlockLayoutFeatures, .names = &featureScalarBlockLayoutNeed },
     .{ .featureType = vk.VkPhysicalDeviceBufferDeviceAddressFeatures, .names = &featureBufferDeviceAddressNeed },
+    .{ .featureType = vk.VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR, .names = &featureSwapchainMaintenance1Need },
 };
 
 const VkQueueFamily = types.VkQueueFamily;
@@ -137,11 +139,16 @@ const Features: type = t: {
         const needle = "VkPhysicalDevice";
         const index = std.mem.indexOf(u8, name, needle).?;
         const index2 = std.mem.indexOf(u8, name, "EXT");
+        const index3 = std.mem.indexOf(u8, name, "KHR");
 
-        const fieldName = name[index + needle.len .. index2 orelse name.len];
+        const endIndex = index3 orelse (index2 orelse name.len);
+
+        const fieldName = name[index + needle.len .. endIndex];
 
         fields_name[count] = std.fmt.comptimePrint("_{s}", .{fieldName});
         fields_type[count] = value.featureType;
+
+        // @compileLog(std.fmt.comptimePrint("{s}", .{fields_name[count]}));
 
         count += 1;
     }
@@ -176,6 +183,7 @@ fn getSType(comptime T: type) vk.VkStructureType {
         vk.VkPhysicalDeviceMaintenance4Features => vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES,
         vk.VkPhysicalDeviceScalarBlockLayoutFeatures => vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES,
         vk.VkPhysicalDeviceBufferDeviceAddressFeatures => vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES,
+        vk.VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR => vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR,
         // ... 在这里添加新类型的映射
         else => @compileError(std.fmt.comptimePrint("Unsupported feature type {s}", .{@typeName(T)})),
     };

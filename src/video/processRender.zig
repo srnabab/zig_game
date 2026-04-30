@@ -4256,6 +4256,9 @@ pub const oneTimeCommand = struct {
                     1,
                     0,
                 );
+
+                // vk.vkCmdDrawMeshTasksIndirectEXT(commandBuffer: ?*struct_VkCommandBuffer_T, buffer: ?*struct_VkBuffer_T, offset: u64, drawCount: u32, stride: u32)
+
             },
             else => {
                 std.debug.panic("unsupported command type {s}", .{@tagName(command.command)});
@@ -4495,21 +4498,19 @@ pub const oneTimeCommand = struct {
             try mutex.lock(self.io);
             defer mutex.unlock(self.io);
 
-            const currentFrames = self.vulkan.currentFrame.load(.seq_cst);
-
             const graphicCommandBuffer = try self.primaryCommandPool.getPrimaryCommandBuffer(
                 .graphic,
-                currentFrames,
+                currentFrame,
                 self.vulkan,
             );
             const transferCommandBuffer = try self.primaryCommandPool.getPrimaryCommandBuffer(
                 .transfer,
-                currentFrames,
+                currentFrame,
                 self.vulkan,
             );
             const computeCommandBuffer = try self.primaryCommandPool.getPrimaryCommandBuffer(
                 .compute,
-                currentFrames,
+                currentFrame,
                 self.vulkan,
             );
             var graphicSemaphoreValue, var transferSemaphoreValue, var computeSemaphoreValue, var currentSemaphoreValue =
@@ -4537,6 +4538,8 @@ pub const oneTimeCommand = struct {
             const startComm = pCommands.queue.get(0).?;
             const present = startComm.command.start.present;
             var currentIndex = startComm.command.start.currentIndex;
+
+            // std.log.debug("current index {d}, current frame {d}", .{ currentIndex, currentFrame });
 
             var iterator = try iterate(&pCommands.nodeDag, currentSemaphoreValue);
             defer iterator.deinit();
@@ -4741,9 +4744,11 @@ pub const oneTimeCommand = struct {
                     temp3.sType = vk.VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
                     temp3.pNext = null;
                     temp3.deviceIndex = 0;
-                    temp3.semaphore = self.vulkan.renderFinishSemaphore[currentFrames];
+                    temp3.semaphore = self.vulkan.renderFinishSemaphore[currentFrame];
                     temp3.stageMask = vk.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
                     temp3.value = 0;
+
+                    try self.vulkan._waitForFence(self.vulkan.presentDoneFence[currentFrame .. currentFrame + 1], vk.VK_TRUE);
                 }
 
                 var temp4 = vk.VkCommandBufferSubmitInfo{
@@ -4774,27 +4779,34 @@ pub const oneTimeCommand = struct {
                 // std.Thread.sleep(5 * std.time.ns_per_s);
 
                 // std.log.debug("semaphore {*}", .{submitInfo.pSignalSemaphoreInfos[0].semaphore});
-
+                try self.vulkan.resetFence(1, &self.vulkan.endFence[currentFrame]);
                 try self.vulkan.queueSubmit(
                     self.io,
                     currentType,
                     1,
                     submitInfo,
-                    &self.vulkan.endFence[currentFrames],
+                    &self.vulkan.endFence[currentFrame],
                 );
             }
 
             if (present) {
+                var fenceInfo = vk.VkSwapchainPresentFenceInfoKHR{
+                    .sType = vk.VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_FENCE_INFO_KHR,
+                    .pNext = null,
+                    .pFences = &self.vulkan.presentDoneFence[currentFrame],
+                    .swapchainCount = 1,
+                };
                 var presentInfo = vk.VkPresentInfoKHR{
                     .sType = vk.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-                    .pNext = null,
+                    .pNext = &fenceInfo,
                     .waitSemaphoreCount = 1,
-                    .pWaitSemaphores = @ptrCast(&self.vulkan.renderFinishSemaphore[currentFrames]),
+                    .pWaitSemaphores = @ptrCast(&self.vulkan.renderFinishSemaphore[currentFrame]),
                     .swapchainCount = 1,
                     .pSwapchains = @ptrCast(&self.vulkan.swapchain),
                     .pImageIndices = @ptrCast(&currentIndex),
                     .pResults = null,
                 };
+                try self.vulkan.resetFence(1, &self.vulkan.presentDoneFence[currentFrame]);
                 try self.vulkan.presentSubmit(self.io, @ptrCast(&presentInfo));
             }
 

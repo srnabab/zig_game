@@ -50,14 +50,34 @@ pub fn init(vulkan_t: *vkStruct, graphic: *Commands, pTextureSet_t: *textureSet,
     vulkan = vulkan_t;
     pTextureSet = pTextureSet_t;
 
-    vertexBuffer2D = try vulkan.createVertexBuffer(vertex2DinitCount * @sizeOf(Vertex2D), @sizeOf(Vertex2D));
-    indexBuffer2D = try vulkan.createIndexBuffer(index2DinitCount * 6 * @sizeOf(u16));
+    vertexBuffer2D = try vulkan.createBufferByUsage(
+        vertex2DinitCount * @sizeOf(Vertex2D),
+        @sizeOf(Vertex2D),
+        .vertex,
+        true,
+    );
+    indexBuffer2D = try vulkan.createBufferByUsage(
+        index2DinitCount * 6 * @sizeOf(u16),
+        0,
+        .index,
+        false,
+    );
     vertices2D = try allocator.alloc(Vertex2D, vertex2DinitCount);
 
-    indirectDrawCommandBuffer = try vulkan.createStorageBuffer(@sizeOf(vk.VkDrawIndirectCommand), true);
+    indirectDrawCommandBuffer = try vulkan.createBufferByUsage(
+        @sizeOf(vk.VkDrawIndirectCommand),
+        0,
+        .indirect,
+        true,
+    );
 
-    instanceBuffer2D = try vulkan.createVertexBuffer(1000 * @sizeOf(vertexStruct.Instance), @sizeOf(vertexStruct.Instance));
-    instanceIDsBuffer = try vulkan.createStorageBuffer(1000 * @sizeOf(u32), false);
+    instanceBuffer2D = try vulkan.createBufferByUsage(
+        1000 * @sizeOf(vertexStruct.Instance),
+        @sizeOf(vertexStruct.Instance),
+        .storage,
+        true,
+    );
+    instanceIDsBuffer = try vulkan.createBufferByUsage(1000 * @sizeOf(u32), 0, .storage, true);
 
     instances2D = .init(allocator);
     positions2D = .init(allocator);
@@ -81,7 +101,12 @@ pub fn init(vulkan_t: *vkStruct, graphic: *Commands, pTextureSet_t: *textureSet,
             break :is s;
         };
 
-        const stagingBuffer = try vulkan.createStagingBuffer(indices.len * @sizeOf(u16));
+        const stagingBuffer = try vulkan.createBufferByUsage(
+            indices.len * @sizeOf(u16),
+            0,
+            .staging,
+            false,
+        );
         vulkan.buffers.copyDataToMapped(stagingBuffer, u16, &indices);
         // @memcpy(@as([*c]u16, @ptrCast(@alignCast(stagingBuffer.pMappedData.?))), &indices);
 
@@ -101,7 +126,12 @@ pub fn init(vulkan_t: *vkStruct, graphic: *Commands, pTextureSet_t: *textureSet,
             .regions = &region,
         } });
 
-        const stagingBuffer2 = try vulkan.createStagingBuffer(@sizeOf(vk.VkDrawIndirectCommand));
+        const stagingBuffer2 = try vulkan.createBufferByUsage(
+            @sizeOf(vk.VkDrawIndirectCommand),
+            0,
+            .staging,
+            false,
+        );
         var tempData = [_]vk.VkDrawIndirectCommand{indirectDrawCommand};
         vulkan.buffers.copyDataToMapped(stagingBuffer2, vk.VkDrawIndirectCommand, &tempData);
 
@@ -209,7 +239,12 @@ pub fn upload(graphic: *Commands) !void {
 
     if (updated2D) {
         const bufferSize = @sizeOf(Vertex2D) * (vertexCount2D - update2dStartIndex);
-        const stagingBuffer = try vulkan.createStagingBuffer(@intCast(bufferSize));
+        const stagingBuffer = try vulkan.createBufferByUsage(
+            @intCast(bufferSize),
+            0,
+            .staging,
+            false,
+        );
 
         vulkan.buffers.copyDataToMapped(stagingBuffer, Vertex2D, vertices2D[update2dStartIndex..vertexCount2D]);
 
@@ -260,7 +295,12 @@ pub fn uploadInstance(graphic: *Commands) !void {
 
     if (instanceUpdated) {
         const bufferSize = @sizeOf(vertexStruct.Instance) * (updateEnd - updateStart);
-        const stagingBuffer = try vulkan.createStagingBuffer(@intCast(bufferSize));
+        const stagingBuffer = try vulkan.createBufferByUsage(
+            @intCast(bufferSize),
+            0,
+            .staging,
+            false,
+        );
 
         vulkan.buffers.copyDataToMapped(stagingBuffer, vertexStruct.Instance, instances2D.items[updateStart..updateEnd]);
 

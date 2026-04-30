@@ -7,7 +7,7 @@ const QueueType = @import("queueType.zig").QueueType;
 const VkResultToError = @import("resultToError");
 const vulkanType = VkResultToError.vulkanType;
 const VkError = vulkanType.VkError;
-const Usage = @import("processRender").drawC.BufferUsage;
+pub const Usage = @import("processRender").drawC.BufferUsage;
 const FixedIndexArray = @import("fixedIndexArray").FixedIndexArray;
 const Handles = @import("handle");
 const Handle = Handles.Handle;
@@ -195,105 +195,68 @@ pub fn destroyBuffer(
     handles.destroyHandle(buffer);
 }
 
-pub fn createStagingBuffer(
+pub fn createBufferByUsage(
     self: *Self,
     vmaa: *vmaStruct,
-    bufferSize: vk.VkDeviceSize,
+    size: vk.VkDeviceSize,
     handles: *global.HandlesType,
-) !Buffer_t {
-    return self._createBuffer(
-        vmaa,
-        0,
-        null,
-        vk.VK_SHARING_MODE_EXCLUSIVE,
-        @intCast(math.round(BufferAlign, @intCast(bufferSize))),
-        0,
-        vk.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | vma.VMA_ALLOCATION_CREATE_MAPPED_BIT,
-        vma.VMA_MEMORY_USAGE_AUTO,
-        handles,
-    );
-}
-
-pub fn createVertexBuffer(
-    self: *Self,
-    vmaa: *vmaStruct,
-    bufferSize: vk.VkDeviceSize,
     stride: vk.VkDeviceSize,
-    handles: *global.HandlesType,
+    usage: Usage,
+    bda: bool,
 ) !Buffer_t {
+    var usageFlags: vk.VkBufferUsageFlags = 0;
+    var vmaFlags: vma.VmaAllocationCreateFlags = 0;
+    var vmaUsage: vma.VmaMemoryUsage = 0;
+
+    switch (usage) {
+        .index => {
+            usageFlags |= vk.VK_BUFFER_USAGE_INDEX_BUFFER_BIT | vk.VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+            vmaFlags = 0;
+            vmaUsage = vma.VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+        },
+        .vertex => {
+            usageFlags |= vk.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | vk.VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+            vmaFlags = 0;
+            vmaUsage = vma.VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+        },
+        .uniform => {
+            usageFlags |= vk.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+            vmaFlags |= vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT |
+                vma.VMA_ALLOCATION_CREATE_MAPPED_BIT;
+            vmaUsage = vma.VMA_MEMORY_USAGE_AUTO;
+        },
+        .staging => {
+            usageFlags |= vk.VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+            vmaFlags |= vma.VMA_ALLOCATION_CREATE_MAPPED_BIT |
+                vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+            vmaUsage = vma.VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+        },
+        .indirect => {
+            usageFlags |= vk.VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | vk.VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+            vmaFlags = 0;
+            vmaUsage = vma.VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+        },
+        .storage, .storageRead => {
+            usageFlags |= vk.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | vk.VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+            vmaFlags = 0;
+            vmaUsage = vma.VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+        },
+
+        .none => unreachable,
+    }
+
+    if (bda) usageFlags |= vk.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+
     return self._createBuffer(
         vmaa,
         0,
         null,
         vk.VK_SHARING_MODE_EXCLUSIVE,
-        @intCast(math.round(BufferAlign, bufferSize)),
+        @intCast(math.round(BufferAlign, size)),
         stride,
-        vk.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | vk.VK_BUFFER_USAGE_TRANSFER_DST_BIT | vk.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-        vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT,
-        vma.VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
-        handles,
-    );
-}
-
-pub fn createIndexBuffer(
-    self: *Self,
-    vmaa: *vmaStruct,
-    size: vk.VkDeviceSize,
-    handles: *global.HandlesType,
-) !Buffer_t {
-    return self._createBuffer(
-        vmaa,
-        0,
-        null,
-        vk.VK_SHARING_MODE_EXCLUSIVE,
-        @intCast(math.round(BufferAlign, size)),
-        0,
-        vk.VK_BUFFER_USAGE_INDEX_BUFFER_BIT | vk.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-        vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-        vma.VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
-        handles,
-    );
-}
-pub fn createUniformBuffer(
-    self: *Self,
-    vmaa: *vmaStruct,
-    size: vk.VkDeviceSize,
-    handles: *global.HandlesType,
-) !Buffer_t {
-    return self._createBuffer(
-        vmaa,
-        0,
-        null,
-        vk.VK_SHARING_MODE_EXCLUSIVE,
-        @intCast(math.round(UniformBufferAlign, size)),
-        0,
-        vk.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-        vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | vma.VMA_ALLOCATION_CREATE_MAPPED_BIT,
-        vma.VMA_MEMORY_USAGE_AUTO_PREFER_HOST,
-        handles,
-    );
-}
-
-pub fn createStorageBuffer(
-    self: *Self,
-    vmaa: *vmaStruct,
-    size: vk.VkDeviceSize,
-    handles: *global.HandlesType,
-    indirect: bool,
-) !Buffer_t {
-    var usage = vk.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | vk.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | vk.VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    if (indirect) usage |= vk.VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
-    return self._createBuffer(
-        vmaa,
-        0,
-        null,
-        vk.VK_SHARING_MODE_EXCLUSIVE,
-        @intCast(math.round(BufferAlign, size)),
-        0,
-        @intCast(usage),
-        vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-        vma.VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+        @intCast(usageFlags),
+        vmaFlags,
+        vmaUsage,
         handles,
     );
 }
