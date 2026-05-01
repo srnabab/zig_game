@@ -503,10 +503,11 @@ pub fn render_thread_func(
         .stageFlag = vk.VK_SHADER_STAGE_COMPUTE_BIT,
     };
 
-    // global.stopNodeDagPrint = false;
+    global.stopNodeDagPrint = false;
+    global.printDagToDot = true;
     // global.stopNodeDagDetailPrint = false;
     // global.stopExecuteNodePrint = false;
-    // global.game_end.store(1, .seq_cst);
+    global.game_end.store(1, .seq_cst);
 
     // vulkan.logBufferPtr();
     // vulkan.logPipeline();

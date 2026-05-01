@@ -45,6 +45,7 @@ pub const MeshletStorageBufferSize = StorageBufferMeshletTrianglesEnd;
 pub var FrameInFlight: u32 = 2;
 
 pub var stopNodeDagPrint = true;
+pub var printDagToDot = false;
 pub var stopNodeDagDetailPrint = true;
 pub var stopExecuteNodePrint = true;
 

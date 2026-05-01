@@ -810,6 +810,92 @@ fn nodeDagPrint(self: *QueueNodes, self2: *commands) void {
         }
     }
     std.log.debug("\n", .{});
+
+    if (global.printDagToDot) {
+        const time = std.Io.Timestamp.now(self2.io, .real).toNanoseconds();
+        const timeBytes = std.mem.toBytes(time);
+        const timeHex = std.fmt.bytesToHex(timeBytes, .lower);
+        var pathBuffer = [_]u8{0} ** 64;
+        const path = std.fmt.bufPrint(&pathBuffer, "{s}.dot", .{timeHex}) catch |err| {
+            std.log.err("write err: {s} 6", .{@errorName(err)});
+            return;
+        };
+        var dotFile = std.Io.Dir.cwd().createFile(self2.io, path, .{}) catch |err| {
+            std.log.err("write err: {s} 7", .{@errorName(err)});
+            return;
+        };
+        defer dotFile.close(self2.io);
+
+        var writeBuffer = [_]u8{0} ** 1024;
+        var fileWriter = dotFile.writer(self2.io, &writeBuffer);
+
+        fileWriter.interface.print(
+            "digraph G {{\n" ++
+                // "rankdir=LR;\n" ++
+                "node [shape=box, style=filled, color=lightblue];\n\n",
+            .{},
+        ) catch |err| {
+            std.log.err("write err: {s} 1", .{@errorName(err)});
+            return;
+        };
+        for (0..self.innerID) |i| {
+            if (self.map.get(@intCast(i))) |n| {
+                for (n.children.list.items) |ID| {
+                    fileWriter.interface.print("{d} -> {d};\n", .{ n.ID, ID.* }) catch |err| {
+                        std.log.err("write err: {s} 2", .{@errorName(err)});
+                        return;
+                    };
+                }
+            }
+        }
+        fileWriter.interface.print("\n", .{}) catch |err| {
+            std.log.err("write err: {s} 3", .{@errorName(err)});
+            return;
+        };
+        for (0..self.innerID) |i| {
+            if (self.map.get(@intCast(i))) |n| {
+                if (self2.queue.getPtr(@intCast(i))) |c| {
+                    fileWriter.interface.print("{d} [label=\"{s}\", color=\"{s}\"];\n", .{
+                        i,
+                        @tagName(c.command),
+                        queueTypeToColor(n.data.commandPoolType),
+                    }) catch |err| {
+                        std.log.err("write err: {s} 4", .{@errorName(err)});
+                        return;
+                    };
+                }
+            }
+        }
+        fileWriter.interface.print("}}\n", .{}) catch |err| {
+            std.log.err("write err: {s} 5", .{@errorName(err)});
+            return;
+        };
+
+        fileWriter.flush() catch |err| {
+            std.log.err("write err: {s} 8", .{@errorName(err)});
+            return;
+        };
+    }
+}
+
+fn queueTypeToColor(queueType: VkStruct.CommandPoolType) *const [7:0]u8 {
+    switch (queueType) {
+        .init => {
+            return "#7fc975";
+        },
+        .graphic => {
+            return "#beaed4";
+        },
+        .compute => {
+            return "#fdc086";
+        },
+        .transfer => {
+            return "#ffff99";
+        },
+        .present => {
+            return "#386cb0";
+        },
+    }
 }
 
 const MaxThreads = 8;
