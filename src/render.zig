@@ -505,7 +505,7 @@ pub fn render_thread_func(
 
     global.stopNodeDagPrint = false;
     global.printDagToDot = true;
-    // global.stopNodeDagDetailPrint = false;
+    global.stopNodeDagDetailPrint = false;
     // global.stopExecuteNodePrint = false;
     global.game_end.store(1, .seq_cst);
 

@@ -314,7 +314,7 @@ fn SpecialThreadPool(maxThreads: u32) type {
                     .command = .{ .end = void{} },
                 };
                 var emptyQueueNode: QueueNode = .{
-                    .listID = null,
+                    // .listID = null,
                     .children = undefined,
                     .parents = undefined,
                 };
@@ -348,7 +348,7 @@ fn Graph(T: type) type {
         const Self = @This();
 
         ID: u32 = 0,
-        listID: ?*u32,
+        // listID: ?*u32,
 
         parents: uniqueArrayList(*u32),
         parentsLen: u32 = 0,
@@ -374,7 +374,7 @@ fn Graph(T: type) type {
             if (!(try self.children.append(ID))) {
                 self.childrenLen += 1;
 
-                // if (self.ID == 28 and ID.* == 40) {
+                // if (self.ID == 16 and ID.* == 33) {
                 //     @breakpoint();
                 // }
 
@@ -536,9 +536,9 @@ fn DAG(T: type) type {
         pub const Inner = Graph(T);
 
         innerID: u32 = 0,
-        innerListID: u32 = 0,
+        // innerListID: u32 = 0,
 
-        currentListID: ?*u32 = null,
+        // currentListID: ?*u32 = null,
 
         mem: std.heap.memory_pool.Extra(Inner, .{}),
         map: std.hash_map.AutoHashMap(u32, *Inner),
@@ -569,10 +569,17 @@ fn DAG(T: type) type {
             const node = try self.mem.create(self.arena.allocator());
             node.* = .{
                 .ID = self.innerID,
-                .listID = null,
+                // .listID = null,
                 .children = .init(self.arena.allocator()),
                 .parents = .init(self.arena.allocator()),
             };
+
+            // if (self.innerID == 43) @breakpoint();
+            // if (self.innerID == 33) @breakpoint();
+            // if (self.innerID == 35) @breakpoint();
+            // if (self.innerID == 41) @breakpoint();
+            // if (self.innerID == 39) @breakpoint();
+            // if (self.innerID == 15) @breakpoint();
 
             self.innerID += 1;
 
@@ -591,11 +598,11 @@ fn DAG(T: type) type {
             _ = self.map.remove(node.ID);
         }
 
-        pub fn newListID(self: *Self) u32 {
-            self.innerListID += 1;
+        // pub fn newListID(self: *Self) u32 {
+        //     self.innerListID += 1;
 
-            return self.innerListID;
-        }
+        //     return self.innerListID;
+        // }
         // pub fn childrenAppend(self: *Self, node: *Inner, child: *Inner) !void {}
 
         pub fn clearRetainCapacity(self: *Self) void {
@@ -605,7 +612,7 @@ fn DAG(T: type) type {
             _ = self.mem.reset(self.arena.child_allocator, .retain_capacity);
             self.map.clearRetainingCapacity();
             self.innerID = 0;
-            self.innerListID = 0;
+            // self.innerListID = 0;
         }
 
         pub fn undoneAllNodes(self: *Self) void {
@@ -775,48 +782,12 @@ fn nodeDagPrint(self: *QueueNodes, self2: *commands) void {
         }
     }
 
-    var buffer = [_]u8{0} ** 1024;
-    var buffer2 = [_]u8{0} ** 1024;
-    var writer = std.Io.Writer.fixed(&buffer);
-    var writer2 = std.Io.Writer.fixed(&buffer2);
-
-    for (0..self.innerID) |i| {
-        if (self.map.get(@intCast(i))) |n| {
-            for (n.parents.list.items) |ID| {
-                const ll: *QueueNode = @alignCast(@fieldParentPtr("ID", ID));
-
-                writer.print("{d} {s} {s} ", .{
-                    ll.ID,                                         @tagName(self.map.get(ID.*).?.data.commandPoolType),
-                    @tagName(self2.queue.getPtr(ll.ID).?.command),
-                }) catch |err| {
-                    std.log.err("write err: {s}", .{@errorName(err)});
-                };
-            }
-
-            for (n.children.list.items) |ID| {
-                const ll: *QueueNode = @alignCast(@fieldParentPtr("ID", ID));
-
-                writer2.print("{d} {s} {s} ", .{
-                    ll.ID,                                         @tagName(self.map.get(ID.*).?.data.commandPoolType),
-                    @tagName(self2.queue.getPtr(ll.ID).?.command),
-                }) catch |err| {
-                    std.log.err("write err: {s}", .{@errorName(err)});
-                };
-            }
-
-            std.log.debug("[{s}] => ID: {d} => [{s}]", .{ buffer[0..if (writer.end > 1) writer.end - 1 else 0], n.ID, buffer2[0..if (writer2.end > 1) writer2.end - 1 else 0] });
-            _ = writer.consumeAll();
-            _ = writer2.consumeAll();
-        }
-    }
-    std.log.debug("\n", .{});
-
     if (global.printDagToDot) {
         const time = std.Io.Timestamp.now(self2.io, .real).toNanoseconds();
         const timeBytes = std.mem.toBytes(time);
         const timeHex = std.fmt.bytesToHex(timeBytes, .lower);
         var pathBuffer = [_]u8{0} ** 64;
-        const path = std.fmt.bufPrint(&pathBuffer, "{s}.dot", .{timeHex}) catch |err| {
+        const path = std.fmt.bufPrint(&pathBuffer, "{s}", .{timeHex}) catch |err| {
             std.log.err("write err: {s} 6", .{@errorName(err)});
             return;
         };
@@ -855,9 +826,11 @@ fn nodeDagPrint(self: *QueueNodes, self2: *commands) void {
         for (0..self.innerID) |i| {
             if (self.map.get(@intCast(i))) |n| {
                 if (self2.queue.getPtr(@intCast(i))) |c| {
-                    fileWriter.interface.print("{d} [label=\"{s}\", color=\"{s}\"];\n", .{
+                    fileWriter.interface.print("{d} [label=\"{s} {d}\", color=\"{s}\"];\n", .{
                         i,
                         @tagName(c.command),
+                        i,
+                        // n.listID.?.*,
                         queueTypeToColor(n.data.commandPoolType),
                     }) catch |err| {
                         std.log.err("write err: {s} 4", .{@errorName(err)});
@@ -875,6 +848,42 @@ fn nodeDagPrint(self: *QueueNodes, self2: *commands) void {
             std.log.err("write err: {s} 8", .{@errorName(err)});
             return;
         };
+    } else {
+        var buffer = [_]u8{0} ** 1024;
+        var buffer2 = [_]u8{0} ** 1024;
+        var writer = std.Io.Writer.fixed(&buffer);
+        var writer2 = std.Io.Writer.fixed(&buffer2);
+
+        for (0..self.innerID) |i| {
+            if (self.map.get(@intCast(i))) |n| {
+                for (n.parents.list.items) |ID| {
+                    const ll: *QueueNode = @alignCast(@fieldParentPtr("ID", ID));
+
+                    writer.print("{d} {s} {s} ", .{
+                        ll.ID,                                         @tagName(self.map.get(ID.*).?.data.commandPoolType),
+                        @tagName(self2.queue.getPtr(ll.ID).?.command),
+                    }) catch |err| {
+                        std.log.err("write err: {s}", .{@errorName(err)});
+                    };
+                }
+
+                for (n.children.list.items) |ID| {
+                    const ll: *QueueNode = @alignCast(@fieldParentPtr("ID", ID));
+
+                    writer2.print("{d} {s} {s} ", .{
+                        ll.ID,                                         @tagName(self.map.get(ID.*).?.data.commandPoolType),
+                        @tagName(self2.queue.getPtr(ll.ID).?.command),
+                    }) catch |err| {
+                        std.log.err("write err: {s}", .{@errorName(err)});
+                    };
+                }
+
+                std.log.debug("[{s}] => ID: {d} => [{s}]", .{ buffer[0..if (writer.end > 1) writer.end - 1 else 0], n.ID, buffer2[0..if (writer2.end > 1) writer2.end - 1 else 0] });
+                _ = writer.consumeAll();
+                _ = writer2.consumeAll();
+            }
+        }
+        std.log.debug("\n", .{});
     }
 }
 
@@ -997,6 +1006,11 @@ pub const commands = struct {
         index: u32,
     };
 
+    const QueueNode_ID = struct {
+        node: *QueueNode,
+        ID: u32,
+    };
+
     mutex: std.Io.Mutex = .init,
     io: std.Io,
 
@@ -1013,7 +1027,7 @@ pub const commands = struct {
 
     queue: std.hash_map.AutoHashMap(u32, drawC),
     nodeDag: QueueNodes,
-    combineMap: std.AutoHashMap(u64, *QueueNode),
+    combineMap: std.AutoHashMap(u64, []QueueNode_ID),
 
     drawCacheMap: std.AutoHashMap(u32, void),
     cacheMap: std.AutoHashMap(*anyopaque, u32),
@@ -1074,13 +1088,18 @@ pub const commands = struct {
     pub fn clearRetainCapacity(self: *Self) void {
         self.queue.clearRetainingCapacity();
         self.nodeDag.clearRetainCapacity();
+        var it1 = self.combineMap.iterator();
+        while (it1.next()) |entry| {
+            self.allocator.free(entry.value_ptr.*);
+        }
         self.combineMap.clearRetainingCapacity();
+
         self.cacheMap.clearRetainingCapacity();
         self.cachedCommand.clearRetainingCapacity();
         self.drawCacheMap.clearRetainingCapacity();
 
-        var it = self.renderingMap.iterator();
-        while (it.next()) |entry| {
+        var it2 = self.renderingMap.iterator();
+        while (it2.next()) |entry| {
             entry.value_ptr.drawResourceMap.deinit();
             entry.value_ptr.resourceMap.deinit();
         }
@@ -1103,6 +1122,9 @@ pub const commands = struct {
 
         const node = try self.nodeDag.create();
 
+        // node.listID = try self.u32Mem.create(self.allocator);
+        // node.listID.?.* = self.nodeDag.newListID();
+
         const ptr = try self.queue.getOrPut(node.ID);
         ptr.value_ptr.* = drawC{
             .ID = node.ID,
@@ -1110,29 +1132,6 @@ pub const commands = struct {
             .command = .{ .start = .{} },
         };
     }
-
-    // fn getOuput(commandType: drawC.CommandType, command: drawC.comm) drawC.Output {
-    //     const zone = tracy.initZone(@src(), .{ .name = "get output OnetimeCommand" });
-    //     defer zone.deinit();
-
-    //     return rs: switch (commandType) {
-    //         .start, .beginPrimaryRecord, .beginRendering, .beginSecondaryRecord, .endRendering, .endRecord, .present, .draw2D, .graphicTransfer, .transfer, .end, .pipelineBarrier => {
-    //             break :rs drawC.Output{ .empty = void{} };
-    //         },
-    //         .copyBufferToImage => {
-    //             break :rs drawC.Output{ .image = command.copyBufferToImage.dstImage };
-    //         },
-    //         .copyBuffer => {
-    //             break :rs drawC.Output{ .buffer = command.copyBuffer.dstBuffer };
-    //         },
-    //         // .transLayout => {
-    //         //     break :rs drawC.Output{ .image = command.transLayout.pTexture.image.vkImage };
-    //         // },
-    //         else => {
-    //             std.debug.panic("not support {s}", .{@tagName(commandType)});
-    //         },
-    //     };
-    // }
 
     fn commandCost(commandType: drawC.CommandType2) u32 {
         const zone = tracy.initZone(@src(), .{ .name = "calculate command cost" });
@@ -1557,7 +1556,12 @@ pub const commands = struct {
         };
     }
 
-    fn addCommand2(self: *Self, command: drawC.comm2, enterCommandType: drawC.CommandType) !twoQueueNode {
+    fn addCommand2(
+        self: *Self,
+        command: drawC.comm2,
+        enterCommandType: drawC.CommandType,
+        enterCommandID: u32,
+    ) !twoQueueNode {
         const zone = tracy.initZone(@src(), .{ .name = "add command 2" });
         defer zone.deinit();
 
@@ -1579,7 +1583,7 @@ pub const commands = struct {
                     // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                     .command = .{ .pushconstant = command.pushconstant },
                 };
-                rootNode.listID = self.nodeDag.currentListID;
+                // rootNode.listID = self.nodeDag.currentListID;
 
                 if (enterCommandType == .draw2D) {
                     rootNode.data.commandPoolType = .graphic;
@@ -1636,34 +1640,47 @@ pub const commands = struct {
 
                     const releaseNode = blk: {
                         if (release.found_existing) {
-                            const node = release.value_ptr.*;
-                            const cmd = self.queue.getPtr(node.ID).?;
+                            const nodes = release.value_ptr.*;
 
-                            if (cmd.command != .pipelineBarrier) std.debug.panic("not supported commandType {s}", .{@tagName(cmd.command)});
-                            if (node.listID) |listID| {
-                                if (listID.* == self.nodeDag.currentListID.?.*) {
-                                    break :blk node;
+                            for (nodes) |node| {
+                                if (node.ID == enterCommandID) {
+                                    const cmd = self.queue.getPtr(node.node.ID).?;
+                                    if (cmd.command != .pipelineBarrier) std.debug.panic("not supported commandType {s}", .{@tagName(cmd.command)});
+
+                                    switch (enterCommandType) {
+                                        .draw2D, .drawMesh, .drawIndirect, .present, .compute => {
+                                            break :blk node.node;
+                                        },
+                                        else => break,
+                                    }
                                 }
                             }
                         }
 
-                        {
-                            const node = try self.nodeDag.create();
-                            release.value_ptr.* = node;
-                            node.listID = self.nodeDag.currentListID;
-                            const ptr = try self.queue.getOrPut(node.ID);
-                            ptr.value_ptr.* = drawC{
-                                .ID = node.ID,
-                                // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
-                                .command = .{
-                                    .pipelineBarrier = .{
-                                        .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
-                                        .lastSrcStageMask = releaseFlags.sourceStage,
-                                    },
+                        const node = try self.nodeDag.create();
+                        release.value_ptr.* = if (release.found_existing)
+                            try self.allocator.realloc(release.value_ptr.*, release.value_ptr.len + 1)
+                        else
+                            try self.allocator.alloc(QueueNode_ID, 1);
+
+                        release.value_ptr.*[release.value_ptr.len - 1] = .{
+                            .node = node,
+                            .ID = enterCommandID,
+                        };
+
+                        // node.listID = self.nodeDag.currentListID;
+                        const ptr = try self.queue.getOrPut(node.ID);
+                        ptr.value_ptr.* = drawC{
+                            .ID = node.ID,
+                            // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
+                            .command = .{
+                                .pipelineBarrier = .{
+                                    .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
+                                    .lastSrcStageMask = releaseFlags.sourceStage,
                                 },
-                            };
-                            break :blk node;
-                        }
+                            },
+                        };
+                        break :blk node;
                     };
                     releaseNode.data.commandPoolType = transLayout.srcQueueFamily;
 
@@ -1715,36 +1732,47 @@ pub const commands = struct {
 
                     const acquireNode = blk: {
                         if (acquire.found_existing) {
-                            const node = acquire.value_ptr.*;
-                            const cmd = self.queue.getPtr(node.ID).?;
+                            const nodes = acquire.value_ptr.*;
 
-                            if (cmd.command != .pipelineBarrier) std.debug.panic("not supported commandType {s}", .{@tagName(cmd.command)});
+                            for (nodes) |node| {
+                                if (node.ID == enterCommandID) {
+                                    const cmd = self.queue.getPtr(node.node.ID).?;
+                                    if (cmd.command != .pipelineBarrier) std.debug.panic("not supported commandType {s}", .{@tagName(cmd.command)});
 
-                            if (node.listID) |listID| {
-                                if (listID.* == self.nodeDag.currentListID.?.*) {
-                                    break :blk node;
+                                    switch (enterCommandType) {
+                                        .draw2D, .drawMesh, .drawIndirect, .present, .compute => {
+                                            break :blk node.node;
+                                        },
+                                        else => break,
+                                    }
                                 }
                             }
                         }
 
-                        {
-                            const node = try self.nodeDag.create();
-                            acquire.value_ptr.* = node;
-                            node.listID = self.nodeDag.currentListID;
+                        const node = try self.nodeDag.create();
+                        acquire.value_ptr.* = if (acquire.found_existing)
+                            try self.allocator.realloc(acquire.value_ptr.*, acquire.value_ptr.len + 1)
+                        else
+                            try self.allocator.alloc(QueueNode_ID, 1);
 
-                            const ptr = try self.queue.getOrPut(node.ID);
-                            ptr.value_ptr.* = drawC{
-                                .ID = node.ID,
-                                // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
-                                .command = .{
-                                    .pipelineBarrier = .{
-                                        .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
-                                        .lastSrcStageMask = acquireFlags.sourceStage,
-                                    },
+                        acquire.value_ptr.*[acquire.value_ptr.len - 1] = .{
+                            .node = node,
+                            .ID = enterCommandID,
+                        };
+                        // node.listID = self.nodeDag.currentListID;
+
+                        const ptr = try self.queue.getOrPut(node.ID);
+                        ptr.value_ptr.* = drawC{
+                            .ID = node.ID,
+                            // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
+                            .command = .{
+                                .pipelineBarrier = .{
+                                    .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
+                                    .lastSrcStageMask = acquireFlags.sourceStage,
                                 },
-                            };
-                            break :blk node;
-                        }
+                            },
+                        };
+                        break :blk node;
                     };
                     acquireNode.data.commandPoolType = transLayout.dstQueueFamily;
 
@@ -1798,36 +1826,47 @@ pub const commands = struct {
 
                     const rootNode = blk: {
                         if (res.found_existing) {
-                            const node = res.value_ptr.*;
+                            const nodes = res.value_ptr.*;
 
-                            const cmd = self.queue.getPtr(node.ID).?;
-                            if (cmd.command != .pipelineBarrier) std.debug.panic("not supported commandType {s}", .{@tagName(cmd.command)});
+                            for (nodes) |node| {
+                                if (node.ID == enterCommandID) {
+                                    const cmd = self.queue.getPtr(node.node.ID).?;
+                                    if (cmd.command != .pipelineBarrier) std.debug.panic("not supported commandType {s}", .{@tagName(cmd.command)});
 
-                            if (node.listID) |listID| {
-                                if (listID.* == self.nodeDag.currentListID.?.*) {
-                                    break :blk node;
+                                    switch (enterCommandType) {
+                                        .draw2D, .drawMesh, .drawIndirect, .present, .compute => {
+                                            break :blk node.node;
+                                        },
+                                        else => break,
+                                    }
                                 }
                             }
                         }
 
-                        {
-                            const node = try self.nodeDag.create();
-                            res.value_ptr.* = node;
-                            node.listID = self.nodeDag.currentListID;
+                        const node = try self.nodeDag.create();
+                        res.value_ptr.* = if (res.found_existing)
+                            try self.allocator.realloc(res.value_ptr.*, res.value_ptr.len + 1)
+                        else
+                            try self.allocator.alloc(QueueNode_ID, 1);
 
-                            const ptr = try self.queue.getOrPut(node.ID);
-                            ptr.value_ptr.* = drawC{
-                                .ID = node.ID,
-                                // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
-                                .command = .{
-                                    .pipelineBarrier = .{
-                                        .lastSrcStageMask = flags.sourceStage,
-                                        .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
-                                    },
+                        res.value_ptr.*[res.value_ptr.len - 1] = .{
+                            .node = node,
+                            .ID = enterCommandID,
+                        };
+                        // node.listID = self.nodeDag.currentListID;
+
+                        const ptr = try self.queue.getOrPut(node.ID);
+                        ptr.value_ptr.* = drawC{
+                            .ID = node.ID,
+                            // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
+                            .command = .{
+                                .pipelineBarrier = .{
+                                    .lastSrcStageMask = flags.sourceStage,
+                                    .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
                                 },
-                            };
-                            break :blk node;
-                        }
+                            },
+                        };
+                        break :blk node;
                     };
 
                     // 3. 统一的 Barrier 添加逻辑 (利用 realloc 自动处理空切片情况)
@@ -1887,35 +1926,47 @@ pub const commands = struct {
 
                 const releaseNode = blk: {
                     if (release.found_existing) {
-                        const node = release.value_ptr.*;
-                        const cmd = self.queue.getPtr(node.ID).?;
+                        const nodes = release.value_ptr.*;
 
-                        if (cmd.command != .pipelineBarrier) std.debug.panic("not supported commandType {s}", .{@tagName(cmd.command)});
+                        for (nodes) |node| {
+                            if (node.ID == enterCommandID) {
+                                const cmd = self.queue.getPtr(node.node.ID).?;
+                                if (cmd.command != .pipelineBarrier) std.debug.panic("not supported commandType {s}", .{@tagName(cmd.command)});
 
-                        if (node.listID) |listID| {
-                            if (listID.* == self.nodeDag.currentListID.?.*) {
-                                break :blk node;
+                                switch (enterCommandType) {
+                                    .draw2D, .drawMesh, .drawIndirect, .present, .compute => {
+                                        break :blk node.node;
+                                    },
+                                    else => break,
+                                }
                             }
                         }
                     }
 
-                    {
-                        const node = try self.nodeDag.create();
-                        release.value_ptr.* = node;
-                        node.listID = self.nodeDag.currentListID;
-                        const ptr = try self.queue.getOrPut(node.ID);
-                        ptr.value_ptr.* = drawC{
-                            .ID = node.ID,
-                            // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
-                            .command = .{
-                                .pipelineBarrier = .{
-                                    .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
-                                    .lastSrcStageMask = releaseFlags.sourceStage,
-                                },
+                    const node = try self.nodeDag.create();
+                    release.value_ptr.* = if (release.found_existing)
+                        try self.allocator.realloc(release.value_ptr.*, release.value_ptr.len + 1)
+                    else
+                        try self.allocator.alloc(QueueNode_ID, 1);
+
+                    release.value_ptr.*[release.value_ptr.len - 1] = .{
+                        .node = node,
+                        .ID = enterCommandID,
+                    };
+
+                    // node.listID = self.nodeDag.currentListID;
+                    const ptr = try self.queue.getOrPut(node.ID);
+                    ptr.value_ptr.* = drawC{
+                        .ID = node.ID,
+                        // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
+                        .command = .{
+                            .pipelineBarrier = .{
+                                .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
+                                .lastSrcStageMask = releaseFlags.sourceStage,
                             },
-                        };
-                        break :blk node;
-                    }
+                        },
+                    };
+                    break :blk node;
                 };
                 releaseNode.data.commandPoolType = changeBufferQueue.srcQueueFamily;
 
@@ -1963,33 +2014,47 @@ pub const commands = struct {
 
                 const acquireNode = blk: {
                     if (acquire.found_existing) {
-                        const node = acquire.value_ptr.*;
-                        const cmd = self.queue.getPtr(node.ID).?;
-                        if (cmd.command != .pipelineBarrier) std.debug.panic("not supported commandType {s}", .{@tagName(cmd.command)});
+                        const nodes = acquire.value_ptr.*;
 
-                        if (node.listID) |listID| {
-                            if (listID.* == self.nodeDag.currentListID.?.*) {
-                                break :blk node;
+                        for (nodes) |node| {
+                            if (node.ID == enterCommandID) {
+                                const cmd = self.queue.getPtr(node.node.ID).?;
+                                if (cmd.command != .pipelineBarrier) std.debug.panic("not supported commandType {s}", .{@tagName(cmd.command)});
+
+                                switch (enterCommandType) {
+                                    .draw2D, .drawMesh, .drawIndirect, .present, .compute => {
+                                        break :blk node.node;
+                                    },
+                                    else => break,
+                                }
                             }
                         }
                     }
-                    {
-                        const node = try self.nodeDag.create();
-                        acquire.value_ptr.* = node;
-                        node.listID = self.nodeDag.currentListID;
-                        const ptr = try self.queue.getOrPut(node.ID);
-                        ptr.value_ptr.* = drawC{
-                            .ID = node.ID,
-                            // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
-                            .command = .{
-                                .pipelineBarrier = .{
-                                    .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
-                                    .lastSrcStageMask = acquireFlags.sourceStage,
-                                },
+
+                    const node = try self.nodeDag.create();
+                    acquire.value_ptr.* = if (acquire.found_existing)
+                        try self.allocator.realloc(acquire.value_ptr.*, acquire.value_ptr.len + 1)
+                    else
+                        try self.allocator.alloc(QueueNode_ID, 1);
+
+                    acquire.value_ptr.*[acquire.value_ptr.len - 1] = .{
+                        .node = node,
+                        .ID = enterCommandID,
+                    };
+
+                    // node.listID = self.nodeDag.currentListID;
+                    const ptr = try self.queue.getOrPut(node.ID);
+                    ptr.value_ptr.* = drawC{
+                        .ID = node.ID,
+                        // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
+                        .command = .{
+                            .pipelineBarrier = .{
+                                .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
+                                .lastSrcStageMask = acquireFlags.sourceStage,
                             },
-                        };
-                        break :blk node;
-                    }
+                        },
+                    };
+                    break :blk node;
                 };
                 acquireNode.data.commandPoolType = changeBufferQueue.dstQueueFamily;
 
@@ -2036,7 +2101,7 @@ pub const commands = struct {
                     // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                     .command = .{ .beginRendering = command.beginRendering },
                 };
-                rootNode.listID = self.nodeDag.currentListID;
+                // rootNode.listID = self.nodeDag.currentListID;
                 rootNode.data.commandPoolType = .graphic;
 
                 resNode = rootNode;
@@ -2054,7 +2119,7 @@ pub const commands = struct {
                     // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                     .command = .{ .bindPipeline = bindPipeline },
                 };
-                rootNode.listID = self.nodeDag.currentListID;
+                // rootNode.listID = self.nodeDag.currentListID;
                 rootNode.data.commandPoolType = switch (bindPipeline.bindPoint) {
                     vk.VK_PIPELINE_BIND_POINT_COMPUTE => .compute,
                     vk.VK_PIPELINE_BIND_POINT_GRAPHICS => .graphic,
@@ -2076,7 +2141,7 @@ pub const commands = struct {
                     // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                     .command = .{ .bindIndexBuffer = bindIndexBuffer },
                 };
-                rootNode.listID = self.nodeDag.currentListID;
+                // rootNode.listID = self.nodeDag.currentListID;
                 rootNode.data.commandPoolType = .graphic;
 
                 resNode = rootNode;
@@ -2094,7 +2159,7 @@ pub const commands = struct {
                     // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                     .command = .{ .bindVertexBuffers = bindVertexBuffers },
                 };
-                rootNode.listID = self.nodeDag.currentListID;
+                // rootNode.listID = self.nodeDag.currentListID;
                 rootNode.data.commandPoolType = .graphic;
 
                 resNode = rootNode;
@@ -2112,7 +2177,7 @@ pub const commands = struct {
                     // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                     .command = .{ .bindDescriptorSets = bindDescriptorSets },
                 };
-                rootNode.listID = self.nodeDag.currentListID;
+                // rootNode.listID = self.nodeDag.currentListID;
                 rootNode.data.commandPoolType = .graphic;
 
                 resNode = rootNode;
@@ -2128,7 +2193,7 @@ pub const commands = struct {
                     // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                     .command = .{ .endRendering = void{} },
                 };
-                rootNode.listID = self.nodeDag.currentListID;
+                // rootNode.listID = self.nodeDag.currentListID;
                 rootNode.data.commandPoolType = .graphic;
 
                 resNode = rootNode;
@@ -2144,7 +2209,7 @@ pub const commands = struct {
                     // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                     .command = .{ .setScissor = command.setScissor },
                 };
-                rootNode.listID = self.nodeDag.currentListID;
+                // rootNode.listID = self.nodeDag.currentListID;
                 rootNode.data.commandPoolType = .graphic;
 
                 resNode = rootNode;
@@ -2160,7 +2225,7 @@ pub const commands = struct {
                     // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                     .command = .{ .setViewport = command.setViewport },
                 };
-                rootNode.listID = self.nodeDag.currentListID;
+                // rootNode.listID = self.nodeDag.currentListID;
                 rootNode.data.commandPoolType = .graphic;
 
                 resNode = rootNode;
@@ -2169,27 +2234,6 @@ pub const commands = struct {
                 std.debug.panic("not supported commandType {s}", .{@tagName(command)});
             },
         }
-
-        // const hash: u64 = hs: {
-        //     switch (ptr.value_ptr.commandType) {
-        //         .transLayout => {
-        //             const transLayout = ptr.value_ptr.command.transLayout;
-        //             break :hs math.szudzikPairing(transLayout.sourceStage, transLayout.destinationStage);
-        //         },
-        //         .copyBufferToImage => {
-        //             var wyHash = std.hash.Wyhash.init(0);
-        //             const copyBufferToImage = ptr.value_ptr.command.copyBufferToImage;
-        //             const a = @intFromPtr(copyBufferToImage.buffer.vkBuffer);
-        //             const b = @intFromPtr(copyBufferToImage.pTexture.image.vkImage);
-        //             wyHash.update(std.mem.asBytes(&a));
-        //             wyHash.update(std.mem.asBytes(&b));
-        //             break :hs wyHash.final();
-        //         },
-        //         else => {
-        //             std.debug.panic("not supported commandType {s}", .{@tagName(command.commandType)});
-        //         },
-        //     }
-        // };
 
         return .{
             .a = resNode,
@@ -2203,6 +2247,7 @@ pub const commands = struct {
         newQueue: VkStruct.CommandPoolType,
         regions: []drawC.SizeOffset,
         commandType: drawC.CommandType,
+        commandID: u32,
     ) !twoQueueNode {
         var resNode = twoQueueNode{};
 
@@ -2214,7 +2259,7 @@ pub const commands = struct {
                     .srcQueueFamily = oldSrcQueueType,
                     .dstQueueFamily = newQueue,
                     .regions = regions,
-                } }, commandType);
+                } }, commandType, commandID);
             }
             // std.log.debug("queue {s}", .{@tagName(oldSrcQueueType)});
             self.vulkan.buffers.changeQueueType(pBuffer, newQueue);
@@ -2234,6 +2279,7 @@ pub const commands = struct {
         newLayout: vk.VkImageLayout,
         newQueue: VkStruct.CommandPoolType,
         commandType: drawC.CommandType,
+        commandID: u32,
     ) !twoQueueNode {
         const textureContent = textureSet.getTextureCotent(texture_);
         const oldLayouts = textureContent.layouts;
@@ -2265,7 +2311,7 @@ pub const commands = struct {
                     .layerCount = count,
                     .srcQueueFamily = oldQueue,
                     .dstQueueFamily = newQueue,
-                } }, commandType);
+                } }, commandType, commandID);
 
                 currentLayout = layout;
                 currentBase += count;
@@ -2283,7 +2329,7 @@ pub const commands = struct {
                 .layerCount = count,
                 .srcQueueFamily = oldQueue,
                 .dstQueueFamily = newQueue,
-            } }, commandType);
+            } }, commandType, commandID);
         }
         textureSet.changeTextureLayout(texture_, baseArrayLayer, layerCount, newLayout);
         textureSet.changeTextureQueue(texture_, newQueue);
@@ -2293,9 +2339,19 @@ pub const commands = struct {
         return transNode;
     }
 
-    fn pipelineBarrierNodeConnect(self: *Self, nodes: []twoQueueNode) !twoQueueNode {
+    fn pipelineBarrierNodeConnect(
+        self: *Self,
+        nodes: []twoQueueNode,
+        graphicCurrentNode: *?*QueueNode,
+        computeCurrentNode: *?*QueueNode,
+        transferCurrentNode: *?*QueueNode,
+    ) !twoQueueNode {
         const zone = tracy.initZone(@src(), .{ .name = "pipeline barrier node connect" });
         defer zone.deinit();
+
+        var graphicSet: bool = false;
+        var computeSet: bool = false;
+        var transferSet: bool = false;
 
         const allocator = self.stackAllocators[self.stackAllocatorsIndex].allocator();
 
@@ -2376,6 +2432,17 @@ pub const commands = struct {
 
             if (a) |aa| {
                 const srcStageMask = self.queue.getPtr(aa.ID).?.command.pipelineBarrier.lastSrcStageMask;
+
+                if (aa.data.commandPoolType == .transfer and !transferSet) {
+                    transferSet = true;
+                    transferCurrentNode.* = aa;
+                } else if (aa.data.commandPoolType == .compute and !computeSet) {
+                    computeSet = true;
+                    computeCurrentNode.* = aa;
+                } else if (aa.data.commandPoolType == .graphic and !graphicSet) {
+                    graphicSet = true;
+                    graphicCurrentNode.* = aa;
+                }
 
                 // may need type check
 
@@ -2469,6 +2536,7 @@ pub const commands = struct {
         bufferHandles: []VkStruct.Buffer_t,
         startIndex: u32,
         commandType: drawC.CommandType,
+        commandID: u32,
     ) !*QueueNode {
         const zone = tracy.initZone(@src(), .{ .name = "bind vertex buffer" });
         defer zone.deinit();
@@ -2488,18 +2556,15 @@ pub const commands = struct {
             o.* = 0;
         }
 
-        const tempTwoNode = try self.addCommand2(
-            .{
-                .bindVertexBuffers = .{
-                    .firstBinding = startIndex,
-                    .buffers = buffers,
-                    .sizes = sizes,
-                    .offsets = offsets,
-                    .strides = strides,
-                },
+        const tempTwoNode = try self.addCommand2(.{
+            .bindVertexBuffers = .{
+                .firstBinding = startIndex,
+                .buffers = buffers,
+                .sizes = sizes,
+                .offsets = offsets,
+                .strides = strides,
             },
-            commandType,
-        );
+        }, commandType, commandID);
 
         return tempTwoNode.a.?;
     }
@@ -2510,9 +2575,13 @@ pub const commands = struct {
         buffers: ?[]VkStruct.Buffer_t,
         textures: ?[]texture.Texture_t,
         currentNode: **QueueNode,
+        graphicCurrentNode: *?*QueueNode,
+        computeCurrentNode: *?*QueueNode,
+        transferCurrentNode: *?*QueueNode,
         renderingNode: *?*QueueNode,
         allocator: std.mem.Allocator,
         commandType: drawC.CommandType,
+        commandID: u32,
     ) !void {
         const zone = tracy.initZone(@src(), .{ .name = "rendering resource pre process" });
         defer zone.deinit();
@@ -2550,6 +2619,7 @@ pub const commands = struct {
                     .graphic,
                     &bufferOffset,
                     commandType,
+                    commandID,
                 );
             }
         }
@@ -2564,6 +2634,7 @@ pub const commands = struct {
                     vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                     .graphic,
                     commandType,
+                    commandID,
                 );
             }
         }
@@ -2579,6 +2650,7 @@ pub const commands = struct {
                         attachment.imageLayout,
                         .graphic,
                         commandType,
+                        commandID,
                     );
                 }
             }
@@ -2593,6 +2665,7 @@ pub const commands = struct {
                     v[0].imageLayout,
                     .graphic,
                     commandType,
+                    commandID,
                 );
             }
 
@@ -2606,24 +2679,22 @@ pub const commands = struct {
                     v[0].imageLayout,
                     .graphic,
                     commandType,
+                    commandID,
                 );
             }
 
             totalQueueNodes[totalQueueNodes.len - 2] = depthImageQueueNode;
             totalQueueNodes[totalQueueNodes.len - 1] = stencilImageQueueNode;
 
-            const beginRenderingQueueNode = try self.addCommand2(
-                .{ .beginRendering = .{
-                    .flags = renderingInfo.flags,
-                    .renderArea = renderingInfo.renderArea,
-                    .layerCount = renderingInfo.layerCount,
-                    .viewMask = renderingInfo.viewMask,
-                    .pColorAttachments = if (renderingInfo.pColorAttachments) |v| v else &.{},
-                    .depthAttachment = if (renderingInfo.depthAttachment) |v| @ptrCast(v.ptr) else null,
-                    .stencilAttachment = if (renderingInfo.stencilAttachment) |v| @ptrCast(v.ptr) else null,
-                } },
-                commandType,
-            );
+            const beginRenderingQueueNode = try self.addCommand2(.{ .beginRendering = .{
+                .flags = renderingInfo.flags,
+                .renderArea = renderingInfo.renderArea,
+                .layerCount = renderingInfo.layerCount,
+                .viewMask = renderingInfo.viewMask,
+                .pColorAttachments = if (renderingInfo.pColorAttachments) |v| v else &.{},
+                .depthAttachment = if (renderingInfo.depthAttachment) |v| @ptrCast(v.ptr) else null,
+                .stencilAttachment = if (renderingInfo.stencilAttachment) |v| @ptrCast(v.ptr) else null,
+            } }, commandType, commandID);
 
             self.pRendering.renderingStart(pRendering);
 
@@ -2638,7 +2709,12 @@ pub const commands = struct {
             renderingNode.* = self.nodeDag.get(renderingRes.value_ptr.*).?;
         }
 
-        const res = try self.pipelineBarrierNodeConnect(totalQueueNodes);
+        const res = try self.pipelineBarrierNodeConnect(
+            totalQueueNodes,
+            graphicCurrentNode,
+            computeCurrentNode,
+            transferCurrentNode,
+        );
         if (res.a) |aa| {
             if (res.b) |bb| {
                 try bb.childrenAppend(&renderingNode.*.?.ID);
@@ -2817,6 +2893,7 @@ pub const commands = struct {
         pipeline: VkStruct.Pipeline_t,
         pushConstants: ?[]drawC.PushConstantPack,
         commandType: drawC.CommandType,
+        commandID: u32,
         allocator: std.mem.Allocator,
     ) !twoQueueNode {
         const vertexBufferLen = if (vertexBuffers != null) vertexBuffers.?.len else 0;
@@ -2877,7 +2954,7 @@ pub const commands = struct {
                                         .pDynamicOffsets = null,
                                     },
                                 },
-                            }, commandType);
+                            }, commandType, commandID);
 
                             descriptorSetIndex = @intCast(i - vertexBufferLen);
                             descriptorSetCount = 1;
@@ -2912,6 +2989,7 @@ pub const commands = struct {
                         vertexBuffers.?,
                         vertexBufferIndex,
                         commandType,
+                        commandID,
                     );
                     vertexCount = 0;
 
@@ -2957,7 +3035,7 @@ pub const commands = struct {
                                     .pDynamicOffsets = null,
                                 },
                             },
-                        }, commandType);
+                        }, commandType, commandID);
 
                         descriptorSetIndex = @intCast(i - vertexBufferLen);
                         descriptorSetCount = 1;
@@ -2990,7 +3068,7 @@ pub const commands = struct {
                                     .offset = 0,
                                     .size = indexBufferContent.size,
                                     .indexType = vk.VK_INDEX_TYPE_UINT16,
-                                } }, commandType);
+                                } }, commandType, commandID);
 
                                 tempNode = tempTwoNode.a.?;
 
@@ -3005,13 +3083,10 @@ pub const commands = struct {
 
                             const pipelineContent = self.vulkan.getPipelineContent(pipeline);
 
-                            const tempTwoNode = try self.addCommand2(
-                                .{ .bindPipeline = .{
-                                    .bindPoint = vk.VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                    .pipeline = pipelineContent.pipeline,
-                                } },
-                                commandType,
-                            );
+                            const tempTwoNode = try self.addCommand2(.{ .bindPipeline = .{
+                                .bindPoint = vk.VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                .pipeline = pipelineContent.pipeline,
+                            } }, commandType, commandID);
 
                             tempNode = tempTwoNode.a.?;
 
@@ -3026,12 +3101,9 @@ pub const commands = struct {
 
                                 const scissor = self.vulkan.scissors.getScissorContent(self.io, v);
 
-                                const tempTwoNode = try self.addCommand2(
-                                    .{
-                                        .setScissor = scissor,
-                                    },
-                                    commandType,
-                                );
+                                const tempTwoNode = try self.addCommand2(.{
+                                    .setScissor = scissor,
+                                }, commandType, commandID);
 
                                 tempNode = tempTwoNode.a.?;
 
@@ -3049,12 +3121,9 @@ pub const commands = struct {
 
                                 const viewport = self.vulkan.viewports.getViewportContent(self.io, v);
 
-                                const tempTwoNode = try self.addCommand2(
-                                    .{
-                                        .setViewport = viewport,
-                                    },
-                                    commandType,
-                                );
+                                const tempTwoNode = try self.addCommand2(.{
+                                    .setViewport = viewport,
+                                }, commandType, commandID);
 
                                 tempNode = tempTwoNode.a.?;
 
@@ -3083,6 +3152,7 @@ pub const commands = struct {
                 vertexBuffers.?,
                 vertexBufferIndex,
                 commandType,
+                commandID,
             );
 
             if (linkNodeEnd == null) {
@@ -3113,7 +3183,7 @@ pub const commands = struct {
                         .pDynamicOffsets = null,
                     },
                 },
-            }, commandType);
+            }, commandType, commandID);
 
             // const tempNode = try self.addCommand2(.bindDescriptorSets, .{
             //     .bindDescriptorSets = .{
@@ -3146,7 +3216,7 @@ pub const commands = struct {
                     .offset = value.offset,
                     .size = value.size,
                     .pValues = pushConstantMem,
-                } }, commandType);
+                } }, commandType, commandID);
 
                 if (linkNodeEnd == null) {
                     linkNodeEnd = pushConstantNode.a;
@@ -3254,13 +3324,18 @@ pub const commands = struct {
 
         const node = try self.nodeDag.create();
         const ID = node.ID;
-        node.listID = try self.u32Mem.create(self.allocator);
+        // node.listID = try self.u32Mem.create(self.allocator);
 
         // std.log.debug("{d}, {s}", .{ ID, @tagName(commandType) });
 
-        node.listID.?.* = 0;
+        // node.listID.?.* = 0;
 
-        self.nodeDag.currentListID = node.listID;
+        // self.nodeDag.currentListID = node.listID;
+
+        var graphicCurrentNode: ?*QueueNode = null;
+        var computeCurrentNode: ?*QueueNode = null;
+        var transferCurrentNode: ?*QueueNode = null;
+        var renderingCurrentNode: ?*QueueNode = null;
 
         var currentNode = node;
         const ptr = try self.queue.getOrPut(ID);
@@ -3279,6 +3354,8 @@ pub const commands = struct {
         var dependenciesArray: std.array_list.Managed(*anyopaque) = .init(allocator);
 
         var needToCacheArray: std.array_list.Managed(ptr_index_cache) = .init(allocator);
+
+        // var putDrawCacheMapID: i32 = -1;
 
         // dependcy infer
         // combine memory barrier operation with same src stage mask
@@ -3310,7 +3387,7 @@ pub const commands = struct {
                     self.addBuffer_tDependency(dependencyPtr, value);
                     const ptridx = try needToCacheArray.addOne();
                     ptridx.* = .{
-                        .ptr = value,
+                        .ptr = @ptrCast(self.vulkan.buffers.getVkBuffer(value)),
                         .index = ID,
                     };
                 }
@@ -3334,6 +3411,7 @@ pub const commands = struct {
                         vk.VK_IMAGE_LAYOUT_GENERAL,
                         .compute,
                         commandType,
+                        ID,
                     );
                     twoNodeIndex += 1;
                 }
@@ -3347,11 +3425,17 @@ pub const commands = struct {
                         .compute,
                         &region,
                         commandType,
+                        ID,
                     );
                     twoNodeIndex += 1;
                 }
 
-                const linkNodes = try self.pipelineBarrierNodeConnect(allTwoNodes);
+                const linkNodes = try self.pipelineBarrierNodeConnect(
+                    allTwoNodes,
+                    &graphicCurrentNode,
+                    &computeCurrentNode,
+                    &transferCurrentNode,
+                );
 
                 var linkNodeEnd: ?*QueueNode = null;
                 var linkNodeStart: ?*QueueNode = null;
@@ -3360,7 +3444,7 @@ pub const commands = struct {
                 const pipelineNode = try self.addCommand2(.{ .bindPipeline = .{
                     .pipeline = pipelineContent.pipeline,
                     .bindPoint = vk.VK_PIPELINE_BIND_POINT_COMPUTE,
-                } }, commandType);
+                } }, commandType, ID);
 
                 if (linkNodeEnd == null) {
                     linkNodeEnd = pipelineNode.a.?;
@@ -3385,7 +3469,7 @@ pub const commands = struct {
                             .dynamicOffsetCount = 0,
                             .pDynamicOffsets = null,
                         },
-                    } }, commandType);
+                    } }, commandType, ID);
 
                     if (linkNodeEnd == null) {
                         linkNodeEnd = descriptorSetNode.a.?;
@@ -3407,7 +3491,7 @@ pub const commands = struct {
                         u8,
                         @as([*]u8, @ptrCast(@alignCast(compute.pushConstants.pValues)))[0..compute.pushConstants.size],
                     ),
-                } }, commandType);
+                } }, commandType, ID);
 
                 if (linkNodeEnd == null) {
                     linkNodeEnd = pushConstantNode.a.?;
@@ -3439,6 +3523,7 @@ pub const commands = struct {
                 node.data.commandPoolType = .graphic;
 
                 try self.drawCacheMap.put(ID, void{});
+                // putDrawCacheMapID = @intCast(ID);
 
                 var renderingNode: ?*QueueNode = null;
                 var lastNode: ?*QueueNode = null;
@@ -3553,9 +3638,13 @@ pub const commands = struct {
                     buffers,
                     pTextures,
                     &currentNode,
+                    &graphicCurrentNode,
+                    &computeCurrentNode,
+                    &transferCurrentNode,
                     &renderingNode,
                     allocator,
                     std.meta.activeTag(command),
+                    ID,
                 );
                 const cachePtr = try needToCacheArray.addOne();
                 cachePtr.* = .{
@@ -3605,6 +3694,7 @@ pub const commands = struct {
                     pipeline,
                     pushConstants,
                     std.meta.activeTag(command),
+                    ID,
                     allocator,
                 );
                 self.lastInMesh = self.inMesh;
@@ -3621,11 +3711,14 @@ pub const commands = struct {
                         vk.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
                         .graphic,
                         std.meta.activeTag(command),
+                        ID,
                     );
 
                     try node.childrenAppend(&transNode.a.?.ID);
                     try transNode.a.?.parentsAppend(&node.ID);
                 }
+
+                renderingCurrentNode = renderingNode;
 
                 if (currentNode == node) {
                     currentNode = self.nodeDag.get(0).?;
@@ -3657,6 +3750,7 @@ pub const commands = struct {
                     .transfer,
                     srcOffsets,
                     std.meta.activeTag(command),
+                    ID,
                 );
 
                 // inputs may have dependency
@@ -3680,10 +3774,16 @@ pub const commands = struct {
                     .transfer,
                     dstOffsets,
                     std.meta.activeTag(command),
+                    ID,
                 );
 
                 var nodes = [_]twoQueueNode{ srcBufferNode, dstBufferNode };
-                const res = try self.pipelineBarrierNodeConnect(&nodes);
+                const res = try self.pipelineBarrierNodeConnect(
+                    &nodes,
+                    &graphicCurrentNode,
+                    &computeCurrentNode,
+                    &transferCurrentNode,
+                );
 
                 if (res.a) |aa| {
                     try res.b.?.childrenAppend(&currentNode.ID);
@@ -3719,6 +3819,7 @@ pub const commands = struct {
                     vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                     .transfer,
                     std.meta.activeTag(command),
+                    ID,
                 );
 
                 var region = [1]drawC.SizeOffset{.{
@@ -3730,17 +3831,21 @@ pub const commands = struct {
                     .transfer,
                     &region,
                     std.meta.activeTag(command),
+                    ID,
                 );
 
                 // inputs may have dependency
                 const dependencyPtr = try dependenciesArray.addOne();
-
                 self.addBuffer_tDependency(dependencyPtr, copyBufferToImage.buffer);
-                dependencyPtr.* = copyBufferToImage.buffer;
 
                 var nodes = [_]twoQueueNode{ imageQueueNode, bufferQueueNode };
 
-                const res = try self.pipelineBarrierNodeConnect(&nodes);
+                const res = try self.pipelineBarrierNodeConnect(
+                    &nodes,
+                    &graphicCurrentNode,
+                    &computeCurrentNode,
+                    &transferCurrentNode,
+                );
                 if (res.a) |aa| {
                     if (res.b) |bb| {
                         try bb.childrenAppend(&currentNode.ID);
@@ -3778,6 +3883,14 @@ pub const commands = struct {
         const zone3 = tracy.initZone(@src(), .{ .name = "infer dependency 2" });
         errdefer zone3.deinit();
 
+        std.log.debug("current ID {d}", .{currentNode.ID});
+
+        // std.log.debug("graphic {d}, compute {d}, transfer {d}", .{
+        //     if (graphicCurrentNode != null) graphicCurrentNode.?.ID else 1000,
+        //     if (computeCurrentNode != null) computeCurrentNode.?.ID else 1000,
+        //     if (transferCurrentNode != null) transferCurrentNode.?.ID else 1000,
+        // });
+
         const comm = self.queue.get(currentNode.ID).?;
         if (comm.command == .start) {
             if (command != .present) {
@@ -3804,14 +3917,55 @@ pub const commands = struct {
                         if (dependencyNode.ID == currentNode.ID) {
                             continue;
                         }
-                        if (self.drawCacheMap.contains(dependencyNode.ID)) {
-                            continue;
+
+                        if (dependencyNode.data.commandPoolType != currentNode.data.commandPoolType) {
+                            const pCommand = self.queue.getPtr(dependencyNode.ID);
+                            if (pCommand) |cmd| {
+                                if (cmd.command != .pipelineBarrier) {
+                                    if (dependencyNode.ID == 15) @breakpoint();
+
+                                    switch (dependencyNode.data.commandPoolType) {
+                                        .transfer => {
+                                            if (transferCurrentNode) |dNode| {
+                                                try dependencyNode.childrenAppend(&dNode.ID);
+                                                try dNode.parentsAppend(&dependencyNode.ID);
+
+                                                // currentNode.listID.?.* = dependencyNode.listID.?.*;
+
+                                                dependencyLinked = true;
+                                            } else std.log.debug("skip ID {d}", .{dependencyNode.ID});
+                                        },
+                                        .compute => {
+                                            if (computeCurrentNode) |dNode| {
+                                                try dependencyNode.childrenAppend(&dNode.ID);
+                                                try dNode.parentsAppend(&dependencyNode.ID);
+
+                                                // currentNode.listID.?.* = dependencyNode.listID.?.*;
+
+                                                dependencyLinked = true;
+                                            } else std.log.debug("skip ID {d}", .{dependencyNode.ID});
+                                        },
+                                        .graphic => {
+                                            if (graphicCurrentNode) |dNode| {
+                                                try dependencyNode.childrenAppend(&dNode.ID);
+                                                try dNode.parentsAppend(&dependencyNode.ID);
+
+                                                // currentNode.listID.?.* = dependencyNode.listID.?.*;
+
+                                                dependencyLinked = true;
+                                            } else std.log.debug("skip ID {d}", .{dependencyNode.ID});
+                                        },
+                                        else => unreachable,
+                                    }
+                                    continue;
+                                }
+                            }
                         }
 
                         try dependencyNode.childrenAppend(&currentNode.ID);
                         try currentNode.parentsAppend(&dependencyNode.ID);
 
-                        currentNode.listID.?.* = dependencyNode.listID.?.*;
+                        // currentNode.listID.?.* = dependencyNode.listID.?.*;
 
                         dependencyLinked = true;
                     }
@@ -3823,7 +3977,7 @@ pub const commands = struct {
                 try root.childrenAppend(&currentNode.ID);
                 try currentNode.parentsAppend(&root.ID);
 
-                currentNode.listID.?.* = self.nodeDag.newListID();
+                // currentNode.listID.?.* = self.nodeDag.newListID();
             }
         }
         zone3.deinit();
@@ -3849,6 +4003,7 @@ pub const commands = struct {
             const endRenderingTwoNode = try self.addCommand2(
                 .{ .endRendering = void{} },
                 .empty,
+                0,
             );
             const endRenderingNode = endRenderingTwoNode.a.?;
 
@@ -4631,7 +4786,7 @@ pub const oneTimeCommand = struct {
             defer iterator.deinit();
 
             while (iterator.next(self.io, currentSemaphoreValue)) |nn| {
-                // std.log.debug("ID {d}", .{nn.ID});
+                std.log.debug("ID {d}", .{nn.ID});
 
                 if (begin and nn.data.commandPoolType != currentType) {
                     defer signalSemaphoreSubmitInfos.clearRetainingCapacity();
