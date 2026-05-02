@@ -348,7 +348,6 @@ fn Graph(T: type) type {
         const Self = @This();
 
         ID: u32 = 0,
-        // listID: ?*u32,
 
         parents: uniqueArrayList(*u32),
         parentsLen: u32 = 0,
@@ -536,19 +535,21 @@ fn DAG(T: type) type {
         pub const Inner = Graph(T);
 
         innerID: u32 = 0,
-        // innerListID: u32 = 0,
-
-        // currentListID: ?*u32 = null,
 
         mem: std.heap.memory_pool.Extra(Inner, .{}),
         map: std.hash_map.AutoHashMap(u32, *Inner),
         arena: std.heap.ArenaAllocator,
+
+        toEndMap: std.hash_map.AutoHashMap(u32, u32),
+        nodesToEndMap: std.hash_map.AutoHashMap(u32, []u32),
 
         pub fn init(allocator: std.mem.Allocator) !Self {
             return .{
                 .mem = try .initCapacity(allocator, 128),
                 .map = .init(allocator),
                 .arena = .init(allocator),
+                .toEndMap = .init(allocator),
+                .nodesToEndMap = .init(allocator),
             };
         }
 
@@ -556,6 +557,8 @@ fn DAG(T: type) type {
             self.arena.deinit();
             self.mem.deinit(self.arena.child_allocator);
             self.map.deinit();
+            self.toEndMap.deinit();
+            self.nodesToEndMap.deinit();
         }
 
         pub fn get(self: *Self, id: u32) ?*Inner {
@@ -566,10 +569,9 @@ fn DAG(T: type) type {
         }
 
         pub fn create(self: *Self) !*Inner {
-            const node = try self.mem.create(self.arena.allocator());
+            const node = try self.mem.create(self.arena.child_allocator);
             node.* = .{
                 .ID = self.innerID,
-                // .listID = null,
                 .children = .init(self.arena.allocator()),
                 .parents = .init(self.arena.allocator()),
             };
@@ -598,19 +600,50 @@ fn DAG(T: type) type {
             _ = self.map.remove(node.ID);
         }
 
-        // pub fn newListID(self: *Self) u32 {
-        //     self.innerListID += 1;
+        pub fn childrenAppend(self: *Self, node: *Inner, child: *Inner) !void {
+            const zone = tracy.initZone(@src(), .{ .name = "dag children append" });
+            defer zone.deinit();
 
-        //     return self.innerListID;
-        // }
-        // pub fn childrenAppend(self: *Self, node: *Inner, child: *Inner) !void {}
+            try node.childrenAppend(&child.ID);
+
+            // if (node.childrenLen > 1) {
+            //     _ = self.toEndMap.remove(node.ID);
+            // } else {
+            const end_id = self.toEndMap.get(child.ID) orelse child.ID;
+
+            var moving_ids: []u32 = undefined;
+            if (self.nodesToEndMap.fetchRemove(node.ID)) |kv| {
+                moving_ids = try self.arena.allocator().realloc(kv.value, kv.value.len + 1);
+                moving_ids[moving_ids.len - 1] = node.ID;
+            } else {
+                moving_ids = try self.arena.allocator().alloc(u32, 1);
+                moving_ids[0] = node.ID;
+            }
+
+            for (moving_ids) |id| {
+                try self.toEndMap.put(id, end_id);
+            }
+
+            const gop = try self.nodesToEndMap.getOrPut(end_id);
+            if (gop.found_existing) {
+                const old_len = gop.value_ptr.len;
+                gop.value_ptr.* = try self.arena.allocator().realloc(gop.value_ptr.*, old_len + moving_ids.len);
+                @memcpy(gop.value_ptr.*[old_len..], moving_ids);
+            } else {
+                gop.value_ptr.* = moving_ids;
+            }
+            // }
+        }
 
         pub fn clearRetainCapacity(self: *Self) void {
             const zone = tracy.initZone(@src(), .{ .name = "DAG clear" });
             defer zone.deinit();
 
+            _ = self.arena.reset(.retain_capacity);
             _ = self.mem.reset(self.arena.child_allocator, .retain_capacity);
             self.map.clearRetainingCapacity();
+            self.toEndMap.clearRetainingCapacity();
+            self.nodesToEndMap.clearRetainingCapacity();
             self.innerID = 0;
             // self.innerListID = 0;
         }
@@ -826,10 +859,11 @@ fn nodeDagPrint(self: *QueueNodes, self2: *commands) void {
         for (0..self.innerID) |i| {
             if (self.map.get(@intCast(i))) |n| {
                 if (self2.queue.getPtr(@intCast(i))) |c| {
-                    fileWriter.interface.print("{d} [label=\"{s} {d}\", color=\"{s}\"];\n", .{
+                    fileWriter.interface.print("{d} [label=\"{s} {d} {d}\", color=\"{s}\"];\n", .{
                         i,
                         @tagName(c.command),
                         i,
+                        self.toEndMap.get(@intCast(i)) orelse 10000,
                         // n.listID.?.*,
                         queueTypeToColor(n.data.commandPoolType),
                     }) catch |err| {
@@ -2451,7 +2485,7 @@ pub const commands = struct {
                     lastA = aa;
                     midA = aa;
                 } else {
-                    try aa.childrenAppend(&lastA.?.ID);
+                    try self.nodeDag.childrenAppend(aa, lastA.?);
                     try lastA.?.parentsAppend(&aa.ID);
 
                     lastA = aa;
@@ -2464,7 +2498,7 @@ pub const commands = struct {
                     midB = bb;
                 } else {
                     try bb.parentsAppend(&lastB.?.ID);
-                    try lastB.?.childrenAppend(&bb.ID);
+                    try self.nodeDag.childrenAppend(lastB.?, bb);
 
                     lastB = bb;
                 }
@@ -2477,7 +2511,7 @@ pub const commands = struct {
             for (oneNodes[0..one]) |node| {
                 if (node.a == null) continue;
 
-                try tempNode.childrenAppend(&node.a.?.ID);
+                try self.nodeDag.childrenAppend(tempNode, node.a.?);
                 try node.a.?.parentsAppend(&tempNode.ID);
 
                 tempNode = node.a.?;
@@ -2490,7 +2524,7 @@ pub const commands = struct {
             for (oneNodes[0..one]) |node| {
                 if (node.a == null) continue;
 
-                try tempNode.childrenAppend(&node.a.?.ID);
+                try self.nodeDag.childrenAppend(tempNode, node.a.?);
                 try node.a.?.parentsAppend(&tempNode.ID);
 
                 tempNode = node.a.?;
@@ -2508,7 +2542,7 @@ pub const commands = struct {
                     continue;
                 }
 
-                try tempNode.childrenAppend(&node.a.?.ID);
+                try self.nodeDag.childrenAppend(tempNode, node.a.?);
                 try node.a.?.parentsAppend(&tempNode.ID);
 
                 tempNode = node.a.?;
@@ -2518,7 +2552,7 @@ pub const commands = struct {
         }
 
         if (midA != null and midB != null) {
-            try midA.?.childrenAppend(&midB.?.ID);
+            try self.nodeDag.childrenAppend(midA.?, midB.?);
             try midB.?.parentsAppend(&midA.?.ID);
         }
 
@@ -2717,10 +2751,10 @@ pub const commands = struct {
         );
         if (res.a) |aa| {
             if (res.b) |bb| {
-                try bb.childrenAppend(&renderingNode.*.?.ID);
+                try self.nodeDag.childrenAppend(bb, renderingNode.*.?);
                 try renderingNode.*.?.parentsAppend(&bb.ID);
             } else {
-                try aa.childrenAppend(&renderingNode.*.?.ID);
+                try self.nodeDag.childrenAppend(aa, renderingNode.*.?);
                 try renderingNode.*.?.parentsAppend(&aa.ID);
             }
 
@@ -2964,7 +2998,7 @@ pub const commands = struct {
                                 linkNodeStart = linkNodeEnd;
                             } else {
                                 try linkNodeEnd.?.parentsAppend(&tempNode.a.?.ID);
-                                try tempNode.a.?.childrenAppend(&linkNodeEnd.?.ID);
+                                try self.nodeDag.childrenAppend(tempNode.a.?, linkNodeEnd.?);
 
                                 linkNodeEnd = tempNode.a.?;
                             }
@@ -2997,7 +3031,7 @@ pub const commands = struct {
                         linkNodeEnd = tempNode;
                         linkNodeStart = linkNodeEnd;
                     } else {
-                        try linkNodeEnd.?.childrenAppend(&tempNode.ID);
+                        try self.nodeDag.childrenAppend(linkNodeEnd.?, tempNode);
                         try tempNode.parentsAppend(&linkNodeEnd.?.ID);
 
                         linkNodeEnd = tempNode;
@@ -3045,7 +3079,7 @@ pub const commands = struct {
                             linkNodeStart = linkNodeEnd;
                         } else {
                             try linkNodeEnd.?.parentsAppend(&tempNode.a.?.ID);
-                            try tempNode.a.?.childrenAppend(&linkNodeEnd.?.ID);
+                            try self.nodeDag.childrenAppend(tempNode.a.?, linkNodeEnd.?);
 
                             linkNodeEnd = tempNode.a.?;
                         }
@@ -3138,7 +3172,7 @@ pub const commands = struct {
                         linkNodeStart = linkNodeEnd;
                     } else {
                         try linkNodeEnd.?.parentsAppend(&tempNode.ID);
-                        try tempNode.childrenAppend(&linkNodeEnd.?.ID);
+                        try self.nodeDag.childrenAppend(tempNode, linkNodeEnd.?);
 
                         linkNodeEnd = tempNode;
                     }
@@ -3160,7 +3194,7 @@ pub const commands = struct {
                 linkNodeStart = linkNodeEnd;
             } else {
                 try linkNodeEnd.?.parentsAppend(&tempNode.ID);
-                try tempNode.childrenAppend(&linkNodeEnd.?.ID);
+                try self.nodeDag.childrenAppend(tempNode, linkNodeEnd.?);
 
                 linkNodeEnd = tempNode;
             }
@@ -3200,7 +3234,7 @@ pub const commands = struct {
                 linkNodeStart = linkNodeEnd;
             } else {
                 try linkNodeEnd.?.parentsAppend(&tempNode.a.?.ID);
-                try tempNode.a.?.childrenAppend(&linkNodeEnd.?.ID);
+                try self.nodeDag.childrenAppend(tempNode.a.?, linkNodeEnd.?);
 
                 linkNodeEnd = tempNode.a.?;
             }
@@ -3223,7 +3257,7 @@ pub const commands = struct {
                     linkNodeStart = linkNodeEnd;
                 } else {
                     try linkNodeEnd.?.parentsAppend(&pushConstantNode.a.?.ID);
-                    try pushConstantNode.a.?.childrenAppend(&linkNodeEnd.?.ID);
+                    try self.nodeDag.childrenAppend(pushConstantNode.a.?, linkNodeEnd.?);
 
                     linkNodeEnd = pushConstantNode.a.?;
                 }
@@ -3237,6 +3271,7 @@ pub const commands = struct {
     }
 
     fn lastNodeLinkNodeRenderingNodeConnect(
+        self: *Self,
         lastNode: ?*QueueNode,
         linkNode: twoQueueNode,
         node: *QueueNode,
@@ -3252,10 +3287,10 @@ pub const commands = struct {
 
             if (linkNodeEnd) |b| {
                 if (linkNodeEnd != linkNodeStart) {
-                    try linkNodeStart.?.childrenAppend(&node.ID);
+                    try self.nodeDag.childrenAppend(linkNodeStart.?, node);
                     try node.parentsAppend(&linkNodeStart.?.ID);
                 } else {
-                    try b.childrenAppend(&node.ID);
+                    try self.nodeDag.childrenAppend(b, node);
                     try node.parentsAppend(&b.ID);
                 }
 
@@ -3268,7 +3303,7 @@ pub const commands = struct {
 
                 a.clearChildren();
 
-                try a.childrenAppend(&b.ID);
+                try self.nodeDag.childrenAppend(a, b);
                 try b.parentsAppend(&a.ID);
             } else {
                 for (a_children.list.items) |value| {
@@ -3280,23 +3315,23 @@ pub const commands = struct {
 
                 a.clearChildren();
 
-                try a.childrenAppend(&node.ID);
+                try self.nodeDag.childrenAppend(a, node);
                 try node.parentsAppend(&a.ID);
             }
         } else {
             if (linkNodeEnd) |b| {
-                try renderingNode.?.childrenAppend(&b.ID);
+                try self.nodeDag.childrenAppend(renderingNode.?, b);
                 try b.parentsAppend(&renderingNode.?.ID);
 
                 if (linkNodeEnd != linkNodeStart) {
-                    try linkNodeStart.?.childrenAppend(&node.ID);
+                    try self.nodeDag.childrenAppend(linkNodeStart.?, node);
                     try node.parentsAppend(&linkNodeStart.?.ID);
                 } else {
-                    try linkNodeEnd.?.childrenAppend(&node.ID);
+                    try self.nodeDag.childrenAppend(linkNodeEnd.?, node);
                     try node.parentsAppend(&linkNodeEnd.?.ID);
                 }
             } else {
-                try renderingNode.?.childrenAppend(&node.ID);
+                try self.nodeDag.childrenAppend(renderingNode.?, node);
                 try node.parentsAppend(&renderingNode.?.ID);
             }
         }
@@ -3451,7 +3486,7 @@ pub const commands = struct {
                     linkNodeStart = linkNodeEnd;
                 } else {
                     try linkNodeEnd.?.parentsAppend(&pipelineNode.a.?.ID);
-                    try pipelineNode.a.?.childrenAppend(&linkNodeEnd.?.ID);
+                    try self.nodeDag.childrenAppend(pipelineNode.a.?, linkNodeEnd.?);
 
                     linkNodeEnd = pipelineNode.a.?;
                 }
@@ -3476,7 +3511,7 @@ pub const commands = struct {
                         linkNodeStart = linkNodeEnd;
                     } else {
                         try linkNodeEnd.?.parentsAppend(&descriptorSetNode.a.?.ID);
-                        try descriptorSetNode.a.?.childrenAppend(&linkNodeEnd.?.ID);
+                        try self.nodeDag.childrenAppend(descriptorSetNode.a.?, linkNodeEnd.?);
 
                         linkNodeEnd = descriptorSetNode.a.?;
                     }
@@ -3498,7 +3533,7 @@ pub const commands = struct {
                     linkNodeStart = linkNodeEnd;
                 } else {
                     try linkNodeEnd.?.parentsAppend(&pushConstantNode.a.?.ID);
-                    try pushConstantNode.a.?.childrenAppend(&linkNodeEnd.?.ID);
+                    try self.nodeDag.childrenAppend(pushConstantNode.a.?, linkNodeEnd.?);
 
                     linkNodeEnd = pushConstantNode.a.?;
                 }
@@ -3506,17 +3541,17 @@ pub const commands = struct {
                 if (linkNodes.a) |a| {
                     currentNode = a;
                     if (linkNodes.b) |b| {
-                        try b.childrenAppend(&linkNodeEnd.?.ID);
+                        try self.nodeDag.childrenAppend(b, linkNodeEnd.?);
                         try linkNodeEnd.?.parentsAppend(&b.ID);
                     } else {
-                        try a.childrenAppend(&linkNodeEnd.?.ID);
+                        try self.nodeDag.childrenAppend(a, linkNodeEnd.?);
                         try linkNodeEnd.?.parentsAppend(&a.ID);
                     }
                 } else {
                     currentNode = linkNodeEnd.?;
                 }
 
-                try linkNodeStart.?.childrenAppend(&node.ID);
+                try self.nodeDag.childrenAppend(linkNodeStart.?, node);
                 try node.parentsAppend(&linkNodeStart.?.ID);
             },
             .draw2D, .present, .drawMesh, .drawIndirect => {
@@ -3699,7 +3734,7 @@ pub const commands = struct {
                 );
                 self.lastInMesh = self.inMesh;
 
-                try lastNodeLinkNodeRenderingNodeConnect(lastNode, linkNode, node, renderingNode);
+                try self.lastNodeLinkNodeRenderingNodeConnect(lastNode, linkNode, node, renderingNode);
 
                 if (command == .present) {
                     const renderingInfo = self.pRendering.getRenderingInfoContent(pRendering);
@@ -3714,7 +3749,7 @@ pub const commands = struct {
                         ID,
                     );
 
-                    try node.childrenAppend(&transNode.a.?.ID);
+                    try self.nodeDag.childrenAppend(node, transNode.a.?);
                     try transNode.a.?.parentsAppend(&node.ID);
                 }
 
@@ -3786,7 +3821,7 @@ pub const commands = struct {
                 );
 
                 if (res.a) |aa| {
-                    try res.b.?.childrenAppend(&currentNode.ID);
+                    try self.nodeDag.childrenAppend(res.b.?, currentNode);
                     try currentNode.parentsAppend(&res.b.?.ID);
 
                     currentNode = aa;
@@ -3848,10 +3883,10 @@ pub const commands = struct {
                 );
                 if (res.a) |aa| {
                     if (res.b) |bb| {
-                        try bb.childrenAppend(&currentNode.ID);
+                        try self.nodeDag.childrenAppend(bb, currentNode);
                         try currentNode.parentsAppend(&bb.ID);
                     } else {
-                        try aa.childrenAppend(&currentNode.ID);
+                        try self.nodeDag.childrenAppend(aa, currentNode);
                         try currentNode.parentsAppend(&aa.ID);
                     }
 
@@ -3899,82 +3934,133 @@ pub const commands = struct {
         } else {
             var dependencyLinked = false;
 
-            if (dependenciesArray.items.len > 0) {
-                for (dependenciesArray.items) |dependency| {
-                    const dependencyID = self.cacheMap.get(dependency);
+            for (dependenciesArray.items) |dependency| {
+                const dependencyID = self.cacheMap.get(dependency);
 
-                    if (dependencyID) |idx| {
-                        // std.log.debug("dependency id {d}", .{idx});
+                if (dependencyID == null) continue;
+                const idx = dependencyID.?;
 
-                        const dependencyNode = self.nodeDag.get(idx).?;
+                // std.log.debug("dependency id {d}", .{idx});
 
-                        // std.log.debug("{d} {*}, {d} {*}", .{ dependencyNode.ID, dependencyNode, currentNode.ID, currentNode });
+                const dependencyNode = self.nodeDag.get(idx).?;
 
-                        if (dependencyNode.ID >= startID and dependencyNode.ID <= endID) {
-                            // std.log.debug("{d} {*}, {d} {*}", .{ dependencyNode.ID, dependencyNode, currentNode.ID, currentNode });
-                            continue;
-                        }
-                        if (dependencyNode.ID == currentNode.ID) {
-                            continue;
-                        }
+                // std.log.debug("{d} {*}, {d} {*}", .{ dependencyNode.ID, dependencyNode, currentNode.ID, currentNode });
 
-                        if (dependencyNode.data.commandPoolType != currentNode.data.commandPoolType) {
-                            const pCommand = self.queue.getPtr(dependencyNode.ID);
-                            if (pCommand) |cmd| {
-                                if (cmd.command != .pipelineBarrier) {
-                                    if (dependencyNode.ID == 15) @breakpoint();
+                if (dependencyNode.ID >= startID and dependencyNode.ID <= endID) {
+                    // std.log.debug("{d} {*}, {d} {*}", .{ dependencyNode.ID, dependencyNode, currentNode.ID, currentNode });
+                    continue;
+                }
+                if (dependencyNode.ID == currentNode.ID) {
+                    continue;
+                }
+                if (dependencyNode.data.commandPoolType == currentNode.data.commandPoolType) {
+                    try self.nodeDag.childrenAppend(dependencyNode, currentNode);
+                    try currentNode.parentsAppend(&dependencyNode.ID);
 
-                                    switch (dependencyNode.data.commandPoolType) {
-                                        .transfer => {
-                                            if (transferCurrentNode) |dNode| {
-                                                try dependencyNode.childrenAppend(&dNode.ID);
-                                                try dNode.parentsAppend(&dependencyNode.ID);
+                    dependencyLinked = true;
+                    continue;
+                }
 
-                                                // currentNode.listID.?.* = dependencyNode.listID.?.*;
+                const pCommand = self.queue.getPtr(dependencyNode.ID);
+                if (pCommand == null) continue;
 
-                                                dependencyLinked = true;
-                                            } else std.log.debug("skip ID {d}", .{dependencyNode.ID});
-                                        },
-                                        .compute => {
-                                            if (computeCurrentNode) |dNode| {
-                                                try dependencyNode.childrenAppend(&dNode.ID);
-                                                try dNode.parentsAppend(&dependencyNode.ID);
+                const cmd = pCommand.?;
 
-                                                // currentNode.listID.?.* = dependencyNode.listID.?.*;
+                if (cmd.command != .pipelineBarrier) {
+                    // if (dependencyNode.ID == 15) @breakpoint();
+                    var secondLinked = false;
 
-                                                dependencyLinked = true;
-                                            } else std.log.debug("skip ID {d}", .{dependencyNode.ID});
-                                        },
-                                        .graphic => {
-                                            if (graphicCurrentNode) |dNode| {
-                                                try dependencyNode.childrenAppend(&dNode.ID);
-                                                try dNode.parentsAppend(&dependencyNode.ID);
+                    switch (dependencyNode.data.commandPoolType) {
+                        .transfer => {
+                            if (transferCurrentNode) |dNode| {
+                                try self.nodeDag.childrenAppend(dependencyNode, dNode);
+                                try dNode.parentsAppend(&dependencyNode.ID);
 
-                                                // currentNode.listID.?.* = dependencyNode.listID.?.*;
+                                // currentNode.listID.?.* = dependencyNode.listID.?.*;
 
-                                                dependencyLinked = true;
-                                            } else std.log.debug("skip ID {d}", .{dependencyNode.ID});
-                                        },
-                                        else => unreachable,
-                                    }
-                                    continue;
+                                dependencyLinked = true;
+                                secondLinked = true;
+                            } else std.log.debug("skip ID {d}", .{dependencyNode.ID});
+                        },
+                        .compute => {
+                            if (computeCurrentNode) |dNode| {
+                                try self.nodeDag.childrenAppend(dependencyNode, dNode);
+                                try dNode.parentsAppend(&dependencyNode.ID);
+
+                                // currentNode.listID.?.* = dependencyNode.listID.?.*;
+
+                                dependencyLinked = true;
+                                secondLinked = true;
+                            } else std.log.debug("skip ID {d}", .{dependencyNode.ID});
+                        },
+                        .graphic => {
+                            if (graphicCurrentNode) |dNode| {
+                                try self.nodeDag.childrenAppend(dependencyNode, dNode);
+                                try dNode.parentsAppend(&dependencyNode.ID);
+
+                                // currentNode.listID.?.* = dependencyNode.listID.?.*;
+
+                                dependencyLinked = true;
+                                secondLinked = true;
+                            } else std.log.debug("skip ID {d}", .{dependencyNode.ID});
+                        },
+                        else => unreachable,
+                    }
+
+                    if (!secondLinked) {
+                        const currentEndID = self.nodeDag.toEndMap.get(currentNode.ID);
+                        if (currentEndID) |ceid| {
+                            var tempNode: ?*QueueNode = currentNode;
+                            while (tempNode.?.data.commandPoolType != dependencyNode.data.commandPoolType) {
+                                std.log.debug("temp {s}, dep {s}", .{
+                                    @tagName(tempNode.?.data.commandPoolType),
+                                    @tagName(dependencyNode.data.commandPoolType),
+                                });
+
+                                var tempIdx: u32 = 0;
+                                var childID = tempNode.?.children.list.items[tempIdx].*;
+                                var childEndID = self.nodeDag.toEndMap.get(childID) orelse childID;
+
+                                while (ceid != childEndID) {
+                                    tempIdx += 1;
+                                    if (tempIdx >= tempNode.?.childrenLen) break;
+                                    childID = tempNode.?.children.list.items[tempIdx].*;
+                                    childEndID = self.nodeDag.toEndMap.get(childID) orelse childID;
+                                } else {
+                                    tempNode = self.nodeDag.get(childID);
+                                }
+
+                                if (childID == childEndID) {
+                                    tempNode = null;
+                                    break;
                                 }
                             }
+                            if (tempNode) |n| {
+                                // std.log.debug("final link node id {d}", .{n.ID});
+                                // std.log.debug("skip end {d}, final end {d}", .{
+                                //     self.nodeDag.toEndMap.get(dependencyNode.ID) orelse 1000,
+                                //     self.nodeDag.toEndMap.get(n.ID) orelse 1000,
+                                // });
+                                const skipEndId =
+                                    self.nodeDag.toEndMap.get(dependencyNode.ID) orelse dependencyNode.ID;
+                                const finalEndId =
+                                    self.nodeDag.toEndMap.get(n.ID) orelse n.ID;
+
+                                if (skipEndId == finalEndId) continue;
+
+                                try self.nodeDag.childrenAppend(dependencyNode, n);
+                                try n.parentsAppend(&dependencyNode.ID);
+                            }
                         }
-
-                        try dependencyNode.childrenAppend(&currentNode.ID);
-                        try currentNode.parentsAppend(&dependencyNode.ID);
-
-                        // currentNode.listID.?.* = dependencyNode.listID.?.*;
-
-                        dependencyLinked = true;
                     }
+
+                    continue;
                 }
             }
 
             if (!dependencyLinked) {
                 const root = self.nodeDag.get(0).?;
-                try root.childrenAppend(&currentNode.ID);
+                try self.nodeDag.childrenAppend(root, currentNode);
                 try currentNode.parentsAppend(&root.ID);
 
                 // currentNode.listID.?.* = self.nodeDag.newListID();
@@ -4016,13 +4102,13 @@ pub const commands = struct {
 
                 childrenNode.parentsRemove(&lastNode.ID);
 
-                try endRenderingNode.childrenAppend(&childrenNode.ID);
+                try self.nodeDag.childrenAppend(endRenderingNode, childrenNode);
                 try childrenNode.parentsAppend(&endRenderingNode.ID);
             }
 
             lastNode.clearChildren();
 
-            try lastNode.childrenAppend(&endRenderingNode.ID);
+            try self.nodeDag.childrenAppend(lastNode, endRenderingNode);
             try endRenderingNode.parentsAppend(&lastNode.ID);
 
             self.pRendering.renderingEnd(entry.key_ptr.*);
