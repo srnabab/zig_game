@@ -218,7 +218,6 @@ pub const PushConstantPack = struct {
 
 pub const Draw2D = struct {
     pipeline: VkStruct.Pipeline_t,
-    rendering: rendering.RenderingInfo_t,
     vertexBuffer: []VkStruct.Buffer_t,
     indexBuffer: VkStruct.Buffer_t,
     descriptorSets: []vk.VkDescriptorSet,
@@ -280,7 +279,6 @@ pub const BindDescriptorSets = struct {
 
 pub const Present = struct {
     pipeline: VkStruct.Pipeline_t,
-    rendering: rendering.RenderingInfo_t,
     descriptorSets: []vk.VkDescriptorSet,
     pTextures: []texture.Texture_t,
 };
@@ -299,7 +297,6 @@ pub const PushConstant = struct {
 
 pub const DrawMesh = struct {
     pipeline: VkStruct.Pipeline_t,
-    rendering: rendering.RenderingInfo_t,
     descriptorSets: []vk.VkDescriptorSet,
     pTextures: []texture.Texture_t,
     usedBuffers: []VkStruct.Buffer_t,
@@ -309,7 +306,6 @@ pub const DrawMesh = struct {
 
 pub const DrawMeshIndirect = struct {
     pipeline: VkStruct.Pipeline_t,
-    rendering: rendering.RenderingInfo_t,
     descriptorSets: []vk.VkDescriptorSet,
     pTextures: []texture.Texture_t,
     usedBuffers: []VkStruct.Buffer_t,
@@ -327,7 +323,6 @@ pub const DrawMeshIndirectRecord = struct {
 
 pub const DrawIndirect = struct {
     pipeline: VkStruct.Pipeline_t,
-    rendering: rendering.RenderingInfo_t,
     descriptorSets: []vk.VkDescriptorSet,
     pTextures: []texture.Texture_t,
     usedBuffers: []VkStruct.Buffer_t,

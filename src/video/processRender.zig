@@ -12,7 +12,6 @@ const global = @import("global");
 const tracy = @import("tracy");
 const math = @import("math");
 const uniqueArrayList = @import("uniqueArrayList").UniqueArrayList;
-const rendering = @import("rendering");
 const Handle = @import("handle").Handle;
 
 const logStructSize = @import("logStructSize").logStructSize;
@@ -373,7 +372,13 @@ fn Graph(T: type) type {
             if (!(try self.children.append(ID))) {
                 self.childrenLen += 1;
 
-                // if (self.ID == 17 and ID.* == 21) {
+                // if (self.ID == 17 and ID.* == 3) {
+                //     @breakpoint();
+                // }
+                // if (self.ID == 20 and ID.* == 3) {
+                //     @breakpoint();
+                // }
+                // if (self.ID == 1 and ID.* == 19) {
                 //     @breakpoint();
                 // }
 
@@ -575,12 +580,13 @@ fn DAG(T: type) type {
                 .parents = .init(self.arena.allocator()),
             };
 
-            // if (self.innerID == 43) @breakpoint();
+            // if (self.innerID == 49) @breakpoint();
             // if (self.innerID == 33) @breakpoint();
             // if (self.innerID == 35) @breakpoint();
             // if (self.innerID == 41) @breakpoint();
             // if (self.innerID == 39) @breakpoint();
             // if (self.innerID == 15) @breakpoint();
+            // if (self.innerID == 18) @breakpoint();
 
             self.innerID += 1;
 
@@ -604,6 +610,11 @@ fn DAG(T: type) type {
             defer zone.deinit();
 
             try node.childrenAppend(&child.ID);
+
+            if (node.childrenLen > 1) {
+                _ = self.toEndMap.remove(node.ID);
+                return;
+            }
 
             const nodeEndID = self.toEndMap.get(node.ID) orelse node.ID;
             const end_id = self.toEndMap.get(child.ID) orelse child.ID;
@@ -1030,7 +1041,6 @@ pub const QueueNode = QueueNodes.Inner;
 const commandBufferDAG = DAG(CommandBufferBelong);
 
 const garbageDataTag = enum {
-    renderingInfo,
     buffer,
     bufferAndRegion,
     regions,
@@ -1041,7 +1051,6 @@ const garbageDataTag = enum {
     pValues,
 };
 const garbageData = union(garbageDataTag) {
-    renderingInfo: rendering.RenderingInfo_t,
     buffer: VkStruct.Buffer_t,
     bufferAndRegion: struct {
         buffer: VkStruct.Buffer_t,
@@ -1079,36 +1088,52 @@ pub const commands = struct {
     const Self = @This();
 
     const ptr_index_cache = struct {
-        ptr: *anyopaque,
+        ptr: u64,
         index: u32,
     };
-
     const QueueNode_ID = struct {
         node: *QueueNode,
         ID: u32,
+    };
+    const Rendering = struct {
+        flags: vk.VkRenderingFlags = 0,
+        renderArea: vk.VkRect2D = std.mem.zeroes(vk.VkRect2D),
+        layerCount: u32 = 0,
+        viewMask: u32 = 0,
+        colorAttachmentCount: u32 = 0,
+        colorAttachments: [5]vk.VkRenderingAttachmentInfo = std.mem.zeroes([5]vk.VkRenderingAttachmentInfo),
+        colorTextures: [5]texture.Texture_t = undefined,
+        depthAttachment: ?vk.VkRenderingAttachmentInfo = null,
+        depthTexture: ?texture.Texture_t = null,
+        stencilAttachment: ?vk.VkRenderingAttachmentInfo = null,
+        stencilTexture: ?texture.Texture_t = null,
     };
 
     mutex: std.Io.Mutex = .init,
     io: std.Io,
 
     vulkan: *VkStruct,
-    pRendering: *rendering,
     pTextureSet: *texture,
+
     pViewport: ?VkStruct.Viewport_t = null,
     bindViewport: bool = false,
     pScissor: ?VkStruct.Scissor_t = null,
     bindScissor: bool = false,
+    rendering: Rendering = .{},
+    renderingChanged: bool = false,
+    presentRendering: Rendering = .{},
+    presentRenderingChanged: bool = false,
 
-    lastInMesh: bool = true,
-    inMesh: bool = true,
+    // pipelineChange: bool = true,
+    // lastPipelineChangeState: bool = false,
 
     queue: std.hash_map.AutoHashMap(u32, drawC),
     nodeDag: QueueNodes,
     combineMap: std.AutoHashMap(u64, []QueueNode_ID),
 
     drawCacheMap: std.AutoHashMap(u32, void),
-    cacheMap: std.AutoHashMap(*anyopaque, u32),
-    renderingMap: std.AutoHashMap(rendering.RenderingInfo_t, RenderingPack),
+    cacheMap: std.AutoHashMap(u64, u32),
+    renderingMap: std.AutoHashMap(u64, RenderingPack),
     u32Mem: std.heap.memory_pool.Extra(u32, .{}),
 
     allocator: std.mem.Allocator,
@@ -1119,7 +1144,7 @@ pub const commands = struct {
 
     end: bool = false,
 
-    pub fn init(io: std.Io, allocator: std.mem.Allocator, buffers: []u8, vulkan: *VkStruct, pRendering: *rendering, pTextureSet: *texture) !Self {
+    pub fn init(io: std.Io, allocator: std.mem.Allocator, buffers: []u8, vulkan: *VkStruct, pTextureSet: *texture) !Self {
         // logStructSize(drawC);
         std.log.debug("command size {d}", .{@sizeOf(drawC.comm2)});
         std.log.debug("drawc size {d}", .{@sizeOf(drawC)});
@@ -1142,7 +1167,6 @@ pub const commands = struct {
             .cacheMap = .init(allocator),
             .renderingMap = .init(allocator),
             .vulkan = vulkan,
-            .pRendering = pRendering,
             .u32Mem = try .initCapacity(allocator, 128),
             .allocator = allocator,
             .pTextureSet = pTextureSet,
@@ -1229,6 +1253,142 @@ pub const commands = struct {
     pub fn setScissor(self: *Self, scissor: ?VkStruct.Scissor_t) void {
         self.pScissor = scissor;
         self.bindScissor = true;
+    }
+
+    pub fn setRendering(
+        self: *Self,
+        flags: ?vk.VkRenderingFlags,
+        renderArea: ?vk.VkRect2D,
+        layerCount: ?u32,
+        viewMask: ?u32,
+        setPresent: bool,
+    ) void {
+        self.mutex.lock(self.io) catch unreachable;
+        defer self.mutex.unlock(self.io);
+
+        if (setPresent) {
+            if (flags) |f| self.presentRendering.flags = f;
+            if (renderArea) |r| self.presentRendering.renderArea = r;
+            if (layerCount) |l| self.presentRendering.layerCount = l;
+            if (viewMask) |v| self.presentRendering.viewMask = v;
+
+            self.presentRenderingChanged = true;
+        } else {
+            if (flags) |f| self.rendering.flags = f;
+            if (renderArea) |r| self.rendering.renderArea = r;
+            if (layerCount) |l| self.rendering.layerCount = l;
+            if (viewMask) |v| self.rendering.viewMask = v;
+
+            self.renderingChanged = true;
+        }
+    }
+
+    pub fn setRenderingColorAttachment(
+        self: *Self,
+        index: u32,
+        colorAttachment: vk.VkRenderingAttachmentInfo,
+        texture_: texture.Texture_t,
+        setPresent: bool,
+    ) !void {
+        try self.mutex.lock(self.io);
+        defer self.mutex.unlock(self.io);
+
+        if (setPresent) {
+            if (index >= self.presentRendering.colorAttachments.len or index > self.presentRendering.colorAttachmentCount)
+                return error.OutOfColorAttachmentsRange;
+
+            self.presentRendering.colorAttachments[index] = colorAttachment;
+            self.presentRendering.colorTextures[index] = texture_;
+            self.renderingChanged = true;
+
+            if (index == self.presentRendering.colorAttachmentCount) self.presentRendering.colorAttachmentCount += 1;
+        } else {
+            if (index >= self.rendering.colorAttachments.len or index > self.rendering.colorAttachmentCount)
+                return error.OutOfColorAttachmentsRange;
+
+            self.rendering.colorAttachments[index] = colorAttachment;
+            self.rendering.colorTextures[index] = texture_;
+            self.renderingChanged = true;
+
+            if (index == self.rendering.colorAttachmentCount) self.rendering.colorAttachmentCount += 1;
+        }
+    }
+
+    pub fn setRenderingDepthOrStencilAttachment(
+        self: *Self,
+        attachment: vk.VkRenderingAttachmentInfo,
+        isDepth: bool,
+        setPresent: bool,
+    ) void {
+        try self.mutex.lock(self.io);
+        defer self.mutex.unlock(self.io);
+
+        if (setPresent) {
+            if (isDepth) {
+                self.presentRendering.depthAttachment = attachment;
+            } else {
+                self.presentRendering.stencilAttachment = attachment;
+            }
+            self.presentRenderingChanged = true;
+        } else {
+            if (isDepth) {
+                self.rendering.depthAttachment = attachment;
+            } else {
+                self.rendering.stencilAttachment = attachment;
+            }
+            self.renderingChanged = true;
+        }
+    }
+
+    fn hashRendering(pRendering: *Rendering) u64 {
+        var hasher = std.hash.Wyhash.init(0);
+        var flags = std.mem.toBytes(pRendering.flags);
+        hasher.update(&flags);
+        var renderArea = std.mem.toBytes(pRendering.renderArea);
+        hasher.update(&renderArea);
+        var layerCount = std.mem.toBytes(pRendering.layerCount);
+        hasher.update(&layerCount);
+        var viewMask = std.mem.toBytes(pRendering.viewMask);
+        hasher.update(&viewMask);
+        var colorAttachmentCount = std.mem.toBytes(pRendering.colorAttachmentCount);
+        hasher.update(&colorAttachmentCount);
+        for (pRendering.colorAttachments[0..pRendering.colorAttachmentCount]) |value| {
+            const bytes = std.mem.toBytes(value);
+            hasher.update(&bytes);
+        }
+        if (pRendering.depthAttachment) |value| {
+            const bytes = std.mem.toBytes(value);
+            hasher.update(&bytes);
+        }
+        if (pRendering.stencilAttachment) |value| {
+            const bytes = std.mem.toBytes(value);
+            hasher.update(&bytes);
+        }
+
+        return hasher.final();
+    }
+
+    fn renderingIsStart(self: *Self, pRendering: *Rendering, present: bool) bool {
+        if (present) {
+            if (self.presentRenderingChanged) return false;
+        } else {
+            if (self.renderingChanged) return false;
+        }
+
+        const hash = hashRendering(pRendering);
+        const res = self.renderingMap.get(hash);
+
+        if (res != null) return true;
+
+        return false;
+    }
+
+    fn startRendering(self: *Self, present: bool) !void {
+        if (present) {
+            self.presentRenderingChanged = false;
+        } else {
+            self.renderingChanged = false;
+        }
     }
 
     fn inferAcquirePipelinBarrierInfoByCommandTypeAndBufferUsage(
@@ -1643,6 +1803,8 @@ pub const commands = struct {
         const zone = tracy.initZone(@src(), .{ .name = "add command 2" });
         defer zone.deinit();
 
+        const allocator = self.stackAllocators[self.stackAllocatorsIndex].allocator();
+
         // const allCommandType = drawC.PrivateCommandTypeToCommandType(commandType);
         var commandCopy = command;
 
@@ -1682,8 +1844,6 @@ pub const commands = struct {
                 defer zone2.deinit();
 
                 const transLayout = commandCopy.transLayout;
-
-                const allocator = self.stackAllocators[self.stackAllocatorsIndex].allocator();
 
                 if (transLayout.srcQueueFamily != .init and transLayout.srcQueueFamily != transLayout.dstQueueFamily and self.vulkan.queueTypeCount > 1) {
                     const releaseFlags = inferReleasePipelineBarrierInfoByImageUsage(
@@ -1971,8 +2131,6 @@ pub const commands = struct {
                     break :s;
                 }
 
-                const allocator = self.stackAllocators[self.stackAllocatorsIndex].allocator();
-
                 const changeBufferQueue = command.changeBufferQueue;
                 const bufferUsage = self.vulkan.buffers.getBufferUsage(changeBufferQueue.buffer);
 
@@ -2174,12 +2332,37 @@ pub const commands = struct {
 
                 const rootNode = try self.nodeDag.create();
                 const ptr = try self.queue.getOrPut(rootNode.ID);
+
+                const colorAttachments = try allocator.dupe(
+                    vk.VkRenderingAttachmentInfo,
+                    command.beginRendering.pColorAttachments,
+                );
+
                 ptr.value_ptr.* = drawC{
                     .ID = rootNode.ID,
                     // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                     .command = .{ .beginRendering = command.beginRendering },
                 };
-                // rootNode.listID = self.nodeDag.currentListID;
+                ptr.value_ptr.command.beginRendering.pColorAttachments = colorAttachments;
+
+                if (command.beginRendering.depthAttachment) |d| {
+                    const depthAttachment =
+                        try allocator.create(vk.VkRenderingAttachmentInfo);
+
+                    depthAttachment.* = d.*;
+
+                    ptr.value_ptr.command.beginRendering.depthAttachment = depthAttachment;
+                }
+
+                if (command.beginRendering.stencilAttachment) |d| {
+                    const stencilAttachment =
+                        try allocator.create(vk.VkRenderingAttachmentInfo);
+
+                    stencilAttachment.* = d.*;
+
+                    ptr.value_ptr.command.beginRendering.stencilAttachment = stencilAttachment;
+                }
+
                 rootNode.data.commandPoolType = .graphic;
 
                 resNode = rootNode;
@@ -2203,6 +2386,8 @@ pub const commands = struct {
                     vk.VK_PIPELINE_BIND_POINT_GRAPHICS => .graphic,
                     else => unreachable,
                 };
+
+                // self.pipelineChange = true;
 
                 resNode = rootNode;
             },
@@ -2649,7 +2834,7 @@ pub const commands = struct {
 
     fn renderingResourcePreProcess(
         self: *Self,
-        pRendering: rendering.RenderingInfo_t,
+        pRendering: *Rendering,
         buffers: ?[]VkStruct.Buffer_t,
         textures: ?[]texture.Texture_t,
         currentNode: **QueueNode,
@@ -2660,21 +2845,12 @@ pub const commands = struct {
         allocator: std.mem.Allocator,
         commandType: drawC.CommandType,
         commandID: u32,
+        present: bool,
     ) !void {
         const zone = tracy.initZone(@src(), .{ .name = "rendering resource pre process" });
         defer zone.deinit();
 
-        const renderingInfo = self.pRendering.getRenderingInfoContent(pRendering);
-        const renderingColorTextureLen = bl: {
-            var count: u32 = 0;
-            if (renderingInfo.depthAttachment != null) {
-                count += 1;
-            }
-            if (renderingInfo.stencilAttachment != null) {
-                count += 1;
-            }
-            break :bl renderingInfo.textures.len - count;
-        };
+        const renderingColorTextureLen = pRendering.colorAttachmentCount;
 
         const bufferLen: u32 = if (buffers != null) @intCast(buffers.?.len) else 0;
         const textureLen: u32 = if (textures != null) @intCast(textures.?.len) else 0;
@@ -2717,30 +2893,32 @@ pub const commands = struct {
             }
         }
 
-        if (!self.pRendering.renderingIsStart(pRendering)) {
-            if (renderingInfo.pColorAttachments) |v| {
-                for (renderingInfo.textures[0..renderingColorTextureLen], v, 0..) |value, attachment, i| {
-                    totalQueueNodes[bufferLen + textureLen + i] = try self.transLayoutHelper(
-                        self.pTextureSet,
-                        value,
-                        0,
-                        1,
-                        attachment.imageLayout,
-                        .graphic,
-                        commandType,
-                        commandID,
-                    );
-                }
+        if (!self.renderingIsStart(pRendering, present)) {
+            for (
+                pRendering.colorTextures[0..renderingColorTextureLen],
+                pRendering.colorAttachments[0..pRendering.colorAttachmentCount],
+                0..,
+            ) |value, attachment, i| {
+                totalQueueNodes[bufferLen + textureLen + i] = try self.transLayoutHelper(
+                    self.pTextureSet,
+                    value,
+                    0,
+                    1,
+                    attachment.imageLayout,
+                    .graphic,
+                    commandType,
+                    commandID,
+                );
             }
 
             var depthImageQueueNode: twoQueueNode = .{};
-            if (renderingInfo.depthAttachment) |v| {
+            if (pRendering.depthAttachment) |v| {
                 depthImageQueueNode = try self.transLayoutHelper(
                     self.pTextureSet,
-                    renderingInfo.textures[renderingColorTextureLen],
+                    pRendering.depthTexture.?,
                     0,
                     1,
-                    v[0].imageLayout,
+                    v.imageLayout,
                     .graphic,
                     commandType,
                     commandID,
@@ -2748,13 +2926,13 @@ pub const commands = struct {
             }
 
             var stencilImageQueueNode: twoQueueNode = .{};
-            if (renderingInfo.stencilAttachment) |v| {
+            if (pRendering.stencilAttachment) |v| {
                 stencilImageQueueNode = try self.transLayoutHelper(
                     self.pTextureSet,
-                    renderingInfo.textures[renderingColorTextureLen + 1],
+                    pRendering.stencilTexture.?,
                     0,
                     1,
-                    v[0].imageLayout,
+                    v.imageLayout,
                     .graphic,
                     commandType,
                     commandID,
@@ -2765,25 +2943,29 @@ pub const commands = struct {
             totalQueueNodes[totalQueueNodes.len - 1] = stencilImageQueueNode;
 
             const beginRenderingQueueNode = try self.addCommand2(.{ .beginRendering = .{
-                .flags = renderingInfo.flags,
-                .renderArea = renderingInfo.renderArea,
-                .layerCount = renderingInfo.layerCount,
-                .viewMask = renderingInfo.viewMask,
-                .pColorAttachments = if (renderingInfo.pColorAttachments) |v| v else &.{},
-                .depthAttachment = if (renderingInfo.depthAttachment) |v| @ptrCast(v.ptr) else null,
-                .stencilAttachment = if (renderingInfo.stencilAttachment) |v| @ptrCast(v.ptr) else null,
+                .flags = pRendering.flags,
+                .renderArea = pRendering.renderArea,
+                .layerCount = pRendering.layerCount,
+                .viewMask = pRendering.viewMask,
+                .pColorAttachments = if (pRendering.colorAttachmentCount > 0)
+                    pRendering.colorAttachments[0..pRendering.colorAttachmentCount]
+                else
+                    &.{},
+                .depthAttachment = if (pRendering.depthAttachment) |_|
+                    &pRendering.depthAttachment.?
+                else
+                    null,
+                .stencilAttachment = if (pRendering.stencilAttachment) |_|
+                    &pRendering.stencilAttachment.?
+                else
+                    null,
             } }, commandType, commandID);
 
-            self.pRendering.renderingStart(pRendering);
+            try self.startRendering(present);
 
             renderingNode.* = beginRenderingQueueNode.a.?;
-
-            // std.log.debug("total {d}", .{totalQueueNodes.len});
-
-            // totalQueueNodes[totalQueueNodes.len - 4] = imageQueueNode;
-
         } else {
-            const renderingRes = try self.cacheMap.getOrPut(pRendering);
+            const renderingRes = try self.cacheMap.getOrPut(hashRendering(pRendering));
             renderingNode.* = self.nodeDag.get(renderingRes.value_ptr.*).?;
         }
 
@@ -2808,24 +2990,54 @@ pub const commands = struct {
         }
     }
 
-    pub fn cacheAttachementImageView(self: *Self, pRendering: rendering.RenderingInfo_t, lastNode: *QueueNode, array: *std.array_list.Managed(ptr_index_cache)) !void {
+    pub fn cacheAttachementImageView(pRendering: *Rendering, lastNode: *QueueNode, array: *std.array_list.Managed(ptr_index_cache)) !void {
         const zone = tracy.initZone(@src(), .{ .name = "cache attachement image view" });
         defer zone.deinit();
 
-        const textures = self.pRendering.getRenderingInfoContent(pRendering).textures;
-
-        for (textures) |value| {
+        for (pRendering.colorTextures[0..pRendering.colorAttachmentCount]) |value| {
             const ptr = try array.addOne();
             ptr.* = .{
-                .ptr = value,
+                .ptr = @intFromPtr(value),
+                .index = lastNode.ID,
+            };
+        }
+        if (pRendering.depthTexture) |tex| {
+            const ptr = try array.addOne();
+            ptr.* = .{
+                .ptr = @intFromPtr(tex),
+                .index = lastNode.ID,
+            };
+        }
+        if (pRendering.stencilTexture) |tex| {
+            const ptr = try array.addOne();
+            ptr.* = .{
+                .ptr = @intFromPtr(tex),
                 .index = lastNode.ID,
             };
         }
     }
 
+    pub fn addAttachementImageViewDependency(pRendering: *Rendering, dependenctArray: *std.array_list.Managed(*anyopaque)) !void {
+        const zone = tracy.initZone(@src(), .{ .name = "cache attachement image view" });
+        defer zone.deinit();
+
+        for (pRendering.colorTextures[0..pRendering.colorAttachmentCount]) |value| {
+            const ptr = try dependenctArray.addOne();
+            ptr.* = value;
+        }
+        if (pRendering.depthTexture) |tex| {
+            const ptr = try dependenctArray.addOne();
+            ptr.* = tex;
+        }
+        if (pRendering.stencilTexture) |tex| {
+            const ptr = try dependenctArray.addOne();
+            ptr.* = tex;
+        }
+    }
+
     pub fn getRenderingResPack(
         self: *Self,
-        pRendering: rendering.RenderingInfo_t,
+        pRendering: *Rendering,
         vertexBuffers: ?[]VkStruct.Buffer_t,
         indexBuffer: ?VkStruct.Buffer_t,
         descriptorSets: ?[]vk.VkDescriptorSet,
@@ -2836,7 +3048,7 @@ pub const commands = struct {
         node: *QueueNode,
         pLastNode: *?*QueueNode,
     ) ![]drawResourceMapGetOrPutResult {
-        var renderingPack_ = try self.renderingMap.getOrPut(pRendering);
+        var renderingPack_ = try self.renderingMap.getOrPut(hashRendering(pRendering));
         // std.log.debug("rendering {*}", .{renderingPack_.key_ptr.*});
         if (!renderingPack_.found_existing) {
             renderingPack_.value_ptr.* = .{
@@ -2999,55 +3211,55 @@ pub const commands = struct {
 
             if (value.found_existing) {
                 if (i < vertexBufferLen) {} else if (i < vAndDeLen) {
-                    if (self.inMesh != self.lastInMesh) {
-                        // std.log.debug("1 des", .{});
-                        if (descriptorSetCount == 0) {
-                            descriptorSetIndex = @intCast(i - vertexBufferLen);
-                            descriptorSetCount += 1;
-                            continue;
-                        }
+                    // if (self.pipelineChange) {
+                    // std.log.debug("1 des", .{});
+                    if (descriptorSetCount == 0) {
+                        descriptorSetIndex = @intCast(i - vertexBufferLen);
+                        descriptorSetCount += 1;
+                        continue;
+                    }
 
-                        // std.log.debug("#count {d}", .{descriptorSetCount});
-                        // std.log.debug("sum {d}", .{descriptorSetCount + descriptorSetIndex});
+                    // std.log.debug("#count {d}", .{descriptorSetCount});
+                    // std.log.debug("sum {d}", .{descriptorSetCount + descriptorSetIndex});
 
-                        if (descriptorSetIndex + descriptorSetCount + vertexBufferLen == i) {
-                            descriptorSetCount += 1;
+                    if (descriptorSetIndex + descriptorSetCount + vertexBufferLen == i) {
+                        descriptorSetCount += 1;
 
-                            continue;
-                        } else {
-                            // std.log.debug("start {d}, end {d}", .{ descriptorSetIndex, descriptorSetIndex + descriptorSetCount });
+                        continue;
+                    } else {
+                        // std.log.debug("start {d}, end {d}", .{ descriptorSetIndex, descriptorSetIndex + descriptorSetCount });
 
-                            const descriptorSets = pDescriptorSets.?[descriptorSetIndex .. descriptorSetIndex + descriptorSetCount];
-                            const tempNode = try self.addCommand2(.{
-                                .bindDescriptorSets = .{
-                                    .bindDescriptorSetsInfo = .{
-                                        .sType = vk.VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO,
-                                        .pNext = null,
-                                        .stageFlags = self.getDescriptorSetsShaderStage(descriptorSets),
-                                        .layout = self.vulkan.getPipelineContent(pipeline).pipelineLayout,
-                                        .firstSet = descriptorSetIndex,
-                                        .descriptorSetCount = @intCast(descriptorSets.len),
-                                        .pDescriptorSets = @ptrCast(descriptorSets.ptr),
-                                        .dynamicOffsetCount = 0,
-                                        .pDynamicOffsets = null,
-                                    },
+                        const descriptorSets = pDescriptorSets.?[descriptorSetIndex .. descriptorSetIndex + descriptorSetCount];
+                        const tempNode = try self.addCommand2(.{
+                            .bindDescriptorSets = .{
+                                .bindDescriptorSetsInfo = .{
+                                    .sType = vk.VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO,
+                                    .pNext = null,
+                                    .stageFlags = self.getDescriptorSetsShaderStage(descriptorSets),
+                                    .layout = self.vulkan.getPipelineContent(pipeline).pipelineLayout,
+                                    .firstSet = descriptorSetIndex,
+                                    .descriptorSetCount = @intCast(descriptorSets.len),
+                                    .pDescriptorSets = @ptrCast(descriptorSets.ptr),
+                                    .dynamicOffsetCount = 0,
+                                    .pDynamicOffsets = null,
                                 },
-                            }, commandType, commandID);
+                            },
+                        }, commandType, commandID);
 
-                            descriptorSetIndex = @intCast(i - vertexBufferLen);
-                            descriptorSetCount = 1;
+                        descriptorSetIndex = @intCast(i - vertexBufferLen);
+                        descriptorSetCount = 1;
 
-                            if (linkNodeEnd == null) {
-                                linkNodeEnd = tempNode.a.?;
-                                linkNodeStart = linkNodeEnd;
-                            } else {
-                                try linkNodeEnd.?.parentsAppend(&tempNode.a.?.ID);
-                                try self.nodeDag.childrenAppend(tempNode.a.?, linkNodeEnd.?);
+                        if (linkNodeEnd == null) {
+                            linkNodeEnd = tempNode.a.?;
+                            linkNodeStart = linkNodeEnd;
+                        } else {
+                            try linkNodeEnd.?.parentsAppend(&tempNode.a.?.ID);
+                            try self.nodeDag.childrenAppend(tempNode.a.?, linkNodeEnd.?);
 
-                                linkNodeEnd = tempNode.a.?;
-                            }
+                            linkNodeEnd = tempNode.a.?;
                         }
                     }
+                    // }
                 }
             } else {
                 if (i < vertexBufferLen) {
@@ -3165,6 +3377,8 @@ pub const commands = struct {
                                 .bindPoint = vk.VK_PIPELINE_BIND_POINT_GRAPHICS,
                                 .pipeline = pipelineContent.pipeline,
                             } }, commandType, commandID);
+
+                            // self.pipelineChange = true;
 
                             tempNode = tempTwoNode.a.?;
 
@@ -3456,7 +3670,7 @@ pub const commands = struct {
                     dependencyPtr.* = tex;
                     const ptridx = try needToCacheArray.addOne();
                     ptridx.* = .{
-                        .ptr = tex,
+                        .ptr = @intFromPtr(tex),
                         .index = ID,
                     };
                 }
@@ -3466,7 +3680,7 @@ pub const commands = struct {
                     self.addBuffer_tDependency(dependencyPtr, value);
                     const ptridx = try needToCacheArray.addOne();
                     ptridx.* = .{
-                        .ptr = @ptrCast(self.vulkan.buffers.getVkBuffer(value)),
+                        .ptr = @intFromPtr(self.vulkan.buffers.getVkBuffer(value)),
                         .index = ID,
                     };
                 }
@@ -3608,19 +3822,20 @@ pub const commands = struct {
                 var lastNode: ?*QueueNode = null;
                 var pTextures: []texture.Texture_t = undefined;
                 var buffers: []VkStruct.Buffer_t = undefined;
-                var pRendering: rendering.RenderingInfo_t = undefined;
                 var descriptorSets: []vk.VkDescriptorSet = undefined;
                 var pipeline: VkStruct.Pipeline_t = undefined;
                 var pushConstants: []drawC.PushConstantPack = undefined;
                 var indexBuffer: ?VkStruct.Buffer_t = null;
+                var pRendering: *Rendering = undefined;
+                var isPresent = false;
 
                 if (command == .drawIndirect) {
                     const drawIndirect = command.drawIndirect;
                     pTextures = drawIndirect.pTextures;
-                    pRendering = drawIndirect.rendering;
                     descriptorSets = drawIndirect.descriptorSets;
                     pipeline = drawIndirect.pipeline;
                     pushConstants = drawIndirect.pushConstants;
+                    pRendering = &self.rendering;
 
                     buffers = try allocator.alloc(
                         VkStruct.Buffer_t,
@@ -3638,20 +3853,20 @@ pub const commands = struct {
                         },
                     };
 
-                    self.inMesh = false;
+                    // self.inMesh = false;
                 } else if (command == .drawMesh) {
                     const drawMesh = command.drawMesh;
                     pTextures = drawMesh.pTextures;
-                    pRendering = drawMesh.rendering;
                     descriptorSets = drawMesh.descriptorSets;
                     pipeline = drawMesh.pipeline;
                     pushConstants = drawMesh.pushConstants;
                     buffers = drawMesh.usedBuffers;
+                    pRendering = &self.rendering;
 
                     ptr.value_ptr.command = .{
                         .drawMeshRecord = .{ .meshletCount = drawMesh.meshletCount },
                     };
-                    self.inMesh = true;
+                    // self.inMesh = true;
                 } else if (command == .present) {
                     var rootCommand = self.queue.getPtr(0).?;
 
@@ -3660,11 +3875,12 @@ pub const commands = struct {
 
                     const present = command.present;
                     pTextures = present.pTextures;
-                    pRendering = present.rendering;
                     descriptorSets = present.descriptorSets;
                     buffers = &.{};
                     pipeline = present.pipeline;
                     pushConstants = &.{};
+                    pRendering = &self.presentRendering;
+                    isPresent = true;
 
                     ptr.value_ptr.command = .{
                         .presentRecord = .{ .empty = void{} },
@@ -3673,24 +3889,21 @@ pub const commands = struct {
                     rootCommand.command.start.present = true;
                     rootCommand.command.start.currentIndex = currentIndex;
 
-                    var imageView = [_]vk.VkImageView{
-                        self.pTextureSet.getVkImageView(self.vulkan.swapchainTextures[currentIndex]),
-                    };
-                    try self.pRendering.changeRenderingImageView(
-                        0,
-                        1,
-                        &imageView,
-                        present.rendering,
-                        self.pTextureSet,
-                    );
-                    self.inMesh = false;
+                    // var imageView = [_]vk.VkImageView{
+                    //     self.pTextureSet.getVkImageView(self.vulkan.swapchainTextures[currentIndex]),
+                    // };
+                    pRendering.colorAttachments[0].imageView =
+                        self.pTextureSet.getVkImageView(self.vulkan.swapchainTextures[currentIndex]);
+                    pRendering.colorTextures[0] = self.vulkan.swapchainTextures[currentIndex];
+
+                    // self.inMesh = false;
                 } else if (command == .draw2D) {
                     const draw2D = command.draw2D;
-                    pRendering = draw2D.rendering;
                     descriptorSets = draw2D.descriptorSets;
                     pipeline = draw2D.pipeline;
                     pushConstants = draw2D.pushConstants;
                     indexBuffer = draw2D.indexBuffer;
+                    pRendering = &self.rendering;
 
                     // var textures = [_]texture.Texture_t{draw2D.pTexture};
                     pTextures = try allocator.alloc(texture.Texture_t, 1);
@@ -3709,7 +3922,7 @@ pub const commands = struct {
                     ptr.value_ptr.command = .{ .draw2DRecord = .{
                         .offsets = offsets,
                     } };
-                    self.inMesh = false;
+                    // self.inMesh = false;
                 }
 
                 try self.renderingResourcePreProcess(
@@ -3724,10 +3937,11 @@ pub const commands = struct {
                     allocator,
                     std.meta.activeTag(command),
                     ID,
+                    isPresent,
                 );
                 const cachePtr = try needToCacheArray.addOne();
                 cachePtr.* = .{
-                    .ptr = pRendering,
+                    .ptr = hashRendering(pRendering),
                     .index = renderingNode.?.ID,
                 };
 
@@ -3740,13 +3954,7 @@ pub const commands = struct {
                     const dependencyPtr = try dependenciesArray.addOne();
                     dependencyPtr.* = tex;
                 }
-                {
-                    const r_ = self.pRendering.getRenderingInfoContent(pRendering);
-                    for (r_.textures) |t| {
-                        const dependencyPtr = try dependenciesArray.addOne();
-                        dependencyPtr.* = t;
-                    }
-                }
+                try addAttachementImageViewDependency(pRendering, &dependenciesArray);
 
                 const resPack = try self.getRenderingResPack(
                     pRendering,
@@ -3761,7 +3969,7 @@ pub const commands = struct {
                     &lastNode,
                 );
 
-                try self.cacheAttachementImageView(pRendering, node, &needToCacheArray);
+                try cacheAttachementImageView(pRendering, node, &needToCacheArray);
 
                 const linkNode = try self.resPackNodeProcess(
                     resPack,
@@ -3776,15 +3984,14 @@ pub const commands = struct {
                     ID,
                     allocator,
                 );
-                self.lastInMesh = self.inMesh;
+                // self.lastInMesh = self.inMesh;
 
                 try self.lastNodeLinkNodeRenderingNodeConnect(lastNode, linkNode, node, renderingNode);
 
                 if (command == .present) {
-                    const renderingInfo = self.pRendering.getRenderingInfoContent(pRendering);
                     const transNode = try self.transLayoutHelper(
                         self.pTextureSet,
-                        renderingInfo.textures[0],
+                        pRendering.colorTextures[0],
                         0,
                         1,
                         vk.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
@@ -3876,7 +4083,7 @@ pub const commands = struct {
                 // cache outputs
                 const cachePtr = try needToCacheArray.addOne();
                 cachePtr.* = .{
-                    .ptr = @ptrCast(self.vulkan.buffers.getVkBuffer(copyBuffer.dstBuffer)),
+                    .ptr = @intFromPtr(self.vulkan.buffers.getVkBuffer(copyBuffer.dstBuffer)),
                     .index = ID,
                 };
             },
@@ -3942,7 +4149,7 @@ pub const commands = struct {
                 // cache outputs
                 const cachePtr = try needToCacheArray.addOne();
                 cachePtr.* = .{
-                    .ptr = copyBufferToImage.pTexture,
+                    .ptr = @intFromPtr(copyBufferToImage.pTexture),
                     .index = ID,
                 };
             },
@@ -3979,7 +4186,7 @@ pub const commands = struct {
             var dependencyLinked = false;
 
             for (dependenciesArray.items) |dependency| {
-                const dependencyID = self.cacheMap.get(dependency);
+                const dependencyID = self.cacheMap.get(@intFromPtr(dependency));
 
                 if (dependencyID == null) continue;
                 const idx = dependencyID.?;
@@ -4023,6 +4230,7 @@ pub const commands = struct {
                 if (cmd.command != .pipelineBarrier) {
                     // if (dependencyNode.ID == 15) @breakpoint();
                     var secondLinked = false;
+                    // std.log.debug("skip ID {d}", .{dependencyNode.ID});
 
                     switch (dependencyNode.data.commandPoolType) {
                         .transfer => {
@@ -4170,8 +4378,6 @@ pub const commands = struct {
 
             try self.nodeDag.childrenAppend(lastNode, endRenderingNode);
             try endRenderingNode.parentsAppend(&lastNode.ID);
-
-            self.pRendering.renderingEnd(entry.key_ptr.*);
         }
 
         const root = self.nodeDag.get(0).?;
@@ -4224,7 +4430,6 @@ pub const oneTimeCommand = struct {
 
     // single
     vulkan: *VkStruct,
-    pRendering: *rendering,
     io: std.Io,
 
     innerID: u32 = 0,
@@ -4242,7 +4447,7 @@ pub const oneTimeCommand = struct {
     signalSemaphoreSubmitInfos: [global.MaxFrameInFlight]std.array_list.Managed(vk.VkSemaphoreSubmitInfo),
     sumbitInfos: [global.MaxFrameInFlight]std.array_list.Managed(vk.VkSubmitInfo2),
 
-    pub fn init(io: std.Io, allocator: std.mem.Allocator, vulkan: *VkStruct, pRendering: *rendering) Self {
+    pub fn init(io: std.Io, allocator: std.mem.Allocator, vulkan: *VkStruct) Self {
         return Self{
             .allocator = allocator,
             .threadPool = .init(io, allocator),
@@ -4251,7 +4456,6 @@ pub const oneTimeCommand = struct {
             .waitSemaphoreSubmitInfos = [_]std.array_list.Managed(vk.VkSemaphoreSubmitInfo){.init(allocator)} ** global.MaxFrameInFlight,
             .signalSemaphoreSubmitInfos = [_]std.array_list.Managed(vk.VkSemaphoreSubmitInfo){.init(allocator)} ** global.MaxFrameInFlight,
             .sumbitInfos = [_]std.array_list.Managed(vk.VkSubmitInfo2){.init(allocator)} ** global.MaxFrameInFlight,
-            .pRendering = pRendering,
             .garbageData = .init(allocator),
             .io = io,
         };
@@ -4806,7 +5010,7 @@ pub const oneTimeCommand = struct {
                     // self.allocator.free(g.data.pValues);
                     self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
                 },
-                .descriptorSets, .vertexBuffer, .renderingInfo, .empty => {},
+                .descriptorSets, .vertexBuffer, .empty => {},
             }
         }
 

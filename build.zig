@@ -258,11 +258,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    const rendering_mod = b.createModule(.{
-        .root_source_file = b.path("src/video/vkStruct/rendering.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
     const logStructSize_mod = b.createModule(.{
         .root_source_file = b.path("src/logStructSize.zig"),
         .target = target,
@@ -308,13 +303,6 @@ pub fn build(b: *std.Build) void {
     // meshopt_mod.addIncludePath(b.path("include"));
 
     input_mod.addImport("sdl", sdl_mod);
-
-    rendering_mod.addImport("vulkan", vk_c_mod);
-    rendering_mod.addImport("global", global_mod);
-    rendering_mod.addImport("handle", handle_mod);
-    rendering_mod.addImport("textureSet", textureSet_mod);
-    rendering_mod.addImport("mesh", mesh_mod);
-    rendering_mod.addImport("tracy", tracy.module("tracy"));
 
     error_mod.addImport("sdl", sdl_mod);
 
@@ -440,7 +428,6 @@ pub fn build(b: *std.Build) void {
     processRender_mod.addImport("tracy", tracy.module("tracy"));
     processRender_mod.addImport("math", math_mod);
     processRender_mod.addImport("uniqueArrayList", uniqueArrayList_mod);
-    processRender_mod.addImport("rendering", rendering_mod);
     processRender_mod.addImport("handle", handle_mod);
     processRender_mod.addImport("logStructSize", logStructSize_mod);
 
@@ -480,7 +467,6 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("vertices", vertices_mod);
     exe_mod.addImport("handle", handle_mod);
     exe_mod.addImport("sdl", sdl_mod);
-    exe_mod.addImport("rendering", rendering_mod);
     exe_mod.addImport("vulkan", vk_c_mod);
     exe_mod.addImport("math", math_mod);
     exe_mod.addImport("mesh", mesh_mod);

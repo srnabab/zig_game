@@ -11,7 +11,6 @@ const processRender = @import("processRender");
 const OneTimeCommand = processRender.oneTimeCommand;
 const Commands = processRender.commands;
 const textureSet = @import("textureSet");
-const rendering = @import("rendering");
 const vertices = @import("vertices");
 const shaderStruct = @import("video/shaderStruct.zig");
 const vertexStruct = @import("vertexStruct");
@@ -57,20 +56,16 @@ pub fn render_thread_func(
     defer vulkan.deinit();
     defer pTextureSet.deinit(&vulkan);
 
-    var pRendering = rendering.init(io, allocator_t.*, handles);
-    defer pRendering.deinit();
-
     var commands = try Commands.init(
         io,
         allocator_t.*,
         stackMemory[0..global.StackMemorySize],
         &vulkan,
-        &pRendering,
         &pTextureSet,
     );
     defer commands.deinit();
 
-    var graphic = OneTimeCommand.init(io, allocator_t.*, &vulkan, &pRendering);
+    var graphic = OneTimeCommand.init(io, allocator_t.*, &vulkan);
     defer graphic.deinit() catch |err| {
         std.debug.panic("error {s}", .{@errorName(err)});
     };
@@ -130,8 +125,7 @@ pub fn render_thread_func(
         "texture_test",
     );
 
-    var colorAttachment: [1]vk.VkRenderingAttachmentInfo = undefined;
-    colorAttachment[0] = vk.VkRenderingAttachmentInfo{
+    const colorAttachment = vk.VkRenderingAttachmentInfo{
         .sType = vk.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .imageView = pTextureSet.getVkImageView(texture_test),
         .imageLayout = vk.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -144,60 +138,63 @@ pub fn render_thread_func(
         },
     };
 
-    var texture_test_array = [_]textureSet.Texture_t{texture_test};
-    const rendering_test = try pRendering.createRenderingInfo(
-        io,
-        0,
-        vk.VkRect2D{
-            .extent = .{
-                .width = vulkan.windowWidth,
-                .height = vulkan.windowHeight,
-            },
-            .offset = .{ .x = 0, .y = 0 },
-        },
+    // var texture_test_array = [_]textureSet.Texture_t{texture_test};
+    // const rendering_test = try pRendering.createRenderingInfo(
+    //     io,
+    //     0,
+    //     vk.VkRect2D{
+    //         .extent = .{
+    //             .width = vulkan.windowWidth,
+    //             .height = vulkan.windowHeight,
+    //         },
+    //         .offset = .{ .x = 0, .y = 0 },
+    //     },
 
-        1,
-        0,
-        &texture_test_array,
-        &colorAttachment,
-        null,
-        null,
-    );
-    colorAttachment[0].loadOp = vk.VK_ATTACHMENT_LOAD_OP_LOAD;
-    const rendering_mesh_test = try pRendering.createRenderingInfo(
-        io,
-        0,
-        vk.VkRect2D{
-            .extent = .{
-                .width = vulkan.windowWidth,
-                .height = vulkan.windowHeight,
-            },
-            .offset = .{ .x = 0, .y = 0 },
-        },
+    //     1,
+    //     0,
+    //     &texture_test_array,
+    //     &colorAttachment,
+    //     null,
+    //     null,
+    // );
+    // colorAttachment[0].loadOp = vk.VK_ATTACHMENT_LOAD_OP_LOAD;
+    // const rendering_mesh_test = try pRendering.createRenderingInfo(
+    //     io,
+    //     0,
+    //     vk.VkRect2D{
+    //         .extent = .{
+    //             .width = vulkan.windowWidth,
+    //             .height = vulkan.windowHeight,
+    //         },
+    //         .offset = .{ .x = 0, .y = 0 },
+    //     },
 
-        1,
-        0,
-        &texture_test_array,
-        &colorAttachment,
-        null,
-        null,
-    );
+    //     1,
+    //     0,
+    //     &texture_test_array,
+    //     &colorAttachment,
+    //     null,
+    //     null,
+    // );
 
-    var present_texture_test_array = [_]textureSet.Texture_t{undefined};
-    const present_rendering_test = try pRendering.createRenderingInfo(
-        io,
-        0,
-        vk.VkRect2D{ .extent = .{
-            .width = vulkan.windowWidth,
-            .height = vulkan.windowHeight,
-        }, .offset = .{ .x = 0, .y = 0 } },
-        1,
-        0,
-        &present_texture_test_array,
-        &colorAttachment,
-        null,
-        null,
-    );
+    // var present_texture_test_array = [_]textureSet.Texture_t{undefined};
+    // const present_rendering_test = try pRendering.createRenderingInfo(
+    //     io,
+    //     0,
+    //     vk.VkRect2D{ .extent = .{
+    //         .width = vulkan.windowWidth,
+    //         .height = vulkan.windowHeight,
+    //     }, .offset = .{ .x = 0, .y = 0 } },
+    //     1,
+    //     0,
+    //     &present_texture_test_array,
+    //     &colorAttachment,
+    //     null,
+    //     null,
+    // );
+    // _ = present_rendering_test;
+    // _ = rendering_mesh_test;
+    // _ = rendering_test;
 
     const ubo_test = try vulkan.createBufferByUsage(
         @sizeOf(shaderStruct.UniformBufferObject),
@@ -503,6 +500,24 @@ pub fn render_thread_func(
         .stageFlag = vk.VK_SHADER_STAGE_COMPUTE_BIT,
     };
 
+    commands.setRendering(0, vk.VkRect2D{
+        .extent = .{
+            .width = vulkan.windowWidth,
+            .height = vulkan.windowHeight,
+        },
+        .offset = .{ .x = 0, .y = 0 },
+    }, 1, 0, false);
+    commands.setRendering(0, vk.VkRect2D{
+        .extent = .{
+            .width = vulkan.windowWidth,
+            .height = vulkan.windowHeight,
+        },
+        .offset = .{ .x = 0, .y = 0 },
+    }, 1, 0, true);
+
+    try commands.setRenderingColorAttachment(0, colorAttachment, texture_test, false);
+    try commands.setRenderingColorAttachment(0, colorAttachment, texture_test, true);
+
     // global.stopNodeDagPrint = false;
     // global.printDagToDot = true;
     // global.stopNodeDagDetailPrint = false;
@@ -515,19 +530,24 @@ pub fn render_thread_func(
 
     while (true) {
         const frame = vulkan.totalFrame.load(.seq_cst);
+        _ = frame;
+        // std.log.debug("frame {d}", .{frame});
 
         // if (frame == 0) {
         //     global.stopNodeDagPrint = false;
         //     global.printDagToDot = true;
         // }
         // if (frame == 1) {
+        //     global.stopNodeDagPrint = false;
+        //     global.printDagToDot = true;
+        //     global.stopNodeDagDetailPrint = false;
         //     global.game_end.store(1, .seq_cst);
         // }
 
-        if (frame == 100000) {
-            global.stopExecuteNodePrint = true;
-            global.stopNodeDagPrint = true;
-        }
+        // if (frame == 100000) {
+        //     global.stopExecuteNodePrint = true;
+        //     global.stopNodeDagPrint = true;
+        // }
 
         try vulkan.waitEndFence();
 
@@ -537,7 +557,6 @@ pub fn render_thread_func(
         try commands.addCommand(.draw2D, .{ .draw2D = .{
             .pipeline = vulkan.getPipeline("flat2d").?,
             .pTexture = circleTexture,
-            .rendering = rendering_test,
             .vertexBuffer = &testBuffers,
             .indexBuffer = vertices.indexBuffer2D,
             .descriptorSets = &testDescriptorSets,
@@ -551,9 +570,9 @@ pub fn render_thread_func(
             .groupCount = 1,
             .pushConstants = computeIndirectDrawPushConstants,
         } });
+
         try commands.addCommand(.drawIndirect, .{ .drawIndirect = .{
             .pipeline = vulkan.getPipeline("indirectDraw").?,
-            .rendering = rendering_mesh_test,
             .descriptorSets = &testDescriptorSets,
             .pTextures = &test_meshTextures,
             .usedBuffers = &test_indirectBuffers,
@@ -563,7 +582,6 @@ pub fn render_thread_func(
         // std.log.debug("drawmesh", .{});
         try commands.addCommand(.drawMesh, .{ .drawMesh = .{
             .pipeline = vulkan.getPipeline("model").?,
-            .rendering = rendering_mesh_test,
             .descriptorSets = &testMeshDescriptorSets,
             .pTextures = &test_meshTextures,
             .usedBuffers = &test_meshBuffers,
@@ -574,7 +592,6 @@ pub fn render_thread_func(
         try commands.addCommand(.present, .{ .present = .{
             .pipeline = vulkan.getPipeline("directOut").?,
             .pTextures = &presentTextures,
-            .rendering = present_rendering_test,
             .descriptorSets = &presentDescriptorSets,
         } });
         try commands.addCommandEnd();
