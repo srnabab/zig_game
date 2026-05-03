@@ -145,6 +145,7 @@ pub fn createSwapchain(
 
     var swapchain: vk.VkSwapchainKHR = null;
     const imageCount: u32 = @max(surfaceCapabilities.minImageCount + 1, surfaceCapabilities.maxImageCount);
+    // const imageCount: u32 = surfaceCapabilities.minImageCount + 1;
 
     var createInfo = vk.VkSwapchainCreateInfoKHR{
         .sType = vk.VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,

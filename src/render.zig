@@ -503,11 +503,12 @@ pub fn render_thread_func(
         .stageFlag = vk.VK_SHADER_STAGE_COMPUTE_BIT,
     };
 
-    global.stopNodeDagPrint = false;
-    global.printDagToDot = true;
-    global.stopNodeDagDetailPrint = false;
+    // global.stopNodeDagPrint = false;
+    // global.printDagToDot = true;
+    // global.stopNodeDagDetailPrint = false;
     // global.stopExecuteNodePrint = false;
-    global.game_end.store(1, .seq_cst);
+    // global.storExecuteSequencePrint = false;
+    // global.game_end.store(1, .seq_cst);
 
     // vulkan.logBufferPtr();
     // vulkan.logPipeline();
@@ -515,7 +516,11 @@ pub fn render_thread_func(
     while (true) {
         const frame = vulkan.totalFrame.load(.seq_cst);
 
-        // if (frame == 3) {
+        // if (frame == 0) {
+        //     global.stopNodeDagPrint = false;
+        //     global.printDagToDot = true;
+        // }
+        // if (frame == 1) {
         //     global.game_end.store(1, .seq_cst);
         // }
 

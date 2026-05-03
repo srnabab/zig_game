@@ -27,7 +27,7 @@ var updated2D = false;
 pub var instanceIDsBuffer: vkStruct.Buffer_t = undefined;
 const indirectDrawCommand = vk.VkDrawIndirectCommand{
     .vertexCount = 6,
-    .instanceCount = 6,
+    .instanceCount = 0,
     .firstVertex = 0,
     .firstInstance = 0,
 };

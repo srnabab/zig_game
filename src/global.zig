@@ -48,5 +48,6 @@ pub var stopNodeDagPrint = true;
 pub var printDagToDot = false;
 pub var stopNodeDagDetailPrint = true;
 pub var stopExecuteNodePrint = true;
+pub var storExecuteSequencePrint = true;
 
 pub var game_end: std.atomic.Value(u8) = .init(0);

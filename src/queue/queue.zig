@@ -109,7 +109,7 @@ pub fn Queue(T: type) type {
             try self.mutex.lock(io);
             defer self.mutex.unlock(io);
 
-            const nnode = try self.nodeMemory.create();
+            const nnode = try self.nodeMemory.create(self.allocator);
             nnode.* = DataNode{
                 .data = data,
             };

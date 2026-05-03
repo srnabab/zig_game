@@ -373,7 +373,7 @@ fn Graph(T: type) type {
             if (!(try self.children.append(ID))) {
                 self.childrenLen += 1;
 
-                // if (self.ID == 16 and ID.* == 33) {
+                // if (self.ID == 17 and ID.* == 21) {
                 //     @breakpoint();
                 // }
 
@@ -541,7 +541,6 @@ fn DAG(T: type) type {
         arena: std.heap.ArenaAllocator,
 
         toEndMap: std.hash_map.AutoHashMap(u32, u32),
-        nodesToEndMap: std.hash_map.AutoHashMap(u32, []u32),
 
         pub fn init(allocator: std.mem.Allocator) !Self {
             return .{
@@ -549,7 +548,7 @@ fn DAG(T: type) type {
                 .map = .init(allocator),
                 .arena = .init(allocator),
                 .toEndMap = .init(allocator),
-                .nodesToEndMap = .init(allocator),
+                // .nodesToEndMap = .init(allocator),
             };
         }
 
@@ -558,7 +557,7 @@ fn DAG(T: type) type {
             self.mem.deinit(self.arena.child_allocator);
             self.map.deinit();
             self.toEndMap.deinit();
-            self.nodesToEndMap.deinit();
+            // self.nodesToEndMap.deinit();
         }
 
         pub fn get(self: *Self, id: u32) ?*Inner {
@@ -606,33 +605,27 @@ fn DAG(T: type) type {
 
             try node.childrenAppend(&child.ID);
 
-            // if (node.childrenLen > 1) {
-            //     _ = self.toEndMap.remove(node.ID);
-            // } else {
+            const nodeEndID = self.toEndMap.get(node.ID) orelse node.ID;
             const end_id = self.toEndMap.get(child.ID) orelse child.ID;
 
-            var moving_ids: []u32 = undefined;
-            if (self.nodesToEndMap.fetchRemove(node.ID)) |kv| {
-                moving_ids = try self.arena.allocator().realloc(kv.value, kv.value.len + 1);
-                moving_ids[moving_ids.len - 1] = node.ID;
-            } else {
-                moving_ids = try self.arena.allocator().alloc(u32, 1);
-                moving_ids[0] = node.ID;
+            // std.log.debug("node {d}, child {d}", .{ nodeEndID, end_id });
+            if (nodeEndID == end_id) return;
+
+            try self.toEndMap.put(nodeEndID, end_id);
+        }
+
+        pub fn toEnd(self: *Self, ID: u32) ?u32 {
+            const zone = tracy.initZone(@src(), .{ .name = "dag to end" });
+            defer zone.deinit();
+
+            var nextID = ID;
+            while (self.toEndMap.get(nextID)) |endID| {
+                // std.log.debug("a", .{});
+                nextID = endID;
             }
 
-            for (moving_ids) |id| {
-                try self.toEndMap.put(id, end_id);
-            }
-
-            const gop = try self.nodesToEndMap.getOrPut(end_id);
-            if (gop.found_existing) {
-                const old_len = gop.value_ptr.len;
-                gop.value_ptr.* = try self.arena.allocator().realloc(gop.value_ptr.*, old_len + moving_ids.len);
-                @memcpy(gop.value_ptr.*[old_len..], moving_ids);
-            } else {
-                gop.value_ptr.* = moving_ids;
-            }
-            // }
+            if (nextID == ID) return null;
+            return nextID;
         }
 
         pub fn clearRetainCapacity(self: *Self) void {
@@ -643,7 +636,7 @@ fn DAG(T: type) type {
             _ = self.mem.reset(self.arena.child_allocator, .retain_capacity);
             self.map.clearRetainingCapacity();
             self.toEndMap.clearRetainingCapacity();
-            self.nodesToEndMap.clearRetainingCapacity();
+            // self.nodesToEndMap.clearRetainingCapacity();
             self.innerID = 0;
             // self.innerListID = 0;
         }
@@ -726,6 +719,9 @@ const QueueNodeIterator = struct {
             return it.currentNode;
         }
 
+        var oldQueueType: VkStruct.CommandPoolType = .init;
+        var enterNode: ?*QueueNode = null;
+
         if (it.currentNode != null) {
             if (it.currentNode.?.childrenLen > 1) {
                 it.nextNodeQueue.pushLast(
@@ -736,6 +732,8 @@ const QueueNodeIterator = struct {
                     },
                 ) catch unreachable;
             }
+            oldQueueType = it.currentNode.?.data.commandPoolType;
+            enterNode = it.currentNode.?;
 
             it.currentNode = it.currentNode.?.getFirstUndoneChild();
         }
@@ -766,6 +764,51 @@ const QueueNodeIterator = struct {
                 }
             } else {
                 it.currentNode = null;
+            }
+        } else if (it.currentNode != null) {
+            if (it.currentNode.?.data.commandPoolType != oldQueueType) {
+                const startNode = it.currentNode;
+
+                var times: u32 = 0;
+                const node = it.nextNodeQueue.peekLast();
+                while (node) |value| {
+                    // std.log.debug("peek ID {d}", .{value.node.ID});
+                    it.currentNode = value.node.getFirstUndoneChild();
+                    times += 1;
+
+                    if (it.currentNode == null) {
+                        it.currentNode = startNode;
+                        break;
+                    } else if (it.currentNode.?.parentsDone < it.currentNode.?.parentsLen or
+                        it.currentNode.?.data.commandPoolType != oldQueueType)
+                    {
+                        it.currentNode = value.node.getNextUndoneChild();
+                        times += 1;
+                        if (times > value.node.childrenLen - value.node.childrenDone) {
+                            it.currentNode = startNode;
+                            break;
+                        }
+                        continue;
+                    } else {
+                        it.semaphoreValue = value.semaphoreValue;
+                        break;
+                    }
+                } else {
+                    it.currentNode = startNode;
+                }
+
+                // std.log.debug("same queue node {d}", .{it.currentNode.?.ID});
+
+                // it.currentNode = startNode;
+
+                if (it.currentNode != startNode and enterNode != null)
+                    it.nextNodeQueue.pushFirst(
+                        io,
+                        .{
+                            .node = enterNode.?,
+                            .semaphoreValue = currentSemaphoreValue,
+                        },
+                    ) catch unreachable;
             }
         }
 
@@ -863,7 +906,7 @@ fn nodeDagPrint(self: *QueueNodes, self2: *commands) void {
                         i,
                         @tagName(c.command),
                         i,
-                        self.toEndMap.get(@intCast(i)) orelse 10000,
+                        self.toEnd(@intCast(i)) orelse 1000,
                         // n.listID.?.*,
                         queueTypeToColor(n.data.commandPoolType),
                     }) catch |err| {
@@ -1225,10 +1268,11 @@ pub const commands = struct {
                     .storage => {
                         if (commandType == .drawMesh) {
                             destinationStage = vk.VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT;
+                        } else if (commandType == .drawIndirect) {
+                            destinationStage = vk.VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT;
                         } else {
                             std.debug.panic("unsupported command type {s}", .{@tagName(commandType)});
                         }
-
                         dstAccessMask = vk.VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
                     },
                     else => std.debug.panic("unsupported buffer usage {s}", .{@tagName(bufferUsage)}),
@@ -3918,7 +3962,7 @@ pub const commands = struct {
         const zone3 = tracy.initZone(@src(), .{ .name = "infer dependency 2" });
         errdefer zone3.deinit();
 
-        std.log.debug("current ID {d}", .{currentNode.ID});
+        // std.log.debug("current ID {d}", .{currentNode.ID});
 
         // std.log.debug("graphic {d}, compute {d}, transfer {d}", .{
         //     if (graphicCurrentNode != null) graphicCurrentNode.?.ID else 1000,
@@ -3954,6 +3998,16 @@ pub const commands = struct {
                     continue;
                 }
                 if (dependencyNode.data.commandPoolType == currentNode.data.commandPoolType) {
+                    const depEndID =
+                        self.nodeDag.toEnd(dependencyNode.ID) orelse dependencyNode.ID;
+                    const curEndID =
+                        self.nodeDag.toEnd(currentNode.ID) orelse currentNode.ID;
+
+                    // std.log.debug("ID {d}, ID {d}", .{ dependencyNode.ID, currentNode.ID });
+                    // std.log.debug("dep {d}, cur {d}\n", .{ depEndID, curEndID });
+
+                    if (depEndID == curEndID) continue;
+
                     try self.nodeDag.childrenAppend(dependencyNode, currentNode);
                     try currentNode.parentsAppend(&dependencyNode.ID);
 
@@ -3980,7 +4034,8 @@ pub const commands = struct {
 
                                 dependencyLinked = true;
                                 secondLinked = true;
-                            } else std.log.debug("skip ID {d}", .{dependencyNode.ID});
+                            }
+                            // else std.log.debug("skip ID {d}", .{dependencyNode.ID});
                         },
                         .compute => {
                             if (computeCurrentNode) |dNode| {
@@ -3991,7 +4046,8 @@ pub const commands = struct {
 
                                 dependencyLinked = true;
                                 secondLinked = true;
-                            } else std.log.debug("skip ID {d}", .{dependencyNode.ID});
+                            }
+                            //  else std.log.debug("skip ID {d}", .{dependencyNode.ID});
                         },
                         .graphic => {
                             if (graphicCurrentNode) |dNode| {
@@ -4002,30 +4058,34 @@ pub const commands = struct {
 
                                 dependencyLinked = true;
                                 secondLinked = true;
-                            } else std.log.debug("skip ID {d}", .{dependencyNode.ID});
+                            }
+                            //  else std.log.debug("skip ID {d}", .{dependencyNode.ID});
                         },
                         else => unreachable,
                     }
 
                     if (!secondLinked) {
-                        const currentEndID = self.nodeDag.toEndMap.get(currentNode.ID);
+                        const zone4 = tracy.initZone(@src(), .{ .name = "infer dependency 3" });
+                        defer zone4.deinit();
+
+                        const currentEndID = self.nodeDag.toEnd(currentNode.ID);
                         if (currentEndID) |ceid| {
                             var tempNode: ?*QueueNode = currentNode;
                             while (tempNode.?.data.commandPoolType != dependencyNode.data.commandPoolType) {
-                                std.log.debug("temp {s}, dep {s}", .{
-                                    @tagName(tempNode.?.data.commandPoolType),
-                                    @tagName(dependencyNode.data.commandPoolType),
-                                });
+                                // std.log.debug("temp {s}, dep {s}", .{
+                                //     @tagName(tempNode.?.data.commandPoolType),
+                                //     @tagName(dependencyNode.data.commandPoolType),
+                                // });
 
                                 var tempIdx: u32 = 0;
                                 var childID = tempNode.?.children.list.items[tempIdx].*;
-                                var childEndID = self.nodeDag.toEndMap.get(childID) orelse childID;
+                                var childEndID = self.nodeDag.toEnd(childID) orelse childID;
 
                                 while (ceid != childEndID) {
                                     tempIdx += 1;
                                     if (tempIdx >= tempNode.?.childrenLen) break;
                                     childID = tempNode.?.children.list.items[tempIdx].*;
-                                    childEndID = self.nodeDag.toEndMap.get(childID) orelse childID;
+                                    childEndID = self.nodeDag.toEnd(childID) orelse childID;
                                 } else {
                                     tempNode = self.nodeDag.get(childID);
                                 }
@@ -4042,9 +4102,9 @@ pub const commands = struct {
                                 //     self.nodeDag.toEndMap.get(n.ID) orelse 1000,
                                 // });
                                 const skipEndId =
-                                    self.nodeDag.toEndMap.get(dependencyNode.ID) orelse dependencyNode.ID;
+                                    self.nodeDag.toEnd(dependencyNode.ID) orelse dependencyNode.ID;
                                 const finalEndId =
-                                    self.nodeDag.toEndMap.get(n.ID) orelse n.ID;
+                                    self.nodeDag.toEnd(n.ID) orelse n.ID;
 
                                 if (skipEndId == finalEndId) continue;
 
@@ -4218,7 +4278,7 @@ pub const oneTimeCommand = struct {
         self.garbageData.deinit();
 
         // self.drawResourceMap.deinit();
-        for (0..2) |i| {
+        for (0..global.MaxFrameInFlight) |i| {
             self.waitSemaphoreSubmitInfos[i].deinit();
             self.signalSemaphoreSubmitInfos[i].deinit();
             self.sumbitInfos[i].deinit();
@@ -4776,6 +4836,7 @@ pub const oneTimeCommand = struct {
         defer self.mutex.unlock(self.io);
 
         const currentFrame = self.vulkan.currentFrame.load(.seq_cst);
+        // std.log.debug("currentFrame {d}", .{currentFrame});
 
         const allocator = pCommands.stackAllocators[pCommands.stackAllocatorsIndex].allocator();
 
@@ -4872,7 +4933,8 @@ pub const oneTimeCommand = struct {
             defer iterator.deinit();
 
             while (iterator.next(self.io, currentSemaphoreValue)) |nn| {
-                std.log.debug("ID {d}", .{nn.ID});
+                if (!global.storExecuteSequencePrint)
+                    std.log.debug("ID {d}", .{nn.ID});
 
                 if (begin and nn.data.commandPoolType != currentType) {
                     defer signalSemaphoreSubmitInfos.clearRetainingCapacity();
