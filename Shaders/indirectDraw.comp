@@ -45,21 +45,21 @@ void main() {
     if (idx == 0) instanceCount = 0;
     barrier();
 
-    if (idx >= pc.totalSpriteCount) return;
+    if (idx < pc.totalSpriteCount) {
+        Instance instance = pc.instanceBuffer.instances[idx];
 
-    Instance instance = pc.instanceBuffer.instances[idx];
+        bool visible = true;
+        if (instance.pos.x + instance.scale.x < pc.viewBounds.z || 
+            instance.pos.x > pc.viewBounds.w ||
+            instance.pos.y + instance.scale.y < pc.viewBounds.x ||
+            instance.pos.y > pc.viewBounds.y) {
+            visible = false;
+        }
 
-    bool visible = true;
-    if (instance.pos.x + instance.scale.x < pc.viewBounds.z || 
-        instance.pos.x > pc.viewBounds.w ||
-        instance.pos.y + instance.scale.y < pc.viewBounds.x ||
-        instance.pos.y > pc.viewBounds.y) {
-        visible = false;
-    }
-
-    if (visible) {
-        uint writeIdx = atomicAdd(instanceCount, 1);
-        pc.instanceIDs.instanceIDs[writeIdx] = idx;
+        if (visible) {
+            uint writeIdx = atomicAdd(instanceCount, 1);
+            pc.instanceIDs.instanceIDs[writeIdx] = idx;
+        }
     }
 
     barrier();

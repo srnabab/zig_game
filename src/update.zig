@@ -14,9 +14,21 @@ const textureSet = @import("textureSet");
 
 const DrawableC = ECS.CompentPool(process.Drawable);
 
+pub const Args = struct {
+    io: std.Io,
+    gpa: std.mem.Allocator,
+    thread_count: usize,
+    pInput: *input,
+};
+
 const inputProcessInterval = std.time.ns_per_ms * 5;
-var debug_allocator: std.heap.DebugAllocator(.{ .stack_trace_frames = 10 }) = .init;
-pub fn update_thread_func(io: std.Io, gpa: std.mem.Allocator, thread_count: usize, pInput: *input) !void {
+
+pub fn update_thread_func(args: Args) !void {
+    const io = args.io;
+    const gpa = args.gpa;
+    const thread_count = args.thread_count;
+    const pInput = args.pInput;
+
     var tracyAllocator = tracy.TracingAllocator.initNamed("pool", gpa);
     defer tracyAllocator.deinit();
     var taa = tracyAllocator.allocator();
@@ -42,6 +54,8 @@ pub fn update_thread_func(io: std.Io, gpa: std.mem.Allocator, thread_count: usiz
         null,
         true,
     );
+
+    var sceneChanged = true;
 
     var lastMouseX: f32 = 0;
     var lastMouseY: f32 = 0;
@@ -72,6 +86,10 @@ pub fn update_thread_func(io: std.Io, gpa: std.mem.Allocator, thread_count: usiz
 
             try pInput.releaseCurrentInput(io, inputs);
             inputs = &.{};
+        }
+
+        if (sceneChanged) {
+            sceneChanged = false;
         }
 
         accumulateTime += sdl.SDL_GetTicksNS() - lastTimestamp;

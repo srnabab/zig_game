@@ -112,20 +112,28 @@ pub fn main(init: std.process.Init) !void {
     log.info("render thread count {d}", .{render_thread});
     std.log.info("cache line {d}", .{std.atomic.cache_line});
 
-    if (steamInner.SteamAPI_RestartAppIfNecessary_C(@as(u32, steamInner.k_uAppIdInvalid_C))) {
-        return error.SteamError;
-    }
-    if (!steamInner.SteamAPI_Init_C()) {
-        return error.SteamError;
-    }
-    defer steamInner.SteamAPI_Shutdown_C();
+    // if (steamInner.SteamAPI_RestartAppIfNecessary_C(@as(u32, steamInner.k_uAppIdInvalid_C))) {
+    //     return error.SteamError;
+    // }
+    // if (!steamInner.SteamAPI_Init_C()) {
+    //     return error.SteamError;
+    // }
+    // defer steamInner.SteamAPI_Shutdown_C();
 
-    var achievements = steam.Achievement{
-        .pUserStats = steamInner.SteamUserStats_C().?,
-        .StoreStats = false,
-    };
-    achievements.UnlockAchievement(@ptrCast(&steam.g_rgAchievements[1]));
-    achievements.StoreStatsIfNecessary();
+    // var achievements = steam.Achievement{
+    //     .pUserStats = steamInner.SteamUserStats_C().?,
+    //     .StoreStats = false,
+    // };
+    // achievements.UnlockAchievement(@ptrCast(&steam.g_rgAchievements[1]));
+    // achievements.StoreStatsIfNecessary();
+
+    var resourceArrays: [2]std.array_list.Managed(u32) = undefined;
+    resourceArrays[0] = .init(allocator_t.*);
+    resourceArrays[1] = .init(allocator_t.*);
+    defer {
+        resourceArrays[0].deinit();
+        resourceArrays[1].deinit();
+    }
 
     var endSemaphore: std.Io.Semaphore = .{};
 
@@ -137,27 +145,33 @@ pub fn main(init: std.process.Init) !void {
     var render_t = try Thread.spawn(
         .{},
         render.render_thread_func,
-        .{
-            init.io,
-            gpa,
-            render_thread,
-            &endSemaphore,
-            &handles,
-            window,
-            width,
-            height,
-        },
+        .{render.Args{
+            .io = init.io,
+            .gpa = gpa,
+            .thread_count = render_thread,
+            .endSemaphore = &endSemaphore,
+            .handles = &handles,
+            .window = window,
+            .width = width,
+            .height = height,
+        }},
     );
     defer render_t.join();
 
     global.game_end.store(0, .seq_cst);
 
-    var update_t = try Thread.spawn(.{}, update.update_thread_func, .{
-        init.io,
-        gpa,
-        update_thread,
-        input1,
-    });
+    // global.resourceQueueIndex.fetchXor(1, .seq_cst);
+
+    var update_t = try Thread.spawn(
+        .{},
+        update.update_thread_func,
+        .{update.Args{
+            .io = init.io,
+            .gpa = gpa,
+            .thread_count = update_thread,
+            .pInput = input1,
+        }},
+    );
     defer update_t.join();
 
     while (true) {

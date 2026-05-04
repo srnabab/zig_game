@@ -51,3 +51,4 @@ pub var stopExecuteNodePrint = true;
 pub var storExecuteSequencePrint = true;
 
 pub var game_end: std.atomic.Value(u8) = .init(0);
+pub var resourceQueueIndex: std.atomic.Value(u8) = .init(0);

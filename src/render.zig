@@ -25,9 +25,7 @@ const file = @import("fileSystem");
 
 const mesh = @import("mesh");
 
-var debug_allocator: std.heap.DebugAllocator(.{ .stack_trace_frames = 10 }) = .init;
-
-pub fn render_thread_func(
+pub const Args = struct {
     io: std.Io,
     gpa: std.mem.Allocator,
     thread_count: usize,
@@ -36,9 +34,20 @@ pub fn render_thread_func(
     window: *sdl.SDL_Window,
     width: u32,
     height: u32,
-) !void {
+};
+
+pub fn render_thread_func(args: Args) !void {
     tracy.setThreadName("render");
     defer tracy.message("render exit");
+
+    const io = args.io;
+    const gpa = args.gpa;
+    const thread_count = args.thread_count;
+    const endSemaphore = args.endSemaphore;
+    const handles = args.handles;
+    const window = args.window;
+    const width = args.width;
+    const height = args.height;
 
     const zone = tracy.initZone(@src(), .{ .name = "render" });
     defer zone.deinit();
@@ -70,15 +79,16 @@ pub fn render_thread_func(
         std.debug.panic("error {s}", .{@errorName(err)});
     };
 
-    try vertices.init(&vulkan, &commands, &pTextureSet, allocator_t.*);
-    defer vertices.deinit(allocator_t.*);
-
     _ = try pTextureSet.createImageTexture(
         comptime file.comptimeGetID("non_exist.png"),
         .pixel2d,
         &vulkan,
         &commands,
     );
+
+    try vertices.init(&vulkan, &commands, &pTextureSet, allocator_t.*);
+    defer vertices.deinit(allocator_t.*);
+
     {
         const temp = pTextureSet.createImageTextureEnsureWithErrorImage(
             comptime file.comptimeGetID("circle.png"),
@@ -138,64 +148,6 @@ pub fn render_thread_func(
         },
     };
 
-    // var texture_test_array = [_]textureSet.Texture_t{texture_test};
-    // const rendering_test = try pRendering.createRenderingInfo(
-    //     io,
-    //     0,
-    //     vk.VkRect2D{
-    //         .extent = .{
-    //             .width = vulkan.windowWidth,
-    //             .height = vulkan.windowHeight,
-    //         },
-    //         .offset = .{ .x = 0, .y = 0 },
-    //     },
-
-    //     1,
-    //     0,
-    //     &texture_test_array,
-    //     &colorAttachment,
-    //     null,
-    //     null,
-    // );
-    // colorAttachment[0].loadOp = vk.VK_ATTACHMENT_LOAD_OP_LOAD;
-    // const rendering_mesh_test = try pRendering.createRenderingInfo(
-    //     io,
-    //     0,
-    //     vk.VkRect2D{
-    //         .extent = .{
-    //             .width = vulkan.windowWidth,
-    //             .height = vulkan.windowHeight,
-    //         },
-    //         .offset = .{ .x = 0, .y = 0 },
-    //     },
-
-    //     1,
-    //     0,
-    //     &texture_test_array,
-    //     &colorAttachment,
-    //     null,
-    //     null,
-    // );
-
-    // var present_texture_test_array = [_]textureSet.Texture_t{undefined};
-    // const present_rendering_test = try pRendering.createRenderingInfo(
-    //     io,
-    //     0,
-    //     vk.VkRect2D{ .extent = .{
-    //         .width = vulkan.windowWidth,
-    //         .height = vulkan.windowHeight,
-    //     }, .offset = .{ .x = 0, .y = 0 } },
-    //     1,
-    //     0,
-    //     &present_texture_test_array,
-    //     &colorAttachment,
-    //     null,
-    //     null,
-    // );
-    // _ = present_rendering_test;
-    // _ = rendering_mesh_test;
-    // _ = rendering_test;
-
     const ubo_test = try vulkan.createBufferByUsage(
         @sizeOf(shaderStruct.UniformBufferObject),
         0,
@@ -238,14 +190,6 @@ pub fn render_thread_func(
     );
     const pData = @as(*shaderStruct.UniformBufferObject, @ptrCast(@alignCast(ubo.pMappedData)));
     pData.* = pUIUbo;
-
-    // var testMatrix: vertexStruct.mat4 align(16) = undefined;
-    // var res: vertexStruct.vec4 align(16) = undefined;
-    // var value: vertexStruct.vec4 align(16) = vertexStruct.vec4{ 300, 0, 0.1, 1.0 };
-    // cglm.glmc_mul(&pUIUbo.proj, &pUIUbo.view, &testMatrix);
-    // cglm.glmc_mat4_mulv(&testMatrix, &value, &res);
-
-    // std.log.debug("{d}, {d}, {d}, {d}", .{ res[0], res[1], res[2], res[3] });
 
     var eye2 = cglm.vec3{ 0.0, 0.0, 10.0 };
     var center2 = cglm.vec3{ 0.0, 0.0, 0.0 };
