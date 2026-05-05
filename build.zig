@@ -300,6 +300,11 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const stateBuffering_mod = b.createModule(.{
+        .root_source_file = b.path("src/stateBuffering/stateBuffering.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     // dependency
     twoChannel_mod.addImport("ringBuffer", ringBuffer_mod);
@@ -453,6 +458,7 @@ pub fn build(b: *std.Build) void {
     global_mod.addImport("vertexStruct", vertexStruct_mod);
     global_mod.addImport("ringBuffer", ringBuffer_mod);
     global_mod.addImport("twoChannel", twoChannel_mod);
+    global_mod.addImport("stateBuffering", stateBuffering_mod);
 
     fileSystem_mod.addImport("sqlDb", sqliteModule);
     fileSystem_mod.addImport("global", global_mod);

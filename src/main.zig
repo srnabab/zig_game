@@ -141,6 +141,9 @@ pub fn main(init: std.process.Init) !void {
     }
     _ = resourceArrays.putDataIntoChannel(&arrayPtrs);
 
+    var stateBuffering: global.StateBufferingType = .init(gpa);
+    defer stateBuffering.deinit();
+
     var endSemaphore: std.Io.Semaphore = .{};
 
     var width: u32 = 0;
@@ -161,6 +164,7 @@ pub fn main(init: std.process.Init) !void {
             .width = width,
             .height = height,
             .resourceArrays = &resourceArrays,
+            .stateBuffering = &stateBuffering,
         }},
     );
     defer render_t.join();
@@ -178,6 +182,7 @@ pub fn main(init: std.process.Init) !void {
             .thread_count = update_thread,
             .pInput = input1,
             .resourceArrays = &resourceArrays,
+            .stateBuffering = &stateBuffering,
         }},
     );
     defer update_t.join();

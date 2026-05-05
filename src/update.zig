@@ -20,6 +20,7 @@ pub const Args = struct {
     thread_count: usize,
     pInput: *input,
     resourceArrays: *global.ResourceArrayType,
+    stateBuffering: *global.StateBufferingType,
 };
 
 const inputProcessInterval = std.time.ns_per_ms * 5;
@@ -30,6 +31,7 @@ pub fn update_thread_func(args: Args) !void {
     const thread_count = args.thread_count;
     const pInput = args.pInput;
     const resourceArrays = args.resourceArrays;
+    const stateBuffering = args.stateBuffering;
 
     var tracyAllocator = tracy.TracingAllocator.initNamed("pool", gpa);
     defer tracyAllocator.deinit();
@@ -71,6 +73,8 @@ pub fn update_thread_func(args: Args) !void {
 
     var resourceValue: u32 = 0;
 
+    var stateBufferValue: u32 = 0;
+
     var sceneChanged = true;
 
     var lastMouseX: f32 = 0;
@@ -82,63 +86,71 @@ pub fn update_thread_func(args: Args) !void {
     var accumulateTime: u64 = 0;
 
     out: while (true) {
-        if (accumulateTime > inputProcessInterval) {
-            defer accumulateTime -= inputProcessInterval;
+        {
+            if (accumulateTime > inputProcessInterval) {
+                defer accumulateTime -= inputProcessInterval;
 
-            inputs = try pInput.getCurrentInput(io);
+                inputs = try pInput.getCurrentInput(io);
 
-            for (inputs) |*value| {
-                const r = inputTrigger1.set(value);
-                if (r) continue;
+                for (inputs) |*value| {
+                    const r = inputTrigger1.set(value);
+                    if (r) continue;
 
-                switch (value.*) {
-                    .mouse => |mouse| {
-                        lastMouseX = mouse.x;
-                        lastMouseY = mouse.y;
-                    },
-                    else => {},
+                    switch (value.*) {
+                        .mouse => |mouse| {
+                            lastMouseX = mouse.x;
+                            lastMouseY = mouse.y;
+                        },
+                        else => {},
+                    }
+                }
+
+                try pInput.releaseCurrentInput(io, inputs);
+                inputs = &.{};
+            }
+
+            if (test_A.down) {
+                // sceneChanged = true;
+            }
+
+            if (sceneChanged) {
+                sceneChanged = false;
+
+                // std.log.debug("update: idx {d}", .{resourceArrayIndex});
+
+                const ptr = try resourceArray.addOne();
+                ptr.* = resourceValue;
+
+                resourceValue += 1;
+            }
+
+            if (resourceArray.items.len > 0) {
+                const array = resourceArrays.getEmpty();
+
+                if (array) |a| {
+                    try a.appendSlice(resourceArray.items);
+                    resourceArrays.pushReady(a);
+                    resourceArray.clearRetainingCapacity();
                 }
             }
 
-            try pInput.releaseCurrentInput(io, inputs);
-            inputs = &.{};
-        }
+            const infos = stateBuffering.getWriteBuffer();
+            defer stateBuffering.returnWriteBuffer(infos);
 
-        if (test_A.down) {
-            // sceneChanged = true;
-        }
+            try infos.append(stateBufferValue);
+            stateBufferValue += 1;
 
-        if (sceneChanged) {
-            sceneChanged = false;
+            accumulateTime += sdl.SDL_GetTicksNS() - lastTimestamp;
 
-            // std.log.debug("update: idx {d}", .{resourceArrayIndex});
+            lastTimestamp = sdl.SDL_GetTicksNS();
 
-            const ptr = try resourceArray.addOne();
-            ptr.* = resourceValue;
-
-            resourceValue += 1;
-        }
-
-        if (resourceArray.items.len > 0) {
-            const array = resourceArrays.getEmpty();
-
-            if (array) |a| {
-                try a.appendSlice(resourceArray.items);
-                resourceArrays.pushReady(a);
-                resourceArray.clearRetainingCapacity();
+            if (exit.down) {
+                endGame();
             }
-        }
 
-        accumulateTime += sdl.SDL_GetTicksNS() - lastTimestamp;
-
-        lastTimestamp = sdl.SDL_GetTicksNS();
-
-        if (exit.down) {
-            endGame();
-        }
-
-        if (global.game_end.load(.seq_cst) == 1) {
-            break :out;
+            if (global.game_end.load(.seq_cst) == 1) {
+                break :out;
+            }
         }
     }
 

@@ -35,6 +35,7 @@ pub const Args = struct {
     width: u32,
     height: u32,
     resourceArrays: *global.ResourceArrayType,
+    stateBuffering: *global.StateBufferingType,
 };
 
 pub fn render_thread_func(args: Args) !void {
@@ -50,6 +51,7 @@ pub fn render_thread_func(args: Args) !void {
     const width = args.width;
     const height = args.height;
     const resourceArrays = args.resourceArrays;
+    const stateBuffering = args.stateBuffering;
 
     const zone = tracy.initZone(@src(), .{ .name = "render" });
     defer zone.deinit();
@@ -478,102 +480,112 @@ pub fn render_thread_func(args: Args) !void {
     defer resources.deinit();
 
     while (true) {
-        const frame = vulkan.totalFrame.load(.seq_cst);
-        _ = frame;
-
-        // std.log.debug("frame {d}", .{frame});
-
-        if (resources.items.len > 0) {
-            resources.clearRetainingCapacity();
-        }
-
-        // if (frame == 0) {
-        //     global.stopNodeDagPrint = false;
-        //     global.printDagToDot = true;
-        // }
-        // if (frame == 1) {
-        //     global.stopNodeDagPrint = false;
-        //     global.printDagToDot = true;
-        //     global.stopNodeDagDetailPrint = false;
-        //     global.game_end.store(1, .seq_cst);
-        // }
-
-        // if (frame == 100000) {
-        //     global.stopExecuteNodePrint = true;
-        //     global.stopNodeDagPrint = true;
-        // }
         {
-            const resourceArray = resourceArrays.getReady();
+            const frame = vulkan.totalFrame.load(.seq_cst);
+            _ = frame;
 
-            if (resourceArray) |array| {
-                const slices = array.items;
+            // std.log.debug("frame {d}", .{frame});
 
-                defer resourceArrays.pushEmpty(array);
-                defer array.clearRetainingCapacity();
-
-                try resources.appendSlice(slices);
+            if (resources.items.len > 0) {
+                resources.clearRetainingCapacity();
             }
-        }
 
-        for (resources.items) |r| {
-            std.log.debug("r {d}", .{r});
-        }
+            // if (frame == 0) {
+            //     global.stopNodeDagPrint = false;
+            //     global.printDagToDot = true;
+            // }
+            // if (frame == 1) {
+            //     global.stopNodeDagPrint = false;
+            //     global.printDagToDot = true;
+            //     global.stopNodeDagDetailPrint = false;
+            //     global.game_end.store(1, .seq_cst);
+            // }
 
-        try vulkan.waitEndFence();
+            // if (frame == 100000) {
+            //     global.stopExecuteNodePrint = true;
+            //     global.stopNodeDagPrint = true;
+            // }
+            {
+                const resourceArray = resourceArrays.getReady();
 
-        try commands.startCommand();
-        try commands.addCachedCommand();
-        // std.log.debug("draw2d", .{});
-        try commands.addCommand(.draw2D, .{ .draw2D = .{
-            .pipeline = vulkan.getPipeline("flat2d").?,
-            .pTexture = circleTexture,
-            .vertexBuffer = &testBuffers,
-            .indexBuffer = vertices.indexBuffer2D,
-            .descriptorSets = &testDescriptorSets,
-            .pushConstants = &draw2dPushConstants,
-        } });
-        try commands.addCommand(.compute, .{ .compute = .{
-            .pipeline = vulkan.getPipeline("indirectDrawCompute").?,
-            .pTextures = &.{},
-            .usedBuffers = &test_computeBuffers,
-            .descriptorSets = &.{},
-            .groupCount = 1,
-            .pushConstants = computeIndirectDrawPushConstants,
-        } });
+                if (resourceArray) |array| {
+                    const slices = array.items;
 
-        try commands.addCommand(.drawIndirect, .{ .drawIndirect = .{
-            .pipeline = vulkan.getPipeline("indirectDraw").?,
-            .descriptorSets = &testDescriptorSets,
-            .pTextures = &test_meshTextures,
-            .usedBuffers = &test_indirectBuffers,
-            .indirectBuffer = vertices.indirectDrawCommandBuffer,
-            .pushConstants = &drawIndirectPushConstants,
-        } });
-        // std.log.debug("drawmesh", .{});
-        try commands.addCommand(.drawMesh, .{ .drawMesh = .{
-            .pipeline = vulkan.getPipeline("model").?,
-            .descriptorSets = &testMeshDescriptorSets,
-            .pTextures = &test_meshTextures,
-            .usedBuffers = &test_meshBuffers,
-            .meshletCount = meshes.meshletCount,
-            .pushConstants = &drawMeshPushConstants,
-        } });
-        // std.log.debug("present", .{});
-        try commands.addCommand(.present, .{ .present = .{
-            .pipeline = vulkan.getPipeline("directOut").?,
-            .pTextures = &presentTextures,
-            .descriptorSets = &presentDescriptorSets,
-        } });
-        try commands.addCommandEnd();
+                    defer resourceArrays.pushEmpty(array);
+                    defer array.clearRetainingCapacity();
 
-        try graphic.executeCommands(&commands);
+                    try resources.appendSlice(slices);
+                }
+            }
 
-        vulkan.nextFrame();
+            for (resources.items) |r| {
+                std.log.debug("r {d}", .{r});
+            }
 
-        // if (std.time.milliTimestamp() - renderStart > 1 * std.time.ms_per_s) {
-        if (global.game_end.load(.seq_cst) == 1) {
-            _ = renderStart;
-            break;
+            const infos = stateBuffering.getReadyBuffer();
+            defer stateBuffering.returnReadyBuffer(infos);
+
+            try vulkan.waitEndFence();
+
+            try commands.startCommand();
+            try commands.addCachedCommand();
+
+            for (infos.items) |value| {
+                std.log.debug("info {d}", .{value});
+            }
+
+            // std.log.debug("draw2d", .{});
+            try commands.addCommand(.draw2D, .{ .draw2D = .{
+                .pipeline = vulkan.getPipeline("flat2d").?,
+                .pTexture = circleTexture,
+                .vertexBuffer = &testBuffers,
+                .indexBuffer = vertices.indexBuffer2D,
+                .descriptorSets = &testDescriptorSets,
+                .pushConstants = &draw2dPushConstants,
+            } });
+            try commands.addCommand(.compute, .{ .compute = .{
+                .pipeline = vulkan.getPipeline("indirectDrawCompute").?,
+                .pTextures = &.{},
+                .usedBuffers = &test_computeBuffers,
+                .descriptorSets = &.{},
+                .groupCount = 1,
+                .pushConstants = computeIndirectDrawPushConstants,
+            } });
+
+            try commands.addCommand(.drawIndirect, .{ .drawIndirect = .{
+                .pipeline = vulkan.getPipeline("indirectDraw").?,
+                .descriptorSets = &testDescriptorSets,
+                .pTextures = &test_meshTextures,
+                .usedBuffers = &test_indirectBuffers,
+                .indirectBuffer = vertices.indirectDrawCommandBuffer,
+                .pushConstants = &drawIndirectPushConstants,
+            } });
+            // std.log.debug("drawmesh", .{});
+            try commands.addCommand(.drawMesh, .{ .drawMesh = .{
+                .pipeline = vulkan.getPipeline("model").?,
+                .descriptorSets = &testMeshDescriptorSets,
+                .pTextures = &test_meshTextures,
+                .usedBuffers = &test_meshBuffers,
+                .meshletCount = meshes.meshletCount,
+                .pushConstants = &drawMeshPushConstants,
+            } });
+            // std.log.debug("present", .{});
+            try commands.addCommand(.present, .{ .present = .{
+                .pipeline = vulkan.getPipeline("directOut").?,
+                .pTextures = &presentTextures,
+                .descriptorSets = &presentDescriptorSets,
+            } });
+            try commands.addCommandEnd();
+
+            try graphic.executeCommands(&commands);
+
+            vulkan.nextFrame();
+
+            // if (std.time.milliTimestamp() - renderStart > 1 * std.time.ms_per_s) {
+            if (global.game_end.load(.seq_cst) == 1) {
+                _ = renderStart;
+                break;
+            }
         }
     }
 
