@@ -127,13 +127,19 @@ pub fn main(init: std.process.Init) !void {
     // achievements.UnlockAchievement(@ptrCast(&steam.g_rgAchievements[1]));
     // achievements.StoreStatsIfNecessary();
 
-    var resourceArrays: [2]std.array_list.Managed(u32) = undefined;
-    resourceArrays[0] = .init(allocator_t.*);
-    resourceArrays[1] = .init(allocator_t.*);
-    defer {
-        resourceArrays[0].deinit();
-        resourceArrays[1].deinit();
+    var resourceArrays: global.ResourceArrayType = .init();
+    var arrays: [4]std.array_list.Managed(u32) = undefined;
+    for (0..arrays.len) |i| {
+        arrays[i] = .init(gpa);
     }
+    defer for (0..arrays.len) |i| {
+        arrays[i].deinit();
+    };
+    var arrayPtrs: [4]*std.array_list.Managed(u32) = undefined;
+    for (0..arrayPtrs.len) |i| {
+        arrayPtrs[i] = &arrays[i];
+    }
+    _ = resourceArrays.putDataIntoChannel(&arrayPtrs);
 
     var endSemaphore: std.Io.Semaphore = .{};
 
@@ -154,6 +160,7 @@ pub fn main(init: std.process.Init) !void {
             .window = window,
             .width = width,
             .height = height,
+            .resourceArrays = &resourceArrays,
         }},
     );
     defer render_t.join();
@@ -170,6 +177,7 @@ pub fn main(init: std.process.Init) !void {
             .gpa = gpa,
             .thread_count = update_thread,
             .pInput = input1,
+            .resourceArrays = &resourceArrays,
         }},
     );
     defer update_t.join();

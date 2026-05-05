@@ -6,6 +6,7 @@ const TextureSet = @import("textureSet");
 const Handles = @import("handle");
 const vertexStruct = @import("vertexStruct");
 const math = @import("math");
+const twoChannel = @import("twoChannel");
 
 pub const databaseName = "Content.db";
 
@@ -17,6 +18,7 @@ pub const LOGICAL_HEIGHT = 600;
 pub const LOGICAL_WEIGHT = 800;
 
 pub const HandlesType = Handles.Handles(10240, .Once);
+pub const ResourceArrayType = twoChannel.twoChannel(*std.array_list.Managed(u32), 4);
 
 pub const Name = "Game";
 pub const AppVersionMajor = 0;
@@ -52,3 +54,4 @@ pub var storExecuteSequencePrint = true;
 
 pub var game_end: std.atomic.Value(u8) = .init(0);
 pub var resourceQueueIndex: std.atomic.Value(u8) = .init(0);
+pub var resourceQueueMutexs: [2]std.Io.Mutex = .{ .init, .init };

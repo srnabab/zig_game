@@ -19,6 +19,7 @@ pub const Args = struct {
     gpa: std.mem.Allocator,
     thread_count: usize,
     pInput: *input,
+    resourceArrays: *global.ResourceArrayType,
 };
 
 const inputProcessInterval = std.time.ns_per_ms * 5;
@@ -28,6 +29,7 @@ pub fn update_thread_func(args: Args) !void {
     const gpa = args.gpa;
     const thread_count = args.thread_count;
     const pInput = args.pInput;
+    const resourceArrays = args.resourceArrays;
 
     var tracyAllocator = tracy.TracingAllocator.initNamed("pool", gpa);
     defer tracyAllocator.deinit();
@@ -54,6 +56,20 @@ pub fn update_thread_func(args: Args) !void {
         null,
         true,
     );
+
+    const test_A = try inputFunc1.registerAction(
+        inputTrigger1,
+        "test_A",
+        sdl.SDL_SCANCODE_A,
+        null,
+        null,
+        false,
+    );
+
+    var resourceArray: std.array_list.Managed(u32) = .init(gpa);
+    defer resourceArray.deinit();
+
+    var resourceValue: u32 = 0;
 
     var sceneChanged = true;
 
@@ -88,8 +104,29 @@ pub fn update_thread_func(args: Args) !void {
             inputs = &.{};
         }
 
+        if (test_A.down) {
+            // sceneChanged = true;
+        }
+
         if (sceneChanged) {
             sceneChanged = false;
+
+            // std.log.debug("update: idx {d}", .{resourceArrayIndex});
+
+            const ptr = try resourceArray.addOne();
+            ptr.* = resourceValue;
+
+            resourceValue += 1;
+        }
+
+        if (resourceArray.items.len > 0) {
+            const array = resourceArrays.getEmpty();
+
+            if (array) |a| {
+                try a.appendSlice(resourceArray.items);
+                resourceArrays.pushReady(a);
+                resourceArray.clearRetainingCapacity();
+            }
         }
 
         accumulateTime += sdl.SDL_GetTicksNS() - lastTimestamp;

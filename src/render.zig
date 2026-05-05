@@ -34,6 +34,7 @@ pub const Args = struct {
     window: *sdl.SDL_Window,
     width: u32,
     height: u32,
+    resourceArrays: *global.ResourceArrayType,
 };
 
 pub fn render_thread_func(args: Args) !void {
@@ -48,6 +49,7 @@ pub fn render_thread_func(args: Args) !void {
     const window = args.window;
     const width = args.width;
     const height = args.height;
+    const resourceArrays = args.resourceArrays;
 
     const zone = tracy.initZone(@src(), .{ .name = "render" });
     defer zone.deinit();
@@ -472,10 +474,18 @@ pub fn render_thread_func(args: Args) !void {
     // vulkan.logBufferPtr();
     // vulkan.logPipeline();
 
+    var resources: std.array_list.Managed(u32) = .init(gpa);
+    defer resources.deinit();
+
     while (true) {
         const frame = vulkan.totalFrame.load(.seq_cst);
         _ = frame;
+
         // std.log.debug("frame {d}", .{frame});
+
+        if (resources.items.len > 0) {
+            resources.clearRetainingCapacity();
+        }
 
         // if (frame == 0) {
         //     global.stopNodeDagPrint = false;
@@ -492,6 +502,22 @@ pub fn render_thread_func(args: Args) !void {
         //     global.stopExecuteNodePrint = true;
         //     global.stopNodeDagPrint = true;
         // }
+        {
+            const resourceArray = resourceArrays.getReady();
+
+            if (resourceArray) |array| {
+                const slices = array.items;
+
+                defer resourceArrays.pushEmpty(array);
+                defer array.clearRetainingCapacity();
+
+                try resources.appendSlice(slices);
+            }
+        }
+
+        for (resources.items) |r| {
+            std.log.debug("r {d}", .{r});
+        }
 
         try vulkan.waitEndFence();
 

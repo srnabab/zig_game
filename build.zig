@@ -290,8 +290,20 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         },
     );
+    const ringBuffer_mod = b.createModule(.{
+        .root_source_file = b.path("src/ringBuffer/ringBuffer.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const twoChannel_mod = b.createModule(.{
+        .root_source_file = b.path("src/twoChannel/twoChannel.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     // dependency
+    twoChannel_mod.addImport("ringBuffer", ringBuffer_mod);
+
     mesh_mod.addImport("processRender", processRender_mod);
     mesh_mod.addImport("vertexStruct", vertexStruct_mod);
     mesh_mod.addImport("video", video_mod);
@@ -439,6 +451,8 @@ pub fn build(b: *std.Build) void {
     global_mod.addImport("handle", handle_mod);
     global_mod.addImport("math", math_mod);
     global_mod.addImport("vertexStruct", vertexStruct_mod);
+    global_mod.addImport("ringBuffer", ringBuffer_mod);
+    global_mod.addImport("twoChannel", twoChannel_mod);
 
     fileSystem_mod.addImport("sqlDb", sqliteModule);
     fileSystem_mod.addImport("global", global_mod);
