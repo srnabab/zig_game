@@ -353,7 +353,7 @@ queueTypeCount: u32 = 0,
 
 handles: *global.HandlesType,
 
-pub fn init(allocator: Allocator, handles: *global.HandlesType, window: *sdl.SDL_Window, width: u32, height: u32) Self {
+pub fn init(io: std.Io, allocator: Allocator, handles: *global.HandlesType, window: *sdl.SDL_Window, width: u32, height: u32) Self {
     return Self{
         .allocator = allocator,
         .shaderModules = .init(allocator),
@@ -365,7 +365,7 @@ pub fn init(allocator: Allocator, handles: *global.HandlesType, window: *sdl.SDL
         .descriptorImageInfos = .init(allocator),
         .descriptorBufferInfos = .init(allocator),
         .descriptorBufferViewInfos = .init(allocator),
-        .buffers = .init(allocator),
+        .buffers = .init(io, allocator),
         .viewports = .init(allocator, handles),
         .scissors = .init(allocator, handles),
         .handles = handles,
@@ -702,7 +702,7 @@ pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet) !void {
     self.presentSamplerDescriptorSet = presentSets[0];
     try self.descriptorSetShaderStages.put(self.presentSamplerDescriptorSet, vk.VK_SHADER_STAGE_FRAGMENT_BIT);
 
-    try self.samplers.initSamplers(io, self.device, self.pAllocCallBacks, self.allocator);
+    // try self.samplers.initSamplers(io, self.device, self.pAllocCallBacks, self.allocator);
 }
 
 pub fn deinit(self: *Self) void {
@@ -743,7 +743,10 @@ pub fn deinit(self: *Self) void {
 
     var pipelines = self.pipelineMap.iterator();
     while (pipelines.next()) |val| {
-        const pipe = &self.pipelines.items[Handles.getIndex(val.value_ptr.*)];
+        const index = Handles.getIndex(val.value_ptr.*);
+        if (index == null) continue;
+
+        const pipe = &self.pipelines.items[index.?];
 
         vk.vkDestroyPipeline(self.device, pipe.pipeline, self.pAllocCallBacks);
         vk.vkDestroyPipelineLayout(self.device, pipe.pipelineLayout, self.pAllocCallBacks);
@@ -1021,25 +1024,30 @@ pub fn createAllPipelinesAdded(self: *Self) !void {
     const zone = tracy.initZone(@src(), .{ .name = "create pipelines" });
     defer zone.deinit();
 
+    const compute = self.computeInfoCount > 0;
+    const graphic = self.graphicInfoCount > 0;
+
     var temp = [_]vk.VkPipeline{null} ** 20;
 
-    try checkVkResult(vk.vkCreateGraphicsPipelines(
-        self.device,
-        self.pipelineCache,
-        self.graphicInfoCount,
-        @ptrCast(&self.graphicPipelineCreateInfo),
-        self.pAllocCallBacks,
-        @ptrCast(&temp),
-    ));
+    if (graphic)
+        try checkVkResult(vk.vkCreateGraphicsPipelines(
+            self.device,
+            self.pipelineCache,
+            self.graphicInfoCount,
+            @ptrCast(&self.graphicPipelineCreateInfo),
+            self.pAllocCallBacks,
+            @ptrCast(&temp),
+        ));
 
-    try checkVkResult(vk.vkCreateComputePipelines(
-        self.device,
-        self.pipelineCache,
-        self.computeInfoCount,
-        &self.computePipelineCreateInfo,
-        self.pAllocCallBacks,
-        @ptrCast(&temp[10]),
-    ));
+    if (compute)
+        try checkVkResult(vk.vkCreateComputePipelines(
+            self.device,
+            self.pipelineCache,
+            self.computeInfoCount,
+            &self.computePipelineCreateInfo,
+            self.pAllocCallBacks,
+            @ptrCast(&temp[10]),
+        ));
 
     var pp: *Pipeline = undefined;
     for (0..self.graphicInfoCount) |i| {
@@ -1052,7 +1060,7 @@ pub fn createAllPipelinesAdded(self: *Self) !void {
             .outputs = try self.allocator.alloc(Out, self.preGraphicInfoPtrs[i].outputCount),
         };
         const index = self.pipelines.items.len - 1;
-        const handle = self.handles.createHandle(@intCast(index));
+        const handle = self.handles.createHandle(@intCast(index), .pipeline);
 
         const len = std.mem.len(@as([*c]u8, @ptrCast(&self.preGraphicInfoPtrs[i].name)));
         const name = try self.allocator.alloc(u8, len);
@@ -1079,7 +1087,7 @@ pub fn createAllPipelinesAdded(self: *Self) !void {
             .outputs = &.{},
         };
         const index = self.pipelines.items.len - 1;
-        const handle = self.handles.createHandle(@intCast(index));
+        const handle = self.handles.createHandle(@intCast(index), .pipeline);
 
         const len = std.mem.len(@as([*c]u8, @ptrCast(&self.preComputeicInfoPtrs[i].name)));
         const name = try self.allocator.alloc(u8, len);
@@ -1520,6 +1528,8 @@ pub fn writeCachedDescriptorSetResources(self: *Self) void {
     const zone = tracy.initZone(@src(), .{ .name = "update descriptor wrote sets" });
     defer zone.deinit();
 
+    if (self.writeDescriptorSets.items.len == 0) return;
+
     vk.vkUpdateDescriptorSets(
         self.device,
         @intCast(self.writeDescriptorSets.items.len),
@@ -1597,7 +1607,7 @@ pub fn getPipeline(self: *Self, pipelineName: []const u8) ?Handle {
 }
 
 pub fn getPipelineContent(self: *Self, pipeline: Pipeline_t) Pipeline {
-    return self.pipelines.items[Handles.getIndex(pipeline)];
+    return self.pipelines.items[Handles.getIndex(pipeline).?];
 }
 
 pub fn destroyImageView(self: *Self, imageView: vk.VkImageView) void {

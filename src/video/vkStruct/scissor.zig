@@ -37,7 +37,7 @@ pub fn createScissor(self: *Self, io: std.Io, scissor: vk.VkRect2D) !Scissor_t {
 
     try self.array.append(scissor);
 
-    return self.pHandle.createHandle(@intCast(index));
+    return self.pHandle.createHandle(@intCast(index), .scissor);
 }
 
 pub fn destroyScissor(self: *Self, io: std.Io, scissor: Scissor_t) void {
@@ -53,5 +53,5 @@ pub fn getScissorContent(self: *Self, io: std.Io, scissor: Scissor_t) vk.VkRect2
     self.mutex.lock(io) catch unreachable;
     defer self.mutex.unlock(io);
 
-    return self.array.items[Handles.getIndex(scissor)];
+    return self.array.items[Handles.getIndex(scissor).?];
 }

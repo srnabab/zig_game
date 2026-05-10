@@ -216,10 +216,10 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
         const Params = getParamFromSQL(SQL, skipID);
         const insertStruct: type = createInsertStruct(Params);
 
-        db: *sqlite.sqlite3,
+        db: ?*sqlite.sqlite3,
         tableName: []const u8 = tableName,
 
-        pub fn init(db: *sqlite.sqlite3) Self {
+        pub fn init(db: ?*sqlite.sqlite3) Self {
             return Self{ .db = db };
         }
 

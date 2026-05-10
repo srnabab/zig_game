@@ -14,6 +14,7 @@ const Handle = Handles.Handle;
 const processRender = @import("processRender");
 const Commands = processRender.commands;
 const hash = std.hash;
+const resource = @import("resource");
 
 const Self = @This();
 
@@ -77,8 +78,9 @@ imageViewToTexture: std.hash_map.AutoHashMap(vk.VkImageView, Texture_t),
 map: std.hash_map.AutoHashMap(u32, Texture_t),
 layoutMemory: MemoryPool(vk.VkImageLayout),
 descriptorSetIndices: std.AutoHashMap(u32, u32),
+nameToId: std.StringHashMap(u32),
 
-tempTextureRecord: *Texture = undefined,
+nextID: std.atomic.Value(u32) = .init(file.MaxID + 1),
 
 handles: *global.HandlesType,
 
@@ -102,6 +104,7 @@ pub fn init(io: std.Io, allocator: std.mem.Allocator, handles: *global.HandlesTy
         .offsetRange = .init(allocator),
         .imageViewToTexture = .init(allocator),
         .handles = handles,
+        .nameToId = .init(allocator),
         // .vulkan = vulkan,
         // .graphic = graphic,
     };
@@ -130,9 +133,21 @@ pub fn deinit(self: *Self, vulkan: *VkStruct) void {
     self.layoutMemory.deinit();
     self.descriptorSetIndices.deinit();
     self.imageViewToTexture.deinit();
+
+    var it = self.nameToId.iterator();
+    while (it.next()) |entry| {
+        self.allocator.free(entry.key_ptr.*);
+    }
+    self.nameToId.deinit();
 }
 
-pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Samplers.SamplerType, vulkan: *VkStruct, graphic: *Commands) !Texture_t {
+pub fn createImageTexture(
+    self: *Self,
+    fileID: u32,
+    samplerType: VkStruct.Samplers.SamplerType,
+    vulkan: *VkStruct,
+    graphic: *Commands,
+) !Texture_t {
     const zone = tracy.initZone(@src(), .{ .name = "create image texutre from file" });
     defer zone.deinit();
 
@@ -152,7 +167,7 @@ pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Sample
     var channel: u32 = 0;
     var index: u32 = 0;
     {
-        self.mutex.lock(self.io) catch unreachable;
+        self.mutex.lockUncancelable(self.io);
         defer self.mutex.unlock(self.io);
 
         const img = try file.getImageLoadParam(self.io, @intCast(fileID));
@@ -226,7 +241,7 @@ pub fn createImageTexture(self: *Self, fileID: u32, samplerType: VkStruct.Sample
             texture.layouts[i] = vk.VK_IMAGE_LAYOUT_UNDEFINED;
         }
 
-        texture_t = self.handles.createHandle(index);
+        texture_t = self.handles.createHandle(index, .texture);
 
         try self.map.put(ID, texture_t);
     }
@@ -282,7 +297,15 @@ pub fn create2DTexture(
     std.log.debug("index {d}", .{index});
     // unlock
 
-    const ID = hash.CityHash32.hash(name);
+    const ID = self.nextID.fetchAdd(1, .seq_cst);
+    const name_dupe = try self.allocator.dupe(u8, name);
+    errdefer self.allocator.free(name_dupe);
+
+    if (self.nameToId.get(name_dupe)) |tex| {
+        return self.getTexture(tex).?;
+    }
+    try self.nameToId.put(name_dupe, ID);
+    errdefer _ = self.nameToId.remove(name_dupe);
 
     texture.* = .{
         .image = image,
@@ -298,7 +321,7 @@ pub fn create2DTexture(
         texture.layouts[i] = vk.VK_IMAGE_LAYOUT_UNDEFINED;
     }
 
-    const texture_t = self.handles.createHandle(index);
+    const texture_t = self.handles.createHandle(index, .texture);
 
     try self.map.put(ID, texture_t);
 
@@ -325,7 +348,17 @@ pub fn createTexturePackVkImage(
     var texture = try self.array.addOne();
     const index: u32 = @intCast(self.array.items.len - 1);
 
-    const ID = hash.CityHash32.hash(name);
+    const ID = self.nextID.fetchAdd(1, .seq_cst);
+    const name_dupe = try self.allocator.dupe(u8, name);
+    errdefer self.allocator.free(name_dupe);
+
+    if (self.nameToId.get(name_dupe)) |tex| {
+        self.allocator.free(name_dupe);
+
+        return self.getTexture(tex).?;
+    }
+    try self.nameToId.put(name_dupe, ID);
+    errdefer _ = self.nameToId.remove(name_dupe);
 
     texture.* = .{
         .image = .{
@@ -345,11 +378,74 @@ pub fn createTexturePackVkImage(
         texture.layouts[i] = vk.VK_IMAGE_LAYOUT_UNDEFINED;
     }
 
-    const texture_t = self.handles.createHandle(index);
+    const texture_t = self.handles.createHandle(index, .texture);
 
     try self.map.put(ID, texture_t);
 
     try self.imageViewToTexture.put(texture.imageView, texture_t);
+
+    return texture_t;
+}
+
+pub fn createTextureFromResource(
+    self: *Self,
+    io: std.Io,
+    textureResource: resource.ResourceTexture,
+    graphic: *Commands,
+) !Texture_t {
+    try self.mutex.lock(io);
+    defer self.mutex.unlock(io);
+
+    const texture_t = textureResource.handle;
+    if (!Handles.typeCompare(texture_t, .texture)) return error.InvalidHandle;
+
+    if (self.map.get(textureResource.fileID)) |value| {
+        return value;
+    }
+
+    const texture = try self.array.addOne();
+    const index: u32 = @intCast(self.array.items.len - 1);
+
+    texture.* = .{
+        .ID = textureResource.fileID,
+        .format = textureResource.format,
+        .image = .{
+            .vkImage = textureResource.vkImage,
+            .allocation = textureResource.allocation,
+            .queueIndex = .init,
+        },
+        .imageView = textureResource.vkImageView,
+        .layouts = try self.layoutMemory.create(1),
+        .source_width = textureResource.width,
+        .source_height = textureResource.height,
+    };
+
+    self.handles.setIndex(texture_t, index);
+    for (0..texture.layouts.len) |i| {
+        texture.layouts[i] = vk.VK_IMAGE_LAYOUT_UNDEFINED;
+    }
+
+    if (self.offsetRange.capacity < self.array.items.len) {
+        try self.offsetRange.ensureTotalCapacity(self.array.items.len);
+        self.offsetRange.expandToCapacity();
+    }
+    self.offsetRange.items[self.array.items.len - 1] = .{
+        .offset = 0,
+        .count = 0,
+    };
+
+    try self.map.put(textureResource.fileID, texture_t);
+
+    try self.imageViewToTexture.put(texture.imageView, texture_t);
+
+    try graphic.cacheCommand(
+        .{ .copyBufferToImage = .{
+            .pTexture = texture_t,
+            .width = texture.source_width,
+            .height = texture.source_height,
+            .buffer = textureResource.staginfBuffer,
+        } },
+    );
 
     return texture_t;
 }
@@ -398,8 +494,9 @@ pub fn getTextureCotent(self: *Self, texture: Texture_t) Texture {
     self.mutex.lock(self.io) catch unreachable;
     defer self.mutex.unlock(self.io);
 
-    const index: u32 = Handles.getIndex(texture);
-    return self.array.items[index];
+    const index = Handles.getIndex(texture);
+
+    return self.array.items[index.?];
 }
 
 pub fn offsetsAdd(self: *Self, texture: Texture_t, offset: u32) !void {
@@ -438,7 +535,7 @@ pub fn getTextureOffsets(self: *Self, texture: Texture_t) ![]Offsets {
     self.mutex.lock(self.io) catch unreachable;
     defer self.mutex.unlock(self.io);
 
-    const index = Handles.getIndex(texture);
+    const index = Handles.getIndex(texture).?;
 
     return self.offsetsPool.items[self.offsetRange.items[index].offset..][0..self.offsetRange.items[index].count];
 }
@@ -447,14 +544,14 @@ pub fn changeTextureLayout(self: *Self, texture: Texture_t, baseLayer: u32, laye
     self.mutex.lock(self.io) catch unreachable;
     defer self.mutex.unlock(self.io);
 
-    const index = Handles.getIndex(texture);
+    const index = Handles.getIndex(texture).?;
     const tex = &self.array.items[index];
 
     tex.changeTextureLayout(baseLayer, layerCount, layout);
 }
 
 pub fn getCurrentLayouts(self: *Self, texture: Texture_t) []vk.VkImageLayout {
-    const tex = self.getTextureCotent(texture);
+    const tex = self.getTextureCotent(texture).?;
 
     return tex.layouts;
 }
@@ -462,7 +559,7 @@ pub fn changeTextureQueue(self: *Self, texture: Texture_t, queueType: VkStruct.C
     self.mutex.lock(self.io) catch unreachable;
     defer self.mutex.unlock(self.io);
 
-    const index = Handles.getIndex(texture);
+    const index = Handles.getIndex(texture).?;
     const tex = &self.array.items[index];
 
     tex.changeTextureQueue(queueType);
@@ -474,7 +571,7 @@ pub fn getVkImage(self: *Self, texture: Texture_t) vk.VkImage {
     return tex.image.vkImage;
 }
 
-pub fn getVkImageView(self: *Self, texture: Texture_t) vk.VkImageView {
+pub fn getVkImageView(self: *Self, texture: Texture_t) ?vk.VkImageView {
     const tex = self.getTextureCotent(texture);
 
     return tex.imageView;

@@ -7,18 +7,49 @@ const Option = enum {
 
 const Context = opaque {};
 pub const Handle = *Context;
+pub const WaitFill = std.math.maxInt(u32);
+const InvalidVersion = std.math.maxInt(u24);
 
-pub fn getIndex(handle: Handle) u32 {
-    const ptr: *u32 = @ptrCast(@alignCast(handle));
+pub const ResourceType = enum(u8) {
+    texture,
+    buffer,
+    pipeline,
+    viewport,
+    scissor,
+    others,
+};
 
-    return ptr.*;
+const Content = packed struct {
+    resourceType: ResourceType,
+    version: u24,
+    index: u32,
+};
+
+pub fn getIndex(handle: Handle) ?u32 {
+    const ptr: *Content = @ptrCast(@alignCast(handle));
+
+    if (ptr.version == InvalidVersion) return null;
+
+    return ptr.index;
+}
+
+pub fn typeCompare(handle: Handle, exceptedType: ResourceType) bool {
+    const ptr: *Content = @ptrCast(@alignCast(handle));
+
+    return ptr.resourceType == exceptedType;
+}
+
+pub fn handleIsValid(handle: Handle) bool {
+    const ptr: *Content = @ptrCast(@alignCast(handle));
+
+    return ptr.version != InvalidVersion;
 }
 
 pub fn Handles(comptime capacity: u32, comptime option: Option) type {
     return struct {
         const Self = @This();
 
-        array: []u32,
+        array: []Content,
         index: std.atomic.Value(u32),
 
         loop: if (option == .Reuse) bool else void,
@@ -26,7 +57,7 @@ pub fn Handles(comptime capacity: u32, comptime option: Option) type {
 
         pub fn init(allocator: std.mem.Allocator) !Self {
             return Self{
-                .array = try allocator.alloc(u32, capacity),
+                .array = try allocator.alloc(Content, capacity),
                 .index = .init(0),
                 .loop = if (option == .Reuse) false else void{},
                 .lastEndIndex = if (option == .Reuse) 0 else void{},
@@ -37,14 +68,18 @@ pub fn Handles(comptime capacity: u32, comptime option: Option) type {
             allocator.free(self.array);
         }
 
-        pub fn createHandle(self: *Self, index: u32) Handle {
+        pub fn createHandle(self: *Self, index: u32, resourceType: ResourceType) Handle {
             if (option == .Reuse) {
                 if (self.loop) {
                     for (self.array[self.lastEndIndex..], self.lastEndIndex..) |value, i| {
-                        if (value == std.math.maxInt(u32)) {
+                        if (value.index == std.math.maxInt(u32)) {
                             self.lastEndIndex = @intCast(i);
 
-                            self.array[i] = index;
+                            self.array[i] = .{
+                                .resourceType = resourceType,
+                                .version = if (index == WaitFill) InvalidVersion else 0,
+                                .index = index,
+                            };
 
                             return @ptrCast(@alignCast(&self.array[i]));
                         }
@@ -58,7 +93,12 @@ pub fn Handles(comptime capacity: u32, comptime option: Option) type {
                         self.loop = true;
                     }
 
-                    self.array[current] = index;
+                    self.array[current] = .{
+                        .resourceType = resourceType,
+                        .version = if (index == WaitFill) InvalidVersion else 0,
+                        .index = index,
+                    };
+
                     return @ptrCast(@alignCast(&self.array[current]));
                 }
             } else if (option == .Once) {
@@ -66,7 +106,12 @@ pub fn Handles(comptime capacity: u32, comptime option: Option) type {
 
                 std.debug.assert(current < capacity);
 
-                self.array[current] = index;
+                self.array[current] = .{
+                    .resourceType = resourceType,
+                    .version = if (index == WaitFill) InvalidVersion else 0,
+                    .index = index,
+                };
+
                 return @ptrCast(@alignCast(&self.array[current]));
             }
         }
@@ -75,16 +120,32 @@ pub fn Handles(comptime capacity: u32, comptime option: Option) type {
             if (option == .Reuse) {
                 _ = self;
 
-                const ptr: *u32 = @ptrCast(@alignCast(handle));
+                const ptr: *Content = @ptrCast(@alignCast(handle));
 
-                ptr.* = std.math.maxInt(u32);
+                ptr.* = .{
+                    .resourceType = .others,
+                    .version = InvalidVersion,
+                    .index = std.math.maxInt(u32),
+                };
             } else if (option == .Once) {
                 _ = self;
 
-                const ptr: *u32 = @ptrCast(@alignCast(handle));
+                const ptr: *Content = @ptrCast(@alignCast(handle));
 
-                ptr.* = std.math.maxInt(u32);
+                ptr.* = .{
+                    .resourceType = .others,
+                    .version = InvalidVersion,
+                    .index = std.math.maxInt(u32),
+                };
             }
+        }
+
+        pub fn setIndex(self: *Self, handle: Handle, index: u32) void {
+            _ = self;
+            const ptr: *Content = @ptrCast(@alignCast(handle));
+
+            ptr.version = 0;
+            ptr.index = index;
         }
     };
 }

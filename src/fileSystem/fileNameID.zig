@@ -104,3 +104,4 @@ return FileNameIdHashMap.get(fileName) orelse @compileError("not found");
 }
 
 pub fn getID(fileName: []const u8) i32 {    return FileNameIdHashMap.get(fileName) orelse std.debug.panic("ilegal name", .{}); }
+pub const MaxID = 84;

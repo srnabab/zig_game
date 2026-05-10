@@ -12,7 +12,8 @@ const global = @import("global");
 const tracy = @import("tracy");
 const math = @import("math");
 const uniqueArrayList = @import("uniqueArrayList").UniqueArrayList;
-const Handle = @import("handle").Handle;
+const Handles = @import("handle");
+const Handle = Handles.Handle;
 
 const logStructSize = @import("logStructSize").logStructSize;
 
@@ -579,6 +580,9 @@ fn DAG(T: type) type {
                 .children = .init(self.arena.allocator()),
                 .parents = .init(self.arena.allocator()),
             };
+
+            // if (self.innerID != 0)
+            //     std.log.debug("ID {d}", .{self.innerID});
 
             // if (self.innerID == 49) @breakpoint();
             // if (self.innerID == 33) @breakpoint();
@@ -2153,7 +2157,7 @@ pub const commands = struct {
                         .dstAccessMask = releaseFlags.dstAccessMask,
                         .srcQueueFamilyIndex = self.vulkan.getQueueIndex(changeBufferQueue.srcQueueFamily),
                         .dstQueueFamilyIndex = self.vulkan.getQueueIndex(changeBufferQueue.dstQueueFamily),
-                        .buffer = self.vulkan.buffers.getVkBuffer(changeBufferQueue.buffer),
+                        .buffer = self.vulkan.buffers.getVkBuffer(changeBufferQueue.buffer).?,
                         // assigned later
                         .offset = 0,
                         .size = 0,
@@ -2241,7 +2245,7 @@ pub const commands = struct {
                         .dstAccessMask = acquireFlags.dstAccessMask,
                         .srcQueueFamilyIndex = self.vulkan.getQueueIndex(changeBufferQueue.srcQueueFamily),
                         .dstQueueFamilyIndex = self.vulkan.getQueueIndex(changeBufferQueue.dstQueueFamily),
-                        .buffer = self.vulkan.buffers.getVkBuffer(changeBufferQueue.buffer),
+                        .buffer = self.vulkan.buffers.getVkBuffer(changeBufferQueue.buffer).?,
                         // assigned later
                         .offset = 0,
                         .size = 0,
@@ -3597,7 +3601,7 @@ pub const commands = struct {
 
     fn addBuffer_tDependency(self: *Self, ptr: **anyopaque, buffer: VkStruct.Buffer_t) void {
         const vkBuffer = self.vulkan.buffers.getVkBuffer(buffer);
-        ptr.* = @ptrCast(vkBuffer);
+        ptr.* = @ptrCast(vkBuffer.?);
     }
 
     pub fn addCommand(self: *Self, commandType: drawC.CommandType, command: drawC.comm) !void {
@@ -3654,13 +3658,34 @@ pub const commands = struct {
         // combine memory barrier operation with same src stage mask
         // combine same image draw call
         // combine buffer copy to image with same src buffer and dst image
+        var reAdd = false;
+
         const zone2 = tracy.initZone(@src(), .{ .name = "infer dependency 1" });
         errdefer zone2.deinit();
-        switch (command) {
+        re: switch (command) {
             .compute => {
                 node.data.commandPoolType = .compute;
 
                 const compute = command.compute;
+
+                {
+                    if (!Handles.handleIsValid(compute.pipeline)) reAdd = true;
+                    for (compute.pTextures) |value| {
+                        if (!Handles.handleIsValid(value)) {
+                            reAdd = true;
+                            break;
+                        }
+                    }
+                    for (compute.usedBuffers) |value| {
+                        if (!Handles.handleIsValid(value)) {
+                            reAdd = true;
+                            break;
+                        }
+                    }
+
+                    if (reAdd) break :re;
+                }
+
                 ptr.value_ptr.command = .{ .computeRecord = .{
                     .groupCount = compute.groupCount,
                 } };
@@ -3679,8 +3704,11 @@ pub const commands = struct {
                     const dependencyPtr = try dependenciesArray.addOne();
                     self.addBuffer_tDependency(dependencyPtr, value);
                     const ptridx = try needToCacheArray.addOne();
+
+                    const vkBuffer = self.vulkan.buffers.getVkBuffer(value);
+
                     ptridx.* = .{
-                        .ptr = @intFromPtr(self.vulkan.buffers.getVkBuffer(value)),
+                        .ptr = @intFromPtr(vkBuffer.?),
                         .index = ID,
                     };
                 }
@@ -3831,6 +3859,26 @@ pub const commands = struct {
 
                 if (command == .drawIndirect) {
                     const drawIndirect = command.drawIndirect;
+
+                    {
+                        if (!Handles.handleIsValid(drawIndirect.pipeline)) reAdd = true;
+                        if (!Handles.handleIsValid(drawIndirect.indirectBuffer)) reAdd = true;
+                        for (drawIndirect.pTextures) |value| {
+                            if (!Handles.handleIsValid(value)) {
+                                reAdd = true;
+                                break;
+                            }
+                        }
+                        for (drawIndirect.usedBuffers) |value| {
+                            if (!Handles.handleIsValid(value)) {
+                                reAdd = true;
+                                break;
+                            }
+                        }
+
+                        if (reAdd) break :re;
+                    }
+
                     pTextures = drawIndirect.pTextures;
                     descriptorSets = drawIndirect.descriptorSets;
                     pipeline = drawIndirect.pipeline;
@@ -3848,7 +3896,7 @@ pub const commands = struct {
 
                     ptr.value_ptr.command = .{
                         .drawIndirectRecord = .{
-                            .buffer = self.vulkan.buffers.getVkBuffer(drawIndirect.indirectBuffer),
+                            .buffer = self.vulkan.buffers.getVkBuffer(drawIndirect.indirectBuffer).?,
                             .offset = 0,
                         },
                     };
@@ -3856,6 +3904,25 @@ pub const commands = struct {
                     // self.inMesh = false;
                 } else if (command == .drawMesh) {
                     const drawMesh = command.drawMesh;
+
+                    {
+                        if (!Handles.handleIsValid(drawMesh.pipeline)) reAdd = true;
+                        for (drawMesh.pTextures) |value| {
+                            if (!Handles.handleIsValid(value)) {
+                                reAdd = true;
+                                break;
+                            }
+                        }
+                        for (drawMesh.usedBuffers) |value| {
+                            if (!Handles.handleIsValid(value)) {
+                                reAdd = true;
+                                break;
+                            }
+                        }
+
+                        if (reAdd) break :re;
+                    }
+
                     pTextures = drawMesh.pTextures;
                     descriptorSets = drawMesh.descriptorSets;
                     pipeline = drawMesh.pipeline;
@@ -3870,10 +3937,22 @@ pub const commands = struct {
                 } else if (command == .present) {
                     var rootCommand = self.queue.getPtr(0).?;
 
+                    const present = command.present;
+                    {
+                        if (!Handles.handleIsValid(present.pipeline)) reAdd = true;
+                        for (present.pTextures) |value| {
+                            if (!Handles.handleIsValid(value)) {
+                                reAdd = true;
+                                break;
+                            }
+                        }
+
+                        if (reAdd) break :re;
+                    }
+
                     var currentIndex: u32 = 0;
                     try self.vulkan.acquireNextImage(&currentIndex);
 
-                    const present = command.present;
                     pTextures = present.pTextures;
                     descriptorSets = present.descriptorSets;
                     buffers = &.{};
@@ -3893,12 +3972,27 @@ pub const commands = struct {
                     //     self.pTextureSet.getVkImageView(self.vulkan.swapchainTextures[currentIndex]),
                     // };
                     pRendering.colorAttachments[0].imageView =
-                        self.pTextureSet.getVkImageView(self.vulkan.swapchainTextures[currentIndex]);
+                        self.pTextureSet.getVkImageView(self.vulkan.swapchainTextures[currentIndex]).?;
                     pRendering.colorTextures[0] = self.vulkan.swapchainTextures[currentIndex];
 
                     // self.inMesh = false;
                 } else if (command == .draw2D) {
                     const draw2D = command.draw2D;
+
+                    {
+                        if (!Handles.handleIsValid(draw2D.pipeline)) reAdd = true;
+                        if (!Handles.handleIsValid(draw2D.pTexture)) reAdd = true;
+                        if (!Handles.handleIsValid(draw2D.indexBuffer)) reAdd = true;
+                        for (draw2D.vertexBuffer) |value| {
+                            if (!Handles.handleIsValid(value)) {
+                                reAdd = true;
+                                break;
+                            }
+                        }
+
+                        if (reAdd) break :re;
+                    }
+
                     descriptorSets = draw2D.descriptorSets;
                     pipeline = draw2D.pipeline;
                     pushConstants = draw2D.pushConstants;
@@ -4011,13 +4105,20 @@ pub const commands = struct {
                 }
             },
             .copyBuffer => {
+                const copyBuffer = command.copyBuffer;
+                {
+                    if (!Handles.handleIsValid(copyBuffer.srcBuffer)) reAdd = true;
+                    if (!Handles.handleIsValid(copyBuffer.dstBuffer)) reAdd = true;
+
+                    if (reAdd) break :re;
+                }
+
                 if (self.vulkan.queueTypeCount != 1) {
                     node.data.commandPoolType = .transfer;
                 } else {
                     node.data.commandPoolType = .graphic;
                 }
 
-                const copyBuffer = command.copyBuffer;
                 ptr.value_ptr.command = .{ .copyBuffer = copyBuffer };
 
                 const tempRegions = copyBuffer.regions;
@@ -4083,18 +4184,26 @@ pub const commands = struct {
                 // cache outputs
                 const cachePtr = try needToCacheArray.addOne();
                 cachePtr.* = .{
-                    .ptr = @intFromPtr(self.vulkan.buffers.getVkBuffer(copyBuffer.dstBuffer)),
+                    .ptr = @intFromPtr(self.vulkan.buffers.getVkBuffer(copyBuffer.dstBuffer).?),
                     .index = ID,
                 };
             },
             .copyBufferToImage => {
+                const copyBufferToImage = command.copyBufferToImage;
+
+                {
+                    if (!Handles.handleIsValid(copyBufferToImage.buffer)) reAdd = true;
+                    if (!Handles.handleIsValid(copyBufferToImage.pTexture)) reAdd = true;
+
+                    if (reAdd) break :re;
+                }
+
                 if (self.vulkan.queueTypeCount != 1) {
                     node.data.commandPoolType = .transfer;
                 } else {
                     node.data.commandPoolType = .graphic;
                 }
 
-                const copyBufferToImage = command.copyBufferToImage;
                 ptr.value_ptr.command = .{ .copyBufferToImage = copyBufferToImage };
 
                 const imageQueueNode = try self.transLayoutHelper(
@@ -4158,6 +4267,11 @@ pub const commands = struct {
             },
         }
         zone2.deinit();
+
+        if (reAdd) {
+            try self.cacheCommand(command);
+            return;
+        }
 
         const endID = self.nodeDag.innerID - 1;
         // _ = startID;
@@ -4381,6 +4495,10 @@ pub const commands = struct {
         }
 
         const root = self.nodeDag.get(0).?;
+        if (root.childrenLen == 0) {
+            return;
+        }
+
         const child = root.children.list.items[0];
 
         root.data.commandPoolType = self.nodeDag.get(child.*).?.data.commandPoolType;
@@ -4410,10 +4528,11 @@ pub const commands = struct {
     pub fn addCachedCommand(self: *Self) !void {
         if (self.cachedCommand.items.len == 0) return;
 
-        defer self.cachedCommand.clearRetainingCapacity();
-        for (self.cachedCommand.items) |comm| {
-            // std.log.debug("{s}", .{@tagName(@as(drawC.PublicCommandType, @enumFromInt(@intFromEnum(std.meta.activeTag(comm)))))});
-            try self.addCommand(@enumFromInt(@intFromEnum(std.meta.activeTag(comm))), comm);
+        const coms = try self.cachedCommand.toOwnedSlice();
+        defer self.allocator.free(coms);
+
+        for (coms) |comm| {
+            try self.addCommand(std.meta.activeTag(comm), comm);
 
             switch (comm) {
                 .copyBuffer => {
@@ -5034,10 +5153,17 @@ pub const oneTimeCommand = struct {
         const zone = tracy.initZone(@src(), .{ .name = "execute all command in one time command" });
         defer zone.deinit();
 
-        if (!pCommands.end) return;
-
         try self.mutex.lock(self.io);
         defer self.mutex.unlock(self.io);
+
+        defer {
+            pCommands.clearRetainCapacity();
+
+            self.innerCommandBufferID = 0;
+            self.innerID = 0;
+        }
+
+        if (!pCommands.end) return;
 
         const currentFrame = self.vulkan.currentFrame.load(.seq_cst);
         // std.log.debug("currentFrame {d}", .{currentFrame});
@@ -5047,13 +5173,6 @@ pub const oneTimeCommand = struct {
         // self.nodeDag.print();
 
         try self.cleanGarbage();
-
-        defer {
-            pCommands.clearRetainCapacity();
-
-            self.innerCommandBufferID = 0;
-            self.innerID = 0;
-        }
 
         const taskQueueStruct = struct {
             queueNode: *QueueNode,

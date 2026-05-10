@@ -9,17 +9,14 @@ const Types = @import("types");
 
 pub const comptimeGetID = fileNameID.comptimeGetID;
 pub const getID = fileNameID.getID;
+pub const MaxID = fileNameID.MaxID;
 
 const ContentPath = tables.ContentPath;
 const ImageLoadParameter = tables.ImageLoadParameter;
 const ModelLoadParameter = tables.ModelLoadParameter;
 
-var db: ?*sqlite.sqlite3 = null;
-var ContentPathT: ContentPath = undefined;
-var ImageLoadParameterT: ImageLoadParameter = undefined;
-var ModelLoadParameterT: ModelLoadParameter = undefined;
-
-fn getRelativePath(id: i64, result: []u8) !void {
+fn getRelativePath(id: i64, result: []u8, db: ?*sqlite.sqlite3) !void {
+    var ContentPathT = ContentPath.init(db);
     var ptrs: [1]*anyopaque = undefined;
     ptrs[0] = @ptrCast(result.ptr);
 
@@ -31,15 +28,25 @@ fn getRelativePath(id: i64, result: []u8) !void {
     };
 }
 
-pub fn init(databaseName: []const u8) void {
+pub fn init(databaseName: []const u8, db: ?*sqlite.sqlite3) void {
     var disk_db: ?*sqlite.sqlite3 = null;
     var backup: ?*sqlite.sqlite3_backup = null;
 
-    var res = sqlite.sqlite3_open(@ptrCast(databaseName.ptr), @ptrCast(&disk_db));
-    defer _ = sqlite.sqlite3_close(disk_db);
+    var res = sqlite.sqlite3_open_v2(
+        @ptrCast(databaseName.ptr),
+        @ptrCast(&disk_db),
+        sqlite.SQLITE_OPEN_READWRITE | sqlite.SQLITE_OPEN_CREATE,
+        null,
+    );
+    defer _ = sqlite.sqlite3_close_v2(disk_db);
     assert(res == sqlite.SQLITE_OK);
 
-    res = sqlite.sqlite3_open(":memory:", @ptrCast(&db));
+    res = sqlite.sqlite3_open_v2(
+        ":memory:",
+        @ptrCast(&db),
+        sqlite.SQLITE_OPEN_READWRITE | sqlite.SQLITE_OPEN_CREATE,
+        null,
+    );
     assert(res == sqlite.SQLITE_OK);
 
     backup = sqlite.sqlite3_backup_init(db, "main", disk_db, "main");
@@ -48,16 +55,58 @@ pub fn init(databaseName: []const u8) void {
     res = sqlite.sqlite3_backup_step(backup, -1);
     defer _ = sqlite.sqlite3_backup_finish(backup);
     assert(res == sqlite.SQLITE_DONE);
-
-    ContentPathT = ContentPath.init(db.?);
-    ImageLoadParameterT = ImageLoadParameter.init(db.?);
-    ModelLoadParameterT = ModelLoadParameter.init(db.?);
 }
 
-pub fn getFile(io: std.Io, id: i64, cwd: std.Io.Dir) !std.Io.File {
+pub fn initManyDb(databaseName: []const u8, openTimes: u32, rwSqlite: [*c]?*sqlite.sqlite3, allocator: std.mem.Allocator) ![]?*sqlite.sqlite3 {
+    _ = sqlite.sqlite3_config(sqlite.SQLITE_CONFIG_MULTITHREAD);
+
+    const dbs = try allocator.alloc(?*sqlite.sqlite3, openTimes);
+
+    var disk_db: ?*sqlite.sqlite3 = null;
+    var backup: ?*sqlite.sqlite3_backup = null;
+
+    var res = sqlite.sqlite3_open_v2(
+        @ptrCast(databaseName.ptr),
+        @ptrCast(&disk_db),
+        sqlite.SQLITE_OPEN_READONLY,
+        null,
+    );
+    defer _ = sqlite.sqlite3_close_v2(disk_db);
+
+    const uri = "file:memdb1?mode=memory&cache=shared";
+    res = sqlite.sqlite3_open_v2(
+        @ptrCast(uri),
+        @ptrCast(rwSqlite),
+        sqlite.SQLITE_OPEN_READWRITE | sqlite.SQLITE_OPEN_CREATE | sqlite.SQLITE_OPEN_URI,
+        null,
+    );
+    assert(res == sqlite.SQLITE_OK);
+
+    backup = sqlite.sqlite3_backup_init(rwSqlite.*, "main", disk_db, "main");
+    assert(backup != null);
+
+    res = sqlite.sqlite3_backup_step(backup, -1);
+    assert(res == sqlite.SQLITE_DONE);
+
+    _ = sqlite.sqlite3_backup_finish(backup);
+
+    for (dbs) |*dbb| {
+        res = sqlite.sqlite3_open_v2(
+            uri,
+            @ptrCast(dbb),
+            sqlite.SQLITE_OPEN_READONLY | sqlite.SQLITE_OPEN_URI,
+            null,
+        );
+        assert(res == sqlite.SQLITE_OK);
+    }
+
+    return dbs;
+}
+
+pub fn getFile(io: std.Io, id: i64, cwd: std.Io.Dir, db: ?*sqlite.sqlite3) !std.Io.File {
     var buffer = [_]u8{0} ** 256;
 
-    try getRelativePath(id, &buffer);
+    try getRelativePath(id, &buffer, db);
     const ptr = @as([*c]u8, buffer[0..256]);
     const len = std.mem.len(ptr);
 
@@ -68,7 +117,9 @@ pub fn getFile(io: std.Io, id: i64, cwd: std.Io.Dir) !std.Io.File {
 
 pub const FileType = Types.FileType;
 
-pub fn getFileType(id: i32) sqlDB.sqliteError!FileType {
+pub fn getFileType(id: i32, db: ?*sqlite.sqlite3) sqlDB.sqliteError!FileType {
+    var ContentPathT = ContentPath.init(db);
+
     var res: i64 = 0;
     var ptrs: [1]*anyopaque = undefined;
     ptrs[0] = @ptrCast(&res);
@@ -120,10 +171,12 @@ const imageLoad = struct {
     image: Image,
 };
 
-pub fn getImageLoadParam(id: i32) !imageLoad {
-    const fType = try getFileType(id);
+pub fn getImageLoadParam(id: i32, db: ?*sqlite.sqlite3) !imageLoad {
+    const fType = try getFileType(id, db);
     switch (fType) {
         .PNG => {
+            var ImageLoadParameterT = ImageLoadParameter.init(db);
+
             var ptrs: [5]*anyopaque = undefined;
             var buffer = [_]u8{0} ** 256;
             var format: vk.VkFormat = vk.VK_FORMAT_UNDEFINED;
@@ -169,10 +222,12 @@ const meshLoad = struct {
     mesh: Mesh,
 };
 
-pub fn getMeshLoadParam(id: i32) !meshLoad {
+pub fn getMeshLoadParam(id: i32, db: ?*sqlite.sqlite3) !meshLoad {
     const fType = try getFileType(id);
     switch (fType) {
         .VTX => {
+            var ModelLoadParameterT = ModelLoadParameter.init(db);
+
             var ptrs: [6]*anyopaque = undefined;
             var buffer = [_]u8{0} ** 256;
             var vertexType: u32 = @intFromEnum(vertexStruct.VertexType.none);
@@ -216,7 +271,7 @@ pub fn getMeshLoadParam(id: i32) !meshLoad {
     }
 }
 
-pub fn deinit(databaseName: []const u8) void {
+pub fn deinit(databaseName: []const u8, db: ?*sqlite.sqlite3) void {
     var disk_db: ?*sqlite.sqlite3 = null;
     var backup: ?*sqlite.sqlite3_backup = null;
 
@@ -232,4 +287,19 @@ pub fn deinit(databaseName: []const u8) void {
     assert(res == sqlite.SQLITE_DONE);
 
     _ = sqlite.sqlite3_close(db.?);
+}
+
+pub fn deinitManyDB(
+    databaseName: []const u8,
+    rwSqlite: ?*sqlite.sqlite3,
+    dbs: []?*sqlite.sqlite3,
+    allocator: std.mem.Allocator,
+) void {
+    for (dbs) |value| {
+        _ = sqlite.sqlite3_close_v2(value);
+    }
+
+    allocator.free(dbs);
+
+    deinit(databaseName, rwSqlite);
 }

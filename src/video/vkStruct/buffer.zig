@@ -60,9 +60,12 @@ const UniformBufferAlign = 64;
 const bufferRatio: f32 = 0.5 / 11;
 
 buffers: FixedIndexArray(Buffer),
+mutex: std.Io.Mutex = .init,
+io: std.Io,
 
-pub fn init(allocator: std.mem.Allocator) Self {
+pub fn init(io: std.Io, allocator: std.mem.Allocator) Self {
     return Self{
+        .io = io,
         .buffers = .init(allocator),
     };
 }
@@ -161,7 +164,11 @@ pub fn _createBuffer(
         @ptrCast(&allocationInfo),
     );
 
+    try self.mutex.lock(self.io);
+    errdefer self.mutex.unlock(self.io);
     const pack = try self.buffers.addOne();
+    defer self.mutex.unlock(self.io);
+
     pack.ptr.* = Buffer{
         .queue = .{ .have = .init },
         .allocation = .{ .real = pAllocation },
@@ -173,7 +180,7 @@ pub fn _createBuffer(
         .stride = stride,
     };
 
-    const handle = handles.createHandle(@intCast(pack.index));
+    const handle = handles.createHandle(@intCast(pack.index), .buffer);
 
     return handle;
 }
@@ -185,13 +192,15 @@ pub fn destroyBuffer(
     handles: *global.HandlesType,
 ) void {
     const index = getIndex(buffer);
-    const ptr = self.buffers.get(index);
+    if (index == null) return;
+
+    const ptr = self.buffers.get(index.?);
 
     assert(ptr.allocation == .real);
 
     vmaa.destroyBuffer(ptr.vkBuffer, ptr.allocation.real);
 
-    self.buffers.remove(index);
+    self.buffers.remove(index.?);
     handles.destroyHandle(buffer);
 }
 
@@ -263,13 +272,16 @@ pub fn createBufferByUsage(
 
 pub fn copyDataToMapped(self: *Self, buffer: Buffer_t, srcType: type, src: []const srcType) void {
     const index = getIndex(buffer);
-    const ptr = self.buffers.get(index);
+
+    if (index == null) return;
+
+    const ptr = self.buffers.get(index.?);
 
     @memcpy(@as([*c]srcType, @ptrCast(@alignCast(ptr.pMappedData))), src);
 }
 
 pub fn getBufferQueueType(self: *Self, buffer: Buffer_t) QueueType {
-    const index = getIndex(buffer);
+    const index = getIndex(buffer).?;
     const ptr = self.buffers.get(index);
     return switch (ptr.queue) {
         .have => |h| h,
@@ -278,7 +290,7 @@ pub fn getBufferQueueType(self: *Self, buffer: Buffer_t) QueueType {
 }
 
 pub fn changeQueueType(self: *Self, buffer: Buffer_t, queueType: QueueType) void {
-    const index = getIndex(buffer);
+    const index = getIndex(buffer).?;
     const ptr = self.buffers.get(index);
 
     // std.log.debug("{*} {s} -> {s}", .{
@@ -305,35 +317,40 @@ pub fn changeQueueType(self: *Self, buffer: Buffer_t, queueType: QueueType) void
 
 pub fn getBufferSize(self: *Self, buffer: Buffer_t) vk.VkDeviceSize {
     const index = getIndex(buffer);
-    const ptr = self.buffers.get(index);
+
+    const ptr = self.buffers.get(index.?);
 
     return ptr.size;
 }
 
 pub fn getVkBuffer(self: *Self, buffer: Buffer_t) vk.VkBuffer {
     const index = getIndex(buffer);
-    const ptr = self.buffers.get(index);
+
+    const ptr = self.buffers.get(index.?);
 
     return ptr.vkBuffer;
 }
 
 pub fn getBufferUsage(self: *Self, buffer: Buffer_t) Usage {
     const index = getIndex(buffer);
-    const ptr = self.buffers.get(index);
+
+    const ptr = self.buffers.get(index.?);
 
     return ptr.usage;
 }
 
 pub fn getBufferOffset(self: *Self, buffer: Buffer_t) vk.VkDeviceSize {
     const index = getIndex(buffer);
-    const ptr = self.buffers.get(index);
+
+    const ptr = self.buffers.get(index.?);
 
     return ptr.offset;
 }
 
 pub fn getBufferContent(self: *Self, buffer: Buffer_t) Buffer {
     const index = getIndex(buffer);
-    const ptr = self.buffers.get(index);
+
+    const ptr = self.buffers.get(index.?);
 
     return ptr.*;
 }
@@ -357,7 +374,10 @@ pub fn createVirtualBlockBuffer(
         &block,
     );
 
+    try self.mutex.lock(self.io);
+    errdefer self.mutex.unlock(self.io);
     const pack = try self.buffers.addOne();
+    defer self.mutex.unlock(self.io);
 
     const index = getIndex(buffer);
     const ptr = self.buffers.get(index);
@@ -399,7 +419,10 @@ pub fn createVirtualBuffer(
     alignment: u64,
     handles: *global.HandlesType,
 ) !BufferAndOffset {
+    try self.mutex.lock(self.io);
+    errdefer self.mutex.unlock(self.io);
     const pack = try self.buffers.addOne();
+    defer self.mutex.unlock(self.io);
 
     const index = getIndex(blockBuffer);
     const ptr = self.buffers.get(index);

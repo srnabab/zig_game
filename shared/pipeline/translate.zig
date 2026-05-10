@@ -1,5 +1,4 @@
 const vk = @import("vulkan");
-const file = @import("fileSystem");
 const std = @import("std");
 const global = @import("global");
 const efc = @import("enumFromC");

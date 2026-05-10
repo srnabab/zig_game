@@ -37,7 +37,7 @@ pub fn createViewport(self: *Self, io: std.Io, viewport: vk.VkViewport) !Viewpor
 
     try self.array.append(viewport);
 
-    return self.pHandle.createHandle(@intCast(index));
+    return self.pHandle.createHandle(@intCast(index), .viewport);
 }
 
 pub fn destroyViewport(self: *Self, io: std.Io, viewport: Viewport_t) void {
@@ -53,5 +53,5 @@ pub fn getViewportContent(self: *Self, io: std.Io, viewport: Viewport_t) vk.VkVi
     self.mutex.lock(io) catch unreachable;
     defer self.mutex.unlock(io);
 
-    return self.array.items[Handles.getIndex(viewport)];
+    return self.array.items[Handles.getIndex(viewport).?];
 }

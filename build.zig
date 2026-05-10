@@ -76,7 +76,12 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
     const sqlite_c_mod = sqlite_c.createModule();
-    sqlite_c_mod.addCSourceFile(.{ .file = b.path("shared/sqlite3/sqlite3.c"), .language = .c });
+    const sqlite_c_flags = [_][]const u8{"-DSQLITE_THREADSAFE=2"};
+    sqlite_c_mod.addCSourceFile(.{
+        .file = b.path("shared/sqlite3/sqlite3.c"),
+        .language = .c,
+        .flags = &sqlite_c_flags,
+    });
     const sqliteModule = b.createModule(.{
         .root_source_file = b.path("shared/sqlite3/sqliteDB.zig"),
         .target = target,
@@ -305,8 +310,18 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const resource_mod = b.createModule(.{
+        .root_source_file = b.path("src/resource.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     // dependency
+    resource_mod.addImport("video", video_mod);
+    resource_mod.addImport("vk", vk_c_mod);
+    resource_mod.addImport("vma", vma_mod);
+    resource_mod.addImport("handle", handle_mod);
+
     twoChannel_mod.addImport("ringBuffer", ringBuffer_mod);
 
     mesh_mod.addImport("processRender", processRender_mod);
@@ -399,6 +414,7 @@ pub fn build(b: *std.Build) void {
     textureSet_mod.addImport("objectPool", objectPool_mod);
     textureSet_mod.addImport("handle", handle_mod);
     textureSet_mod.addImport("processRender", processRender_mod);
+    textureSet_mod.addImport("resource", resource_mod);
     textureSet_mod.addIncludePath(b.path("include"));
 
     debug_mod.addImport("vulkan", vk_c_mod);
@@ -451,6 +467,7 @@ pub fn build(b: *std.Build) void {
     uniqueArrayList_mod.addImport("tracy", tracy.module("tracy"));
 
     global_mod.addImport("video", video_mod);
+    global_mod.addImport("resource", resource_mod);
     global_mod.addImport("processRender", processRender_mod);
     global_mod.addImport("textureSet", textureSet_mod);
     global_mod.addImport("handle", handle_mod);
@@ -469,6 +486,9 @@ pub fn build(b: *std.Build) void {
     fileSystem_mod.addImport("vertexStruct", vertexStruct_mod);
     fileSystem_mod.addIncludePath(b.path("include"));
 
+    exe_mod.addImport("textureSet", textureSet_mod);
+    exe_mod.addImport("video", video_mod);
+    exe_mod.addImport("stb_image", stb_image_mod);
     exe_mod.addImport("vertexStruct", vertexStruct_mod);
     exe_mod.addImport("ECS", ecs_mod);
     exe_mod.addImport("input", input_mod);
@@ -489,7 +509,9 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("sdl", sdl_mod);
     exe_mod.addImport("vulkan", vk_c_mod);
     exe_mod.addImport("math", math_mod);
+    exe_mod.addImport("resource", resource_mod);
     exe_mod.addImport("mesh", mesh_mod);
+    exe_mod.addImport("ringBuffer", ringBuffer_mod);
     exe_mod.addIncludePath(b.path("include/"));
 
     exe_mod.addLibraryPath(b.path("lib/"));

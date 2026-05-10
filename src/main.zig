@@ -17,8 +17,6 @@ const update = @import("update.zig");
 const render = @import("render.zig");
 const math = @import("math");
 
-const file = @import("fileSystem");
-
 const tracy = @import("tracy");
 
 const Allocator = std.mem.Allocator;
@@ -26,6 +24,10 @@ const Allocator = std.mem.Allocator;
 const global = @import("global");
 
 const input = @import("input");
+
+const VkStruct = @import("video");
+const textureSet = @import("textureSet");
+const resource = @import("resource");
 
 // const cgltf = @import("cgltf");
 
@@ -72,9 +74,6 @@ pub fn main(init: std.process.Init) !void {
 
     handles = try .init(gpa);
     defer handles.deinit(gpa);
-
-    file.init();
-    defer file.deinit();
 
     var input1 = try input.init(allocator_t.*);
     defer input1.deinit(allocator_t.*);
@@ -128,14 +127,14 @@ pub fn main(init: std.process.Init) !void {
     // achievements.StoreStatsIfNecessary();
 
     var resourceArrays: global.ResourceArrayType = .init();
-    var arrays: [4]std.array_list.Managed(u32) = undefined;
+    var arrays: [4]std.array_list.Managed(resource.Resource) = undefined;
     for (0..arrays.len) |i| {
         arrays[i] = .init(gpa);
     }
     defer for (0..arrays.len) |i| {
         arrays[i].deinit();
     };
-    var arrayPtrs: [4]*std.array_list.Managed(u32) = undefined;
+    var arrayPtrs: [4]*std.array_list.Managed(resource.Resource) = undefined;
     for (0..arrayPtrs.len) |i| {
         arrayPtrs[i] = &arrays[i];
     }
@@ -151,6 +150,19 @@ pub fn main(init: std.process.Init) !void {
     const window = try Window.createWindow(&width, &height);
     defer Window.destroyWindow(window);
 
+    var pTextureSet = textureSet.init(init.io, allocator_t.*, &handles);
+    var vulkan = VkStruct.init(
+        init.io,
+        allocator_t.*,
+        &handles,
+        window,
+        width,
+        height,
+    );
+    try vulkan.initVulkan(init.io, &pTextureSet);
+    defer vulkan.deinit();
+    defer pTextureSet.deinit(&vulkan);
+
     var render_t = try Thread.spawn(
         .{},
         render.render_thread_func,
@@ -165,13 +177,13 @@ pub fn main(init: std.process.Init) !void {
             .height = height,
             .resourceArrays = &resourceArrays,
             .stateBuffering = &stateBuffering,
+            .pTextureSet = &pTextureSet,
+            .vulkan = &vulkan,
         }},
     );
     defer render_t.join();
 
     global.game_end.store(0, .seq_cst);
-
-    // global.resourceQueueIndex.fetchXor(1, .seq_cst);
 
     var update_t = try Thread.spawn(
         .{},
@@ -183,6 +195,8 @@ pub fn main(init: std.process.Init) !void {
             .pInput = input1,
             .resourceArrays = &resourceArrays,
             .stateBuffering = &stateBuffering,
+            .handles = &handles,
+            .vulkan = &vulkan,
         }},
     );
     defer update_t.join();

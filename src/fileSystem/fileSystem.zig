@@ -1,5 +1,5 @@
 const sqlDB = @import("sqlDb");
-const sqlite = sqlDB.sqlite;
+pub const sqlite = sqlDB.sqlite;
 const std = @import("std");
 const global = @import("global");
 const assert = std.debug.assert;
@@ -8,18 +8,28 @@ const base = @import("fileSystemBase.zig");
 const vk = @import("vulkan");
 const tracy = @import("tracy");
 
-pub fn init() void {
+pub const MaxID = base.MaxID;
+
+pub fn init(db: ?*sqlite.sqlite3) void {
     const zone = tracy.initZone(@src(), .{ .name = "init sqlite database" });
     defer zone.deinit();
 
-    base.init(global.databaseName);
+    base.init(global.databaseName, db);
 }
 
-pub fn getFile(io: std.Io, id: i32) !std.Io.File {
+pub fn initManyDb(
+    openTimes: u32,
+    rwSqlite: [*c]?*sqlite.sqlite3,
+    allocator: std.mem.Allocator,
+) ![]?*sqlite.sqlite3 {
+    return base.initManyDb(global.databaseName, openTimes, rwSqlite, allocator);
+}
+
+pub fn getFile(io: std.Io, id: i32, db: ?*sqlite.sqlite3) !std.Io.File {
     const zone = tracy.initZone(@src(), .{ .name = "open file from database" });
     defer zone.deinit();
 
-    return base.getFile(io, id, std.Io.Dir.cwd());
+    return base.getFile(io, id, std.Io.Dir.cwd(), db);
 }
 
 pub const imageLoad = struct {
@@ -27,11 +37,11 @@ pub const imageLoad = struct {
     image: base.Image,
 };
 
-pub fn getImageLoadParam(io: std.Io, id: i32) !imageLoad {
+pub fn getImageLoadParam(io: std.Io, id: i32, db: ?*sqlite.sqlite3) !imageLoad {
     const zone = tracy.initZone(@src(), .{ .name = "get image load parameter" });
     defer zone.deinit();
 
-    const res = try base.getImageLoadParam(id);
+    const res = try base.getImageLoadParam(id, db);
     const ptr = @as([*c]u8, @constCast(&res.relativePath));
     const len = std.mem.len(ptr);
 
@@ -48,11 +58,11 @@ pub const meshLoad = struct {
     mesh: base.Mesh,
 };
 
-pub fn getMeshLoadParam(io: std.Io, id: i32) !meshLoad {
+pub fn getMeshLoadParam(io: std.Io, id: i32, db: ?*sqlite.sqlite3) !meshLoad {
     const zone = tracy.initZone(@src(), .{ .name = "get mesh load parameter" });
     defer zone.deinit();
 
-    const res = try base.getMeshLoadParam(id);
+    const res = try base.getMeshLoadParam(id, db);
     const ptr = @as([*c]u8, @constCast(&res.relativePath));
     const len = std.mem.len(ptr);
 
@@ -67,15 +77,19 @@ pub fn getMeshLoadParam(io: std.Io, id: i32) !meshLoad {
 pub const comptimeGetID = base.comptimeGetID;
 pub const getID = base.getID;
 
-const FileType = base.FileType;
+pub const FileType = base.FileType;
 
-pub fn getFileType(name: []const u8) sqlDB.sqliteError!FileType {
-    return base.getFileType(name);
+pub fn getFileType(name: []const u8, db: ?*sqlite.sqlite3) sqlDB.sqliteError!FileType {
+    return base.getFileType(getID(name), db);
 }
 
-pub fn deinit() void {
+pub fn deinit(db: ?*sqlite.sqlite3) void {
     const zone = tracy.initZone(@src(), .{ .name = "deinit sqlite database" });
     defer zone.deinit();
 
-    base.deinit(global.databaseName);
+    base.deinit(global.databaseName, db);
+}
+
+pub fn deinitManyDB(rwSqlite: ?*sqlite.sqlite3, dbs: []?*sqlite.sqlite3, allocator: std.mem.Allocator) void {
+    base.deinitManyDB(global.databaseName, rwSqlite, dbs, allocator);
 }

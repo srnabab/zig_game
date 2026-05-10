@@ -96,6 +96,8 @@ pub fn main(init: std.process.Init) !void {
     const file = try std.Io.Dir.createFileAbsolute(init.io, outputPath, .{ .read = true });
     defer file.close(init.io);
 
+    var maxID: i32 = -1;
+
     var buffer = [_]u8{0} ** 102400;
     const content = "const std = @import(\"std\");\n\nconst FileNameIdHashMap = map: {\nconst KV = struct {\n[]const u8,i64,\n};\nconst list = [_]KV{\n";
     var writer = std.Io.Writer.fixed(&buffer);
@@ -109,12 +111,18 @@ pub fn main(init: std.process.Init) !void {
         const cc = try std.fmt.bufPrint(&sBuffer, ".{{ \"{s}\", {d} }},\n", .{ value.fileName[0..nameLen], value.ID });
 
         _ = try writer.write(cc);
+
+        maxID = @max(maxID, value.ID);
     }
     const end = "};\n\nbreak: map std.StaticStringMap(i32).initComptime(list);\n};\n";
     _ = try writer.write(end);
 
     const func = " \n\n\npub fn comptimeGetID(comptime fileName: []const u8) i32 {\ncomptime {\n" ++ "return FileNameIdHashMap.get(fileName) orelse @compileError(\"not found\");\n}\n}\n\n" ++ "pub fn getID(fileName: []const u8) i32 {" ++ "    return FileNameIdHashMap.get(fileName) orelse std.debug.panic(\"ilegal name\", .{}); }";
     _ = try writer.write(func);
+
+    var sBuffer = [_]u8{0} ** 256;
+    const pubMaxID = try std.fmt.bufPrint(&sBuffer, "\npub const MaxID = {d};\n", .{maxID});
+    _ = try writer.write(pubMaxID);
 
     const cPtr = @as([*c]u8, &buffer);
     const nameLen = std.mem.len(cPtr);

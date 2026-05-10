@@ -14,6 +14,7 @@ const textureSet = @import("textureSet");
 const vertices = @import("vertices");
 const shaderStruct = @import("video/shaderStruct.zig");
 const vertexStruct = @import("vertexStruct");
+const resource = @import("resource");
 
 const cglm = @import("cglm");
 
@@ -36,6 +37,8 @@ pub const Args = struct {
     height: u32,
     resourceArrays: *global.ResourceArrayType,
     stateBuffering: *global.StateBufferingType,
+    pTextureSet: *textureSet,
+    vulkan: *VkStruct,
 };
 
 pub fn render_thread_func(args: Args) !void {
@@ -46,12 +49,14 @@ pub fn render_thread_func(args: Args) !void {
     const gpa = args.gpa;
     const thread_count = args.thread_count;
     const endSemaphore = args.endSemaphore;
-    const handles = args.handles;
-    const window = args.window;
-    const width = args.width;
-    const height = args.height;
+    // const handles = args.handles;
+    // const window = args.window;
+    // const width = args.width;
+    // const height = args.height;
     const resourceArrays = args.resourceArrays;
     const stateBuffering = args.stateBuffering;
+    const pTextureSet = args.pTextureSet;
+    const vulkan = args.vulkan;
 
     const zone = tracy.initZone(@src(), .{ .name = "render" });
     defer zone.deinit();
@@ -63,74 +68,74 @@ pub fn render_thread_func(args: Args) !void {
     var taa = tracyAllocator.allocator();
     const allocator_t = &taa;
 
-    var pTextureSet = textureSet.init(io, allocator_t.*, handles);
-    var vulkan = VkStruct.init(allocator_t.*, handles, window, width, height);
-    try vulkan.initVulkan(io, &pTextureSet);
-    defer vulkan.deinit();
-    defer pTextureSet.deinit(&vulkan);
+    // var pTextureSet = textureSet.init(io, allocator_t.*, handles);
+    // var vulkan = VkStruct.init(allocator_t.*, handles, window, width, height);
+    // try vulkan.initVulkan(io, &pTextureSet);
+    // defer vulkan.deinit();
+    // defer pTextureSet.deinit(&vulkan);
 
     var commands = try Commands.init(
         io,
         allocator_t.*,
         stackMemory[0..global.StackMemorySize],
-        &vulkan,
-        &pTextureSet,
+        vulkan,
+        pTextureSet,
     );
     defer commands.deinit();
 
-    var graphic = OneTimeCommand.init(io, allocator_t.*, &vulkan);
+    var graphic = OneTimeCommand.init(io, allocator_t.*, vulkan);
     defer graphic.deinit() catch |err| {
         std.debug.panic("error {s}", .{@errorName(err)});
     };
 
-    _ = try pTextureSet.createImageTexture(
-        comptime file.comptimeGetID("non_exist.png"),
-        .pixel2d,
-        &vulkan,
-        &commands,
-    );
+    // _ = try pTextureSet.createImageTexture(
+    //     comptime file.comptimeGetID("non_exist.png"),
+    //     .pixel2d,
+    //     &vulkan,
+    //     &commands,
+    // );
 
-    try vertices.init(&vulkan, &commands, &pTextureSet, allocator_t.*);
-    defer vertices.deinit(allocator_t.*);
+    // try vertices.init(&vulkan, &commands, &pTextureSet, allocator_t.*);
+    // defer vertices.deinit(allocator_t.*);
 
-    {
-        const temp = pTextureSet.createImageTextureEnsureWithErrorImage(
-            comptime file.comptimeGetID("circle.png"),
-            .pixel2d,
-            &vulkan,
-            &commands,
-        );
-        const ix = try vertices.vertexInitialize2D(io, 48, 48, 0, 0, 0.1);
-        try pTextureSet.offsetsAdd(temp, ix);
-        try vertices.upload(&commands);
-    }
-    const boxPng = pTextureSet.createImageTextureEnsureWithErrorImage(
-        comptime file.comptimeGetID("box.png"),
-        .pixel2d,
-        &vulkan,
-        &commands,
-    );
+    // {
+    //     const temp = pTextureSet.createImageTextureEnsureWithErrorImage(
+    //         comptime file.comptimeGetID("circle.png"),
+    //         .pixel2d,
+    //         &vulkan,
+    //         &commands,
+    //     );
+    //     const ix = try vertices.vertexInitialize2D(io, 48, 48, 0, 0, 0.1);
+    //     try pTextureSet.offsetsAdd(temp, ix);
+    //     try vertices.upload(&commands);
+    // }
+    // const boxPng = pTextureSet.createImageTextureEnsureWithErrorImage(
+    //     comptime file.comptimeGetID("box.png"),
+    //     .pixel2d,
+    //     &vulkan,
+    //     &commands,
+    // );
 
     vulkan.writeCachedDescriptorSetResources();
 
-    try vulkan.readPipelineFileAndAdd(io, comptime file.comptimeGetID("flat2d.pipeb"), .draw);
-    try vulkan.readPipelineFileAndAdd(io, comptime file.comptimeGetID("directOut.pipeb"), .present);
-    try vulkan.readPipelineFileAndAdd(io, comptime file.comptimeGetID("model.pipeb"), .meshDraw);
-    try vulkan.readPipelineFileAndAdd(io, comptime file.comptimeGetID("indirectDraw.pipeb"), .draw);
-    try vulkan.readPipelineFileAndAdd(io, comptime file.comptimeGetID("indirectDrawCompute.pipeb"), .compute);
+    // try vulkan.readPipelineFileAndAdd(io, comptime file.comptimeGetID("flat2d.pipeb"), .draw);
+    // try vulkan.readPipelineFileAndAdd(io, comptime file.comptimeGetID("directOut.pipeb"), .present);
+    // try vulkan.readPipelineFileAndAdd(io, comptime file.comptimeGetID("model.pipeb"), .meshDraw);
+    // try vulkan.readPipelineFileAndAdd(io, comptime file.comptimeGetID("indirectDraw.pipeb"), .draw);
+    // try vulkan.readPipelineFileAndAdd(io, comptime file.comptimeGetID("indirectDrawCompute.pipeb"), .compute);
 
     try vulkan.createAllPipelinesAdded();
 
     // vk.vkCreateComputePipelines(device: ?*struct_VkDevice_T, pipelineCache: ?*struct_VkPipelineCache_T, createInfoCount: u32, pCreateInfos: [*c]const struct_VkComputePipelineCreateInfo, pAllocator: [*c]const struct_VkAllocationCallbacks, pPipelines: [*c]?*struct_VkPipeline_T)
     // vk.VkComputePipelineCreateInfo
 
-    const o1 = try vulkan.getPipelineOut("flat2d");
-    for (o1) |value| {
-        std.log.debug("{}", .{value});
-    }
+    // const o1 = try vulkan.getPipelineOut("flat2d");
+    // for (o1) |value| {
+    //     std.log.debug("{}", .{value});
+    // }
 
     const texture_test = try pTextureSet.create2DTexture(
-        &vulkan,
+        vulkan,
         vulkan.windowWidth,
         vulkan.windowHeight,
         vk.VK_FORMAT_R8G8B8A8_SRGB,
@@ -141,7 +146,7 @@ pub fn render_thread_func(args: Args) !void {
 
     const colorAttachment = vk.VkRenderingAttachmentInfo{
         .sType = vk.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-        .imageView = pTextureSet.getVkImageView(texture_test),
+        .imageView = pTextureSet.getVkImageView(texture_test).?,
         .imageLayout = vk.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         .loadOp = vk.VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = vk.VK_ATTACHMENT_STORE_OP_STORE,
@@ -208,121 +213,121 @@ pub fn render_thread_func(args: Args) !void {
     const pData2 = @as(*shaderStruct.UniformBufferObject, @ptrCast(@alignCast(ubo2.pMappedData)));
     pData2.* = pUIUbo2;
 
-    const ssbo_test = try vulkan.createBufferByUsage(
-        global.MeshletStorageBufferSize,
-        0,
-        .storage,
-        false,
-    );
-    const ssbo_test_meshlets = try vulkan.createVirtualBlockBuffer(
-        0,
-        global.StorageBufferMeshletsSize,
-        ssbo_test,
-        0,
-        @sizeOf(vertexStruct.Vertex_f3pf3nf2u),
-    );
-    const ssbo_test_vertices = try vulkan.createVirtualBlockBuffer(
-        0,
-        global.StorageBufferVerticesSize,
-        ssbo_test,
-        global.StorageBufferMeshletsEnd,
-        @sizeOf(vertexStruct.Meshlet),
-    );
-    const ssbo_test_meshletVertices = try vulkan.createVirtualBlockBuffer(
-        0,
-        global.StorageBufferMeshletVerticesSize,
-        ssbo_test,
-        global.StorageBufferVerticesEnd,
-        @sizeOf(u32),
-    );
-    const ssbo_test_meshletTriangles = try vulkan.createVirtualBlockBuffer(
-        0,
-        global.StorageBufferMeshletTrianglesSize,
-        ssbo_test,
-        global.StorageBufferMeshletVerticesEnd,
-        @sizeOf(u8),
-    );
-    var meshes = mesh.init(
-        ssbo_test_meshlets,
-        ssbo_test_vertices,
-        ssbo_test_meshletVertices,
-        ssbo_test_meshletTriangles,
-        null,
-        io,
-    );
-    try meshes.loadMeshlet(comptime file.comptimeGetID("Suzanne_0.vtx"), gpa, &vulkan, &commands);
+    // const ssbo_test = try vulkan.createBufferByUsage(
+    //     global.MeshletStorageBufferSize,
+    //     0,
+    //     .storage,
+    //     false,
+    // );
+    // const ssbo_test_meshlets = try vulkan.createVirtualBlockBuffer(
+    //     0,
+    //     global.StorageBufferMeshletsSize,
+    //     ssbo_test,
+    //     0,
+    //     @sizeOf(vertexStruct.Vertex_f3pf3nf2u),
+    // );
+    // const ssbo_test_vertices = try vulkan.createVirtualBlockBuffer(
+    //     0,
+    //     global.StorageBufferVerticesSize,
+    //     ssbo_test,
+    //     global.StorageBufferMeshletsEnd,
+    //     @sizeOf(vertexStruct.Meshlet),
+    // );
+    // const ssbo_test_meshletVertices = try vulkan.createVirtualBlockBuffer(
+    //     0,
+    //     global.StorageBufferMeshletVerticesSize,
+    //     ssbo_test,
+    //     global.StorageBufferVerticesEnd,
+    //     @sizeOf(u32),
+    // );
+    // const ssbo_test_meshletTriangles = try vulkan.createVirtualBlockBuffer(
+    //     0,
+    //     global.StorageBufferMeshletTrianglesSize,
+    //     ssbo_test,
+    //     global.StorageBufferMeshletVerticesEnd,
+    //     @sizeOf(u8),
+    // );
+    // var meshes = mesh.init(
+    //     ssbo_test_meshlets,
+    //     ssbo_test_vertices,
+    //     ssbo_test_meshletVertices,
+    //     ssbo_test_meshletTriangles,
+    //     null,
+    //     io,
+    // );
+    // try meshes.loadMeshlet(comptime file.comptimeGetID("Suzanne_0.vtx"), gpa, &vulkan, &commands);
 
-    try vulkan.addWriteDescriptorSetBuffer(
-        0,
-        vulkan.buffers.getVkBuffer(ubo_test),
-        0,
-        vulkan.buffers.getBufferSize(ubo_test),
-        vulkan.globalFixed2dMVPMatrixDescriptorSet,
-        0,
-        vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-    );
+    // try vulkan.addWriteDescriptorSetBuffer(
+    //     0,
+    //     vulkan.buffers.getVkBuffer(ubo_test),
+    //     0,
+    //     vulkan.buffers.getBufferSize(ubo_test),
+    //     vulkan.globalFixed2dMVPMatrixDescriptorSet,
+    //     0,
+    //     vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+    // );
 
-    try vulkan.addWriteDescriptorSetBuffer(
-        0,
-        vulkan.buffers.getVkBuffer(ubo_test2),
-        0,
-        vulkan.buffers.getBufferSize(ubo_test2),
-        vulkan.global3dMVPMatrixDescriptorSet,
-        0,
-        vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-    );
+    // try vulkan.addWriteDescriptorSetBuffer(
+    //     0,
+    //     vulkan.buffers.getVkBuffer(ubo_test2),
+    //     0,
+    //     vulkan.buffers.getBufferSize(ubo_test2),
+    //     vulkan.global3dMVPMatrixDescriptorSet,
+    //     0,
+    //     vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+    // );
 
-    try vulkan.addWriteDescriptorSetImage(
-        0,
-        pTextureSet.getVkImageView(texture_test),
-        vulkan.samplers.getDefaultSampler(.pixel2d),
-        vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        vulkan.presentSamplerDescriptorSet,
-        0,
-        vk.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-    );
+    // try vulkan.addWriteDescriptorSetImage(
+    //     0,
+    //     pTextureSet.getVkImageView(texture_test),
+    //     vulkan.samplers.getDefaultSampler(.pixel2d),
+    //     vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    //     vulkan.presentSamplerDescriptorSet,
+    //     0,
+    //     vk.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+    // );
 
-    try vulkan.addWriteDescriptorSetBuffer(
-        0,
-        vulkan.buffers.getVkBuffer(ssbo_test_meshlets),
-        vulkan.buffers.getBufferOffset(ssbo_test_meshlets),
-        vulkan.buffers.getBufferSize(ssbo_test_meshlets),
-        vulkan.meshletsDescriptorSet,
-        0,
-        vk.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-    );
+    // try vulkan.addWriteDescriptorSetBuffer(
+    //     0,
+    //     vulkan.buffers.getVkBuffer(ssbo_test_meshlets),
+    //     vulkan.buffers.getBufferOffset(ssbo_test_meshlets),
+    //     vulkan.buffers.getBufferSize(ssbo_test_meshlets),
+    //     vulkan.meshletsDescriptorSet,
+    //     0,
+    //     vk.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+    // );
 
-    try vulkan.addWriteDescriptorSetBuffer(
-        0,
-        vulkan.buffers.getVkBuffer(ssbo_test_vertices),
-        vulkan.buffers.getBufferOffset(ssbo_test_vertices),
-        vulkan.buffers.getBufferSize(ssbo_test_vertices),
-        vulkan.meshletsDescriptorSet,
-        1,
-        vk.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-    );
+    // try vulkan.addWriteDescriptorSetBuffer(
+    //     0,
+    //     vulkan.buffers.getVkBuffer(ssbo_test_vertices),
+    //     vulkan.buffers.getBufferOffset(ssbo_test_vertices),
+    //     vulkan.buffers.getBufferSize(ssbo_test_vertices),
+    //     vulkan.meshletsDescriptorSet,
+    //     1,
+    //     vk.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+    // );
 
-    try vulkan.addWriteDescriptorSetBuffer(
-        0,
-        vulkan.buffers.getVkBuffer(ssbo_test_meshletVertices),
-        vulkan.buffers.getBufferOffset(ssbo_test_meshletVertices),
-        vulkan.buffers.getBufferSize(ssbo_test_meshletVertices),
-        vulkan.meshletsDescriptorSet,
-        2,
-        vk.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-    );
+    // try vulkan.addWriteDescriptorSetBuffer(
+    //     0,
+    //     vulkan.buffers.getVkBuffer(ssbo_test_meshletVertices),
+    //     vulkan.buffers.getBufferOffset(ssbo_test_meshletVertices),
+    //     vulkan.buffers.getBufferSize(ssbo_test_meshletVertices),
+    //     vulkan.meshletsDescriptorSet,
+    //     2,
+    //     vk.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+    // );
 
-    try vulkan.addWriteDescriptorSetBuffer(
-        0,
-        vulkan.buffers.getVkBuffer(ssbo_test_meshletTriangles),
-        vulkan.buffers.getBufferOffset(ssbo_test_meshletTriangles),
-        vulkan.buffers.getBufferSize(ssbo_test_meshletTriangles),
-        vulkan.meshletsDescriptorSet,
-        3,
-        vk.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-    );
+    // try vulkan.addWriteDescriptorSetBuffer(
+    //     0,
+    //     vulkan.buffers.getVkBuffer(ssbo_test_meshletTriangles),
+    //     vulkan.buffers.getBufferOffset(ssbo_test_meshletTriangles),
+    //     vulkan.buffers.getBufferSize(ssbo_test_meshletTriangles),
+    //     vulkan.meshletsDescriptorSet,
+    //     3,
+    //     vk.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+    // );
 
-    vulkan.writeCachedDescriptorSetResources();
+    // vulkan.writeCachedDescriptorSetResources();
 
     const viewport_test = try vulkan.viewports.createViewport(io, .{
         .x = 0,
@@ -341,112 +346,112 @@ pub fn render_thread_func(args: Args) !void {
         .offset = .{ .x = 0, .y = 0 },
     });
 
-    var testBuffers = [_]VkStruct.Buffer_t{
-        vertices.vertexBuffer2D,
-    };
-    var testDescriptorSets = [_]vk.VkDescriptorSet{
-        vulkan.globalFixed2dMVPMatrixDescriptorSet, vulkan.globalTextureDescriptorSet,
-    };
+    // var testBuffers = [_]VkStruct.Buffer_t{
+    //     vertices.vertexBuffer2D,
+    // };
+    // var testDescriptorSets = [_]vk.VkDescriptorSet{
+    //     vulkan.globalFixed2dMVPMatrixDescriptorSet, vulkan.globalTextureDescriptorSet,
+    // };
 
-    var testMeshDescriptorSets = [_]vk.VkDescriptorSet{
-        vulkan.global3dMVPMatrixDescriptorSet,
-        vulkan.globalTextureDescriptorSet,
-        vulkan.meshletsDescriptorSet,
-    };
+    // var testMeshDescriptorSets = [_]vk.VkDescriptorSet{
+    //     vulkan.global3dMVPMatrixDescriptorSet,
+    //     vulkan.globalTextureDescriptorSet,
+    //     vulkan.meshletsDescriptorSet,
+    // };
 
-    var presentTextures = [_]textureSet.Texture_t{texture_test};
-    var presentDescriptorSets = [_]vk.VkDescriptorSet{vulkan.presentSamplerDescriptorSet};
+    // var presentTextures = [_]textureSet.Texture_t{texture_test};
+    // var presentDescriptorSets = [_]vk.VkDescriptorSet{vulkan.presentSamplerDescriptorSet};
 
-    var test_meshTextures = [_]textureSet.Texture_t{boxPng};
-    var test_meshBuffers = [_]VkStruct.Buffer_t{
-        ssbo_test,
-    };
+    // var test_meshTextures = [_]textureSet.Texture_t{boxPng};
+    // var test_meshBuffers = [_]VkStruct.Buffer_t{
+    //     ssbo_test,
+    // };
 
-    var test_computeBuffers = [_]VkStruct.Buffer_t{
-        vertices.instanceBuffer2D,
-        vertices.indirectDrawCommandBuffer,
-        vertices.instanceIDsBuffer,
-    };
-    // var test_computeDescriptorSets =
+    // var test_computeBuffers = [_]VkStruct.Buffer_t{
+    //     vertices.instanceBuffer2D,
+    //     vertices.indirectDrawCommandBuffer,
+    //     vertices.instanceIDsBuffer,
+    // };
+    // // var test_computeDescriptorSets =
 
-    var test_indirectBuffers = [_]VkStruct.Buffer_t{
-        vertices.instanceBuffer2D,
-        vertices.instanceIDsBuffer,
-    };
+    // var test_indirectBuffers = [_]VkStruct.Buffer_t{
+    //     vertices.instanceBuffer2D,
+    //     vertices.instanceIDsBuffer,
+    // };
 
-    const box1 = try vertices.addInstance(0, 0, 48, 32, 0.1, boxPng);
-    _ = try vertices.addInstance(300, 0, 48, 32, 0.1, boxPng);
-    _ = try vertices.addInstance(0, 200, 48, 32, 0.1, boxPng);
-    _ = try vertices.addInstance(-400, 0, 48, 32, 0.1, boxPng);
-    _ = try vertices.addInstance(0, -300, 48, 32, 0.1, boxPng);
-    _ = try vertices.addInstance(345, -438, 48, 32, 0.1, boxPng);
-    _ = box1;
+    // const box1 = try vertices.addInstance(0, 0, 48, 32, 0.1, boxPng);
+    // _ = try vertices.addInstance(300, 0, 48, 32, 0.1, boxPng);
+    // _ = try vertices.addInstance(0, 200, 48, 32, 0.1, boxPng);
+    // _ = try vertices.addInstance(-400, 0, 48, 32, 0.1, boxPng);
+    // _ = try vertices.addInstance(0, -300, 48, 32, 0.1, boxPng);
+    // _ = try vertices.addInstance(345, -438, 48, 32, 0.1, boxPng);
+    // _ = box1;
 
-    try vertices.uploadInstance(&commands);
+    // try vertices.uploadInstance(&commands);
 
     commands.setViewport(viewport_test);
     commands.setScissor(scissor_test);
 
     const renderStart = std.Io.Timestamp.now(io, .real).toNanoseconds();
 
-    const circleTexture = pTextureSet.getTexture(@intCast(file.getID("circle.png"))).?;
-    var circleIndex = pTextureSet.getDescriptorSetIndex(circleTexture);
-    var vertexBufferAddress = vulkan.getBufferAddress(vulkan.buffers.getVkBuffer(vertices.vertexBuffer2D));
-    var instanceBufferAddress = vulkan.getBufferAddress(vulkan.buffers.getVkBuffer(vertices.instanceBuffer2D));
-    var instanceIDsBufferAddress = vulkan.getBufferAddress(vulkan.buffers.getVkBuffer(vertices.instanceIDsBuffer));
-    const indirectBufferAddress = vulkan.getBufferAddress(vulkan.buffers.getVkBuffer(vertices.indirectDrawCommandBuffer));
+    // const circleTexture = pTextureSet.getTexture(@intCast(file.getID("circle.png"))).?;
+    // var circleIndex = pTextureSet.getDescriptorSetIndex(circleTexture);
+    // var vertexBufferAddress = vulkan.getBufferAddress(vulkan.buffers.getVkBuffer(vertices.vertexBuffer2D));
+    // var instanceBufferAddress = vulkan.getBufferAddress(vulkan.buffers.getVkBuffer(vertices.instanceBuffer2D));
+    // var instanceIDsBufferAddress = vulkan.getBufferAddress(vulkan.buffers.getVkBuffer(vertices.instanceIDsBuffer));
+    // const indirectBufferAddress = vulkan.getBufferAddress(vulkan.buffers.getVkBuffer(vertices.indirectDrawCommandBuffer));
 
-    var boxIndex = pTextureSet.getDescriptorSetIndex(boxPng);
+    // var boxIndex = pTextureSet.getDescriptorSetIndex(boxPng);
 
-    var draw2dPushConstants = [_]processRender.drawC.PushConstantPack{
-        .{
-            .pValues = &vertexBufferAddress,
-            .size = @sizeOf(u64),
-            .offset = 0,
-            .stageFlag = vk.VK_SHADER_STAGE_VERTEX_BIT,
-        },
-        .{
-            .pValues = &circleIndex,
-            .size = @sizeOf(u32),
-            .offset = @sizeOf(u64),
-            .stageFlag = vk.VK_SHADER_STAGE_FRAGMENT_BIT,
-        },
-    };
-    var drawMeshPushConstants = [_]processRender.drawC.PushConstantPack{
-        .{
-            .pValues = &boxIndex,
-            .size = @sizeOf(u32),
-            .offset = @sizeOf(u64),
-            .stageFlag = vk.VK_SHADER_STAGE_FRAGMENT_BIT,
-        },
-    };
-    var drawIndirectPushConstants = [_]processRender.drawC.PushConstantPack{
-        .{
-            .pValues = &instanceBufferAddress,
-            .size = @sizeOf(u64),
-            .offset = 0,
-            .stageFlag = vk.VK_SHADER_STAGE_VERTEX_BIT,
-        },
-        .{
-            .pValues = &instanceIDsBufferAddress,
-            .size = @sizeOf(u64),
-            .offset = @sizeOf(u64),
-            .stageFlag = vk.VK_SHADER_STAGE_VERTEX_BIT,
-        },
-    };
-    var constants = vertexStruct.IndirectDrawComputePushConstants{
-        .instanceBuffer = instanceBufferAddress,
-        .indirectAddress = indirectBufferAddress,
-        .instanceIDs = instanceIDsBufferAddress,
-        .viewBounds = vertexStruct.vec4{ -300, 300, -400, 400 },
-        .totalSpriteCount = @intCast(vertices.instances2D.items.len),
-    };
-    const computeIndirectDrawPushConstants = processRender.drawC.PushConstantPack{
-        .pValues = &constants,
-        .size = @sizeOf(vertexStruct.IndirectDrawComputePushConstants),
-        .offset = 0,
-        .stageFlag = vk.VK_SHADER_STAGE_COMPUTE_BIT,
-    };
+    // var draw2dPushConstants = [_]processRender.drawC.PushConstantPack{
+    //     .{
+    //         .pValues = &vertexBufferAddress,
+    //         .size = @sizeOf(u64),
+    //         .offset = 0,
+    //         .stageFlag = vk.VK_SHADER_STAGE_VERTEX_BIT,
+    //     },
+    //     .{
+    //         .pValues = &circleIndex,
+    //         .size = @sizeOf(u32),
+    //         .offset = @sizeOf(u64),
+    //         .stageFlag = vk.VK_SHADER_STAGE_FRAGMENT_BIT,
+    //     },
+    // };
+    // var drawMeshPushConstants = [_]processRender.drawC.PushConstantPack{
+    //     .{
+    //         .pValues = &boxIndex,
+    //         .size = @sizeOf(u32),
+    //         .offset = @sizeOf(u64),
+    //         .stageFlag = vk.VK_SHADER_STAGE_FRAGMENT_BIT,
+    //     },
+    // };
+    // var drawIndirectPushConstants = [_]processRender.drawC.PushConstantPack{
+    //     .{
+    //         .pValues = &instanceBufferAddress,
+    //         .size = @sizeOf(u64),
+    //         .offset = 0,
+    //         .stageFlag = vk.VK_SHADER_STAGE_VERTEX_BIT,
+    //     },
+    //     .{
+    //         .pValues = &instanceIDsBufferAddress,
+    //         .size = @sizeOf(u64),
+    //         .offset = @sizeOf(u64),
+    //         .stageFlag = vk.VK_SHADER_STAGE_VERTEX_BIT,
+    //     },
+    // };
+    // var constants = vertexStruct.IndirectDrawComputePushConstants{
+    //     .instanceBuffer = instanceBufferAddress,
+    //     .indirectAddress = indirectBufferAddress,
+    //     .instanceIDs = instanceIDsBufferAddress,
+    //     .viewBounds = vertexStruct.vec4{ -300, 300, -400, 400 },
+    //     .totalSpriteCount = @intCast(vertices.instances2D.items.len),
+    // };
+    // const computeIndirectDrawPushConstants = processRender.drawC.PushConstantPack{
+    //     .pValues = &constants,
+    //     .size = @sizeOf(vertexStruct.IndirectDrawComputePushConstants),
+    //     .offset = 0,
+    //     .stageFlag = vk.VK_SHADER_STAGE_COMPUTE_BIT,
+    // };
 
     commands.setRendering(0, vk.VkRect2D{
         .extent = .{
@@ -476,8 +481,10 @@ pub fn render_thread_func(args: Args) !void {
     // vulkan.logBufferPtr();
     // vulkan.logPipeline();
 
-    var resources: std.array_list.Managed(u32) = .init(gpa);
+    var resources: std.array_list.Managed(resource.Resource) = .init(gpa);
     defer resources.deinit();
+
+    // if (true) return;
 
     while (true) {
         {
@@ -519,7 +526,13 @@ pub fn render_thread_func(args: Args) !void {
             }
 
             for (resources.items) |r| {
-                std.log.debug("r {d}", .{r});
+                switch (r) {
+                    .texture => |texture| {
+                        _ = try pTextureSet.createTextureFromResource(io, texture, &commands);
+                    },
+                    .others => {},
+                }
+                std.log.debug("r {s}", .{@tagName(r)});
             }
 
             const infos = stateBuffering.getReadyBuffer();
@@ -535,46 +548,46 @@ pub fn render_thread_func(args: Args) !void {
             }
 
             // std.log.debug("draw2d", .{});
-            try commands.addCommand(.draw2D, .{ .draw2D = .{
-                .pipeline = vulkan.getPipeline("flat2d").?,
-                .pTexture = circleTexture,
-                .vertexBuffer = &testBuffers,
-                .indexBuffer = vertices.indexBuffer2D,
-                .descriptorSets = &testDescriptorSets,
-                .pushConstants = &draw2dPushConstants,
-            } });
-            try commands.addCommand(.compute, .{ .compute = .{
-                .pipeline = vulkan.getPipeline("indirectDrawCompute").?,
-                .pTextures = &.{},
-                .usedBuffers = &test_computeBuffers,
-                .descriptorSets = &.{},
-                .groupCount = 1,
-                .pushConstants = computeIndirectDrawPushConstants,
-            } });
+            // try commands.addCommand(.draw2D, .{ .draw2D = .{
+            //     .pipeline = vulkan.getPipeline("flat2d").?,
+            //     .pTexture = circleTexture,
+            //     .vertexBuffer = &testBuffers,
+            //     .indexBuffer = vertices.indexBuffer2D,
+            //     .descriptorSets = &testDescriptorSets,
+            //     .pushConstants = &draw2dPushConstants,
+            // } });
+            // try commands.addCommand(.compute, .{ .compute = .{
+            //     .pipeline = vulkan.getPipeline("indirectDrawCompute").?,
+            //     .pTextures = &.{},
+            //     .usedBuffers = &test_computeBuffers,
+            //     .descriptorSets = &.{},
+            //     .groupCount = 1,
+            //     .pushConstants = computeIndirectDrawPushConstants,
+            // } });
 
-            try commands.addCommand(.drawIndirect, .{ .drawIndirect = .{
-                .pipeline = vulkan.getPipeline("indirectDraw").?,
-                .descriptorSets = &testDescriptorSets,
-                .pTextures = &test_meshTextures,
-                .usedBuffers = &test_indirectBuffers,
-                .indirectBuffer = vertices.indirectDrawCommandBuffer,
-                .pushConstants = &drawIndirectPushConstants,
-            } });
-            // std.log.debug("drawmesh", .{});
-            try commands.addCommand(.drawMesh, .{ .drawMesh = .{
-                .pipeline = vulkan.getPipeline("model").?,
-                .descriptorSets = &testMeshDescriptorSets,
-                .pTextures = &test_meshTextures,
-                .usedBuffers = &test_meshBuffers,
-                .meshletCount = meshes.meshletCount,
-                .pushConstants = &drawMeshPushConstants,
-            } });
-            // std.log.debug("present", .{});
-            try commands.addCommand(.present, .{ .present = .{
-                .pipeline = vulkan.getPipeline("directOut").?,
-                .pTextures = &presentTextures,
-                .descriptorSets = &presentDescriptorSets,
-            } });
+            // try commands.addCommand(.drawIndirect, .{ .drawIndirect = .{
+            //     .pipeline = vulkan.getPipeline("indirectDraw").?,
+            //     .descriptorSets = &testDescriptorSets,
+            //     .pTextures = &test_meshTextures,
+            //     .usedBuffers = &test_indirectBuffers,
+            //     .indirectBuffer = vertices.indirectDrawCommandBuffer,
+            //     .pushConstants = &drawIndirectPushConstants,
+            // } });
+            // // std.log.debug("drawmesh", .{});
+            // try commands.addCommand(.drawMesh, .{ .drawMesh = .{
+            //     .pipeline = vulkan.getPipeline("model").?,
+            //     .descriptorSets = &testMeshDescriptorSets,
+            //     .pTextures = &test_meshTextures,
+            //     .usedBuffers = &test_meshBuffers,
+            //     .meshletCount = meshes.meshletCount,
+            //     .pushConstants = &drawMeshPushConstants,
+            // } });
+            // // std.log.debug("present", .{});
+            // try commands.addCommand(.present, .{ .present = .{
+            //     .pipeline = vulkan.getPipeline("directOut").?,
+            //     .pTextures = &presentTextures,
+            //     .descriptorSets = &presentDescriptorSets,
+            // } });
             try commands.addCommandEnd();
 
             try graphic.executeCommands(&commands);
