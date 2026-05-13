@@ -8,9 +8,11 @@ const base = @import("fileSystemBase.zig");
 const vk = @import("vulkan");
 const tracy = @import("tracy");
 
+pub const sqlite3 = ?*sqlite.sqlite3;
+
 pub const MaxID = base.MaxID;
 
-pub fn init(db: ?*sqlite.sqlite3) void {
+pub fn init(db: [*c]?*sqlite.sqlite3) void {
     const zone = tracy.initZone(@src(), .{ .name = "init sqlite database" });
     defer zone.deinit();
 

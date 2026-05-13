@@ -315,8 +315,30 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const pass_mod = b.createModule(.{
+        .root_source_file = b.path("src/pass/PassImp.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const renderFlow_mod = b.createModule(.{
+        .root_source_file = b.path("src/pass/renderFlow.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     // dependency
+    renderFlow_mod.addImport("processRender", processRender_mod);
+    renderFlow_mod.addImport("video", video_mod);
+    renderFlow_mod.addImport("vulkan", vk_c_mod);
+    renderFlow_mod.addImport("passImp", pass_mod);
+
+    pass_mod.addImport("renderFlow", renderFlow_mod);
+    pass_mod.addImport("textureSet", textureSet_mod);
+    pass_mod.addImport("video", video_mod);
+    pass_mod.addImport("processRender", processRender_mod);
+    pass_mod.addImport("fileSystem", fileSystem_mod);
+    pass_mod.addImport("vulkan", vk_c_mod);
+
     resource_mod.addImport("video", video_mod);
     resource_mod.addImport("vk", vk_c_mod);
     resource_mod.addImport("vma", vma_mod);
@@ -487,6 +509,8 @@ pub fn build(b: *std.Build) void {
     fileSystem_mod.addIncludePath(b.path("include"));
 
     exe_mod.addImport("textureSet", textureSet_mod);
+    exe_mod.addImport("renderFlow", renderFlow_mod);
+    exe_mod.addImport("pass", pass_mod);
     exe_mod.addImport("video", video_mod);
     exe_mod.addImport("stb_image", stb_image_mod);
     exe_mod.addImport("vertexStruct", vertexStruct_mod);

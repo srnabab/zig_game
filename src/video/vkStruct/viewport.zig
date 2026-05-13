@@ -15,7 +15,7 @@ mutex: std.Io.Mutex = .init,
 
 const Self = @This();
 
-pub const Viewport_t = Handle;
+pub const Viewport_t = *opaque {};
 
 pub fn init(allocator: std.mem.Allocator, pHandle: *global.HandlesType) Self {
     return .{
@@ -37,7 +37,7 @@ pub fn createViewport(self: *Self, io: std.Io, viewport: vk.VkViewport) !Viewpor
 
     try self.array.append(viewport);
 
-    return self.pHandle.createHandle(@intCast(index), .viewport);
+    return @ptrCast(self.pHandle.createHandle(@intCast(index), .viewport));
 }
 
 pub fn destroyViewport(self: *Self, io: std.Io, viewport: Viewport_t) void {
@@ -46,12 +46,12 @@ pub fn destroyViewport(self: *Self, io: std.Io, viewport: Viewport_t) void {
 
     // const index = Handles.getIndex(viewport);
 
-    self.pHandle.destroyHandle(viewport);
+    self.pHandle.destroyHandle(@ptrCast(viewport));
 }
 
 pub fn getViewportContent(self: *Self, io: std.Io, viewport: Viewport_t) vk.VkViewport {
     self.mutex.lock(io) catch unreachable;
     defer self.mutex.unlock(io);
 
-    return self.array.items[Handles.getIndex(viewport).?];
+    return self.array.items[Handles.getIndex(@ptrCast(viewport)).?];
 }

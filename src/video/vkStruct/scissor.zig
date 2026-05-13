@@ -15,7 +15,7 @@ mutex: std.Io.Mutex = .init,
 
 const Self = @This();
 
-pub const Scissor_t = Handle;
+pub const Scissor_t = *opaque {};
 
 pub fn init(allocator: std.mem.Allocator, pHandle: *global.HandlesType) Self {
     return .{
@@ -37,7 +37,7 @@ pub fn createScissor(self: *Self, io: std.Io, scissor: vk.VkRect2D) !Scissor_t {
 
     try self.array.append(scissor);
 
-    return self.pHandle.createHandle(@intCast(index), .scissor);
+    return @ptrCast(self.pHandle.createHandle(@intCast(index), .scissor));
 }
 
 pub fn destroyScissor(self: *Self, io: std.Io, scissor: Scissor_t) void {
@@ -46,12 +46,12 @@ pub fn destroyScissor(self: *Self, io: std.Io, scissor: Scissor_t) void {
 
     // const index = Handles.getIndex(viewport);
 
-    self.pHandle.destroyHandle(scissor);
+    self.pHandle.destroyHandle(@ptrCast(scissor));
 }
 
 pub fn getScissorContent(self: *Self, io: std.Io, scissor: Scissor_t) vk.VkRect2D {
     self.mutex.lock(io) catch unreachable;
     defer self.mutex.unlock(io);
 
-    return self.array.items[Handles.getIndex(scissor).?];
+    return self.array.items[Handles.getIndex(@ptrCast(scissor)).?];
 }

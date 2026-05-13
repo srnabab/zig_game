@@ -2,7 +2,6 @@ const std = @import("std");
 const texture = @import("textureSet");
 const VkStruct = @import("video");
 const vk = VkStruct.vk;
-const rendering = @import("rendering");
 
 pub const CommandType = enum {
     compute,
@@ -210,10 +209,10 @@ pub const PipelineBarrier = struct {
 };
 
 pub const PushConstantPack = struct {
-    stageFlag: vk.VkShaderStageFlags,
-    size: u16,
-    offset: u16,
-    pValues: *anyopaque,
+    stageFlag: vk.VkShaderStageFlags = 0,
+    size: u16 = 0,
+    offset: u16 = 0,
+    pValues: *anyopaque = undefined,
 };
 
 pub const Draw2D = struct {
@@ -222,7 +221,7 @@ pub const Draw2D = struct {
     indexBuffer: VkStruct.Buffer_t,
     descriptorSets: []vk.VkDescriptorSet,
     pTexture: texture.Texture_t,
-    pushConstants: []PushConstantPack,
+    pushConstants: PushConstantPack,
 };
 
 pub const Draw2DRecord = struct {
@@ -300,7 +299,7 @@ pub const DrawMesh = struct {
     descriptorSets: []vk.VkDescriptorSet,
     pTextures: []texture.Texture_t,
     usedBuffers: []VkStruct.Buffer_t,
-    pushConstants: []PushConstantPack,
+    pushConstants: PushConstantPack,
     meshletCount: u32,
 };
 
@@ -309,7 +308,7 @@ pub const DrawMeshIndirect = struct {
     descriptorSets: []vk.VkDescriptorSet,
     pTextures: []texture.Texture_t,
     usedBuffers: []VkStruct.Buffer_t,
-    pushConstants: []PushConstantPack,
+    pushConstants: PushConstantPack,
     meshletCount: u32,
 };
 
@@ -327,7 +326,7 @@ pub const DrawIndirect = struct {
     pTextures: []texture.Texture_t,
     usedBuffers: []VkStruct.Buffer_t,
     indirectBuffer: VkStruct.Buffer_t,
-    pushConstants: []PushConstantPack,
+    pushConstants: PushConstantPack,
 };
 
 pub const DrawIndirectRecord = struct {

@@ -28,6 +28,10 @@ const input = @import("input");
 const VkStruct = @import("video");
 const textureSet = @import("textureSet");
 const resource = @import("resource");
+const file = @import("fileSystem");
+const pass = @import("pass");
+const renderFlow = @import("renderFlow");
+const setPass = @import("setPass.zig");
 
 // const cgltf = @import("cgltf");
 
@@ -163,6 +167,25 @@ pub fn main(init: std.process.Init) !void {
     defer vulkan.deinit();
     defer pTextureSet.deinit(&vulkan);
 
+    renderFlow.init(gpa);
+    defer renderFlow.deinit();
+
+    try setPass.setting();
+
+    var passes: pass = undefined;
+    {
+        var tempDb: ?*file.sqlite.sqlite3 = null;
+        file.init(&tempDb);
+        defer file.deinit(tempDb);
+
+        passes = try pass.initFromRenderFlow(init.io, gpa, &vulkan, tempDb);
+    }
+    defer passes.deinit(gpa);
+
+    for (passes.passes) |*value| {
+        try value.init(null, &vulkan, gpa);
+    }
+
     var render_t = try Thread.spawn(
         .{},
         render.render_thread_func,
@@ -179,6 +202,7 @@ pub fn main(init: std.process.Init) !void {
             .stateBuffering = &stateBuffering,
             .pTextureSet = &pTextureSet,
             .vulkan = &vulkan,
+            .passes = passes,
         }},
     );
     defer render_t.join();

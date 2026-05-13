@@ -163,7 +163,7 @@ pub fn update_thread_func(args: Args) !void {
 
     // var resourceValue: u32 = 0;
 
-    // var stateBufferValue: u32 = 0;
+    var stateBufferValue: u32 = 0;
 
     var sceneChanged = true;
 
@@ -217,6 +217,15 @@ pub fn update_thread_func(args: Args) !void {
                 );
                 _ = boxPng;
 
+                // _ = try readResource(
+                //     io,
+                //     gpa,
+                //     handles,
+                //     &nameArray,
+                //     mainRoSqlite,
+                //     "flat2d.pipeb",
+                // );
+
                 // resourceArray.mutex.lock(io);
                 // defer resourceArray.mutex.unlock(io);
                 // const ptr = try resourceArray.array.addOne();
@@ -242,8 +251,8 @@ pub fn update_thread_func(args: Args) !void {
             const infos = stateBuffering.getWriteBuffer();
             defer stateBuffering.returnWriteBuffer(infos);
 
-            // try infos.append(stateBufferValue);
-            // stateBufferValue += 1;
+            try infos.append(stateBufferValue);
+            stateBufferValue += 1;
 
             accumulateTime += sdl.SDL_GetTicksNS() - lastTimestamp;
 

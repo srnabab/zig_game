@@ -22,13 +22,14 @@ layout(push_constant) uniform PushConstants {
     InstanceIDBuffer instanceIDs;
 } pc;
 
-layout(set = 0, binding = 0) uniform UniformBufferObject {
+layout(set = 1, binding = 0) uniform UniformBufferObject {
     mat4 view;
     mat4 proj;
 } ubo;
 
 layout(location = 0) out vec2 outUV;
 layout(location = 1) flat out uint outTexIndex;
+layout(location = 2) flat out uint outSamplerIndex;
 
 void main() {
     uint idx = pc.instanceIDs.instanceIDs[gl_InstanceIndex];
@@ -47,4 +48,5 @@ void main() {
     
     outUV = uvs[vIdx];
     outTexIndex = sprite.textureIndex;
+    outSamplerIndex = 0;
 }

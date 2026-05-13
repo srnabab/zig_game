@@ -61,6 +61,7 @@ const featureIndexingNeed = [_][]const u8{
     "shaderSampledImageArrayNonUniformIndexing",
     "descriptorBindingUniformBufferUpdateAfterBind",
     "descriptorBindingSampledImageUpdateAfterBind",
+    "descriptorBindingStorageImageUpdateAfterBind",
     "descriptorBindingPartiallyBound",
     "runtimeDescriptorArray",
 };

@@ -3170,7 +3170,7 @@ pub const commands = struct {
         var shaderStage: vk.VkShaderStageFlags = 0;
 
         for (pDescriptorSets) |value| {
-            shaderStage |= self.vulkan.descriptorSetShaderStages.get(value).?;
+            shaderStage |= self.vulkan.getDescriptorSetsShaderStage(value);
         }
 
         return shaderStage;
@@ -3185,7 +3185,7 @@ pub const commands = struct {
         pViewport: ?VkStruct.Viewport_t,
         pScissor: ?VkStruct.Scissor_t,
         pipeline: VkStruct.Pipeline_t,
-        pushConstants: ?[]drawC.PushConstantPack,
+        pushConstants: ?drawC.PushConstantPack,
         commandType: drawC.CommandType,
         commandID: u32,
         allocator: std.mem.Allocator,
@@ -3352,7 +3352,7 @@ pub const commands = struct {
 
                     if (!indexBufferBinded) {
                         if (indexBuffer) |bufer| {
-                            if (bufer == @as(Handle, @ptrCast(value.key_ptr.*))) {
+                            if (bufer == @as(VkStruct.Buffer_t, @ptrCast(value.key_ptr.*))) {
                                 // std.log.debug("xxx 5", .{});
 
                                 const indexBufferContent = self.vulkan.buffers.getBufferContent(bufer);
@@ -3372,7 +3372,7 @@ pub const commands = struct {
                     }
 
                     if (!pipelineBinded) {
-                        if (pipeline == @as(Handle, @ptrCast(value.key_ptr.*))) {
+                        if (pipeline == @as(VkStruct.Pipeline_t, @ptrCast(value.key_ptr.*))) {
                             // std.log.debug("xxx 6", .{});
 
                             const pipelineContent = self.vulkan.getPipelineContent(pipeline);
@@ -3392,7 +3392,7 @@ pub const commands = struct {
 
                     if (!scissorBinded) {
                         if (pScissor) |v| {
-                            if (v == @as(Handle, @ptrCast(value.key_ptr.*))) {
+                            if (v == @as(VkStruct.Scissor_t, @ptrCast(value.key_ptr.*))) {
                                 // std.log.debug("xxx 1", .{});
 
                                 const scissor = self.vulkan.scissors.getScissorContent(self.io, v);
@@ -3412,7 +3412,7 @@ pub const commands = struct {
 
                     if (!viewportBinded) {
                         if (pViewport) |v| {
-                            if (v == @as(Handle, @ptrCast(value.key_ptr.*))) {
+                            if (v == @as(VkStruct.Viewport_t, @ptrCast(value.key_ptr.*))) {
                                 // std.log.debug("xxx 3", .{});
 
                                 const viewport = self.vulkan.viewports.getViewportContent(self.io, v);
@@ -3503,26 +3503,24 @@ pub const commands = struct {
         }
 
         if (pushConstants) |pushs| {
-            for (pushs) |value| {
-                const pushConstantMem = try allocator.alloc(u8, value.size);
-                @memcpy(pushConstantMem, @as([*]u8, @ptrCast(@alignCast(value.pValues)))[0..pushConstantMem.len]);
-                const pushConstantNode = try self.addCommand2(.{ .pushconstant = .{
-                    .layout = self.vulkan.getPipelineContent(pipeline).pipelineLayout,
-                    .stageFlags = value.stageFlag,
-                    .offset = value.offset,
-                    .size = value.size,
-                    .pValues = pushConstantMem,
-                } }, commandType, commandID);
+            const pushConstantMem = try allocator.alloc(u8, pushs.size);
+            @memcpy(pushConstantMem, @as([*]u8, @ptrCast(@alignCast(pushs.pValues)))[0..pushConstantMem.len]);
+            const pushConstantNode = try self.addCommand2(.{ .pushconstant = .{
+                .layout = self.vulkan.getPipelineContent(pipeline).pipelineLayout,
+                .stageFlags = pushs.stageFlag,
+                .offset = pushs.offset,
+                .size = pushs.size,
+                .pValues = pushConstantMem,
+            } }, commandType, commandID);
 
-                if (linkNodeEnd == null) {
-                    linkNodeEnd = pushConstantNode.a;
-                    linkNodeStart = linkNodeEnd;
-                } else {
-                    try linkNodeEnd.?.parentsAppend(&pushConstantNode.a.?.ID);
-                    try self.nodeDag.childrenAppend(pushConstantNode.a.?, linkNodeEnd.?);
+            if (linkNodeEnd == null) {
+                linkNodeEnd = pushConstantNode.a;
+                linkNodeStart = linkNodeEnd;
+            } else {
+                try linkNodeEnd.?.parentsAppend(&pushConstantNode.a.?.ID);
+                try self.nodeDag.childrenAppend(pushConstantNode.a.?, linkNodeEnd.?);
 
-                    linkNodeEnd = pushConstantNode.a.?;
-                }
+                linkNodeEnd = pushConstantNode.a.?;
             }
         }
 
@@ -3669,15 +3667,15 @@ pub const commands = struct {
                 const compute = command.compute;
 
                 {
-                    if (!Handles.handleIsValid(compute.pipeline)) reAdd = true;
+                    if (!Handles.handleIsValid(@ptrCast(compute.pipeline))) reAdd = true;
                     for (compute.pTextures) |value| {
-                        if (!Handles.handleIsValid(value)) {
+                        if (!Handles.handleIsValid(@ptrCast(value))) {
                             reAdd = true;
                             break;
                         }
                     }
                     for (compute.usedBuffers) |value| {
-                        if (!Handles.handleIsValid(value)) {
+                        if (!Handles.handleIsValid(@ptrCast(value))) {
                             reAdd = true;
                             break;
                         }
@@ -3852,7 +3850,7 @@ pub const commands = struct {
                 var buffers: []VkStruct.Buffer_t = undefined;
                 var descriptorSets: []vk.VkDescriptorSet = undefined;
                 var pipeline: VkStruct.Pipeline_t = undefined;
-                var pushConstants: []drawC.PushConstantPack = undefined;
+                var pushConstants: ?drawC.PushConstantPack = null;
                 var indexBuffer: ?VkStruct.Buffer_t = null;
                 var pRendering: *Rendering = undefined;
                 var isPresent = false;
@@ -3861,16 +3859,16 @@ pub const commands = struct {
                     const drawIndirect = command.drawIndirect;
 
                     {
-                        if (!Handles.handleIsValid(drawIndirect.pipeline)) reAdd = true;
-                        if (!Handles.handleIsValid(drawIndirect.indirectBuffer)) reAdd = true;
+                        if (!Handles.handleIsValid(@ptrCast(drawIndirect.pipeline))) reAdd = true;
+                        if (!Handles.handleIsValid(@ptrCast(drawIndirect.indirectBuffer))) reAdd = true;
                         for (drawIndirect.pTextures) |value| {
-                            if (!Handles.handleIsValid(value)) {
+                            if (!Handles.handleIsValid(@ptrCast(value))) {
                                 reAdd = true;
                                 break;
                             }
                         }
                         for (drawIndirect.usedBuffers) |value| {
-                            if (!Handles.handleIsValid(value)) {
+                            if (!Handles.handleIsValid(@ptrCast(value))) {
                                 reAdd = true;
                                 break;
                             }
@@ -3906,15 +3904,15 @@ pub const commands = struct {
                     const drawMesh = command.drawMesh;
 
                     {
-                        if (!Handles.handleIsValid(drawMesh.pipeline)) reAdd = true;
+                        if (!Handles.handleIsValid(@ptrCast(drawMesh.pipeline))) reAdd = true;
                         for (drawMesh.pTextures) |value| {
-                            if (!Handles.handleIsValid(value)) {
+                            if (!Handles.handleIsValid(@ptrCast(value))) {
                                 reAdd = true;
                                 break;
                             }
                         }
                         for (drawMesh.usedBuffers) |value| {
-                            if (!Handles.handleIsValid(value)) {
+                            if (!Handles.handleIsValid(@ptrCast(value))) {
                                 reAdd = true;
                                 break;
                             }
@@ -3939,9 +3937,9 @@ pub const commands = struct {
 
                     const present = command.present;
                     {
-                        if (!Handles.handleIsValid(present.pipeline)) reAdd = true;
+                        if (!Handles.handleIsValid(@ptrCast(present.pipeline))) reAdd = true;
                         for (present.pTextures) |value| {
-                            if (!Handles.handleIsValid(value)) {
+                            if (!Handles.handleIsValid(@ptrCast(value))) {
                                 reAdd = true;
                                 break;
                             }
@@ -3957,7 +3955,6 @@ pub const commands = struct {
                     descriptorSets = present.descriptorSets;
                     buffers = &.{};
                     pipeline = present.pipeline;
-                    pushConstants = &.{};
                     pRendering = &self.presentRendering;
                     isPresent = true;
 
@@ -3980,11 +3977,11 @@ pub const commands = struct {
                     const draw2D = command.draw2D;
 
                     {
-                        if (!Handles.handleIsValid(draw2D.pipeline)) reAdd = true;
-                        if (!Handles.handleIsValid(draw2D.pTexture)) reAdd = true;
-                        if (!Handles.handleIsValid(draw2D.indexBuffer)) reAdd = true;
+                        if (!Handles.handleIsValid(@ptrCast(draw2D.pipeline))) reAdd = true;
+                        if (!Handles.handleIsValid(@ptrCast(draw2D.pTexture))) reAdd = true;
+                        if (!Handles.handleIsValid(@ptrCast(draw2D.indexBuffer))) reAdd = true;
                         for (draw2D.vertexBuffer) |value| {
-                            if (!Handles.handleIsValid(value)) {
+                            if (!Handles.handleIsValid(@ptrCast(value))) {
                                 reAdd = true;
                                 break;
                             }
@@ -4018,6 +4015,8 @@ pub const commands = struct {
                     } };
                     // self.inMesh = false;
                 }
+
+                descriptorSets = try allocator.dupe(vk.VkDescriptorSet, descriptorSets);
 
                 try self.renderingResourcePreProcess(
                     pRendering,
@@ -4107,8 +4106,8 @@ pub const commands = struct {
             .copyBuffer => {
                 const copyBuffer = command.copyBuffer;
                 {
-                    if (!Handles.handleIsValid(copyBuffer.srcBuffer)) reAdd = true;
-                    if (!Handles.handleIsValid(copyBuffer.dstBuffer)) reAdd = true;
+                    if (!Handles.handleIsValid(@ptrCast(copyBuffer.srcBuffer))) reAdd = true;
+                    if (!Handles.handleIsValid(@ptrCast(copyBuffer.dstBuffer))) reAdd = true;
 
                     if (reAdd) break :re;
                 }
@@ -4192,8 +4191,8 @@ pub const commands = struct {
                 const copyBufferToImage = command.copyBufferToImage;
 
                 {
-                    if (!Handles.handleIsValid(copyBufferToImage.buffer)) reAdd = true;
-                    if (!Handles.handleIsValid(copyBufferToImage.pTexture)) reAdd = true;
+                    if (!Handles.handleIsValid(@ptrCast(copyBufferToImage.buffer))) reAdd = true;
+                    if (!Handles.handleIsValid(@ptrCast(copyBufferToImage.pTexture))) reAdd = true;
 
                     if (reAdd) break :re;
                 }

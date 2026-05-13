@@ -25,6 +25,7 @@ const Semaphore = std.Io.Semaphore;
 const file = @import("fileSystem");
 
 const mesh = @import("mesh");
+const pass = @import("pass");
 
 pub const Args = struct {
     io: std.Io,
@@ -39,6 +40,7 @@ pub const Args = struct {
     stateBuffering: *global.StateBufferingType,
     pTextureSet: *textureSet,
     vulkan: *VkStruct,
+    passes: pass,
 };
 
 pub fn render_thread_func(args: Args) !void {
@@ -57,6 +59,7 @@ pub fn render_thread_func(args: Args) !void {
     const stateBuffering = args.stateBuffering;
     const pTextureSet = args.pTextureSet;
     const vulkan = args.vulkan;
+    var passes = args.passes;
 
     const zone = tracy.initZone(@src(), .{ .name = "render" });
     defer zone.deinit();
@@ -118,7 +121,7 @@ pub fn render_thread_func(args: Args) !void {
 
     vulkan.writeCachedDescriptorSetResources();
 
-    // try vulkan.readPipelineFileAndAdd(io, comptime file.comptimeGetID("flat2d.pipeb"), .draw);
+    // try vulkan.readPipelineFileAndAdd(io, comptime file.comptimeGetID("flat2d.pipeb"), , .draw);
     // try vulkan.readPipelineFileAndAdd(io, comptime file.comptimeGetID("directOut.pipeb"), .present);
     // try vulkan.readPipelineFileAndAdd(io, comptime file.comptimeGetID("model.pipeb"), .meshDraw);
     // try vulkan.readPipelineFileAndAdd(io, comptime file.comptimeGetID("indirectDraw.pipeb"), .draw);
@@ -489,7 +492,14 @@ pub fn render_thread_func(args: Args) !void {
     while (true) {
         {
             const frame = vulkan.totalFrame.load(.seq_cst);
-            _ = frame;
+            // _ = frame;
+
+            if (frame == 3) {
+                passes.enablePass("indirect2D");
+            }
+            if (frame == 13) {
+                passes.disablePass("indirect2D");
+            }
 
             // std.log.debug("frame {d}", .{frame});
 
@@ -544,7 +554,16 @@ pub fn render_thread_func(args: Args) !void {
             try commands.addCachedCommand();
 
             for (infos.items) |value| {
-                std.log.debug("info {d}", .{value});
+                // std.log.debug("info {d}", .{value});
+                if (value == 0) {}
+            }
+
+            for (args.passes.passes) |*value| {
+                if (value.enabled) {
+                    // try value.addCommand(null, vulkan, &commands);
+
+                    std.log.debug("pass {s}", .{value.name});
+                }
             }
 
             // std.log.debug("draw2d", .{});

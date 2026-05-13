@@ -28,7 +28,7 @@ fn getRelativePath(id: i64, result: []u8, db: ?*sqlite.sqlite3) !void {
     };
 }
 
-pub fn init(databaseName: []const u8, db: ?*sqlite.sqlite3) void {
+pub fn init(databaseName: []const u8, db: [*c]?*sqlite.sqlite3) void {
     var disk_db: ?*sqlite.sqlite3 = null;
     var backup: ?*sqlite.sqlite3_backup = null;
 
@@ -41,15 +41,17 @@ pub fn init(databaseName: []const u8, db: ?*sqlite.sqlite3) void {
     defer _ = sqlite.sqlite3_close_v2(disk_db);
     assert(res == sqlite.SQLITE_OK);
 
+    const uri = "file:memdb1?mode=memory&cache=shared";
     res = sqlite.sqlite3_open_v2(
-        ":memory:",
-        @ptrCast(&db),
-        sqlite.SQLITE_OPEN_READWRITE | sqlite.SQLITE_OPEN_CREATE,
+        // ":memory:",
+        @ptrCast(uri),
+        db,
+        sqlite.SQLITE_OPEN_READWRITE | sqlite.SQLITE_OPEN_CREATE | sqlite.SQLITE_OPEN_URI,
         null,
     );
     assert(res == sqlite.SQLITE_OK);
 
-    backup = sqlite.sqlite3_backup_init(db, "main", disk_db, "main");
+    backup = sqlite.sqlite3_backup_init(db.*, "main", disk_db, "main");
     assert(backup != null);
 
     res = sqlite.sqlite3_backup_step(backup, -1);

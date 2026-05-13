@@ -51,7 +51,7 @@ pub const Buffer = struct {
     offset: vk.VkDeviceSize = 0,
 };
 
-pub const Buffer_t = Handle;
+pub const Buffer_t = *opaque {};
 
 const Self = @This();
 
@@ -60,6 +60,7 @@ const UniformBufferAlign = 64;
 const bufferRatio: f32 = 0.5 / 11;
 
 buffers: FixedIndexArray(Buffer),
+bufferMap: std.StringHashMap(u32),
 mutex: std.Io.Mutex = .init,
 io: std.Io,
 
@@ -67,6 +68,7 @@ pub fn init(io: std.Io, allocator: std.mem.Allocator) Self {
     return Self{
         .io = io,
         .buffers = .init(allocator),
+        .bufferMap = .init(allocator),
     };
 }
 
@@ -182,7 +184,7 @@ pub fn _createBuffer(
 
     const handle = handles.createHandle(@intCast(pack.index), .buffer);
 
-    return handle;
+    return @ptrCast(handle);
 }
 
 pub fn destroyBuffer(
@@ -191,7 +193,7 @@ pub fn destroyBuffer(
     buffer: Buffer_t,
     handles: *global.HandlesType,
 ) void {
-    const index = getIndex(buffer);
+    const index = getIndex(@ptrCast(buffer));
     if (index == null) return;
 
     const ptr = self.buffers.get(index.?);
@@ -201,7 +203,7 @@ pub fn destroyBuffer(
     vmaa.destroyBuffer(ptr.vkBuffer, ptr.allocation.real);
 
     self.buffers.remove(index.?);
-    handles.destroyHandle(buffer);
+    handles.destroyHandle(@ptrCast(buffer));
 }
 
 pub fn createBufferByUsage(
@@ -271,7 +273,7 @@ pub fn createBufferByUsage(
 }
 
 pub fn copyDataToMapped(self: *Self, buffer: Buffer_t, srcType: type, src: []const srcType) void {
-    const index = getIndex(buffer);
+    const index = getIndex(@ptrCast(buffer));
 
     if (index == null) return;
 
@@ -281,7 +283,7 @@ pub fn copyDataToMapped(self: *Self, buffer: Buffer_t, srcType: type, src: []con
 }
 
 pub fn getBufferQueueType(self: *Self, buffer: Buffer_t) QueueType {
-    const index = getIndex(buffer).?;
+    const index = getIndex(@ptrCast(buffer)).?;
     const ptr = self.buffers.get(index);
     return switch (ptr.queue) {
         .have => |h| h,
@@ -290,7 +292,7 @@ pub fn getBufferQueueType(self: *Self, buffer: Buffer_t) QueueType {
 }
 
 pub fn changeQueueType(self: *Self, buffer: Buffer_t, queueType: QueueType) void {
-    const index = getIndex(buffer).?;
+    const index = getIndex(@ptrCast(buffer)).?;
     const ptr = self.buffers.get(index);
 
     // std.log.debug("{*} {s} -> {s}", .{
@@ -316,7 +318,7 @@ pub fn changeQueueType(self: *Self, buffer: Buffer_t, queueType: QueueType) void
 // }
 
 pub fn getBufferSize(self: *Self, buffer: Buffer_t) vk.VkDeviceSize {
-    const index = getIndex(buffer);
+    const index = getIndex(@ptrCast(buffer));
 
     const ptr = self.buffers.get(index.?);
 
@@ -324,7 +326,7 @@ pub fn getBufferSize(self: *Self, buffer: Buffer_t) vk.VkDeviceSize {
 }
 
 pub fn getVkBuffer(self: *Self, buffer: Buffer_t) vk.VkBuffer {
-    const index = getIndex(buffer);
+    const index = getIndex(@ptrCast(buffer));
 
     const ptr = self.buffers.get(index.?);
 
@@ -332,7 +334,7 @@ pub fn getVkBuffer(self: *Self, buffer: Buffer_t) vk.VkBuffer {
 }
 
 pub fn getBufferUsage(self: *Self, buffer: Buffer_t) Usage {
-    const index = getIndex(buffer);
+    const index = getIndex(@ptrCast(buffer));
 
     const ptr = self.buffers.get(index.?);
 
@@ -340,7 +342,7 @@ pub fn getBufferUsage(self: *Self, buffer: Buffer_t) Usage {
 }
 
 pub fn getBufferOffset(self: *Self, buffer: Buffer_t) vk.VkDeviceSize {
-    const index = getIndex(buffer);
+    const index = getIndex(@ptrCast(buffer));
 
     const ptr = self.buffers.get(index.?);
 
@@ -348,7 +350,7 @@ pub fn getBufferOffset(self: *Self, buffer: Buffer_t) vk.VkDeviceSize {
 }
 
 pub fn getBufferContent(self: *Self, buffer: Buffer_t) Buffer {
-    const index = getIndex(buffer);
+    const index = getIndex(@ptrCast(buffer));
 
     const ptr = self.buffers.get(index.?);
 

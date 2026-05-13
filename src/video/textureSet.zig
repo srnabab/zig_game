@@ -23,7 +23,7 @@ pub const Offsets = struct {
     count: u32,
 };
 
-pub const Texture_t = Handle;
+pub const Texture_t = *opaque {};
 
 pub const Texture = struct {
     ID: u32 = std.math.maxInt(u32),
@@ -321,7 +321,7 @@ pub fn create2DTexture(
         texture.layouts[i] = vk.VK_IMAGE_LAYOUT_UNDEFINED;
     }
 
-    const texture_t = self.handles.createHandle(index, .texture);
+    const texture_t: Texture_t = @ptrCast(self.handles.createHandle(index, .texture));
 
     try self.map.put(ID, texture_t);
 
@@ -378,7 +378,7 @@ pub fn createTexturePackVkImage(
         texture.layouts[i] = vk.VK_IMAGE_LAYOUT_UNDEFINED;
     }
 
-    const texture_t = self.handles.createHandle(index, .texture);
+    const texture_t: Texture_t = @ptrCast(self.handles.createHandle(index, .texture));
 
     try self.map.put(ID, texture_t);
 
@@ -396,8 +396,9 @@ pub fn createTextureFromResource(
     try self.mutex.lock(io);
     defer self.mutex.unlock(io);
 
-    const texture_t = textureResource.handle;
-    if (!Handles.typeCompare(texture_t, .texture)) return error.InvalidHandle;
+    if (!Handles.typeCompare(textureResource.handle, .texture)) return error.InvalidHandle;
+
+    const texture_t: Texture_t = @ptrCast(textureResource.handle);
 
     if (self.map.get(textureResource.fileID)) |value| {
         return value;
@@ -420,7 +421,7 @@ pub fn createTextureFromResource(
         .source_height = textureResource.height,
     };
 
-    self.handles.setIndex(texture_t, index);
+    self.handles.setIndex(@ptrCast(texture_t), index);
     for (0..texture.layouts.len) |i| {
         texture.layouts[i] = vk.VK_IMAGE_LAYOUT_UNDEFINED;
     }
@@ -494,7 +495,7 @@ pub fn getTextureCotent(self: *Self, texture: Texture_t) Texture {
     self.mutex.lock(self.io) catch unreachable;
     defer self.mutex.unlock(self.io);
 
-    const index = Handles.getIndex(texture);
+    const index = Handles.getIndex(@ptrCast(texture));
 
     return self.array.items[index.?];
 }
@@ -535,7 +536,7 @@ pub fn getTextureOffsets(self: *Self, texture: Texture_t) ![]Offsets {
     self.mutex.lock(self.io) catch unreachable;
     defer self.mutex.unlock(self.io);
 
-    const index = Handles.getIndex(texture).?;
+    const index = Handles.getIndex(@ptrCast(texture)).?;
 
     return self.offsetsPool.items[self.offsetRange.items[index].offset..][0..self.offsetRange.items[index].count];
 }
@@ -544,7 +545,7 @@ pub fn changeTextureLayout(self: *Self, texture: Texture_t, baseLayer: u32, laye
     self.mutex.lock(self.io) catch unreachable;
     defer self.mutex.unlock(self.io);
 
-    const index = Handles.getIndex(texture).?;
+    const index = Handles.getIndex(@ptrCast(texture)).?;
     const tex = &self.array.items[index];
 
     tex.changeTextureLayout(baseLayer, layerCount, layout);
@@ -559,7 +560,7 @@ pub fn changeTextureQueue(self: *Self, texture: Texture_t, queueType: VkStruct.C
     self.mutex.lock(self.io) catch unreachable;
     defer self.mutex.unlock(self.io);
 
-    const index = Handles.getIndex(texture).?;
+    const index = Handles.getIndex(@ptrCast(texture)).?;
     const tex = &self.array.items[index];
 
     tex.changeTextureQueue(queueType);

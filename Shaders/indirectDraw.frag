@@ -4,18 +4,17 @@
 
 layout(location = 0) in vec2 fragTexCoord;
 layout(location = 1) flat in uint fragTexIndex;
+layout(location = 2) flat in uint samplerIndex;
 
-layout(set = 1, binding = 0) uniform sampler2D textures[];
+layout(set = 0, binding = 0) uniform texture2D textures[];
+layout(set = 0, binding = 1) uniform writeonly image2D images[];
+layout(set = 0, binding = 2) uniform sampler samplers[16];
+layout(set = 0, binding = 2) uniform samplerShadow shadowSamplers[16];
 
 layout(location = 0) out vec4 outColor;
 
-float random (vec2 st) {
-    return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123);
-}
 void main() {
-    vec4 texColor = texture(textures[nonuniformEXT(fragTexIndex)], fragTexCoord);
+    vec4 texColor = texture(sampler2D(textures[nonuniformEXT(fragTexIndex)], samplers[samplerIndex]), fragTexCoord);
 
     outColor = texColor;
-    // outColor = vec4(1.0);
-    // outColor = vec4(random(fragTexCoord), random(fragTexCoord + vec2(1.0)), random(fragTexCoord + vec2(2.0)), random(fragTexCoord + vec2(3.0)));
 }
