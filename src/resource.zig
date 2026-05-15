@@ -18,7 +18,7 @@ pub const ResourceTexture = struct {
     width: u32,
     height: u32,
     fileID: u32,
-    format: vk.VkFormat,
+    format: vk.VkFormat, // 16
     vkImage: vk.VkImage,
     vkImageView: vk.VkImageView,
     allocation: vma.VmaAllocation,

@@ -1,6 +1,17 @@
 #version 460
+#extension GL_EXT_scalar_block_layout : require
+
+layout(set = 1, binding = 0) uniform UniformBufferObject {
+    mat4 view;
+    mat4 proj;
+} ubo;
  
 layout(location = 0) out vec2 outUV;
+layout(location = 1) out flat uint texIndex;
+
+layout(push_constant, scalar) uniform PushConstants {
+    uint texIndex;
+} pc;
 
 const vec2 positions[6] = vec2[](
     vec2(-1.0, 1.0), // 左下角 (Triangle 1, Vertex 0)
@@ -23,9 +34,6 @@ void main() {
     // 计算并传递纹理坐标 (将NDC坐标 -1..1 映射到 UV坐标 0..1)
     // uv.x = (pos.x + 1.0) * 0.5;
     // uv.y = (pos.y + 1.0) * 0.5;
-    outUV = vec2(pos.x * 0.5 + 0.5, pos.y * 0.5 + 0.5);;
-
-    // 如果你想传递NDC坐标本身给片段着色器，可以这样做：
-    // out vec2 v_NdcPos; // 需要在上面声明
-    // v_NdcPos = pos;
+    outUV = vec2(pos.x * 0.5 + 0.5, pos.y * 0.5 + 0.5);
+    texIndex = pc.texIndex;
 }

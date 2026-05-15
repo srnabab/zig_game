@@ -163,7 +163,12 @@ pub fn main(init: std.process.Init) !void {
         width,
         height,
     );
-    try vulkan.initVulkan(init.io, &pTextureSet);
+    {
+        var tempDb: ?*file.sqlite.sqlite3 = null;
+        file.init(&tempDb);
+        defer file.deinit(tempDb);
+        try vulkan.initVulkan(init.io, &pTextureSet, tempDb);
+    }
     defer vulkan.deinit();
     defer pTextureSet.deinit(&vulkan);
 

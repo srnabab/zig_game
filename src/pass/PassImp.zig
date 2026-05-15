@@ -9,6 +9,7 @@ const vk = @import("vulkan");
 
 const VkStruct = @import("video");
 const file = @import("fileSystem");
+const TextureSet = @import("textureSet");
 
 const renderFlow = @import("renderFlow");
 
@@ -40,8 +41,22 @@ pub const Pass = struct {
         self.vtable.setPushConstants(userdata, self.pushConstant.pValues);
     }
 
-    pub fn addCommand(self: *Pass, userdata: ?*anyopaque, vulkan: *VkStruct, commands: *Commands) !void {
-        try self.vtable.addCommand(userdata, self, vulkan, commands);
+    pub fn addCommand(
+        self: *Pass,
+        userdata: ?*anyopaque,
+        vulkan: *VkStruct,
+        textureSet: *TextureSet,
+        commands: *Commands,
+        gpa: std.mem.Allocator,
+    ) !void {
+        try self.vtable.addCommand(
+            userdata,
+            self,
+            vulkan,
+            textureSet,
+            commands,
+            gpa,
+        );
     }
 
     /// this function is only used for tell dependency, you should set draw data by yourself

@@ -5,6 +5,7 @@ const Commands = @import("processRender").commands;
 const VkStruct = @import("video");
 const vk = @import("vulkan");
 const PassImp = @import("passImp");
+const TextureSet = @import("textureSet");
 
 const emptyVTable = VTable{
     .init = initEmpty,
@@ -26,11 +27,20 @@ fn setPushConstantsEmpty(userdata: ?*anyopaque, pValues: *anyopaque) void {
     _ = userdata;
     _ = pValues;
 }
-fn addCommandEmpty(userdata: ?*anyopaque, pass: *PassImp.Pass, vulkan: *VkStruct, commands: *Commands) !void {
+fn addCommandEmpty(
+    userdata: ?*anyopaque,
+    pass: *PassImp.Pass,
+    vulkan: *VkStruct,
+    textureSet: *TextureSet,
+    commands: *Commands,
+    gpa: std.mem.Allocator,
+) !void {
     _ = userdata;
     _ = pass;
     _ = vulkan;
+    _ = textureSet;
     _ = commands;
+    _ = gpa;
 }
 
 pub const Buffer = struct {
@@ -70,7 +80,9 @@ pub const VTable = struct {
         userdata: ?*anyopaque,
         pass: *PassImp.Pass,
         vulkan: *VkStruct,
+        textureSet: *TextureSet,
         commands: *Commands,
+        gpa: std.mem.Allocator,
     ) anyerror!void,
 };
 

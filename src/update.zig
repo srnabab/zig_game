@@ -215,16 +215,7 @@ pub fn update_thread_func(args: Args) !void {
                     mainRoSqlite,
                     "box.png",
                 );
-                _ = boxPng;
-
-                // _ = try readResource(
-                //     io,
-                //     gpa,
-                //     handles,
-                //     &nameArray,
-                //     mainRoSqlite,
-                //     "flat2d.pipeb",
-                // );
+                std.log.debug("box {any}", .{boxPng});
 
                 // resourceArray.mutex.lock(io);
                 // defer resourceArray.mutex.unlock(io);
@@ -370,6 +361,7 @@ fn processResource(args: ResourceThreadArgs) Io.Cancelable!void {
                 },
                 .PNG => {
                     const fileID = file.getID(pack.name);
+                    std.log.debug("ID {d}", .{fileID});
                     const img = file.getImageLoadParam(io, fileID, sqlite.?) catch |err| {
                         std.log.err("{s}", .{@errorName(err)});
                         continue;
@@ -425,7 +417,10 @@ fn processResource(args: ResourceThreadArgs) Io.Cancelable!void {
                     };
                     errdefer vulkan.destroyImage(image);
 
-                    const imageView = vulkan.createImageView2D(image.vkImage, img.image.format) catch |err| {
+                    const imageView = vulkan.createImageView2D(
+                        @ptrFromInt(image.vkImage),
+                        img.image.format,
+                    ) catch |err| {
                         std.log.err("{s}", .{@errorName(err)});
                         continue;
                     };
@@ -441,9 +436,9 @@ fn processResource(args: ResourceThreadArgs) Io.Cancelable!void {
                             .width = @intCast(imgWidth),
                             .height = @intCast(imgHeight),
                             .fileID = @intCast(fileID),
-                            .vkImage = image.vkImage,
+                            .vkImage = @ptrFromInt(image.vkImage),
                             .vkImageView = imageView,
-                            .allocation = image.allocation,
+                            .allocation = @ptrFromInt(image.allocation),
                             .staginfBuffer = stagingBuffer,
                             .format = img.image.format,
                             .handle = pack.handle,

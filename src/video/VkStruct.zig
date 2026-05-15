@@ -99,7 +99,7 @@ const meshSet1SetLayoutCreateInfos = descriptorSetLayoutCreateInfo{
         0,
     },
 };
-const set0SetLayoutCreateInfos = descriptorSetLayoutCreateInfo{
+var set0SetLayoutCreateInfos = descriptorSetLayoutCreateInfo{
     .flag = vk.VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
     .bindingCount = 3,
     .bindings = [5]vk.VkDescriptorSetLayoutBinding{
@@ -119,7 +119,7 @@ const set0SetLayoutCreateInfos = descriptorSetLayoutCreateInfo{
             .binding = 2,
             .stageFlags = vk.VK_SHADER_STAGE_FRAGMENT_BIT | vk.VK_SHADER_STAGE_COMPUTE_BIT,
             .descriptorType = vk.VK_DESCRIPTOR_TYPE_SAMPLER,
-            .descriptorCount = 16,
+            .descriptorCount = global.TotalSamplerCount,
         },
         .{},
         .{},
@@ -147,9 +147,9 @@ pub const Pipeline = struct {
     outputs: []Out,
 };
 
-pub const Image = struct {
-    vkImage: vk.VkImage,
-    allocation: vma.VmaAllocation,
+pub const Image = packed struct {
+    vkImage: usize, // vk.VkImage,
+    allocation: usize, // vma.VmaAllocation,
     queueIndex: CommandPoolType = .init,
     // queueIndex: i32 = -1,
 };
@@ -290,6 +290,8 @@ queueTypeCount: u32 = 0,
 
 handles: *global.HandlesType,
 
+renderTargets: std.AutoHashMap(u32, textureSet.Texture_t),
+
 pub fn init(io: std.Io, allocator: Allocator, handles: *global.HandlesType, window: *sdl.SDL_Window, width: u32, height: u32) Self {
     return Self{
         .allocator = allocator,
@@ -309,10 +311,11 @@ pub fn init(io: std.Io, allocator: Allocator, handles: *global.HandlesType, wind
         .window = window,
         .windowWidth = width,
         .windowHeight = height,
+        .renderTargets = .init(allocator),
     };
 }
 
-pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet) !void {
+pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet, db: file.sqlite3) !void {
     const zone = tracy.initZone(@src(), .{ .name = "init vulkan resources" });
     defer zone.deinit();
 
@@ -424,15 +427,10 @@ pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet) !void {
 
     self.swapchainTextures = try self.allocator.alloc(textureSet.Texture_t, swapchainImages.len);
 
-    var name = [_]u8{ 's', 'w', 'a', 'p', 'c', 'h', 'a', 'i', 'n', 'T', 'e', 'x', 't', 'u', 'r', 'e', '0' };
-
-    for (swapchainImages, self.swapchainTextures, 0..) |
+    for (swapchainImages, self.swapchainTextures) |
         image,
         *texture,
-        i,
     | {
-        name[16] = @intCast('0' + i);
-
         const imageView = try self._createImageView(
             null,
             0,
@@ -459,7 +457,6 @@ pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet) !void {
             self.surfaceFormats.formats[@intCast(self.surfaceFormats.sdr)].format,
             image,
             imageView,
-            &name,
         );
     }
 
@@ -503,6 +500,16 @@ pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet) !void {
     for (self.presentDoneFence) |value| {
         std.log.debug("fence {*}", .{value});
     }
+
+    try self.samplers.initSamplers(
+        io,
+        self.device,
+        &global.SamplerNames,
+        db,
+        self.pAllocCallBacks,
+        self.allocator,
+    );
+    set0SetLayoutCreateInfos.bindings[2].pImmutableSamplers = &self.samplers.samplers;
 
     self.globalDescriptorPool = try Descriptor._createDescriptorPool(
         self.device,
@@ -606,6 +613,7 @@ pub fn deinit(self: *Self) void {
     self.descriptorImageInfos.deinit();
     self.descriptorBufferInfos.deinit();
     self.descriptorBufferViewInfos.deinit();
+    self.renderTargets.deinit();
 
     Descriptor.destroyDescriptorSetLayout(
         self.device,
@@ -650,7 +658,8 @@ pub fn deinit(self: *Self) void {
 
     var entryNames = self.entryNames.iterator();
     while (entryNames.next()) |name| {
-        self.allocator.free(name.key_ptr.*);
+        const ptr: *[:0]const u8 = @ptrCast(name.key_ptr);
+        self.allocator.free(ptr.*);
     }
     self.entryNames.deinit();
 
@@ -769,10 +778,10 @@ pub fn collectEntryName(self: *Self, entryName: []const u8) !*[]const u8 {
         return self.entryNames.getKeyPtr(entryName[0..len]).?;
     }
 
-    const name = try self.allocator.alloc(u8, len);
+    const name = try self.allocator.allocSentinel(u8, len, 0);
     @memcpy(name, entryName[0..len]);
     const res = try self.entryNames.getOrPutValue(name, void{});
-    // std.log.debug("entry name {s}", .{res.key_ptr.*});
+    std.log.debug("entry name {s}", .{res.key_ptr.*});
     // @breakpoint();
     return res.key_ptr;
 }
@@ -865,6 +874,8 @@ pub fn addPipelineCreateInfo(self: *Self, info: *VulkanPipelineInfo) !void {
         if (self.preGraphicInfoPtrs[self.graphicInfoCount].hasRendering) {
             self.preGraphicInfoPtrs[self.graphicInfoCount].renderingInfo.info.pColorAttachmentFormats = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].renderingInfo.colorAttachment);
         }
+
+        // std.log.debug("entry name {s}", .{self.preGraphicInfoPtrs[self.graphicInfoCount].shaderStageCreateInfo[0].pName});
 
         self.graphicPipelineCreateInfo[self.graphicInfoCount] = vk.VkGraphicsPipelineCreateInfo{
             .sType = vk.VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
@@ -1070,8 +1081,8 @@ fn _createVkImage(
     );
 
     return Image{
-        .vkImage = img,
-        .allocation = allocation,
+        .vkImage = @intFromPtr(img),
+        .allocation = @intFromPtr(allocation),
         .queueIndex = .init,
     };
 }
@@ -1277,9 +1288,10 @@ pub fn destroyImage(self: *Self, image: Image) void {
     const zone = tracy.initZone(@src(), .{ .name = "destroy image" });
     defer zone.deinit();
 
-    if (image.allocation == null) return;
+    // null
+    if (image.allocation == 0) return;
 
-    self.vmaS.destroyImage(@ptrCast(image.vkImage), image.allocation);
+    self.vmaS.destroyImage(@ptrFromInt(image.vkImage), @ptrFromInt(image.allocation));
 }
 
 pub fn readPipelineFileAndAdd(self: *Self, io: std.Io, fileID: i32, sqlite: ?*file.sqlite.sqlite3, isMesh: bool) !Pipeline_t {
@@ -1338,6 +1350,8 @@ pub fn readPipelineFileAndAdd(self: *Self, io: std.Io, fileID: i32, sqlite: ?*fi
 
     const handle = self.handles.createHandle(Handles.WaitFill, .pipeline);
 
+    // std.log.debug("entry name {s}", .{pipelineInfo.shaderStageCreateInfo[0].pName});
+
     const len = std.mem.len(@as([*c]u8, @ptrCast(&pipelineInfo.name)));
     const name = try self.allocator.dupe(u8, pipelineInfo.name[0..len]);
 
@@ -1350,7 +1364,6 @@ pub fn addWriteDescriptorSetImage(
     self: *Self,
     dstArrayElement: u32,
     imageView: vk.VkImageView,
-    sampler: vk.VkSampler,
     imageLayout: vk.VkImageLayout,
     dstSet: vk.VkDescriptorSet,
     dstBinding: u32,
@@ -1363,7 +1376,7 @@ pub fn addWriteDescriptorSetImage(
     errdefer _ = self.descriptorImageInfos.pop();
     imagePtr.* = vk.VkDescriptorImageInfo{
         .imageView = imageView,
-        .sampler = sampler,
+        .sampler = null,
         .imageLayout = imageLayout,
     };
 
@@ -1624,4 +1637,46 @@ pub fn getDescriptorSetsShaderStage(self: *Self, descriptorSet: vk.VkDescriptorS
     if (descriptorSet == self.globalTextureDescriptorSet) return vk.VK_SHADER_STAGE_FRAGMENT_BIT;
 
     return 0;
+}
+
+pub fn getRenderTarget(
+    self: *Self,
+    pTextureSet: *textureSet,
+    width: u32,
+    height: u32,
+    format: vk.VkFormat,
+    usage: vk.VkImageUsageFlags,
+    tiling: vk.VkImageTiling,
+    index: u32,
+) !textureSet.Texture_t {
+    var width_b = std.mem.toBytes(width);
+    var height_b = std.mem.toBytes(height);
+    var format_b = std.mem.toBytes(format);
+    var usage_b = std.mem.toBytes(usage);
+    var tiling_b = std.mem.toBytes(tiling);
+    var index_b = std.mem.toBytes(index);
+
+    var hasher = std.hash.XxHash32.init(0);
+    hasher.update(&width_b);
+    hasher.update(&height_b);
+    hasher.update(&format_b);
+    hasher.update(&usage_b);
+    hasher.update(&tiling_b);
+    hasher.update(&index_b);
+
+    const hash = hasher.final();
+
+    const res = try self.renderTargets.getOrPut(hash);
+    if (!res.found_existing) {
+        res.value_ptr.* = try pTextureSet.create2DTexture(
+            self,
+            width,
+            height,
+            format,
+            tiling,
+            usage,
+        );
+    }
+
+    return res.value_ptr.*;
 }

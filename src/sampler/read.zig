@@ -5,13 +5,13 @@ const fileSystem = @import("fileSystem");
 
 const tracy = @import("tracy");
 
-pub fn readSampler(io: std.Io, id: u32, allocator: std.mem.Allocator) !vk.VkSamplerCreateInfo {
+pub fn readSampler(io: std.Io, id: i32, db: fileSystem.sqlite3, allocator: std.mem.Allocator) !vk.VkSamplerCreateInfo {
     const zone = tracy.initZone(@src(), .{ .name = "read sampler" });
     defer zone.deinit();
 
     var buffer = [_]u8{0} ** 256;
 
-    var file = try fileSystem.getFile(io, @intCast(id));
+    var file = try fileSystem.getFile(io, @intCast(id), db);
     defer file.close(io);
 
     var reader = file.reader(io, &buffer);

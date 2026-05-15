@@ -8,8 +8,8 @@ layout(location = 2) flat in uint samplerIndex;
 
 layout(set = 0, binding = 0) uniform texture2D textures[];
 layout(set = 0, binding = 1) uniform writeonly image2D images[];
-layout(set = 0, binding = 2) uniform sampler samplers[16];
-layout(set = 0, binding = 2) uniform samplerShadow shadowSamplers[16];
+layout(set = 0, binding = 2) uniform sampler samplers[1];
+layout(set = 0, binding = 2) uniform samplerShadow shadowSamplers[1];
 
 layout(location = 0) out vec4 outColor;
 

@@ -2551,7 +2551,7 @@ pub const commands = struct {
         const textureContent = textureSet.getTextureCotent(texture_);
         const oldLayouts = textureContent.layouts;
         const oldQueue = textureContent.image.queueIndex;
-        const dstImage = textureContent.image.vkImage;
+        const dstImage: vk.VkImage = @ptrFromInt(textureContent.image.vkImage);
 
         // std.log.debug("old layouts {s}", .{@tagName(@as(vulkanType.VkImageLayout, @enumFromInt(oldLayouts[0])))});
 
@@ -2560,7 +2560,7 @@ pub const commands = struct {
         var count: u32 = 0;
         var transNode: twoQueueNode = .{};
 
-        for (oldLayouts) |layout| {
+        for (oldLayouts[0..textureContent.layoutCount]) |layout| {
             if (currentLayout == newLayout) {
                 currentLayout = layout;
                 currentBase += 1;

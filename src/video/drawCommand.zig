@@ -280,6 +280,7 @@ pub const Present = struct {
     pipeline: VkStruct.Pipeline_t,
     descriptorSets: []vk.VkDescriptorSet,
     pTextures: []texture.Texture_t,
+    pushConstants: PushConstantPack,
 };
 
 pub const PresentRecord = struct {

@@ -144,7 +144,6 @@ pub fn render_thread_func(args: Args) !void {
         vk.VK_FORMAT_R8G8B8A8_SRGB,
         vk.VK_IMAGE_TILING_OPTIMAL,
         vk.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | vk.VK_IMAGE_USAGE_SAMPLED_BIT,
-        "texture_test",
     );
 
     const colorAttachment = vk.VkRenderingAttachmentInfo{
@@ -260,15 +259,15 @@ pub fn render_thread_func(args: Args) !void {
     // );
     // try meshes.loadMeshlet(comptime file.comptimeGetID("Suzanne_0.vtx"), gpa, &vulkan, &commands);
 
-    // try vulkan.addWriteDescriptorSetBuffer(
-    //     0,
-    //     vulkan.buffers.getVkBuffer(ubo_test),
-    //     0,
-    //     vulkan.buffers.getBufferSize(ubo_test),
-    //     vulkan.globalFixed2dMVPMatrixDescriptorSet,
-    //     0,
-    //     vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-    // );
+    try vulkan.addWriteDescriptorSetBuffer(
+        0,
+        vulkan.buffers.getVkBuffer(ubo_test),
+        0,
+        vulkan.buffers.getBufferSize(ubo_test),
+        vulkan.globalFixed2dMVPMatrixDescriptorSet,
+        0,
+        vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+    );
 
     // try vulkan.addWriteDescriptorSetBuffer(
     //     0,
@@ -330,7 +329,7 @@ pub fn render_thread_func(args: Args) !void {
     //     vk.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
     // );
 
-    // vulkan.writeCachedDescriptorSetResources();
+    vulkan.writeCachedDescriptorSetResources();
 
     const viewport_test = try vulkan.viewports.createViewport(io, .{
         .x = 0,
@@ -456,13 +455,13 @@ pub fn render_thread_func(args: Args) !void {
     //     .stageFlag = vk.VK_SHADER_STAGE_COMPUTE_BIT,
     // };
 
-    commands.setRendering(0, vk.VkRect2D{
-        .extent = .{
-            .width = vulkan.windowWidth,
-            .height = vulkan.windowHeight,
-        },
-        .offset = .{ .x = 0, .y = 0 },
-    }, 1, 0, false);
+    // commands.setRendering(0, vk.VkRect2D{
+    //     .extent = .{
+    //         .width = vulkan.windowWidth,
+    //         .height = vulkan.windowHeight,
+    //     },
+    //     .offset = .{ .x = 0, .y = 0 },
+    // }, 1, 0, false);
     commands.setRendering(0, vk.VkRect2D{
         .extent = .{
             .width = vulkan.windowWidth,
@@ -471,7 +470,7 @@ pub fn render_thread_func(args: Args) !void {
         .offset = .{ .x = 0, .y = 0 },
     }, 1, 0, true);
 
-    try commands.setRenderingColorAttachment(0, colorAttachment, texture_test, false);
+    // try commands.setRenderingColorAttachment(0, colorAttachment, texture_test, false);
     try commands.setRenderingColorAttachment(0, colorAttachment, texture_test, true);
 
     // global.stopNodeDagPrint = false;
@@ -487,6 +486,7 @@ pub fn render_thread_func(args: Args) !void {
     var resources: std.array_list.Managed(resource.Resource) = .init(gpa);
     defer resources.deinit();
 
+    var testDraw = false;
     // if (true) return;
 
     while (true) {
@@ -494,11 +494,14 @@ pub fn render_thread_func(args: Args) !void {
             const frame = vulkan.totalFrame.load(.seq_cst);
             // _ = frame;
 
-            if (frame == 3) {
+            if (frame == 1000) {
                 passes.enablePass("indirect2D");
+                passes.enablePass("present");
+                testDraw = true;
             }
-            if (frame == 13) {
+            if (frame == 1010) {
                 passes.disablePass("indirect2D");
+                passes.disablePass("present");
             }
 
             // std.log.debug("frame {d}", .{frame});
@@ -538,11 +541,16 @@ pub fn render_thread_func(args: Args) !void {
             for (resources.items) |r| {
                 switch (r) {
                     .texture => |texture| {
-                        _ = try pTextureSet.createTextureFromResource(io, texture, &commands);
+                        _ = try pTextureSet.createTextureFromResource(
+                            io,
+                            texture,
+                            vulkan,
+                            &commands,
+                        );
+                        std.log.debug("r {s} {d}", .{ @tagName(r), frame });
                     },
                     .others => {},
                 }
-                std.log.debug("r {s}", .{@tagName(r)});
             }
 
             const infos = stateBuffering.getReadyBuffer();
@@ -554,15 +562,27 @@ pub fn render_thread_func(args: Args) !void {
             try commands.addCachedCommand();
 
             for (infos.items) |value| {
+                _ = value;
+                if (testDraw) {
+                    testDraw = false;
+                    // std.log.debug("ID {d}", .{file.getID("box.png")});
+                    const box = pTextureSet.getTexture(@intCast(file.getID("box.png"))).?;
+                    try passes.passMap.get("indirect2D").?.useTexture(box, gpa);
+                }
                 // std.log.debug("info {d}", .{value});
-                if (value == 0) {}
             }
 
             for (args.passes.passes) |*value| {
                 if (value.enabled) {
-                    // try value.addCommand(null, vulkan, &commands);
+                    try value.addCommand(
+                        null,
+                        vulkan,
+                        pTextureSet,
+                        &commands,
+                        gpa,
+                    );
 
-                    std.log.debug("pass {s}", .{value.name});
+                    // std.log.debug("pass {s}", .{value.name});
                 }
             }
 

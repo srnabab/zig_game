@@ -331,6 +331,7 @@ pub fn build(b: *std.Build) void {
     renderFlow_mod.addImport("video", video_mod);
     renderFlow_mod.addImport("vulkan", vk_c_mod);
     renderFlow_mod.addImport("passImp", pass_mod);
+    renderFlow_mod.addImport("textureSet", textureSet_mod);
 
     pass_mod.addImport("renderFlow", renderFlow_mod);
     pass_mod.addImport("textureSet", textureSet_mod);

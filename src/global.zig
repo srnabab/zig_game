@@ -47,6 +47,9 @@ pub const StorageBufferMeshletTrianglesEnd = StorageBufferMeshletTrianglesSize +
 
 pub const MeshletStorageBufferSize = StorageBufferMeshletTrianglesEnd;
 
+pub var SamplerNames = [_][]const u8{"pixel2dSampler.sampler"};
+pub const TotalSamplerCount = SamplerNames.len;
+
 pub var FrameInFlight: u32 = 2;
 
 pub var stopNodeDagPrint = true;

@@ -171,7 +171,7 @@ fn createShaderStageCreateInfo(
                 .module = null,
                 .pSpecializationInfo = null,
             };
-            std.mem.copyForwards(u8, &names.*[i], &shaderInfos[i].entryName);
+            @memcpy(&names.*[i], &shaderInfos[i].entryName);
             count.* += 1;
         }
     }

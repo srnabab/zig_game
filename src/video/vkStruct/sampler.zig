@@ -5,6 +5,7 @@ const vk = @import("vulkan");
 const samplerRead = @import("sampler");
 const resultToError = @import("resultToError");
 const file = @import("fileSystem");
+const global = @import("global");
 
 const checkVkResult = resultToError.checkVkResult;
 
@@ -14,10 +15,18 @@ pub const SamplerType = enum {
 
 const Self = @This();
 
-pixel2dSampler: vk.VkSampler = null,
+samplers: [global.TotalSamplerCount]vk.VkSampler = undefined,
 
-pub fn _createSampler(io: std.Io, device: vk.VkDevice, pAllocCallBacks: [*c]vk.VkAllocationCallbacks, allocator: std.mem.Allocator, ID: u32, anisotropy: f32) !vk.VkSampler {
-    var info = try samplerRead.readSampler(io, ID, allocator);
+pub fn _createSampler(
+    io: std.Io,
+    device: vk.VkDevice,
+    db: file.sqlite3,
+    pAllocCallBacks: [*c]vk.VkAllocationCallbacks,
+    allocator: std.mem.Allocator,
+    ID: i32,
+    anisotropy: f32,
+) !vk.VkSampler {
+    var info = try samplerRead.readSampler(io, ID, db, allocator);
     info.maxAnisotropy = anisotropy;
 
     var sampler: vk.VkSampler = null;
@@ -27,16 +36,32 @@ pub fn _createSampler(io: std.Io, device: vk.VkDevice, pAllocCallBacks: [*c]vk.V
     return sampler;
 }
 
-pub fn initSamplers(self: *Self, io: std.Io, device: vk.VkDevice, pAllocCallBacks: [*c]vk.VkAllocationCallbacks, allocator: std.mem.Allocator) !void {
-    self.pixel2dSampler = try _createSampler(io, device, pAllocCallBacks, allocator, comptime file.comptimeGetID("pixel2dSampler.sampler"), 1.0);
+pub fn initSamplers(
+    self: *Self,
+    io: std.Io,
+    device: vk.VkDevice,
+    fileNames: [][]const u8,
+    db: file.sqlite3,
+    pAllocCallBacks: [*c]vk.VkAllocationCallbacks,
+    allocator: std.mem.Allocator,
+) !void {
+    std.debug.assert(fileNames.len == global.TotalSamplerCount);
+
+    for (fileNames, 0..) |name, i| {
+        self.samplers[i] = try _createSampler(
+            io,
+            device,
+            db,
+            pAllocCallBacks,
+            allocator,
+            file.getID(name),
+            1.0,
+        );
+    }
 }
 
 pub fn destroySamplers(self: *Self, device: vk.VkDevice, pAllocCallBacks: [*c]vk.VkAllocationCallbacks) void {
-    vk.vkDestroySampler(device, self.pixel2dSampler, pAllocCallBacks);
-}
-
-pub fn getDefaultSampler(self: *Self, samplerType: SamplerType) vk.VkSampler {
-    return switch (samplerType) {
-        .pixel2d => self.pixel2dSampler,
-    };
+    for (self.samplers) |sampler| {
+        vk.vkDestroySampler(device, sampler, pAllocCallBacks);
+    }
 }
