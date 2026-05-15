@@ -217,10 +217,17 @@ pub fn update_thread_func(args: Args) !void {
                 );
                 std.log.debug("box {any}", .{boxPng});
 
-                // resourceArray.mutex.lock(io);
-                // defer resourceArray.mutex.unlock(io);
-                // const ptr = try resourceArray.array.addOne();
-                // ptr.* = resourceValue;
+                resourceArray.mutex.lockUncancelable(io);
+                defer resourceArray.mutex.unlock(io);
+                const ptr = try resourceArray.array.addOne();
+                ptr.* = .{ .position2D = .{
+                    .x = 0,
+                    .y = 0,
+                    .width = 48,
+                    .height = 32,
+                    .depth = 0.1,
+                    .texture = @ptrCast(boxPng),
+                } };
 
                 // resourceValue += 1;
             }

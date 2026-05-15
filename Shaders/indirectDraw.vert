@@ -2,12 +2,14 @@
 
 #extension GL_EXT_scalar_block_layout : require
 #extension GL_EXT_buffer_reference : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int16 : require
 
 struct Instance {
     vec3 pos;
     vec2 scale;
     uint textureIndex;
-    uint flag;
+    uint16_t samplerIndex;
+    uint16_t flag;
 };
 
 layout(buffer_reference, scalar) readonly buffer InstanceBuffer {

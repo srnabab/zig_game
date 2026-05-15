@@ -54,6 +54,7 @@ const featureNeed = [_][]const u8{
     "depthBiasClamp",
     "wideLines",
     "robustBufferAccess",
+    "shaderInt16",
 };
 const featureIndexingNeed = [_][]const u8{
     "shaderUniformBufferArrayNonUniformIndexing",
@@ -80,6 +81,7 @@ const featureMaintenance4Need = [_][]const u8{"maintenance4"};
 const featureScalarBlockLayoutNeed = [_][]const u8{"scalarBlockLayout"};
 const featureBufferDeviceAddressNeed = [_][]const u8{"bufferDeviceAddress"};
 const featureSwapchainMaintenance1Need = [_][]const u8{"swapchainMaintenance1"};
+const feature16BitStorageNeed = [_][]const u8{"storageBuffer16BitAccess"};
 
 const typeNames = struct {
     featureType: type,
@@ -99,6 +101,7 @@ const featureTypeAndNames = [_]typeNames{
     .{ .featureType = vk.VkPhysicalDeviceScalarBlockLayoutFeatures, .names = &featureScalarBlockLayoutNeed },
     .{ .featureType = vk.VkPhysicalDeviceBufferDeviceAddressFeatures, .names = &featureBufferDeviceAddressNeed },
     .{ .featureType = vk.VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR, .names = &featureSwapchainMaintenance1Need },
+    .{ .featureType = vk.VkPhysicalDevice16BitStorageFeatures, .names = &feature16BitStorageNeed },
 };
 
 const VkQueueFamily = types.VkQueueFamily;
@@ -185,6 +188,7 @@ fn getSType(comptime T: type) vk.VkStructureType {
         vk.VkPhysicalDeviceScalarBlockLayoutFeatures => vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES,
         vk.VkPhysicalDeviceBufferDeviceAddressFeatures => vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES,
         vk.VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR => vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR,
+        vk.VkPhysicalDevice16BitStorageFeatures => vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES,
         // ... 在这里添加新类型的映射
         else => @compileError(std.fmt.comptimePrint("Unsupported feature type {s}", .{@typeName(T)})),
     };

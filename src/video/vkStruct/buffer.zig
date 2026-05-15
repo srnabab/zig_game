@@ -47,8 +47,9 @@ pub const Buffer = struct {
     allocation: Allocation,
     size: vk.VkDeviceSize,
     stride: vk.VkDeviceSize = 0,
-    usage: Usage = .none,
     offset: vk.VkDeviceSize = 0,
+    usage: Usage = .none,
+    writed: bool = false,
 };
 
 pub const Buffer_t = *opaque {};
@@ -308,6 +309,27 @@ pub fn changeQueueType(self: *Self, buffer: Buffer_t, queueType: QueueType) void
         .have => ptr.queue.have = queueType,
         .ref => self.changeQueueType(ptr.queue.ref, queueType),
     }
+}
+
+pub fn writeBuffer(self: *Self, buffer: Buffer_t) void {
+    const index = getIndex(@ptrCast(buffer)).?;
+    const ptr = self.buffers.get(index);
+
+    ptr.writed = true;
+}
+
+pub fn unWriteBuffer(self: *Self, buffer: Buffer_t) void {
+    const index = getIndex(@ptrCast(buffer)).?;
+    const ptr = self.buffers.get(index);
+
+    ptr.writed = false;
+}
+
+pub fn bufferIsWrited(self: *Self, buffer: Buffer_t) bool {
+    const index = getIndex(@ptrCast(buffer)).?;
+    const ptr = self.buffers.get(index);
+
+    return ptr.writed;
 }
 
 // pub fn changeUsage(self: *Self, buffer: Buffer_t, usage: Usage) void {

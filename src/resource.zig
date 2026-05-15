@@ -7,11 +7,13 @@ const Texture_t = @import("textureSet").Texture_t;
 
 pub const ResourceType = enum {
     texture,
+    position2D,
     others,
 };
 
 pub const Resource = union(ResourceType) {
     texture: ResourceTexture,
+    position2D: ResourcePosition2D,
     others: ResourceOthers,
 };
 
@@ -34,9 +36,10 @@ pub const ResourceOthers = struct {
 };
 
 pub const ResourcePosition2D = struct {
-    x: u32,
-    y: u32,
-    width: u32,
-    height: u32,
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    depth: f32,
     texture: Texture_t,
 };

@@ -12,6 +12,7 @@ pub const CommandType = enum {
     drawMesh,
     drawMeshIndirect,
     empty,
+    fillBuffer,
     present,
 };
 
@@ -24,6 +25,7 @@ pub const comm = union(CommandType) {
     drawMesh: DrawMesh,
     drawMeshIndirect: DrawMeshIndirect,
     empty: void,
+    fillBuffer: FillBuffer,
     present: Present,
 };
 
@@ -46,6 +48,8 @@ pub const CommandType2 = enum {
     end,
     endRecord,
     endRendering,
+    fillBuffer,
+    setMemoryBarrier,
     pipelineBarrier,
     presentRecord,
     pushconstant,
@@ -74,6 +78,8 @@ pub const comm2 = union(CommandType2) {
     end: void,
     endRecord: void,
     endRendering: void,
+    fillBuffer: FillBuffer,
+    setMemoryBarrier: SetMemoryBarrier,
     pipelineBarrier: PipelineBarrier,
     presentRecord: PresentRecord,
     pushconstant: PushConstant,
@@ -82,6 +88,8 @@ pub const comm2 = union(CommandType2) {
     start: Start,
     transLayout: TransLayout,
 };
+
+pub const SetMemoryBarrier = struct {};
 
 pub const TransLayout = struct {
     // pTexture: texture.Texture_t,
@@ -161,7 +169,6 @@ pub const Start = struct {
     present: bool = false,
     currentIndex: u32 = std.math.maxInt(u32),
 };
-
 pub const MemoryBarrier = struct {
     srcStageMask: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_NONE,
     srcAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_NONE,
@@ -346,6 +353,13 @@ pub const Compute = struct {
 
 pub const ComputeRecord = struct {
     groupCount: u32,
+};
+
+pub const FillBuffer = struct {
+    buffer: VkStruct.Buffer_t,
+    offset: vk.VkDeviceSize,
+    size: vk.VkDeviceSize,
+    value: u32,
 };
 
 // pub const Output = union {
