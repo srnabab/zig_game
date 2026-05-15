@@ -3,6 +3,7 @@ const vk = @import("vk");
 const vma = @import("vma");
 const VkStruct = @import("video");
 const Handles = @import("handle");
+const Texture_t = @import("textureSet").Texture_t;
 
 pub const ResourceType = enum {
     texture,
@@ -30,4 +31,12 @@ pub const ResourceOthers = struct {
     fileID: u32,
     mem: []u8,
     handle: Handles.Handle,
+};
+
+pub const ResourcePosition2D = struct {
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+    texture: Texture_t,
 };

@@ -323,7 +323,10 @@ fn SpecialThreadPool(maxThreads: u32) type {
                     try self.info[i].?.mutex.lock(self.io);
                     defer self.info[i].?.mutex.unlock(self.io);
 
-                    self.info[i].?.taskQueue.pushLast(self.io, .{ .com = &end, .node = &emptyQueueNode }) catch |err| {
+                    self.info[i].?.taskQueue.pushLast(.{
+                        .com = &end,
+                        .node = &emptyQueueNode,
+                    }) catch |err| {
                         std.log.err("failed to push end command to thread task queue: {s}", .{@errorName(err)});
                     };
                     self.info[i].?.semaphore.post(self.io);
@@ -706,12 +709,12 @@ fn DAG(T: type) type {
         }
     };
 }
-pub fn iterate(self: *QueueNodes, startSemaphoreValue: u64) !QueueNodeIterator {
+pub fn iterate(self: *QueueNodes, startSemaphoreValue: u64, io: std.Io) !QueueNodeIterator {
     const node = self.get(0);
 
     return .{
         .hm = self,
-        .nextNodeQueue = try .init(self.arena.allocator()),
+        .nextNodeQueue = try .init(self.arena.allocator(), io),
         .currentNode = node,
         .semaphoreValue = startSemaphoreValue,
     };
@@ -728,7 +731,7 @@ const QueueNodeIterator = struct {
     semaphoreValue: u64,
     begin: bool = true,
 
-    pub fn next(it: *QueueNodeIterator, io: std.Io, currentSemaphoreValue: u64) ?*QueueNode {
+    pub fn next(it: *QueueNodeIterator, currentSemaphoreValue: u64) ?*QueueNode {
         if (it.begin) {
             it.begin = false;
             return it.currentNode;
@@ -740,7 +743,6 @@ const QueueNodeIterator = struct {
         if (it.currentNode != null) {
             if (it.currentNode.?.childrenLen > 1) {
                 it.nextNodeQueue.pushLast(
-                    io,
                     .{
                         .node = it.currentNode.?,
                         .semaphoreValue = currentSemaphoreValue,
@@ -762,13 +764,13 @@ const QueueNodeIterator = struct {
                 times += 1;
 
                 if (it.currentNode == null) {
-                    _ = it.nextNodeQueue.popLast(io);
+                    _ = it.nextNodeQueue.popLast();
                     node = it.nextNodeQueue.peekLast();
                 } else if (it.currentNode.?.parentsDone < it.currentNode.?.parentsLen) {
                     it.currentNode = value.node.getNextUndoneChild();
                     times += 1;
                     if (times > value.node.childrenLen - value.node.childrenDone) {
-                        _ = it.nextNodeQueue.popLast(io);
+                        _ = it.nextNodeQueue.popLast();
                         node = it.nextNodeQueue.peekLast();
                         times = 0;
                     }
@@ -818,7 +820,6 @@ const QueueNodeIterator = struct {
 
                 if (it.currentNode != startNode and enterNode != null)
                     it.nextNodeQueue.pushFirst(
-                        io,
                         .{
                             .node = enterNode.?,
                             .semaphoreValue = currentSemaphoreValue,
@@ -5177,10 +5178,10 @@ pub const oneTimeCommand = struct {
             queueNode: *QueueNode,
             threadCtx: ?*ThreadContext,
         };
-        var prepareToExecuteQueue: Queue(taskQueueStruct) = try .init(self.allocator);
+        var prepareToExecuteQueue: Queue(taskQueueStruct) = try .init(self.allocator, self.io);
         defer prepareToExecuteQueue.deinit();
 
-        var inferNodeNextTaskQueue: Queue(taskQueueStruct) = try .init(self.allocator);
+        var inferNodeNextTaskQueue: Queue(taskQueueStruct) = try .init(self.allocator, self.io);
         defer inferNodeNextTaskQueue.deinit();
 
         var finalPrimaryTaskQueue = std.array_list.Managed(*QueueNode).init(self.allocator);
@@ -5251,10 +5252,14 @@ pub const oneTimeCommand = struct {
 
             // std.log.debug("current index {d}, current frame {d}", .{ currentIndex, currentFrame });
 
-            var iterator = try iterate(&pCommands.nodeDag, currentSemaphoreValue);
+            var iterator = try iterate(
+                &pCommands.nodeDag,
+                currentSemaphoreValue,
+                self.io,
+            );
             defer iterator.deinit();
 
-            while (iterator.next(self.io, currentSemaphoreValue)) |nn| {
+            while (iterator.next(currentSemaphoreValue)) |nn| {
                 if (!global.storExecuteSequencePrint)
                     std.log.debug("ID {d}", .{nn.ID});
 

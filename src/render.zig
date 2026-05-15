@@ -482,7 +482,6 @@ pub fn render_thread_func(args: Args) !void {
 
     // vulkan.logBufferPtr();
     // vulkan.logPipeline();
-
     var resources: std.array_list.Managed(resource.Resource) = .init(gpa);
     defer resources.deinit();
 

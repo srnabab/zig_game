@@ -344,6 +344,7 @@ pub fn build(b: *std.Build) void {
     resource_mod.addImport("vk", vk_c_mod);
     resource_mod.addImport("vma", vma_mod);
     resource_mod.addImport("handle", handle_mod);
+    resource_mod.addImport("textureSet", textureSet_mod);
 
     twoChannel_mod.addImport("ringBuffer", ringBuffer_mod);
 
