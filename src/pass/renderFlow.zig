@@ -28,6 +28,10 @@ pub fn deinit() void {
 }
 
 pub fn createBuffer(name: []const u8, initSize: u64, stride: u64, usage: Pass.BufferUsage) !Pass.Buffer {
+    if (buffers.get(name)) |buffer| {
+        return buffer;
+    }
+
     const name_dupe = try allocator.allocator().dupe(u8, name);
 
     const buffer = Pass.Buffer{

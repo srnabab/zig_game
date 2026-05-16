@@ -165,7 +165,7 @@ pub fn main(init: std.process.Init) !void {
     );
     {
         var tempDb: ?*file.sqlite.sqlite3 = null;
-        file.init(&tempDb);
+        file.init(init.io, &tempDb);
         defer file.deinit(tempDb);
         try vulkan.initVulkan(init.io, &pTextureSet, tempDb);
     }
@@ -180,7 +180,7 @@ pub fn main(init: std.process.Init) !void {
     var passes: pass = undefined;
     {
         var tempDb: ?*file.sqlite.sqlite3 = null;
-        file.init(&tempDb);
+        file.init(init.io, &tempDb);
         defer file.deinit(tempDb);
 
         passes = try pass.initFromRenderFlow(init.io, gpa, &vulkan, tempDb);

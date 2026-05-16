@@ -376,7 +376,7 @@ fn Graph(T: type) type {
             if (!(try self.children.append(ID))) {
                 self.childrenLen += 1;
 
-                // if (self.ID == 4 and ID.* == 4) {
+                // if (self.ID == 12 and ID.* == 9) {
                 //     @breakpoint();
                 // }
                 // if (self.ID == 20 and ID.* == 3) {
@@ -875,11 +875,28 @@ fn nodeDagPrint(self: *QueueNodes, self2: *commands) void {
     }
 
     if (global.printDagToDot) {
-        const time = std.Io.Timestamp.now(self2.io, .real).toNanoseconds();
-        const timeBytes = std.mem.toBytes(time);
-        const timeHex = std.fmt.bytesToHex(timeBytes, .lower);
-        var pathBuffer = [_]u8{0} ** 64;
-        const path = std.fmt.bufPrint(&pathBuffer, "{s}", .{timeHex}) catch |err| {
+        const epochSeconds = std.time.epoch.EpochSeconds{
+            .secs = @intCast(std.Io.Timestamp.now(self2.io, .real).toSeconds()),
+        };
+        const epochDay = epochSeconds.getEpochDay();
+        const daySeconds = epochSeconds.getDaySeconds();
+
+        const year = epochDay.calculateYearDay().year;
+        const month = epochDay.calculateYearDay().calculateMonthDay().month;
+        const day = epochDay.calculateYearDay().calculateMonthDay().day_index;
+        const hour = daySeconds.getHoursIntoDay();
+        const minute = daySeconds.getMinutesIntoHour();
+        const second = daySeconds.getSecondsIntoMinute();
+
+        var pathBuffer = [_]u8{0} ** 21;
+        const path = std.fmt.bufPrint(&pathBuffer, "{d}-{s}-{d}-{d} {d} {d}", .{
+            year,
+            @tagName(month),
+            day,
+            hour,
+            minute,
+            second,
+        }) catch |err| {
             std.log.err("write err: {s} 6", .{@errorName(err)});
             return;
         };
@@ -1157,7 +1174,7 @@ pub const commands = struct {
         var stackAllocators: [global.MaxFrameInFlight]std.heap.FixedBufferAllocator = undefined;
         const averageSize = buffers.len / (global.MaxFrameInFlight);
 
-        std.log.debug("average size {d}", .{averageSize});
+        std.log.debug("average stack size {d}", .{averageSize});
 
         for (0..stackAllocators.len) |i| {
             stackAllocators[i] = .init(buffers[i * averageSize ..][0..averageSize]);
@@ -1605,7 +1622,7 @@ pub const commands = struct {
             },
 
             vk.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR => {
-                dstAccessMask = vk.VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+                dstAccessMask = vk.VK_ACCESS_2_NONE;
                 destinationStage = vk.VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
                 aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
             },
@@ -1874,6 +1891,8 @@ pub const commands = struct {
                     rootNode.data.commandPoolType = .graphic;
                 } else if (enterCommandType == .compute) {
                     rootNode.data.commandPoolType = .compute;
+                } else if (enterCommandType == .present) {
+                    rootNode.data.commandPoolType = .graphic;
                 } else {
                     std.debug.panic("pushconstant unprocessed enterCommandType {s}", .{@tagName(enterCommandType)});
                 }
@@ -2545,7 +2564,10 @@ pub const commands = struct {
                     .command = .{ .bindDescriptorSets = bindDescriptorSets },
                 };
                 // rootNode.listID = self.nodeDag.currentListID;
-                rootNode.data.commandPoolType = .graphic;
+                rootNode.data.commandPoolType = switch (enterCommandType) {
+                    .compute => .compute,
+                    else => .graphic,
+                };
 
                 resNode = rootNode;
             },
@@ -4103,6 +4125,7 @@ pub const commands = struct {
                     pipeline = present.pipeline;
                     pRendering = &self.presentRendering;
                     isPresent = true;
+                    pushConstants = present.pushConstants;
 
                     ptr.value_ptr.command = .{
                         .presentRecord = .{ .empty = void{} },
@@ -4594,6 +4617,13 @@ pub const commands = struct {
 
                 // currentNode.listID.?.* = self.nodeDag.newListID();
             }
+
+            if (currentNode.parentsLen == 0) {
+                // std.log.debug("no parent {d}", .{currentNode.ID});
+                const root = self.nodeDag.get(0).?;
+                try self.nodeDag.childrenAppend(root, currentNode);
+                try currentNode.parentsAppend(&root.ID);
+            }
         }
         zone3.deinit();
 
@@ -4778,7 +4808,8 @@ pub const oneTimeCommand = struct {
                 const innerZone = tracy.initZone(@src(), .{ .name = "compute" });
                 defer innerZone.deinit();
 
-                vk.vkCmdDispatch(commandBuffer, command.command.computeRecord.groupCount, 1, 1);
+                if (command.command.computeRecord.groupCount > 0)
+                    vk.vkCmdDispatch(commandBuffer, command.command.computeRecord.groupCount, 1, 1);
             },
             .pushconstant => {
                 const innerZone = tracy.initZone(@src(), .{ .name = "push constant" });
@@ -5076,9 +5107,17 @@ pub const oneTimeCommand = struct {
                 // std.log.debug("count: {d}", .{bindDescriptorSets.descriptorSets.len});
                 // std.log.debug("first set {d}", .{bindDescriptorSets.firstSet});
 
+                const bindPoint = if (bindDescriptorSets.bindDescriptorSetsInfo.stageFlags & vk.VK_SHADER_STAGE_COMPUTE_BIT > 0) bp: {
+                    break :bp vk.VK_PIPELINE_BIND_POINT_COMPUTE;
+                } else if (bindDescriptorSets.bindDescriptorSetsInfo.stageFlags & vk.VK_SHADER_STAGE_FRAGMENT_BIT > 0) bp: {
+                    break :bp vk.VK_PIPELINE_BIND_POINT_GRAPHICS;
+                } else bp: {
+                    break :bp vk.VK_PIPELINE_BIND_POINT_GRAPHICS;
+                };
+
                 vk.vkCmdBindDescriptorSets(
                     commandBuffer,
-                    vk.VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    @intCast(bindPoint),
                     bindDescriptorSets.bindDescriptorSetsInfo.layout,
                     bindDescriptorSets.bindDescriptorSetsInfo.firstSet,
                     bindDescriptorSets.bindDescriptorSetsInfo.descriptorSetCount,
@@ -5421,9 +5460,6 @@ pub const oneTimeCommand = struct {
             defer iterator.deinit();
 
             while (iterator.next(currentSemaphoreValue)) |nn| {
-                if (!global.storExecuteSequencePrint)
-                    std.log.debug("ID {d}", .{nn.ID});
-
                 if (begin and nn.data.commandPoolType != currentType) {
                     defer signalSemaphoreSubmitInfos.clearRetainingCapacity();
                     defer waitSemaphoreSubmitInfos.clearRetainingCapacity();
@@ -5476,6 +5512,7 @@ pub const oneTimeCommand = struct {
                     };
 
                     submitInfo.waitSemaphoreInfoCount = @intCast(waitSemaphoreSubmitInfos.items.len);
+                    // std.log.debug("wait len {d}", .{waitSemaphoreSubmitInfos.items.len});
                     submitInfo.pWaitSemaphoreInfos = @ptrCast(waitSemaphoreSubmitInfos.items.ptr);
                     submitInfo.commandBufferInfoCount = 1;
                     submitInfo.pCommandBufferInfos = @ptrCast(&temp3);
@@ -5500,6 +5537,9 @@ pub const oneTimeCommand = struct {
 
                     begin = false;
                 }
+
+                if (!global.storExecuteSequencePrint)
+                    std.log.debug("ID {d}", .{nn.ID});
 
                 if (!begin) {
                     switch (nn.data.commandPoolType) {
@@ -5643,6 +5683,7 @@ pub const oneTimeCommand = struct {
                 };
 
                 submitInfo.waitSemaphoreInfoCount = @intCast(waitSemaphoreSubmitInfos.items.len);
+                // std.log.debug("wait len {d}", .{waitSemaphoreSubmitInfos.items.len});
                 submitInfo.pWaitSemaphoreInfos = @ptrCast(waitSemaphoreSubmitInfos.items.ptr);
                 submitInfo.commandBufferInfoCount = 1;
                 submitInfo.pCommandBufferInfos = @ptrCast(&temp4);

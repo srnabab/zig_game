@@ -26,8 +26,16 @@ const layerNeeded = layer: {
 };
 const validationFeature = [_]vk.VkValidationFeatureEnableEXT{
     vk.VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT,
+    vk.VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,
+    // vk.VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
+    // vk.VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT,
 };
-const extensionNeeded = [_][*c]const u8{ "VK_KHR_surface", "VK_KHR_win32_surface" };
+const extensionNeeded = [_][*c]const u8{
+    "VK_KHR_surface",
+    "VK_KHR_win32_surface",
+    "VK_EXT_debug_utils",
+    "VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME",
+};
 const deviceExtensionNeeded = [_][*c]const u8{
     "VK_KHR_swapchain",
     "VK_EXT_descriptor_indexing",
@@ -222,6 +230,11 @@ fn initFeatures(allocator: std.mem.Allocator) !*Features {
     return self;
 }
 
+var debugMessager: if (builtin.mode == .Debug or builtin.mode == .ReleaseSafe)
+    vk.VkDebugUtilsMessengerEXT
+else
+    void = undefined;
+
 pub fn createInstance(pAllocCallBacks: [*c]vk.VkAllocationCallbacks, allocator: std.mem.Allocator) VkError!vk.VkInstance {
     const zone = tracy.initZone(@src(), .{ .name = "create instance" });
     defer zone.deinit();
@@ -263,9 +276,21 @@ pub fn createInstance(pAllocCallBacks: [*c]vk.VkAllocationCallbacks, allocator: 
     );
     defer extension.deinit();
 
+    var debug = vk.VkDebugUtilsMessengerCreateInfoEXT{
+        .sType = vk.VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+        .pNext = null,
+        .messageSeverity = vk.VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+            vk.VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+        .messageType = vk.VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+            vk.VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+            vk.VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+        .pfnUserCallback = debugCallback,
+        .pUserData = null,
+    };
+
     var features = vk.VkValidationFeaturesEXT{
         .sType = vk.VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT,
-        .pNext = null,
+        .pNext = &debug,
         .enabledValidationFeatureCount = @intCast(validationFeature.len),
         .pEnabledValidationFeatures = &validationFeature,
     };
@@ -282,9 +307,31 @@ pub fn createInstance(pAllocCallBacks: [*c]vk.VkAllocationCallbacks, allocator: 
     };
 
     var instance: vk.VkInstance = null;
+
     try checkVkResult(vk.vkCreateInstance(&createInfo, pAllocCallBacks, @ptrCast(&instance)));
+    if (builtin.mode == .Debug or builtin.mode == .ReleaseSafe) {
+        const func: vk.PFN_vkCreateDebugUtilsMessengerEXT = @ptrCast(
+            vk.vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT") orelse return VkError.VkError,
+        );
+        try checkVkResult(func.?(
+            instance,
+            &debug,
+            pAllocCallBacks,
+            &debugMessager,
+        ));
+    }
 
     return instance;
+}
+
+pub fn destroyInstance(instance: vk.VkInstance, pAllocCallBacks: [*c]vk.VkAllocationCallbacks) void {
+    if (builtin.mode == .Debug or builtin.mode == .ReleaseSafe) {
+        const func: vk.PFN_vkDestroyDebugUtilsMessengerEXT = @ptrCast(
+            vk.vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT") orelse return,
+        );
+        func.?(instance, debugMessager, pAllocCallBacks);
+    }
+    vk.vkDestroyInstance(instance, pAllocCallBacks);
 }
 
 fn chooseEnabledLayers(comptime fields: type, comptime field_name: []const u8, neededName: []const [*c]const u8, physicalDevice: vk.VkPhysicalDevice, allocator: std.mem.Allocator) VkError!std.array_list.Managed([*c]const u8) {
@@ -561,4 +608,23 @@ fn calculateMemoryGPU(memoryProperty: vk.VkPhysicalDeviceMemoryProperties) u64 {
         }
     }
     return totalCount;
+}
+
+pub fn debugCallback(
+    messageSeverity: vk.VkDebugUtilsMessageSeverityFlagBitsEXT,
+    messageType: vk.VkDebugUtilsMessageTypeFlagsEXT,
+    pCallbackData: [*c]const vk.VkDebugUtilsMessengerCallbackDataEXT,
+    pUserData: ?*anyopaque,
+) callconv(.c) vk.VkBool32 {
+    _ = messageType;
+    _ = pUserData;
+
+    if (messageSeverity >= vk.VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
+        std.log.err("{s}", .{pCallbackData.*.pMessage});
+        @breakpoint();
+    } else {
+        std.log.debug("{s}", .{pCallbackData.*.pMessage});
+    }
+
+    return vk.VK_FALSE;
 }

@@ -7,6 +7,9 @@ const VTable = @import("renderFlow").Pass.VTable;
 const VkStruct = @import("video");
 const Commands = @import("processRender").commands;
 const TextureSet = @import("textureSet");
+const cglm = @import("cglm");
+
+const vec4 = cglm.vec4;
 
 const indirectPushConstant = struct {
     instanceBuffer: u64,
@@ -42,6 +45,7 @@ fn setIndirectDrawPushConstant(userdata: ?*anyopaque, pValues: *anyopaque) void 
 
     dst.* = src.*;
 }
+
 fn addCommand(
     userdata: ?*anyopaque,
     pass: *Pass,
@@ -236,7 +240,130 @@ fn addPresentPass() !void {
     try renderFlow.appendPass("present");
 }
 
+const IndirectComputePushConstant = extern struct {
+    instanceBuffer: u64,
+    indirectAddress: u64,
+    instanceIDs: u64,
+    viewBounds: vec4,
+    totalSpriteCount: u32,
+    padding: u32,
+};
+
+pub const ViewBoundsAndTotalSpriteCount = struct {
+    viewBounds: vec4,
+    totalSpriteCount: u32,
+};
+
+fn initIndirectCompute(
+    userdata: ?*anyopaque,
+    pass: *Pass,
+    vulkan: *VkStruct,
+    gpa: std.mem.Allocator,
+) !void {
+    _ = userdata;
+
+    const values = IndirectComputePushConstant{
+        .instanceBuffer = vulkan.getBufferAddress(pass.buffer[1]),
+        .indirectAddress = vulkan.getBufferAddress(pass.buffer[0]),
+        .instanceIDs = vulkan.getBufferAddress(pass.buffer[2]),
+        .viewBounds = .{ 0.0, 0.0, 0.0, 0.0 },
+        .totalSpriteCount = 0,
+        .padding = 0,
+    };
+
+    const dst: *IndirectComputePushConstant = @ptrCast(@alignCast(pass.pushConstant.pValues));
+    dst.* = values;
+
+    var descriptorSets = [_]vk.VkDescriptorSet{
+        vulkan.globalTextureDescriptorSet,
+    };
+
+    try pass.setDescriptorSets(&descriptorSets, gpa);
+}
+
+fn setIndirectComputePushConstant(userdata: ?*anyopaque, pValues: *anyopaque) void {
+    const src: *ViewBoundsAndTotalSpriteCount = @ptrCast(@alignCast(userdata.?));
+    const dst: *IndirectComputePushConstant = @ptrCast(@alignCast(pValues));
+
+    dst.viewBounds = src.viewBounds;
+    dst.totalSpriteCount = src.totalSpriteCount;
+}
+
+fn addIndirectComputeCommand(
+    userdata: ?*anyopaque,
+    pass: *Pass,
+    vulkan: *VkStruct,
+    textureSet: *TextureSet,
+    commands: *Commands,
+    gpa: std.mem.Allocator,
+) !void {
+    _ = textureSet;
+    _ = gpa;
+
+    pass.setPushConstants(userdata);
+
+    const src: *ViewBoundsAndTotalSpriteCount = @ptrCast(@alignCast(userdata.?));
+
+    const groupCount = (src.totalSpriteCount + 63) / 64;
+
+    try commands.addCommand(.compute, .{ .compute = .{
+        .descriptorSets = pass.descriptorSet,
+        .pipeline = pass.pipeline,
+        .pTextures = pass.texture,
+        .usedBuffers = pass.buffer,
+        .pushConstants = pass.pushConstant,
+        .groupCount = groupCount,
+    } });
+
+    vulkan.buffers.writeBuffer(pass.buffer[0]);
+    vulkan.buffers.writeBuffer(pass.buffer[2]);
+}
+
+const vtableIndirectCompute = VTable{
+    .init = initIndirectCompute,
+    .addCommand = addIndirectComputeCommand,
+    .setPushConstants = setIndirectComputePushConstant,
+};
+
+fn addIndirectComputePass() !void {
+    const passName = "indirectCompute";
+
+    const buffer = try renderFlow.createBuffer(
+        "indirectDrawCommand",
+        @sizeOf(vk.VkDrawIndirectCommand),
+        0,
+        .indirect,
+    );
+    const buffer2 = try renderFlow.createBuffer(
+        "instance2D",
+        1000 * @sizeOf(vertexStruct.Instance),
+        @sizeOf(vertexStruct.Instance),
+        .storage,
+    );
+    const buffer3 = try renderFlow.createBuffer(
+        "instanceID2D",
+        1000 * @sizeOf(u32),
+        @sizeOf(u32),
+        .storage,
+    );
+
+    const pipe = try renderFlow.addPipeline("indirectDrawCompute.pipeb", false);
+
+    try renderFlow.createPass(passName);
+
+    try renderFlow.addBufferToPass(passName, buffer);
+    try renderFlow.addBufferToPass(passName, buffer2);
+    try renderFlow.addBufferToPass(passName, buffer3);
+    try renderFlow.addPipelineToPass(passName, pipe);
+    try renderFlow.setPushConstant(passName, vk.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 48);
+
+    try renderFlow.addVTableToPass(passName, &vtableIndirectCompute);
+
+    try renderFlow.appendPass(passName);
+}
+
 pub fn setting() !void {
+    try addIndirectComputePass();
     try addIndirectDrawPass();
     try addPresentPass();
 }

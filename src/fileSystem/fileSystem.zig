@@ -12,11 +12,11 @@ pub const sqlite3 = ?*sqlite.sqlite3;
 
 pub const MaxID = base.MaxID;
 
-pub fn init(db: [*c]?*sqlite.sqlite3) void {
+pub fn init(io: std.Io, db: [*c]?*sqlite.sqlite3) void {
     const zone = tracy.initZone(@src(), .{ .name = "init sqlite database" });
     defer zone.deinit();
 
-    base.init(global.databaseName, db);
+    base.init(io, global.databaseName, db);
 }
 
 pub fn initManyDb(

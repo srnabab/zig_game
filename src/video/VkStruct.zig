@@ -241,12 +241,12 @@ entryNames: std.StringHashMap(void),
 
 pipelineCache: vk.VkPipelineCache = null,
 
-graphicPipelineCreateInfo: [10]vk.VkGraphicsPipelineCreateInfo = undefined,
-preGraphicInfoPtrs: [10]VulkanPipelineInfo = undefined,
+graphicPipelineCreateInfo: []vk.VkGraphicsPipelineCreateInfo = &.{},
+preGraphicInfoPtrs: []VulkanPipelineInfo = &.{},
 graphicInfoCount: u32 = 0,
 
-computePipelineCreateInfo: [10]vk.VkComputePipelineCreateInfo = undefined,
-preComputeicInfoPtrs: [10]VulkanPipelineInfo = undefined,
+computePipelineCreateInfo: []vk.VkComputePipelineCreateInfo = &.{},
+preComputeicInfoPtrs: []VulkanPipelineInfo = &.{},
 computeInfoCount: u32 = 0,
 
 pipelineMap: std.StringHashMap(Pipeline_t),
@@ -467,9 +467,9 @@ pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet, db: file.sq
     }
     self.imageAvailableSemaphore[0] = semaphores[0];
     self.imageAvailableSemaphore[1] = semaphores[1];
-    self.imageAvailableSemaphore[2] = semaphores[4];
-    self.renderFinishSemaphore[0] = semaphores[2];
-    self.renderFinishSemaphore[1] = semaphores[3];
+    self.imageAvailableSemaphore[2] = semaphores[2];
+    self.renderFinishSemaphore[0] = semaphores[3];
+    self.renderFinishSemaphore[1] = semaphores[4];
     self.renderFinishSemaphore[2] = semaphores[5];
 
     var semaphores2: [1]vk.VkSemaphore = undefined;
@@ -488,18 +488,18 @@ pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet, db: file.sq
         &self.endFence,
         @intCast(self.endFence.len),
     );
-    for (self.endFence) |value| {
-        std.log.debug("fence {*}", .{value});
-    }
+    // for (self.endFence) |value| {
+    //     std.log.debug("fence {*}", .{value});
+    // }
     try self._createFence(
         null,
         vk.VK_FENCE_CREATE_SIGNALED_BIT,
         &self.presentDoneFence,
         @intCast(self.presentDoneFence.len),
     );
-    for (self.presentDoneFence) |value| {
-        std.log.debug("fence {*}", .{value});
-    }
+    // for (self.presentDoneFence) |value| {
+    //     std.log.debug("fence {*}", .{value});
+    // }
 
     try self.samplers.initSamplers(
         io,
@@ -653,6 +653,10 @@ pub fn deinit(self: *Self) void {
         // }
     }
     self.pipelineMap.deinit();
+    self.allocator.free(self.computePipelineCreateInfo);
+    self.allocator.free(self.graphicPipelineCreateInfo);
+    self.allocator.free(self.preComputeicInfoPtrs);
+    self.allocator.free(self.preGraphicInfoPtrs);
 
     self.pipelines.deinit();
 
@@ -698,7 +702,7 @@ pub fn deinit(self: *Self) void {
 
     vk.vkDestroyDevice(self.device, self.pAllocCallBacks);
     sdl.SDL_Vulkan_DestroySurface(@ptrCast(self.*.instance), @ptrCast(self.*.surface), @ptrCast(self.*.pAllocCallBacks));
-    vk.vkDestroyInstance(self.*.instance, self.*.pAllocCallBacks);
+    InstanceDevice.destroyInstance(self.instance, self.pAllocCallBacks);
 }
 
 fn comptime_print(comptime format: []const u8, comptime args: anytype) void {
@@ -781,7 +785,7 @@ pub fn collectEntryName(self: *Self, entryName: []const u8) !*[]const u8 {
     const name = try self.allocator.allocSentinel(u8, len, 0);
     @memcpy(name, entryName[0..len]);
     const res = try self.entryNames.getOrPutValue(name, void{});
-    std.log.debug("entry name {s}", .{res.key_ptr.*});
+    // std.log.debug("entry name {s}", .{res.key_ptr.*});
     // @breakpoint();
     return res.key_ptr;
 }
@@ -838,8 +842,9 @@ pub fn addPipelineCreateInfo(self: *Self, info: *VulkanPipelineInfo) !void {
     defer zone.deinit();
 
     if (info.compute) {
-        if (self.computeInfoCount > self.computePipelineCreateInfo.len) {
-            return error.OutOfCapacity;
+        if (self.computeInfoCount >= self.computePipelineCreateInfo.len) {
+            self.computePipelineCreateInfo = try self.allocator.realloc(self.computePipelineCreateInfo, self.computeInfoCount + 10);
+            self.preComputeicInfoPtrs = try self.allocator.realloc(self.preComputeicInfoPtrs, self.computeInfoCount + 10);
         }
         var tempInfo = [1]VulkanPipelineInfo{info.*};
         @memcpy(self.preComputeicInfoPtrs[self.computeInfoCount .. self.computeInfoCount + 1], tempInfo[0..1]);
@@ -855,24 +860,32 @@ pub fn addPipelineCreateInfo(self: *Self, info: *VulkanPipelineInfo) !void {
         };
         self.computeInfoCount += 1;
     } else {
-        if (self.graphicInfoCount > self.graphicPipelineCreateInfo.len) {
-            return error.OutOfCapacity;
+        if (self.graphicInfoCount >= self.graphicPipelineCreateInfo.len) {
+            self.graphicPipelineCreateInfo = try self.allocator.realloc(self.graphicPipelineCreateInfo, self.graphicInfoCount + 10);
+            self.preGraphicInfoPtrs = try self.allocator.realloc(self.preGraphicInfoPtrs, self.graphicInfoCount + 10);
         }
         var tempInfo = [1]VulkanPipelineInfo{info.*};
         @memcpy(self.preGraphicInfoPtrs[self.graphicInfoCount .. self.graphicInfoCount + 1], tempInfo[0..1]);
 
-        self.preGraphicInfoPtrs[self.graphicInfoCount].vertexInputInfo.createInfo.pVertexAttributeDescriptions = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].vertexInputInfo.attributes);
-        self.preGraphicInfoPtrs[self.graphicInfoCount].vertexInputInfo.createInfo.pVertexBindingDescriptions = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].vertexInputInfo.bindings);
+        self.preGraphicInfoPtrs[self.graphicInfoCount].vertexInputInfo.createInfo.pVertexAttributeDescriptions =
+            @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].vertexInputInfo.attributes);
+        self.preGraphicInfoPtrs[self.graphicInfoCount].vertexInputInfo.createInfo.pVertexBindingDescriptions =
+            @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].vertexInputInfo.bindings);
 
-        self.preGraphicInfoPtrs[self.graphicInfoCount].viewportInfo.info.pScissors = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].viewportInfo.scissors);
-        self.preGraphicInfoPtrs[self.graphicInfoCount].viewportInfo.info.pViewports = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].viewportInfo.viewports);
+        self.preGraphicInfoPtrs[self.graphicInfoCount].viewportInfo.info.pScissors =
+            @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].viewportInfo.scissors);
+        self.preGraphicInfoPtrs[self.graphicInfoCount].viewportInfo.info.pViewports =
+            @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].viewportInfo.viewports);
 
-        self.preGraphicInfoPtrs[self.graphicInfoCount].colorBlendInfo.createInfo.pAttachments = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].colorBlendInfo.attachments);
+        self.preGraphicInfoPtrs[self.graphicInfoCount].colorBlendInfo.createInfo.pAttachments =
+            @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].colorBlendInfo.attachments);
 
-        self.preGraphicInfoPtrs[self.graphicInfoCount].dynamicStateInfo.createInfo.pDynamicStates = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].dynamicStateInfo.states);
+        self.preGraphicInfoPtrs[self.graphicInfoCount].dynamicStateInfo.createInfo.pDynamicStates =
+            @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].dynamicStateInfo.states);
 
         if (self.preGraphicInfoPtrs[self.graphicInfoCount].hasRendering) {
-            self.preGraphicInfoPtrs[self.graphicInfoCount].renderingInfo.info.pColorAttachmentFormats = @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].renderingInfo.colorAttachment);
+            self.preGraphicInfoPtrs[self.graphicInfoCount].renderingInfo.info.pColorAttachmentFormats =
+                @ptrCast(&self.preGraphicInfoPtrs[self.graphicInfoCount].renderingInfo.colorAttachment);
         }
 
         // std.log.debug("entry name {s}", .{self.preGraphicInfoPtrs[self.graphicInfoCount].shaderStageCreateInfo[0].pName});
@@ -922,16 +935,17 @@ pub fn createAllPipelinesAdded(self: *Self) !void {
     const compute = self.computeInfoCount > 0;
     const graphic = self.graphicInfoCount > 0;
 
-    var temp = [_]vk.VkPipeline{null} ** 20;
+    var temp = try self.allocator.alloc(vk.VkPipeline, self.computeInfoCount + self.graphicInfoCount);
+    defer self.allocator.free(temp);
 
     if (graphic)
         try checkVkResult(vk.vkCreateGraphicsPipelines(
             self.device,
             self.pipelineCache,
             self.graphicInfoCount,
-            @ptrCast(&self.graphicPipelineCreateInfo),
+            self.graphicPipelineCreateInfo.ptr,
             self.pAllocCallBacks,
-            @ptrCast(&temp),
+            temp.ptr,
         ));
 
     if (compute)
@@ -939,9 +953,9 @@ pub fn createAllPipelinesAdded(self: *Self) !void {
             self.device,
             self.pipelineCache,
             self.computeInfoCount,
-            &self.computePipelineCreateInfo,
+            self.computePipelineCreateInfo.ptr,
             self.pAllocCallBacks,
-            @ptrCast(&temp[10]),
+            temp[self.graphicInfoCount..].ptr,
         ));
 
     var pp: *Pipeline = undefined;
@@ -967,9 +981,8 @@ pub fn createAllPipelinesAdded(self: *Self) !void {
 
         std.log.debug("{s}", .{self.preGraphicInfoPtrs[i].name});
     }
-    self.graphicInfoCount = 0;
 
-    for (0.., 10..self.computeInfoCount + 10) |i, j| {
+    for (0.., self.graphicInfoCount..temp.len) |i, j| {
         pp = try self.pipelines.addOne();
         pp.* = Pipeline{
             .compute = true,
@@ -988,6 +1001,20 @@ pub fn createAllPipelinesAdded(self: *Self) !void {
         std.log.debug("{s}", .{self.preComputeicInfoPtrs[i].name});
     }
     self.computeInfoCount = 0;
+    self.graphicInfoCount = 0;
+
+    self.allocator.free(self.preComputeicInfoPtrs);
+    self.allocator.free(self.preGraphicInfoPtrs);
+    self.allocator.free(self.computePipelineCreateInfo);
+    self.allocator.free(self.graphicPipelineCreateInfo);
+
+    self.preComputeicInfoPtrs = &.{};
+    self.preGraphicInfoPtrs = &.{};
+    self.computePipelineCreateInfo = &.{};
+    self.graphicPipelineCreateInfo = &.{};
+
+    self.computeInfoCount = 0;
+    self.graphicInfoCount = 0;
 }
 
 pub fn destroyPipeline(self: *Self, name: []const u8) !void {
@@ -1186,6 +1213,8 @@ pub fn queueSubmit(self: *Self, io: std.Io, kind: CommandPoolType, submitCount: 
     try queue.mutex.lock(io);
     defer queue.mutex.unlock(io);
 
+    // std.log.debug("submit {s}", .{@tagName(kind)});
+
     if (fence != null) {
         try checkVkResult(vk.vkResetFences(self.device, 1, fence.?));
         try checkVkResult(vk.vkQueueSubmit2(queue.queue, submitCount, @ptrCast(pSubmits), fence.?.*));
@@ -1201,7 +1230,6 @@ pub fn queueSubmit(self: *Self, io: std.Io, kind: CommandPoolType, submitCount: 
     //     return err;
     // };
 
-    // std.log.debug("submit {s}", .{@tagName(kind)});
 }
 
 pub fn presentSubmit(self: *Self, io: std.Io, pPresentInfo: [*c]vk.VkPresentInfoKHR) !void {

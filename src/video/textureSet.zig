@@ -137,6 +137,7 @@ pub fn createImageTexture(
     fileID: u32,
     vulkan: *VkStruct,
     graphic: *Commands,
+    db: file.sqlite3,
 ) !Texture_t {
     const zone = tracy.initZone(@src(), .{ .name = "create image texutre from file" });
     defer zone.deinit();
@@ -160,7 +161,7 @@ pub fn createImageTexture(
         self.mutex.lockUncancelable(self.io);
         defer self.mutex.unlock(self.io);
 
-        const img = try file.getImageLoadParam(self.io, @intCast(fileID));
+        const img = try file.getImageLoadParam(self.io, @intCast(fileID), db);
         defer img.file.close(self.io);
 
         const imgStat = try img.file.stat(self.io);
@@ -217,21 +218,25 @@ pub fn createImageTexture(
 
         // errdefer self.array.giveBack(texture);
 
+        const layouts = try self.layoutMemory.create(1);
         texture.* = .{
             .image = image,
             .ID = ID,
             .source_width = imgWidth,
             .source_height = imgHeight,
-            .layouts = try self.layoutMemory.create(1),
+            .layouts = layouts.ptr,
+            .layoutCount = @intCast(layouts.len),
             .imageView = null,
             .format = img.image.format,
+            .extra_imageViewCount = 0,
+            .extra_imageViews = undefined,
             // .usage = .shader,
         };
-        for (0..texture.layouts.len) |i| {
+        for (0..layouts.len) |i| {
             texture.layouts[i] = vk.VK_IMAGE_LAYOUT_UNDEFINED;
         }
 
-        texture_t = self.handles.createHandle(index, .texture);
+        texture_t = @ptrCast(self.handles.createHandle(index, .texture));
 
         try self.map.put(ID, texture_t);
     }
@@ -246,7 +251,7 @@ pub fn createImageTexture(
         } },
     );
 
-    texture.imageView = try vulkan.createImageView2D(texture.image.vkImage, texture.format);
+    texture.imageView = try vulkan.createImageView2D(@ptrFromInt(texture.image.vkImage), texture.format);
 
     const dstArrayElement = try self.acquireDescriptorSetIndex(ID);
     try vulkan.addWriteDescriptorSetImage(

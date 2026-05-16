@@ -97,3 +97,7 @@ pub fn uploadInstance(graphic: *Commands, vulkan: *VkStruct) !void {
         instanceUpdated = false;
     }
 }
+
+pub fn getTotalCount() u32 {
+    return @intCast(instances2D.items.len);
+}

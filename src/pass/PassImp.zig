@@ -129,7 +129,7 @@ pub fn initFromRenderFlow(io: std.Io, gpa: std.mem.Allocator, vulkan: *VkStruct,
         passes[passedIndex].pushConstant = pass.pushConstant;
         const mem = try gpa.alloc(u8, passes[passedIndex].pushConstant.size);
         passes[passedIndex].pushConstant.pValues = @ptrCast(mem.ptr);
-        std.log.debug("len {d}", .{mem.len});
+        // std.log.debug("len {d}", .{mem.len});
 
         if (pass.buffers.len > 0) {
             passes[passedIndex].buffer = try gpa.alloc(Buffer_t, pass.buffers.len);

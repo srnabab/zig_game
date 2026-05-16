@@ -28,7 +28,29 @@ fn getRelativePath(id: i64, result: []u8, db: ?*sqlite.sqlite3) !void {
     };
 }
 
-pub fn init(databaseName: []const u8, db: [*c]?*sqlite.sqlite3) void {
+fn retryNtimes(io: std.Io, times: u32, comptime function: anytype, args: anytype) !void {
+    var i: u32 = 0;
+    while (i < times) : (i += 1) {
+        const res = function(
+            args.@"0",
+            args.@"1",
+            args.@"2",
+            args.@"3",
+        );
+
+        if (res == sqlite.SQLITE_OK) {
+            break;
+        } else if (res == sqlite.SQLITE_BUSY) {
+            continue;
+        } else {
+            return sqlDB.sqliteError.StepError;
+        }
+
+        try std.Io.sleep(io, .fromSeconds(1), .real);
+    }
+}
+
+pub fn init(io: std.Io, databaseName: []const u8, db: [*c]?*sqlite.sqlite3) void {
     var disk_db: ?*sqlite.sqlite3 = null;
     var backup: ?*sqlite.sqlite3_backup = null;
 
@@ -49,7 +71,14 @@ pub fn init(databaseName: []const u8, db: [*c]?*sqlite.sqlite3) void {
         sqlite.SQLITE_OPEN_READWRITE | sqlite.SQLITE_OPEN_CREATE | sqlite.SQLITE_OPEN_URI,
         null,
     );
-    assert(res == sqlite.SQLITE_OK);
+    if (res != sqlite.SQLITE_OK) {
+        retryNtimes(io, 5, sqlite.sqlite3_open_v2, .{
+            @as([*c]const u8, @ptrCast(uri)),
+            db,
+            sqlite.SQLITE_OPEN_READWRITE | sqlite.SQLITE_OPEN_CREATE | sqlite.SQLITE_OPEN_URI,
+            null,
+        }) catch unreachable;
+    }
 
     backup = sqlite.sqlite3_backup_init(db.*, "main", disk_db, "main");
     assert(backup != null);

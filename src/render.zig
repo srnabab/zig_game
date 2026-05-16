@@ -29,6 +29,8 @@ const file = @import("fileSystem");
 const mesh = @import("mesh");
 const pass = @import("pass");
 
+const ViewBoundsAndTotalSpriteCount = @import("setPass.zig").ViewBoundsAndTotalSpriteCount;
+
 pub const Args = struct {
     io: std.Io,
     gpa: std.mem.Allocator,
@@ -86,6 +88,18 @@ pub fn render_thread_func(args: Args) !void {
     defer graphic.deinit() catch |err| {
         std.debug.panic("error {s}", .{@errorName(err)});
     };
+    {
+        var tempDb: file.sqlite3 = null;
+        file.init(io, &tempDb);
+        defer file.deinit(tempDb);
+
+        _ = pTextureSet.createImageTexture(
+            comptime file.comptimeGetID("non_exist.png"),
+            vulkan,
+            &commands,
+            tempDb,
+        ) catch unreachable;
+    }
 
     try vulkan.createAllPipelinesAdded();
 
@@ -234,9 +248,12 @@ pub fn render_thread_func(args: Args) !void {
     }
     defer vertices2D.deinit();
 
-    // global.stopNodeDagDetailPrint = false;
+    var viewBoundsAndTotalSpriteCount = ViewBoundsAndTotalSpriteCount{
+        .viewBounds = .{ 0.0, 0.0, 0.0, 0.0 },
+        .totalSpriteCount = 0,
+    };
+
     // global.stopExecuteNodePrint = false;
-    // global.storExecuteSequencePrint = false;
     // global.game_end.store(1, .seq_cst);
 
     // vulkan.logBufferPtr();
@@ -246,23 +263,30 @@ pub fn render_thread_func(args: Args) !void {
 
     const renderStart = std.Io.Timestamp.now(io, .real).toNanoseconds();
 
+    passes.passMap.get("indirectCompute").?.setUserdata(@ptrCast(&viewBoundsAndTotalSpriteCount));
+
+    passes.enablePass("indirectCompute");
     passes.enablePass("indirect2D");
     passes.enablePass("present");
 
     while (true) {
         {
             const frame = vulkan.totalFrame.load(.seq_cst);
+            // std.log.debug("frame {d}", .{frame});
             // _ = frame;
 
             if (frame == 0) {
-                global.stopNodeDagPrint = false;
-                global.printDagToDot = true;
+                // global.stopNodeDagPrint = false;
+                // global.printDagToDot = true;
+                // global.stopNodeDagDetailPrint = false;
+                // global.storExecuteSequencePrint = false;
                 //     passes.enablePass("indirect2D");
                 //     passes.enablePass("present");
                 //     // testDraw = true;
             }
             if (frame == 2) {
-                global.stopNodeDagPrint = true;
+                // global.stopNodeDagPrint = true;
+                // global.storExecuteSequencePrint = true;
                 //     passes.disablePass("indirect2D");
                 //     passes.disablePass("present");
             }
@@ -325,6 +349,10 @@ pub fn render_thread_func(args: Args) !void {
 
             try vertices2D.uploadInstance(&commands, vulkan);
             vulkan.writeCachedDescriptorSetResources();
+
+            viewBoundsAndTotalSpriteCount.totalSpriteCount = vertices2D.getTotalCount();
+            viewBoundsAndTotalSpriteCount.viewBounds = .{ -300, 300, -400, 400 };
+
             try vulkan.waitEndFence();
 
             try commands.startCommand();
@@ -338,7 +366,7 @@ pub fn render_thread_func(args: Args) !void {
             for (args.passes.passes) |*value| {
                 if (value.enabled) {
                     try value.addCommand(
-                        null,
+                        value.userdata,
                         vulkan,
                         pTextureSet,
                         &commands,
