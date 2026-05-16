@@ -5,6 +5,8 @@ const sdl = @import("sdl").sdl;
 const global = @import("global");
 const tracy = @import("tracy");
 
+const renderDebug = @import("renderDebug");
+
 const VkStruct = @import("video");
 const vk = VkStruct.vk;
 const processRender = @import("processRender");
@@ -83,6 +85,7 @@ pub fn render_thread_func(args: Args) !void {
         pTextureSet,
     );
     defer commands.deinit();
+    renderDebug.init(io, &commands);
 
     var graphic = OneTimeCommand.init(io, allocator_t.*, vulkan);
     defer graphic.deinit() catch |err| {
@@ -337,7 +340,7 @@ pub fn render_thread_func(args: Args) !void {
                                 pos2D.texture,
                                 pTextureSet,
                             );
-                            std.log.debug("set", .{});
+                            // std.log.debug("set", .{});
                         },
                         .others => {},
                     }

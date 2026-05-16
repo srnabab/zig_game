@@ -15,6 +15,11 @@ const ContentPath = tables.ContentPath;
 const ImageLoadParameter = tables.ImageLoadParameter;
 const ModelLoadParameter = tables.ModelLoadParameter;
 
+fn assertEqual(a: c_int, b: c_int) void {
+    std.log.debug("a {d}", .{a});
+    std.debug.assert(a == b);
+}
+
 fn getRelativePath(id: i64, result: []u8, db: ?*sqlite.sqlite3) !void {
     var ContentPathT = ContentPath.init(db);
     var ptrs: [1]*anyopaque = undefined;
@@ -50,7 +55,12 @@ fn retryNtimes(io: std.Io, times: u32, comptime function: anytype, args: anytype
     }
 }
 
+var mutex: std.Io.Mutex = .init;
+
 pub fn init(io: std.Io, databaseName: []const u8, db: [*c]?*sqlite.sqlite3) void {
+    mutex.lockUncancelable(io);
+    defer mutex.unlock(io);
+
     var disk_db: ?*sqlite.sqlite3 = null;
     var backup: ?*sqlite.sqlite3_backup = null;
 
@@ -61,7 +71,7 @@ pub fn init(io: std.Io, databaseName: []const u8, db: [*c]?*sqlite.sqlite3) void
         null,
     );
     defer _ = sqlite.sqlite3_close_v2(disk_db);
-    assert(res == sqlite.SQLITE_OK);
+    assertEqual(res, sqlite.SQLITE_OK);
 
     const uri = "file:memdb1?mode=memory&cache=shared";
     res = sqlite.sqlite3_open_v2(
@@ -71,24 +81,20 @@ pub fn init(io: std.Io, databaseName: []const u8, db: [*c]?*sqlite.sqlite3) void
         sqlite.SQLITE_OPEN_READWRITE | sqlite.SQLITE_OPEN_CREATE | sqlite.SQLITE_OPEN_URI,
         null,
     );
-    if (res != sqlite.SQLITE_OK) {
-        retryNtimes(io, 5, sqlite.sqlite3_open_v2, .{
-            @as([*c]const u8, @ptrCast(uri)),
-            db,
-            sqlite.SQLITE_OPEN_READWRITE | sqlite.SQLITE_OPEN_CREATE | sqlite.SQLITE_OPEN_URI,
-            null,
-        }) catch unreachable;
-    }
+    assertEqual(res, sqlite.SQLITE_OK);
 
     backup = sqlite.sqlite3_backup_init(db.*, "main", disk_db, "main");
     assert(backup != null);
 
     res = sqlite.sqlite3_backup_step(backup, -1);
     defer _ = sqlite.sqlite3_backup_finish(backup);
-    assert(res == sqlite.SQLITE_DONE);
+    assertEqual(res, sqlite.SQLITE_DONE);
 }
 
-pub fn initManyDb(databaseName: []const u8, openTimes: u32, rwSqlite: [*c]?*sqlite.sqlite3, allocator: std.mem.Allocator) ![]?*sqlite.sqlite3 {
+pub fn initManyDb(io: std.Io, databaseName: []const u8, openTimes: u32, rwSqlite: [*c]?*sqlite.sqlite3, allocator: std.mem.Allocator) ![]?*sqlite.sqlite3 {
+    mutex.lockUncancelable(io);
+    defer mutex.unlock(io);
+
     _ = sqlite.sqlite3_config(sqlite.SQLITE_CONFIG_MULTITHREAD);
 
     const dbs = try allocator.alloc(?*sqlite.sqlite3, openTimes);
@@ -111,13 +117,13 @@ pub fn initManyDb(databaseName: []const u8, openTimes: u32, rwSqlite: [*c]?*sqli
         sqlite.SQLITE_OPEN_READWRITE | sqlite.SQLITE_OPEN_CREATE | sqlite.SQLITE_OPEN_URI,
         null,
     );
-    assert(res == sqlite.SQLITE_OK);
+    assertEqual(res, sqlite.SQLITE_OK);
 
     backup = sqlite.sqlite3_backup_init(rwSqlite.*, "main", disk_db, "main");
     assert(backup != null);
 
     res = sqlite.sqlite3_backup_step(backup, -1);
-    assert(res == sqlite.SQLITE_DONE);
+    assertEqual(res, sqlite.SQLITE_DONE);
 
     _ = sqlite.sqlite3_backup_finish(backup);
 
@@ -128,7 +134,7 @@ pub fn initManyDb(databaseName: []const u8, openTimes: u32, rwSqlite: [*c]?*sqli
             sqlite.SQLITE_OPEN_READONLY | sqlite.SQLITE_OPEN_URI,
             null,
         );
-        assert(res == sqlite.SQLITE_OK);
+        assertEqual(res, sqlite.SQLITE_OK);
     }
 
     return dbs;

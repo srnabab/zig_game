@@ -73,6 +73,16 @@ fn addCommand(
         vk.VK_IMAGE_TILING_OPTIMAL,
         0,
     );
+    const depth = try vulkan.getRenderTarget(
+        textureSet,
+        vulkan.windowWidth,
+        vulkan.windowHeight,
+        vk.VK_FORMAT_D32_SFLOAT,
+        vk.VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        vk.VK_IMAGE_TILING_OPTIMAL,
+        0,
+    );
+
     try commands.setRenderingColorAttachment(0, .{
         .sType = vk.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .pNext = null,
@@ -86,6 +96,18 @@ fn addCommand(
             },
         },
     }, texture, false);
+
+    commands.setRenderingDepthOrStencilAttachment(.{
+        .sType = vk.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .pNext = null,
+        .imageView = textureSet.getVkImageView(depth).?,
+        .imageLayout = vk.VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+        .loadOp = vk.VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = vk.VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .clearValue = vk.VkClearValue{
+            .depthStencil = .{ .depth = 1.0 },
+        },
+    }, depth, true, false);
 
     // try pass.useTexture(texture, gpa);
 
@@ -304,7 +326,14 @@ fn addIndirectComputeCommand(
 
     const src: *ViewBoundsAndTotalSpriteCount = @ptrCast(@alignCast(userdata.?));
 
-    const groupCount = (src.totalSpriteCount + 63) / 64;
+    const groupCount = (src.totalSpriteCount + 31) / 32;
+
+    try commands.addCommand(.fillBuffer, .{ .fillBuffer = .{
+        .buffer = pass.buffer[0],
+        .offset = 4,
+        .size = 4,
+        .value = 0,
+    } });
 
     try commands.addCommand(.compute, .{ .compute = .{
         .descriptorSets = pass.descriptorSet,

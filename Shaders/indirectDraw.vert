@@ -43,10 +43,11 @@ void main() {
 
     int vIdx = indices[gl_VertexIndex];
     vec2 localPos = positions[vIdx];
-    
-    // 4. 计算最终位置
+
+    float depthZ = float(idx) / 1000000.0 + sprite.pos.z; 
+
     vec2 worldPos = localPos * sprite.scale + sprite.pos.xy;
-    gl_Position = ubo.proj * ubo.view * vec4(worldPos, sprite.pos.z, 1.0);
+    gl_Position = ubo.proj * ubo.view * vec4(worldPos, depthZ, 1.0);
     
     outUV = uvs[vIdx];
     outTexIndex = sprite.textureIndex;

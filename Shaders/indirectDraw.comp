@@ -3,7 +3,7 @@
 #extension GL_EXT_scalar_block_layout : require
 #extension GL_EXT_buffer_reference : require
 
-layout(local_size_x = 64) in;
+layout(local_size_x = 32) in;
 
 struct VkDrawIndirectCommand {
     uint vertexCount;
@@ -43,30 +43,26 @@ layout(set = 0, binding = 1) uniform writeonly image2D images[];
 layout(set = 0, binding = 2) uniform sampler samplers[1];
 layout(set = 0, binding = 2) uniform samplerShadow shadowSamplers[1];
 
-shared uint instanceCount;
-
 void main() {
-    uint idx = gl_GlobalInvocationID.x;
-    if (idx == 0) instanceCount = 0;
-    barrier();
+    uint idx = gl_GlobalInvocationID.x; 
 
-    if (idx < pc.totalSpriteCount) {
-        Instance instance = pc.instanceBuffer.instances[idx];
-
-        bool visible = true;
-        if (instance.pos.x + instance.scale.x < pc.viewBounds.z || 
-            instance.pos.x > pc.viewBounds.w ||
-            instance.pos.y + instance.scale.y < pc.viewBounds.x ||
-            instance.pos.y > pc.viewBounds.y) {
-            visible = false;
-        }
-
-        if (visible) {
-            uint writeIdx = atomicAdd(instanceCount, 1);
-            pc.instanceIDs.instanceIDs[writeIdx] = idx;
-        }
+    if (idx >= pc.totalSpriteCount) {
+        return; 
     }
 
-    barrier();
-    if (idx == 0) pc.indirectAddress.cmd.instanceCount = instanceCount;
+    Instance instance = pc.instanceBuffer.instances[idx];
+
+    bool visible = true;
+    if (instance.pos.x + instance.scale.x < pc.viewBounds.z || 
+        instance.pos.x > pc.viewBounds.w ||
+        instance.pos.y + instance.scale.y < pc.viewBounds.x ||
+        instance.pos.y > pc.viewBounds.y) {
+        visible = false;
+    }
+
+    if (visible) {
+        uint writeIdx = atomicAdd(pc.indirectAddress.cmd.instanceCount, 1);
+        
+        pc.instanceIDs.instanceIDs[writeIdx] = idx;
+    }
 }

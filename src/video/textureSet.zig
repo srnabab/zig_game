@@ -251,7 +251,11 @@ pub fn createImageTexture(
         } },
     );
 
-    texture.imageView = try vulkan.createImageView2D(@ptrFromInt(texture.image.vkImage), texture.format);
+    texture.imageView = try vulkan.createImageView2D(
+        @ptrFromInt(texture.image.vkImage),
+        texture.format,
+        vk.VK_IMAGE_ASPECT_COLOR_BIT,
+    );
 
     const dstArrayElement = try self.acquireDescriptorSetIndex(ID);
     try vulkan.addWriteDescriptorSetImage(
@@ -316,18 +320,27 @@ pub fn create2DTexture(
 
         try self.map.put(ID, texture_t);
 
-        texture.imageView = try vulkan.createImageView2D(@ptrFromInt(texture.image.vkImage), texture.format);
+        texture.imageView = try vulkan.createImageView2D(
+            @ptrFromInt(texture.image.vkImage),
+            texture.format,
+            if (usage & vk.VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT != 0)
+                vk.VK_IMAGE_ASPECT_DEPTH_BIT
+            else
+                vk.VK_IMAGE_ASPECT_COLOR_BIT,
+        );
     }
 
-    const dstArrayElement = try self.acquireDescriptorSetIndex(ID);
-    try vulkan.addWriteDescriptorSetImage(
-        dstArrayElement,
-        texture.imageView,
-        vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        vulkan.globalTextureDescriptorSet,
-        0,
-        vk.VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-    );
+    if (usage & vk.VK_IMAGE_USAGE_SAMPLED_BIT != 0) {
+        const dstArrayElement = try self.acquireDescriptorSetIndex(ID);
+        try vulkan.addWriteDescriptorSetImage(
+            dstArrayElement,
+            texture.imageView,
+            vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            vulkan.globalTextureDescriptorSet,
+            0,
+            vk.VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+        );
+    }
 
     try self.imageViewToTexture.put(texture.imageView, texture_t);
 

@@ -836,7 +836,7 @@ const QueueNodeIterator = struct {
     }
 };
 
-fn nodeDagPrint(self: *QueueNodes, self2: *commands) void {
+pub fn nodeDagPrint(self: *QueueNodes, self2: *commands) void {
     const zone = tracy.initZone(@src(), .{ .name = "dag print" });
     defer zone.deinit();
 
@@ -1339,24 +1339,29 @@ pub const commands = struct {
     pub fn setRenderingDepthOrStencilAttachment(
         self: *Self,
         attachment: vk.VkRenderingAttachmentInfo,
+        texture_: texture.Texture_t,
         isDepth: bool,
         setPresent: bool,
     ) void {
-        try self.mutex.lock(self.io);
+        self.mutex.lockUncancelable(self.io);
         defer self.mutex.unlock(self.io);
 
         if (setPresent) {
             if (isDepth) {
                 self.presentRendering.depthAttachment = attachment;
+                self.presentRendering.depthTexture = texture_;
             } else {
                 self.presentRendering.stencilAttachment = attachment;
+                self.presentRendering.stencilTexture = texture_;
             }
             self.presentRenderingChanged = true;
         } else {
             if (isDepth) {
                 self.rendering.depthAttachment = attachment;
+                self.rendering.depthTexture = texture_;
             } else {
                 self.rendering.stencilAttachment = attachment;
+                self.rendering.stencilTexture = texture_;
             }
             self.renderingChanged = true;
         }
@@ -1625,6 +1630,12 @@ pub const commands = struct {
                 dstAccessMask = vk.VK_ACCESS_2_NONE;
                 destinationStage = vk.VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
                 aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
+            },
+
+            vk.VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL => {
+                dstAccessMask = vk.VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+                destinationStage = vk.VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT;
+                aspectMask = vk.VK_IMAGE_ASPECT_DEPTH_BIT;
             },
 
             else => {

@@ -1,4 +1,6 @@
 const std = @import("std");
+const renderDebug = @import("renderDebug");
+
 const vk = @import("vulkan");
 const VkError = @import("vulkanType.zig").VkError;
 pub const vulkanType = @import("vulkanType.zig");
@@ -12,6 +14,9 @@ pub fn checkVkResult(result: vk.VkResult) VkError!void {
     VkResultToError(result) catch |err| {
         std.debug.dumpCurrentStackTrace(.{});
         std.log.err("error: {s}", .{@tagName(@as(VkResult, @enumFromInt(result)))});
+        renderDebug.printToDot();
+        renderDebug.printAllInfoToTxt();
+        @breakpoint();
         return err;
     };
 }

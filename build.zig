@@ -325,8 +325,16 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const renderDebug_mod = b.createModule(.{
+        .root_source_file = b.path("src/video/debug/print.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     // dependency
+    renderDebug_mod.addImport("processRender", processRender_mod);
+    renderDebug_mod.addImport("global", global_mod);
+
     renderFlow_mod.addImport("processRender", processRender_mod);
     renderFlow_mod.addImport("video", video_mod);
     renderFlow_mod.addImport("vulkan", vk_c_mod);
@@ -364,6 +372,7 @@ pub fn build(b: *std.Build) void {
 
     resultToError_mod.addImport("enumFromC", enum_c_mod);
     resultToError_mod.addImport("vulkan", vk_c_mod);
+    resultToError_mod.addImport("renderDebug", renderDebug_mod);
 
     cglm_c.addIncludePath(b.path("include"));
 
@@ -510,6 +519,7 @@ pub fn build(b: *std.Build) void {
     fileSystem_mod.addImport("vertexStruct", vertexStruct_mod);
     fileSystem_mod.addIncludePath(b.path("include"));
 
+    exe_mod.addImport("renderDebug", renderDebug_mod);
     exe_mod.addImport("textureSet", textureSet_mod);
     exe_mod.addImport("renderFlow", renderFlow_mod);
     exe_mod.addImport("pass", pass_mod);

@@ -17,6 +17,12 @@ pub const triggerPack = struct {
 
         return self.pre;
     }
+
+    pub fn downIsTrue(self: *triggerPack) bool {
+        defer self.down = false;
+
+        return self.down;
+    }
 };
 
 const short = 0;

@@ -1516,7 +1516,7 @@ pub fn _createImageView(
     return imageView;
 }
 
-pub fn createImageView2D(self: *Self, image: vk.VkImage, format: vk.VkFormat) VkError!vk.VkImageView {
+pub fn createImageView2D(self: *Self, image: vk.VkImage, format: vk.VkFormat, aspectFlags: vk.VkImageAspectFlags) VkError!vk.VkImageView {
     return self._createImageView(
         null,
         0,
@@ -1529,7 +1529,7 @@ pub fn createImageView2D(self: *Self, image: vk.VkImage, format: vk.VkFormat) Vk
             .b = vk.VK_COMPONENT_SWIZZLE_IDENTITY,
             .a = vk.VK_COMPONENT_SWIZZLE_IDENTITY,
         },
-        vk.VK_IMAGE_ASPECT_COLOR_BIT,
+        aspectFlags,
         0,
         1,
         0,

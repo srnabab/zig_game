@@ -20,6 +20,7 @@ const file = @import("fileSystem");
 const resource = @import("resource");
 const Handles = global.Handles;
 const Handle = Handles.Handle;
+const vk = VkStruct.vk;
 
 fn MutexArray(T: type) type {
     return struct {
@@ -130,7 +131,7 @@ pub fn update_thread_func(args: Args) !void {
     var mainRoSqlite: sqlite3 = null;
     var handleMutex: Io.Mutex = .init;
     var databaseHandleArray: DataBaseHandleArrayType = .init();
-    const dbs = try file.initManyDb(8, &rwSqlite, gpa);
+    const dbs = try file.initManyDb(io, 8, &rwSqlite, gpa);
     defer file.deinitManyDB(rwSqlite, dbs, gpa);
 
     mainRoSqlite = dbs[0];
@@ -170,6 +171,11 @@ pub fn update_thread_func(args: Args) !void {
     var lastMouseX: f32 = 0;
     var lastMouseY: f32 = 0;
 
+    const rng_impl: std.Random.IoSource = .{ .io = io };
+    const rng = rng_impl.interface();
+
+    var testBoxPng: ?Handle = null;
+
     var inputs: []input.Input = &.{};
     var lastTimestamp = sdl.SDL_GetTicksNS();
 
@@ -199,15 +205,27 @@ pub fn update_thread_func(args: Args) !void {
                 inputs = &.{};
             }
 
-            if (test_A.down) {
+            if (test_A.downIsTrue()) {
                 // sceneChanged = true;
+
+                resourceArray.mutex.lockUncancelable(io);
+                defer resourceArray.mutex.unlock(io);
+                const ptr = try resourceArray.array.addOne();
+                ptr.* = .{ .position2D = .{
+                    .x = @floatFromInt(rng.intRangeAtMost(i32, -400, 400)),
+                    .y = @floatFromInt(rng.intRangeAtMost(i32, -300, 300)),
+                    .width = 48,
+                    .height = 32,
+                    .depth = 0.1,
+                    .texture = @ptrCast(testBoxPng),
+                } };
             }
 
             if (sceneChanged) {
                 sceneChanged = false;
 
                 // std.log.debug("update: idx {d}", .{resourceArrayIndex});
-                const boxPng = try readResource(
+                testBoxPng = try readResource(
                     io,
                     gpa,
                     handles,
@@ -215,7 +233,7 @@ pub fn update_thread_func(args: Args) !void {
                     mainRoSqlite,
                     "box.png",
                 );
-                std.log.debug("box {any}", .{boxPng});
+                std.log.debug("box {any}", .{testBoxPng});
 
                 resourceArray.mutex.lockUncancelable(io);
                 defer resourceArray.mutex.unlock(io);
@@ -226,7 +244,7 @@ pub fn update_thread_func(args: Args) !void {
                     .width = 48,
                     .height = 32,
                     .depth = 0.1,
-                    .texture = @ptrCast(boxPng),
+                    .texture = @ptrCast(testBoxPng),
                 } };
 
                 // resourceValue += 1;
@@ -427,6 +445,7 @@ fn processResource(args: ResourceThreadArgs) Io.Cancelable!void {
                     const imageView = vulkan.createImageView2D(
                         @ptrFromInt(image.vkImage),
                         img.image.format,
+                        vk.VK_IMAGE_ASPECT_COLOR_BIT,
                     ) catch |err| {
                         std.log.err("{s}", .{@errorName(err)});
                         continue;

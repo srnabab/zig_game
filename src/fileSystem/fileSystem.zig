@@ -20,11 +20,12 @@ pub fn init(io: std.Io, db: [*c]?*sqlite.sqlite3) void {
 }
 
 pub fn initManyDb(
+    io: std.Io,
     openTimes: u32,
     rwSqlite: [*c]?*sqlite.sqlite3,
     allocator: std.mem.Allocator,
 ) ![]?*sqlite.sqlite3 {
-    return base.initManyDb(global.databaseName, openTimes, rwSqlite, allocator);
+    return base.initManyDb(io, global.databaseName, openTimes, rwSqlite, allocator);
 }
 
 pub fn getFile(io: std.Io, id: i32, db: ?*sqlite.sqlite3) !std.Io.File {
