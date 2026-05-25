@@ -348,6 +348,9 @@ pub fn getBufferSize(self: *Self, buffer: Buffer_t) vk.VkDeviceSize {
 }
 
 pub fn getVkBuffer(self: *Self, buffer: Buffer_t) vk.VkBuffer {
+    const zone = tracy.initZone(@src(), .{ .name = "get vk buffer" });
+    defer zone.deinit();
+
     const index = getIndex(@ptrCast(buffer));
 
     const ptr = self.buffers.get(index.?);
@@ -356,6 +359,9 @@ pub fn getVkBuffer(self: *Self, buffer: Buffer_t) vk.VkBuffer {
 }
 
 pub fn getBufferUsage(self: *Self, buffer: Buffer_t) Usage {
+    const zone = tracy.initZone(@src(), .{ .name = "get buffer usage" });
+    defer zone.deinit();
+
     const index = getIndex(@ptrCast(buffer));
 
     const ptr = self.buffers.get(index.?);

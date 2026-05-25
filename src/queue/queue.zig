@@ -20,7 +20,7 @@ pub fn Queue(T: type) type {
         pub fn init(allocator: Allocator, io: std.Io) !Self {
             return .{
                 .allocator = allocator,
-                .buffer = try allocator.alloc(T, 128),
+                .buffer = try allocator.alloc(T, 4),
                 .io = io,
             };
         }
@@ -35,18 +35,19 @@ pub fn Queue(T: type) type {
         fn ensureCapacity(self: *Self, new_capacity: usize) !void {
             if (self.buffer.len >= new_capacity) return;
             const new_len = @max(self.buffer.len * 2, new_capacity);
-            var larger = try self.allocator.alloc(T, new_len);
 
-            var i: usize = 0;
-            while (i < self.totalSize) : (i += 1) {
-                larger[i] = self.getPtr(i).*;
-            }
+            const old_len = self.buffer.len;
+            const head = self.head;
+            const tail = (self.head + self.totalSize) % self.buffer.len;
 
-            if (self.buffer.len > 0) {
-                self.allocator.free(self.buffer);
+            self.buffer = try self.allocator.realloc(self.buffer, new_len);
+
+            if (head > tail) {
+                const len = old_len - head;
+                @memmove(self.buffer[self.buffer.len - len ..], self.buffer[head..old_len]);
+
+                self.head = self.buffer.len - len;
             }
-            self.buffer = larger;
-            self.head = 0;
         }
 
         fn getPtr(self: *Self, logical_idx: usize) *T {

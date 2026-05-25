@@ -96,12 +96,12 @@ pub fn render_thread_func(args: Args) !void {
         file.init(io, &tempDb);
         defer file.deinit(tempDb);
 
-        _ = pTextureSet.createImageTexture(
+        _ = try pTextureSet.createImageTexture(
             comptime file.comptimeGetID("non_exist.png"),
             vulkan,
             &commands,
             tempDb,
-        ) catch unreachable;
+        );
     }
 
     try vulkan.createAllPipelinesAdded();
@@ -366,6 +366,7 @@ pub fn render_thread_func(args: Args) !void {
                 // std.log.debug("info {d}", .{value});
             }
 
+            const zone2 = tracy.initZone(@src(), .{ .name = "pass add" });
             for (args.passes.passes) |*value| {
                 if (value.enabled) {
                     try value.addCommand(
@@ -379,6 +380,7 @@ pub fn render_thread_func(args: Args) !void {
                     // std.log.debug("pass {s}", .{value.name});
                 }
             }
+            zone2.deinit();
 
             try commands.addCommandEnd();
 

@@ -577,6 +577,9 @@ fn DAG(T: type) type {
         }
 
         pub fn create(self: *Self) !*Inner {
+            const zone = tracy.initZone(@src(), .{ .name = "dag create inner" });
+            defer zone.deinit();
+
             const node = try self.mem.create(self.arena.child_allocator);
             node.* = .{
                 .ID = self.innerID,
@@ -1159,6 +1162,11 @@ pub const commands = struct {
     u32Mem: std.heap.memory_pool.Extra(u32, .{}),
 
     allocator: std.mem.Allocator,
+    fixedBufferAllocator: *std.heap.FixedBufferAllocator,
+    warningLen: usize = 0,
+
+    heapAllocator: std.mem.Allocator,
+
     stackAllocators: [global.MaxFrameInFlight]std.heap.FixedBufferAllocator,
     stackAllocatorsIndex: u32 = 0,
 
@@ -1180,32 +1188,58 @@ pub const commands = struct {
             stackAllocators[i] = .init(buffers[i * averageSize ..][0..averageSize]);
         }
 
+        const allocatorMem = try allocator.alloc(u8, 5 * 1024 * 1024);
+        var fixedBufferAllocator = try allocator.create(std.heap.FixedBufferAllocator);
+        fixedBufferAllocator.* = .init(allocatorMem);
+
+        const allocator2 = fixedBufferAllocator.threadSafeAllocator();
+
         return Self{
             .io = io,
-            .queue = .init(allocator),
-            .nodeDag = try .init(allocator),
+            .queue = .init(allocator2),
+            .nodeDag = try .init(allocator2),
             .stackAllocators = stackAllocators,
-            .combineMap = .init(allocator),
-            .cacheMap = .init(allocator),
-            .renderingMap = .init(allocator),
+            .combineMap = .init(allocator2),
+            .cacheMap = .init(allocator2),
+            .renderingMap = .init(allocator2),
             .vulkan = vulkan,
-            .u32Mem = try .initCapacity(allocator, 128),
-            .allocator = allocator,
+            .u32Mem = try .initCapacity(allocator2, 128),
+            .fixedBufferAllocator = fixedBufferAllocator,
+            .warningLen = @intFromFloat(@as(f64, @floatFromInt(fixedBufferAllocator.buffer.len)) * 0.9),
+            .allocator = allocator2,
+            .heapAllocator = allocator,
             .pTextureSet = pTextureSet,
-            .cachedCommand = .init(allocator),
-            .drawCacheMap = .init(allocator),
+            .cachedCommand = .init(allocator2),
+            .drawCacheMap = .init(allocator2),
         };
     }
 
     pub fn deinit(self: *Self) void {
         self.queue.deinit();
         self.nodeDag.deinit();
+
+        var it1 = self.combineMap.iterator();
+        while (it1.next()) |entry| {
+            self.allocator.free(entry.value_ptr.*);
+        }
         self.combineMap.deinit();
+
         self.cacheMap.deinit();
+
+        var it2 = self.renderingMap.iterator();
+        while (it2.next()) |entry| {
+            entry.value_ptr.drawResourceMap.deinit();
+            entry.value_ptr.resourceMap.deinit();
+        }
         self.renderingMap.deinit();
+
         self.u32Mem.deinit(self.allocator);
         self.cachedCommand.deinit();
         self.drawCacheMap.deinit();
+
+        self.fixedBufferAllocator.reset();
+        self.heapAllocator.free(self.fixedBufferAllocator.buffer);
+        self.heapAllocator.destroy(self.fixedBufferAllocator);
     }
 
     pub fn clearRetainCapacity(self: *Self) void {
@@ -1231,6 +1265,29 @@ pub const commands = struct {
         _ = self.u32Mem.reset(self.allocator, .retain_capacity);
     }
 
+    pub fn memReset(self: *Self) !void {
+        const zone = tracy.initZone(@src(), .{ .name = "mem reset" });
+        defer zone.deinit();
+
+        const slice = try self.cachedCommand.toOwnedSlice();
+        const slice_new = try self.heapAllocator.dupe(drawC.comm, slice);
+        defer self.heapAllocator.free(slice_new);
+
+        self.fixedBufferAllocator.reset();
+        self.allocator = self.fixedBufferAllocator.threadSafeAllocator();
+
+        self.queue = .init(self.allocator);
+        self.nodeDag = try .init(self.allocator);
+        self.combineMap = .init(self.allocator);
+        self.cacheMap = .init(self.allocator);
+        self.renderingMap = .init(self.allocator);
+        self.cachedCommand = .init(self.allocator);
+        self.u32Mem = try .initCapacity(self.allocator, 128);
+        self.drawCacheMap = .init(self.allocator);
+
+        try self.cachedCommand.appendSlice(slice_new);
+    }
+
     pub fn startCommand(self: *Self) !void {
         const zone = tracy.initZone(@src(), .{ .name = "start vulkan commands" });
         defer zone.deinit();
@@ -1241,7 +1298,10 @@ pub const commands = struct {
 
         self.stackAllocators[self.stackAllocatorsIndex].reset();
 
-        _ = self.u32Mem.reset(self.allocator, .retain_capacity);
+        if (self.fixedBufferAllocator.end_index > self.warningLen) {
+            std.log.debug("allocator end len {d}", .{self.fixedBufferAllocator.end_index});
+            try self.memReset();
+        }
 
         const node = try self.nodeDag.create();
 
@@ -2200,6 +2260,7 @@ pub const commands = struct {
 
                 const changeBufferQueue = command.changeBufferQueue;
                 const bufferUsage = self.vulkan.buffers.getBufferUsage(changeBufferQueue.buffer);
+
                 if (changeBufferQueue.srcQueueFamily != .init and changeBufferQueue.srcQueueFamily != changeBufferQueue.dstQueueFamily and self.vulkan.queueTypeCount > 1) {
                     const releaseFlags = inferReleasePipelinBarrierInfoByCommandTypeAndBufferUsage(
                         enterCommandType,
@@ -2212,6 +2273,8 @@ pub const commands = struct {
                         releaseFlags.sourceStage + releaseFlags.destinationStage;
 
                     const release = try self.combineMap.getOrPut(releaseHash);
+
+                    const zone3 = tracy.initZone(@src(), .{ .name = "set barrier" });
                     const release_new_barrier = drawC.Barrier{
                         .bufferMemory = .{
                             .srcStageMask = releaseFlags.sourceStage,
@@ -2226,7 +2289,9 @@ pub const commands = struct {
                             .size = 0,
                         },
                     };
+                    zone3.deinit();
 
+                    const zone4 = tracy.initZone(@src(), .{ .name = "get node" });
                     const releaseNode = blk: {
                         if (release.found_existing) {
                             const nodes = release.value_ptr.*;
@@ -2247,10 +2312,13 @@ pub const commands = struct {
                         }
 
                         const node = try self.nodeDag.create();
+
+                        const zone6 = tracy.initZone(@src(), .{ .name = "alloc" });
                         release.value_ptr.* = if (release.found_existing)
                             try self.allocator.realloc(release.value_ptr.*, release.value_ptr.len + 1)
                         else
                             try self.allocator.alloc(QueueNode_ID, 1);
+                        zone6.deinit();
 
                         release.value_ptr.*[release.value_ptr.len - 1] = .{
                             .node = node,
@@ -2258,6 +2326,7 @@ pub const commands = struct {
                         };
 
                         // node.listID = self.nodeDag.currentListID;
+                        const zone7 = tracy.initZone(@src(), .{ .name = "get or put" });
                         const ptr = try self.queue.getOrPut(node.ID);
                         ptr.value_ptr.* = drawC{
                             .ID = node.ID,
@@ -2269,10 +2338,15 @@ pub const commands = struct {
                                 },
                             },
                         };
+                        zone7.deinit();
+
                         break :blk node;
                     };
+                    zone4.deinit();
+
                     releaseNode.data.commandPoolType = changeBufferQueue.srcQueueFamily;
 
+                    const zone5 = tracy.initZone(@src(), .{ .name = "set pipeline barrier" });
                     var releasePipelineBarrier = &self.queue.getPtr(releaseNode.ID).?.command.pipelineBarrier;
                     const new_len = releasePipelineBarrier.barriers.len + changeBufferQueue.regions.len;
                     releasePipelineBarrier.barriers = try allocator.realloc(releasePipelineBarrier.barriers, new_len);
@@ -2285,6 +2359,7 @@ pub const commands = struct {
                         barrier.bufferMemory.size = region.size;
                     }
                     releasePipelineBarrier.lastSrcStageMask = @min(releasePipelineBarrier.lastSrcStageMask, releaseFlags.sourceStage);
+                    zone5.deinit();
 
                     const acquireFlags = inferAcquirePipelinBarrierInfoByCommandTypeAndBufferUsage(
                         enterCommandType,
