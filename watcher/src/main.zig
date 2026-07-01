@@ -468,6 +468,7 @@ pub fn main(init: std.process.Init) !void {
 
                 switch (info.Action) {
                     1, 3 => {
+                        // config file process
                         if (std.mem.eql(u8, name_utf8, watchingFilePath)) {
                             if (watchingFile == null) {
                                 continue;
@@ -550,6 +551,7 @@ pub fn main(init: std.process.Init) !void {
                             }
                             removeArray.clearRetainingCapacity();
                         } else {
+                            // other file process
                             const fullPath = try std.fs.path.joinZ(
                                 gpa,
                                 &[_][]const u8{ watch.path, name_utf8 },
@@ -579,8 +581,10 @@ pub fn main(init: std.process.Init) !void {
                                     const fileName = fullPath[startIndex..];
 
                                     var fType = db.FileType.UNKNOWN;
+                                    var inContent = false;
 
                                     if (watch == contentWatch) {
+                                        inContent = true;
                                         // std.log.debug("in", .{});
                                         const dir = try std.Io.Dir.openDirAbsolute(
                                             init.io,
@@ -978,7 +982,7 @@ pub fn main(init: std.process.Init) !void {
                                         }
                                     }
 
-                                    std.log.debug("name {s} {s}", .{ fileName, @tagName(fType) });
+                                    std.log.debug("{s} {s} {s}", .{ fileName, @tagName(fType), if (inContent) "in content" else " " });
                                 } else if (stat.kind == .directory) {
                                     const dir: ?std.Io.Dir = std.Io.Dir.openDirAbsolute(
                                         init.io,

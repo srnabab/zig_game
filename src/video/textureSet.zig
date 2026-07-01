@@ -519,7 +519,7 @@ pub fn getTexture(self: *Self, textureID: u32) ?Texture_t {
 }
 
 pub fn getTextureCotent(self: *Self, texture: Texture_t) Texture {
-    self.mutex.lock(self.io) catch unreachable;
+    self.mutex.lockUncancelable(self.io);
     defer self.mutex.unlock(self.io);
 
     const index = Handles.getIndex(@ptrCast(texture));

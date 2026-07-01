@@ -45,6 +45,7 @@ fn MutexArray(T: type) type {
 const sqlite3 = ?*file.sqlite.sqlite3;
 const DrawableC = ECS.CompentPool(process.Drawable);
 const Io = std.Io;
+const Allocator = std.mem.Allocator;
 const ResourcesQueue = MutexArray(resource.Resource);
 
 const Name_FileType_Handle = struct {
@@ -349,127 +350,24 @@ fn processResource(args: ResourceThreadArgs) Io.Cancelable!void {
 
             switch (pack.fileType) {
                 .UNKNOWN => {
-                    const fileID = file.getID(pack.name);
-                    const f = file.getFile(io, fileID, sqlite.?) catch |err| {
-                        std.log.err("{s}", .{@errorName(err)});
-                        continue;
-                    };
-                    defer f.close(io);
-
-                    const stat = f.stat(io) catch |err| {
-                        std.log.err("{s}", .{@errorName(err)});
-                        continue;
-                    };
-
-                    var buffer = [_]u8{0} ** 8;
-                    var reader = f.reader(io, &buffer);
-                    reader.seekTo(0) catch continue;
-
-                    const content = reader.interface.readAlloc(gpa, stat.size) catch |err| {
-                        std.log.err("{s}", .{@errorName(err)});
-                        continue;
-                    };
-
-                    {
-                        try resourceArray.mutex.lock(io);
-                        defer resourceArray.mutex.unlock(io);
-                        const ptr = resourceArray.array.addOne() catch |err| {
-                            std.log.err("{s}", .{@errorName(err)});
-                            continue;
-                        };
-                        ptr.* = .{ .others = .{
-                            .fileID = @intCast(fileID),
-                            .mem = content,
-                            .handle = pack.handle,
-                        } };
-                    }
+                    processResource_Unknown(
+                        io,
+                        gpa,
+                        sqlite,
+                        pack.name,
+                        pack.handle,
+                        resourceArray,
+                    ) catch continue;
                 },
                 .PNG => {
-                    const fileID = file.getID(pack.name);
-                    std.log.debug("ID {d}", .{fileID});
-                    const img = file.getImageLoadParam(io, fileID, sqlite.?) catch |err| {
-                        std.log.err("{s}", .{@errorName(err)});
-                        continue;
-                    };
-                    defer img.file.close(io);
-
-                    const imgStat = img.file.stat(io) catch |err| {
-                        std.log.err("{s}", .{@errorName(err)});
-                        continue;
-                    };
-
-                    var buffer = [_]u8{0} ** 8;
-                    var reader = img.file.reader(io, &buffer);
-                    reader.seekTo(0) catch continue;
-
-                    const fileMem = reader.interface.readAlloc(gpa, imgStat.size) catch |err| {
-                        std.log.err("{s}", .{@errorName(err)});
-                        continue;
-                    };
-                    defer gpa.free(fileMem);
-
-                    var imgWidth: c_int = 0;
-                    var imgHeight: c_int = 0;
-                    var channel: c_int = 0;
-
-                    const imageMem = stb_image.stbi_load_from_memory(
-                        @ptrCast(fileMem.ptr),
-                        @intCast(fileMem.len),
-                        @ptrCast(&imgWidth),
-                        @ptrCast(&imgHeight),
-                        @ptrCast(&channel),
-                        stb_image.STBI_rgb_alpha,
-                    );
-                    const pixelSize: u64 = @intCast(@sizeOf(u8) * imgWidth * imgHeight * channel);
-
-                    const stagingBuffer = vulkan.createBufferByUsage(pixelSize, 0, .staging, false) catch |err| {
-                        std.log.err("{s}", .{@errorName(err)});
-                        continue;
-                    };
-                    errdefer vulkan.destroyBuffer(stagingBuffer);
-
-                    vulkan.buffers.copyDataToMapped(stagingBuffer, u8, imageMem[0..pixelSize]);
-
-                    const image = vulkan.createImage2D(
-                        @intCast(imgWidth),
-                        @intCast(imgHeight),
-                        img.image.format,
-                        img.image.tiling,
-                        img.image.usage,
-                    ) catch |err| {
-                        std.log.err("{s}", .{@errorName(err)});
-                        continue;
-                    };
-                    errdefer vulkan.destroyImage(image);
-
-                    const imageView = vulkan.createImageView2D(
-                        @ptrFromInt(image.vkImage),
-                        img.image.format,
-                        vk.VK_IMAGE_ASPECT_COLOR_BIT,
-                    ) catch |err| {
-                        std.log.err("{s}", .{@errorName(err)});
-                        continue;
-                    };
-
-                    {
-                        try resourceArray.mutex.lock(io);
-                        defer resourceArray.mutex.unlock(io);
-                        const ptr = resourceArray.array.addOne() catch |err| {
-                            std.log.err("{s}", .{@errorName(err)});
-                            continue;
-                        };
-                        ptr.* = .{ .texture = .{
-                            .width = @intCast(imgWidth),
-                            .height = @intCast(imgHeight),
-                            .fileID = @intCast(fileID),
-                            .vkImage = @ptrFromInt(image.vkImage),
-                            .vkImageView = imageView,
-                            .allocation = @ptrFromInt(image.allocation),
-                            .staginfBuffer = stagingBuffer,
-                            .format = img.image.format,
-                            .handle = pack.handle,
-                        } };
-                    }
+                    processResource_PNG(
+                        io,
+                        gpa,
+                        sqlite,
+                        vulkan,
+                        pack.name,
+                        pack.handle,
+                    ) catch continue;
                 },
                 else => continue,
             }
@@ -486,5 +384,145 @@ fn processResource(args: ResourceThreadArgs) Io.Cancelable!void {
         }
 
         try std.Io.sleep(io, .fromMilliseconds(1), .real);
+    }
+}
+
+fn processResource_Unknown(
+    io: Io,
+    gpa: Allocator,
+    sqlite: sqlite3,
+    name: []const u8,
+    handle: Handle,
+    resourceArray: *MutexArray(resource),
+) !void {
+    const fileID = file.getID(name);
+    const f = file.getFile(io, fileID, sqlite) catch |err| {
+        std.log.err("{s}", .{@errorName(err)});
+        return err;
+    };
+    defer f.close(io);
+
+    const stat = f.stat(io) catch |err| {
+        std.log.err("{s}", .{@errorName(err)});
+        return err;
+    };
+
+    var buffer = [_]u8{0} ** 8;
+    var reader = f.reader(io, &buffer);
+    try reader.seekTo(0);
+
+    const content = reader.interface.readAlloc(gpa, stat.size) catch |err| {
+        std.log.err("{s}", .{@errorName(err)});
+        return err;
+    };
+
+    {
+        try resourceArray.mutex.lock(io);
+        defer resourceArray.mutex.unlock(io);
+        const ptr = resourceArray.array.addOne() catch |err| {
+            std.log.err("{s}", .{@errorName(err)});
+            return err;
+        };
+        ptr.* = .{ .others = .{
+            .fileID = @intCast(fileID),
+            .mem = content,
+            .handle = handle,
+        } };
+    }
+}
+
+fn processResource_PNG(
+    io: Io,
+    gpa: Allocator,
+    sqlite: sqlite3,
+    vulkan: *VkStruct,
+    name: []const u8,
+    handle: Handle,
+    resourceArray: *MutexArray(resource),
+) !void {
+    const fileID = file.getID(name);
+    std.log.debug("ID {d}", .{fileID});
+    const img = file.getImageLoadParam(io, fileID, sqlite.?) catch |err| {
+        std.log.err("{s}", .{@errorName(err)});
+        return err;
+    };
+    defer img.file.close(io);
+
+    const imgStat = img.file.stat(io) catch |err| {
+        std.log.err("{s}", .{@errorName(err)});
+        return err;
+    };
+
+    var buffer = [_]u8{0} ** 8;
+    var reader = img.file.reader(io, &buffer);
+    try reader.seekTo(0);
+
+    const fileMem = reader.interface.readAlloc(gpa, imgStat.size) catch |err| {
+        std.log.err("{s}", .{@errorName(err)});
+        return err;
+    };
+    defer gpa.free(fileMem);
+
+    var imgWidth: c_int = 0;
+    var imgHeight: c_int = 0;
+    var channel: c_int = 0;
+
+    const imageMem = stb_image.stbi_load_from_memory(
+        @ptrCast(fileMem.ptr),
+        @intCast(fileMem.len),
+        @ptrCast(&imgWidth),
+        @ptrCast(&imgHeight),
+        @ptrCast(&channel),
+        stb_image.STBI_rgb_alpha,
+    );
+    const pixelSize: u64 = @intCast(@sizeOf(u8) * imgWidth * imgHeight * channel);
+
+    const stagingBuffer = vulkan.createBufferByUsage(pixelSize, 0, .staging, false) catch |err| {
+        std.log.err("{s}", .{@errorName(err)});
+        return err;
+    };
+    errdefer vulkan.destroyBuffer(stagingBuffer);
+
+    vulkan.buffers.copyDataToMapped(stagingBuffer, u8, imageMem[0..pixelSize]);
+
+    const image = vulkan.createImage2D(
+        @intCast(imgWidth),
+        @intCast(imgHeight),
+        img.image.format,
+        img.image.tiling,
+        img.image.usage,
+    ) catch |err| {
+        std.log.err("{s}", .{@errorName(err)});
+        return err;
+    };
+    errdefer vulkan.destroyImage(image);
+
+    const imageView = vulkan.createImageView2D(
+        @ptrFromInt(image.vkImage),
+        img.image.format,
+        vk.VK_IMAGE_ASPECT_COLOR_BIT,
+    ) catch |err| {
+        std.log.err("{s}", .{@errorName(err)});
+        return err;
+    };
+
+    {
+        try resourceArray.mutex.lock(io);
+        defer resourceArray.mutex.unlock(io);
+        const ptr = resourceArray.array.addOne() catch |err| {
+            std.log.err("{s}", .{@errorName(err)});
+            return err;
+        };
+        ptr.* = .{ .texture = .{
+            .width = @intCast(imgWidth),
+            .height = @intCast(imgHeight),
+            .fileID = @intCast(fileID),
+            .vkImage = @ptrFromInt(image.vkImage),
+            .vkImageView = imageView,
+            .allocation = @ptrFromInt(image.allocation),
+            .staginfBuffer = stagingBuffer,
+            .format = img.image.format,
+            .handle = handle,
+        } };
     }
 }

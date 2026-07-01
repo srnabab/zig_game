@@ -203,6 +203,8 @@ pub fn loadGltfFile(fileMem: []const u8, fileStat: std.Io.File.Stat, allocator: 
             const node = nodes[j];
             const node_name = try getName(node.*.name, arena);
 
+            // std.log.debug("node name: {s}", .{node_name});
+
             const nodePtr = node_array.addOneAssumeCapacity();
             nodePtr.name = node_name;
 
@@ -284,6 +286,19 @@ pub fn loadGltfFile(fileMem: []const u8, fileStat: std.Io.File.Stat, allocator: 
                                 );
                             }
                         },
+                        .cgltf_attribute_type_tangent => {
+                            for (0..attributes[o].data.*.count) |p| {
+                                var pos: vertexStruct.vec3 = undefined;
+                                _ = cgltf.cgltf_accessor_read_float(&data.*.accessors[o], p, &pos, 3);
+
+                                setValue(
+                                    primPtr.vertex,
+                                    p,
+                                    &pos,
+                                    "tangent",
+                                );
+                            }
+                        },
                         else => {
                             std.debug.panic("{s} not supported", .{@tagName(type_enum)});
                         },
@@ -318,19 +333,21 @@ const Flag_VertexType = struct {
 const list = [_]Flag_VertexType{
     .{ .flag = 0x8000000000000000, ._type = vertexStruct.VertexType.f3p },
     .{ .flag = 0xC000000000000000, ._type = vertexStruct.VertexType.f3pf3n },
-    .{ .flag = 0xA000000000000000, ._type = vertexStruct.VertexType.f3pf2u },
-    .{ .flag = 0xE000000000000000, ._type = vertexStruct.VertexType.f3pf3nf2u },
+    .{ .flag = 0x9000000000000000, ._type = vertexStruct.VertexType.f3pf2u },
+    .{ .flag = 0xD000000000000000, ._type = vertexStruct.VertexType.f3pf3nf2u },
+    .{ .flag = 0xF000000000000000, ._type = vertexStruct.VertexType.f3pf3nf3tf2u },
 };
 
 pub fn judgePrimitiveVertexType(primitives: [*c]cgltf.cgltf_primitive) vertexStruct.VertexType {
     const attributes_count = primitives.*.attributes_count;
     const attributes = primitives.*.attributes;
 
-    const FlagLength = 1 + 1 + 8 + 8 + 8 + 8 + 30;
+    const FlagLength = 1 + 1 + 1 + 8 + 8 + 8 + 8 + 29;
 
     const Position = FlagLength - 1;
     const Normal = Position - 1;
-    const TexCoordStart = Normal - 1;
+    const Tangent = Normal - 1;
+    const TexCoordStart = Tangent - 1;
     const ColorStart = TexCoordStart - 8;
     const JointStart = ColorStart - 8;
     const WeightStart = JointStart - 8;
@@ -360,6 +377,9 @@ pub fn judgePrimitiveVertexType(primitives: [*c]cgltf.cgltf_primitive) vertexStr
             },
             .cgltf_attribute_type_normal => {
                 flag.set(Normal);
+            },
+            .cgltf_attribute_type_tangent => {
+                flag.set(Tangent);
             },
             .cgltf_attribute_type_texcoord => {
                 flag.set(TexCoordStart - texcoordsCount);

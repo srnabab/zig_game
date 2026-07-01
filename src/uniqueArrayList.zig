@@ -1,7 +1,7 @@
 const std = @import("std");
 const tracy = @import("tracy");
 
-/// it just use for-loop to remove duplicate
+/// use for-loop to remove items
 pub fn UniqueArrayList(comptime T: type) type {
     const typeType = comptime @typeInfo(T);
     std.debug.assert(typeType == .int or (typeType == .pointer and @typeInfo(typeType.pointer.child) == .int));
