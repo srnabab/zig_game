@@ -203,7 +203,7 @@ fn createPipelineLayoutCreateInfo(shaderInfos: []PipelineShaderInfo, pipeRes: *V
         if (sInfo.pushConstantSize > 0) {
             pushConstants.*[pushConstantCount.*].stageFlags = sInfo.stage;
             pushConstants.*[pushConstantCount.*].size = @intCast(sInfo.pushConstantSize);
-            pushConstants.*[pushConstantCount.*].offset = pushConstantOffset;
+            pushConstants.*[pushConstantCount.*].offset = 0;
             pushConstantOffset += pushConstants.*[pushConstantCount.*].size;
             pushConstantCount.* += 1;
         }
@@ -268,8 +268,10 @@ pub fn toVulkan2(io: std.Io, info: *pipeline.pipelineInfo, shaderFolder: []const
     }
 
     var codes = try allocator.alloc([]u8, info.shaderCount);
+    // std.log.debug("shader count {d}", .{info.shaderCount});
     for (0..codes.len) |i| {
         codes[i] = shaderInfos[i].shaderCode;
+        // std.log.debug("shader len {d}", .{shaderInfos[i].shaderCode.len});
     }
 
     res.compute = (info.pipeType == .Compute);

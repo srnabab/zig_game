@@ -1,4 +1,6 @@
 const std = @import("std");
+const math = @import("math");
+
 const renderFlow = @import("renderFlow");
 const vk = @import("vulkan");
 const vertexStruct = @import("vertexStruct");
@@ -137,18 +139,24 @@ fn addIndirectDrawPass() !void {
         @sizeOf(vk.VkDrawIndirectCommand),
         0,
         .indirect,
+        false,
+        null,
     );
     const buffer2 = try renderFlow.createBuffer(
         "instance2D",
         1000 * @sizeOf(vertexStruct.Instance),
         @sizeOf(vertexStruct.Instance),
         .storage,
+        false,
+        null,
     );
     const buffer3 = try renderFlow.createBuffer(
         "instanceID2D",
         1000 * @sizeOf(u32),
         @sizeOf(u32),
         .storage,
+        false,
+        null,
     );
 
     const pipe = try renderFlow.addPipeline("indirectDraw.pipeb", false);
@@ -362,18 +370,24 @@ fn addIndirectComputePass() !void {
         @sizeOf(vk.VkDrawIndirectCommand),
         0,
         .indirect,
+        false,
+        null,
     );
     const buffer2 = try renderFlow.createBuffer(
         "instance2D",
         1000 * @sizeOf(vertexStruct.Instance),
         @sizeOf(vertexStruct.Instance),
         .storage,
+        false,
+        null,
     );
     const buffer3 = try renderFlow.createBuffer(
         "instanceID2D",
         1000 * @sizeOf(u32),
         @sizeOf(u32),
         .storage,
+        false,
+        null,
     );
 
     const pipe = try renderFlow.addPipeline("indirectDrawCompute.pipeb", false);
@@ -391,8 +405,213 @@ fn addIndirectComputePass() !void {
     try renderFlow.appendPass(passName);
 }
 
+const Im_FeatherPushConstant = struct {
+    meshlet: u64,
+    vertices: u64,
+    meshletVertices: u64,
+    meshletTriangles: u64,
+    metadata: u64,
+};
+
+fn initIm_Feather(userdata: ?*anyopaque, pass: *Pass, vulkan: *VkStruct, gpa: std.mem.Allocator) !void {
+    _ = userdata;
+
+    const storageBufferAddress = vulkan.getBufferAddress(pass.buffer[1]);
+
+    const meshlet = storageBufferAddress;
+
+    var bufferContent = vulkan.buffers.getBufferContent(pass.buffer[2]);
+    const vertices = storageBufferAddress + bufferContent.size;
+
+    bufferContent = vulkan.buffers.getBufferContent(pass.buffer[3]);
+    const meshletVertices = vertices + bufferContent.size;
+
+    bufferContent = vulkan.buffers.getBufferContent(pass.buffer[4]);
+    const meshletTriangles = meshletVertices + bufferContent.size;
+
+    bufferContent = vulkan.buffers.getBufferContent(pass.buffer[5]);
+    const metadata = meshletTriangles + bufferContent.size;
+
+    pass.setPushConstants(&Im_FeatherPushConstant{
+        .meshlet = meshlet,
+        .vertices = vertices,
+        .meshletVertices = meshletVertices,
+        .meshletTriangles = meshletTriangles,
+        .metadata = metadata,
+    });
+
+    var descriptorSets = [_]vk.VkDescriptorSet{
+        vulkan.globalTextureDescriptorSet,
+        vulkan.global3dMVPMatrixDescriptorSet,
+    };
+
+    try pass.setDescriptorSets(&descriptorSets, gpa);
+}
+
+fn setIm_FeatherPushConstant(userdata: ?*anyopaque, pValues: *anyopaque) void {
+    const src: *Im_FeatherPushConstant = @ptrCast(@alignCast(userdata.?));
+    const dst: *Im_FeatherPushConstant = @ptrCast(@alignCast(pValues));
+
+    dst.* = src.*;
+}
+
+fn addIm_FeatherCommand(
+    userdata: ?*anyopaque,
+    pass: *Pass,
+    vulkan: *VkStruct,
+    textureSet: *TextureSet,
+    commands: *Commands,
+    gpa: std.mem.Allocator,
+) !void {
+    _ = userdata;
+
+    commands.setRendering(0, vk.VkRect2D{
+        .extent = .{
+            .width = vulkan.windowWidth,
+            .height = vulkan.windowHeight,
+        },
+        .offset = .{ .x = 0, .y = 0 },
+    }, 1, 0, false);
+
+    const texture = try vulkan.getRenderTarget(
+        textureSet,
+        vulkan.windowWidth,
+        vulkan.windowHeight,
+        vk.VK_FORMAT_R8G8B8A8_SRGB,
+        vk.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | vk.VK_IMAGE_USAGE_SAMPLED_BIT,
+        vk.VK_IMAGE_TILING_OPTIMAL,
+        0,
+    );
+
+    try commands.setRenderingColorAttachment(0, .{
+        .sType = vk.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .pNext = null,
+        .imageView = textureSet.getVkImageView(texture).?,
+        .imageLayout = vk.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .loadOp = vk.VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = vk.VK_ATTACHMENT_STORE_OP_STORE,
+        .clearValue = vk.VkClearValue{
+            .color = vk.VkClearColorValue{
+                .float32 = [_]f32{ 0.0, 0.0, 0.0, 0.0 },
+            },
+        },
+    }, texture, false);
+
+    commands.addCommand(.drawMeshIndirect, .{ .drawMeshIndirect = .{
+        .descriptorSets = pass.descriptorSet,
+        .pipeline = pass.pipeline,
+        .usedBuffers = pass.buffer[0..2],
+        .pushConstants = pass.pushConstant,
+        .indirectBuffer = pass.buffer[0],
+        .pTextures = pass.texture,
+    } });
+
+    pass.clearTexture(gpa);
+}
+
+const vtableIm_Feather = VTable{
+    .init = initIm_Feather,
+    .addCommand = addIm_FeatherCommand,
+    .setPushConstants = setIm_FeatherPushConstant,
+};
+
+fn addIm_FeatherPass() !void {
+    const buffer = try renderFlow.createBuffer(
+        "im_FeatherCommand",
+        @sizeOf(vk.VkDrawMeshTasksIndirectCommandEXT) * 2,
+        0,
+        .indirect,
+        false,
+        null,
+    );
+    const meshletSize = math.round(16, @sizeOf(vertexStruct.Meshlet) * 100);
+    const verticesSize = math.round(16, @sizeOf(vertexStruct.Vertex_f3pf3nf3tf2u) * 2000);
+    const meshletVerticesSize = math.round(16, @sizeOf(u32) * 1000);
+    const mehsletTrianglesSize = math.round(16, @sizeOf(u8) * 1000);
+    const metadataSize = math.round(16, @sizeOf(vertexStruct.MetaData) * 10);
+
+    const totalSize = verticesSize + meshletSize + meshletVerticesSize + mehsletTrianglesSize + metadataSize;
+
+    const buffer2 = try renderFlow.createBuffer(
+        "featherStorageBuffer",
+        totalSize,
+        0,
+        .storage,
+        false,
+        null,
+    );
+
+    const buffer3 = try renderFlow.createBuffer(
+        "featherMeshlet",
+        meshletSize,
+        @sizeOf(vertexStruct.Meshlet),
+        .storage,
+        true,
+        "featherStorageBuffer",
+    );
+
+    const buffer4 = try renderFlow.createBuffer(
+        "featherVertices",
+        verticesSize,
+        @sizeOf(vertexStruct.Vertex_f3pf3nf3tf2u),
+        .storage,
+        true,
+        "featherStorageBuffer",
+    );
+
+    const buffer5 = try renderFlow.createBuffer(
+        "featherMeshletVertices",
+        meshletVerticesSize,
+        @sizeOf(u32),
+        .storage,
+        true,
+        "featherStorageBuffer",
+    );
+
+    const buffer6 = try renderFlow.createBuffer(
+        "featherMeshletTriangles",
+        mehsletTrianglesSize,
+        @sizeOf(u8),
+        .storage,
+        true,
+        "featherStorageBuffer",
+    );
+
+    const buffer7 = try renderFlow.createBuffer(
+        "featherMetadata",
+        metadataSize,
+        @sizeOf(vertexStruct.MetaData),
+        .storage,
+        true,
+        "featherStorageBuffer",
+    );
+
+    const pipe = try renderFlow.addPipeline("im_feather.pipeb", true);
+
+    try renderFlow.createPass("im_feather");
+    try renderFlow.addPipelineToPass("im_feather", pipe);
+    try renderFlow.addBufferToPass("im_feather", buffer);
+    try renderFlow.addBufferToPass("im_feather", buffer2);
+    try renderFlow.addBufferToPass("im_feather", buffer3);
+    try renderFlow.addBufferToPass("im_feather", buffer4);
+    try renderFlow.addBufferToPass("im_feather", buffer5);
+    try renderFlow.addBufferToPass("im_feather", buffer6);
+    try renderFlow.addBufferToPass("im_feather", buffer7);
+
+    try renderFlow.setPushConstant(
+        "im_feather",
+        vk.VK_SHADER_STAGE_TASK_BIT_EXT | vk.VK_SHADER_STAGE_MESH_BIT_EXT,
+        40,
+    );
+
+    try renderFlow.addVTableToPass("im_feather", &vtableIndirectDraw);
+
+    try renderFlow.appendPass("im_feather");
+}
+
 pub fn setting() !void {
     try addIndirectComputePass();
     try addIndirectDrawPass();
+    try addIm_FeatherPass();
     try addPresentPass();
 }

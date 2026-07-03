@@ -27,18 +27,47 @@ pub fn deinit() void {
     allocator.deinit();
 }
 
-pub fn createBuffer(name: []const u8, initSize: u64, stride: u64, usage: Pass.BufferUsage) !Pass.Buffer {
+pub fn createBuffer(
+    name: []const u8,
+    initSize: u64,
+    stride: u64,
+    usage: Pass.BufferUsage,
+    isVirtualBlock: bool,
+    parentName: ?[]const u8,
+) !Pass.Buffer {
     if (buffers.get(name)) |buffer| {
         return buffer;
+    }
+
+    var offset: u64 = 0;
+
+    if (isVirtualBlock) {
+        if (parentName) |n| {
+            if (buffers.getPtr(n)) |b| {
+                if (b.residuentCapacity < initSize) {
+                    return error.OutOfMemory;
+                }
+                offset = b.initSize - b.residuentCapacity;
+
+                b.residuentCapacity -= initSize;
+            } else {
+                return error.VirtualBlockWithoutParent;
+            }
+        } else {
+            return error.VirtualBlockWithoutParent;
+        }
     }
 
     const name_dupe = try allocator.allocator().dupe(u8, name);
 
     const buffer = Pass.Buffer{
         .name = name_dupe,
+        .parentName = if (isVirtualBlock) parentName else null,
         .initSize = initSize,
         .usage = usage,
         .stride = stride,
+        .residuentCapacity = initSize,
+        .offset = offset,
     };
 
     try buffers.put(name_dupe, buffer);

@@ -395,7 +395,7 @@ pub fn render_thread_func(args: Args) !void {
         }
     }
 
-    // vulkan.logBufferPtr();
+    vulkan.logBufferPtr();
 
     // textureSett.logImagePtr();
 

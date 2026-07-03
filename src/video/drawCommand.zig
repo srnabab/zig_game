@@ -311,21 +311,23 @@ pub const DrawMesh = struct {
     meshletCount: u32,
 };
 
+pub const DrawMeshRecord = struct {
+    meshletCount: u32,
+};
+
 pub const DrawMeshIndirect = struct {
     pipeline: VkStruct.Pipeline_t,
     descriptorSets: []vk.VkDescriptorSet,
     pTextures: []texture.Texture_t,
     usedBuffers: []VkStruct.Buffer_t,
+    indirectBuffer: VkStruct.Buffer_t,
     pushConstants: PushConstantPack,
-    meshletCount: u32,
-};
-
-pub const DrawMeshRecord = struct {
-    meshletCount: u32,
 };
 
 pub const DrawMeshIndirectRecord = struct {
-    e: void,
+    addressRange: vk.VkStridedDeviceAddressRangeKHR,
+    addressFlags: u32,
+    drawCount: u32,
 };
 
 pub const DrawIndirect = struct {

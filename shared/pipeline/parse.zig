@@ -49,15 +49,24 @@ pub fn pipelineJsonParse(io: std.Io, pipelineContent: []const u8, shaderFolder: 
         var val = std.mem.toBytes(val_u32);
         // std.log.debug("len {d}", .{res.shaderCodes[i].len});
         _ = try writer.interface.write(&val);
-        _ = try writer.interface.write(res.shaderCodes[i]);
+        _ = try writer.interface.writeAll(res.shaderCodes[i]);
+
+        // const s = try outputFile.stat(io);
+
+        // std.log.debug("file len {d}", .{s.size});
     }
     try writer.flush();
+
+    // const s = try outputFile.stat(io);
+
+    // std.log.debug("file len {d}", .{s.size});
 
     var shaderNames = try gpa.alloc([:0]u8, res.shaderCodes.len);
     for (0..res.shaderCodes.len) |i| {
         const len = std.mem.len(@as([*c]u8, @ptrCast(&res.info.shaderName[i])));
         shaderNames[i] = try gpa.allocSentinel(u8, len, 0);
         @memcpy(shaderNames[i], res.info.shaderName[i][0..len]);
+        std.log.debug("shader name {s}", .{shaderNames[i]});
     }
 
     std.log.debug("parse {s}", .{outputPath});

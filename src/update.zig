@@ -353,7 +353,7 @@ fn processResource(args: ResourceThreadArgs) Io.Cancelable!void {
                     processResource_Unknown(
                         io,
                         gpa,
-                        sqlite,
+                        sqlite.?,
                         pack.name,
                         pack.handle,
                         resourceArray,
@@ -363,13 +363,18 @@ fn processResource(args: ResourceThreadArgs) Io.Cancelable!void {
                     processResource_PNG(
                         io,
                         gpa,
-                        sqlite,
+                        sqlite.?,
                         vulkan,
                         pack.name,
                         pack.handle,
+                        resourceArray,
                     ) catch continue;
                 },
-                else => continue,
+                .VTX => {},
+                else => {
+                    std.log.debug("unsupported type {s}", .{@tagName(pack.fileType)});
+                    unreachable;
+                },
             }
 
             var pushSuccess = false;
@@ -393,7 +398,7 @@ fn processResource_Unknown(
     sqlite: sqlite3,
     name: []const u8,
     handle: Handle,
-    resourceArray: *MutexArray(resource),
+    resourceArray: *MutexArray(resource.Resource),
 ) !void {
     const fileID = file.getID(name);
     const f = file.getFile(io, fileID, sqlite) catch |err| {
@@ -438,7 +443,7 @@ fn processResource_PNG(
     vulkan: *VkStruct,
     name: []const u8,
     handle: Handle,
-    resourceArray: *MutexArray(resource),
+    resourceArray: *MutexArray(resource.Resource),
 ) !void {
     const fileID = file.getID(name);
     std.log.debug("ID {d}", .{fileID});
@@ -526,3 +531,13 @@ fn processResource_PNG(
         } };
     }
 }
+
+// fn processResource_VTX(
+//     io: Io,
+//     gpa: Allocator,
+//     sqlite: sqlite3,
+//     vulkan: *VkStruct,
+//     name: []const u8,
+//     handle: Handle,
+//     resourceArray: *MutexArray(resource),
+// ) !void {}

@@ -196,11 +196,12 @@ const Self = @This();
 
 const dynamicFuncNeeded = [_][]const u8{
     "vkCmdDrawMeshTasksEXT",
-    // "vkCmdDrawMeshTasksIndirectEXT",
+    "vkCmdDrawMeshTasksIndirect2EXT",
     // "vkCmdDrawMeshTasksIndirectCountEXT",
 };
 
 pub var vkCmdDrawMeshTasksEXT: vk.PFN_vkCmdDrawMeshTasksEXT = null;
+pub var vkCmdDrawMeshTasksIndirect2EXT: vk.PFN_vkCmdDrawMeshTasksIndirect2EXT = null;
 
 currentFrame: std.atomic.Value(u32) = .init(0),
 
@@ -1350,6 +1351,8 @@ pub fn readPipelineFileAndAdd(self: *Self, io: std.Io, fileID: i32, sqlite: ?*fi
     pos += @sizeOf(translate.VulkanPipelineInfo);
     // std.log.debug("pos {d}", .{pos});
     for (0..5) |i| {
+        // std.log.debug("i {d}", .{i});
+
         if (pos >= fileSize) break;
 
         const len = std.mem.bytesToValue(u32, fileContent[pos .. pos + @sizeOf(u32)]);
@@ -1361,6 +1364,8 @@ pub fn readPipelineFileAndAdd(self: *Self, io: std.Io, fileID: i32, sqlite: ?*fi
         // std.log.debug("pos {d}", .{pos});
     }
     zone3.deinit();
+
+    // std.log.debug("type {d}", .{});
 
     try translate.toVulkan(
         pipelineInfo,

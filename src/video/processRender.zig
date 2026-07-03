@@ -4269,6 +4269,54 @@ pub const commands = struct {
                         .offsets = offsets,
                     } };
                     // self.inMesh = false;
+                } else if (command == .drawMeshIndirect) {
+                    const drawMeshIndirect = command.drawMeshIndirect;
+
+                    {
+                        if (!Handles.handleIsValid(@ptrCast(drawMeshIndirect.pipeline))) reAdd = true;
+                        for (drawMeshIndirect.pTextures) |value| {
+                            if (!Handles.handleIsValid(@ptrCast(value))) {
+                                reAdd = true;
+                                break;
+                            }
+                        }
+                        for (drawMeshIndirect.usedBuffers) |value| {
+                            if (!Handles.handleIsValid(@ptrCast(value))) {
+                                reAdd = true;
+                                break;
+                            }
+                        }
+
+                        if (reAdd) break :re;
+                    }
+
+                    pTextures = drawMeshIndirect.pTextures;
+                    descriptorSets = drawMeshIndirect.descriptorSets;
+                    pipeline = drawMeshIndirect.pipeline;
+                    pushConstants = drawMeshIndirect.pushConstants;
+                    buffers = drawMeshIndirect.usedBuffers;
+                    pRendering = &self.rendering;
+
+                    buffers = try allocator.alloc(
+                        VkStruct.Buffer_t,
+                        drawMeshIndirect.usedBuffers.len + 1,
+                    );
+                    for (buffers[0..drawMeshIndirect.usedBuffers.len], 0..drawMeshIndirect.usedBuffers.len) |*value, i| {
+                        value.* = drawMeshIndirect.usedBuffers[i];
+                    }
+                    buffers[buffers.len - 1] = drawMeshIndirect.indirectBuffer;
+
+                    ptr.value_ptr.command = .{
+                        .drawMeshIndirectRecord = .{
+                            .addressRange = .{
+                                .address = self.vulkan.getBufferAddress(drawMeshIndirect.indirectBuffer),
+                                .size = self.vulkan.buffers.getBufferSize(drawMeshIndirect.indirectBuffer),
+                                .stride = @sizeOf(vk.VkDrawMeshTasksIndirectCommandEXT),
+                            },
+                            .addressFlags = vk.VK_ADDRESS_COMMAND_FULLY_BOUND_BIT_KHR,
+                            .drawCount = 1,
+                        },
+                    };
                 }
 
                 descriptorSets = try allocator.dupe(vk.VkDescriptorSet, descriptorSets);
@@ -5255,6 +5303,20 @@ pub const oneTimeCommand = struct {
 
                 // vk.vkCmdDrawMeshTasksIndirectEXT(commandBuffer: ?*struct_VkCommandBuffer_T, buffer: ?*struct_VkBuffer_T, offset: u64, drawCount: u32, stride: u32)
 
+            },
+            .drawMeshIndirectRecord => {
+                const innerZone = tracy.initZone(@src(), .{ .name = "draw mesh indirect" });
+                defer innerZone.deinit();
+
+                var info = vk.VkDrawIndirect2InfoKHR{
+                    .sType = vk.VK_STRUCTURE_TYPE_DRAW_INDIRECT_2_INFO_KHR,
+                    .pNext = null,
+                    .addressRange = command.command.drawMeshIndirectRecord.addressRange,
+                    .addressFlags = command.command.drawMeshIndirectRecord.addressFlags,
+                    .drawCount = command.command.drawMeshIndirectRecord.drawCount,
+                };
+
+                VkStruct.vkCmdDrawMeshTasksIndirect2EXT.?(commandBuffer, &info);
             },
             else => {
                 std.debug.panic("unsupported command type {s}", .{@tagName(command.command)});

@@ -63,6 +63,7 @@ const featureNeed = [_][]const u8{
     "wideLines",
     "robustBufferAccess",
     "shaderInt16",
+    "shaderInt64",
 };
 const featureIndexingNeed = [_][]const u8{
     "shaderUniformBufferArrayNonUniformIndexing",
@@ -90,6 +91,7 @@ const featureScalarBlockLayoutNeed = [_][]const u8{"scalarBlockLayout"};
 const featureBufferDeviceAddressNeed = [_][]const u8{"bufferDeviceAddress"};
 const featureSwapchainMaintenance1Need = [_][]const u8{"swapchainMaintenance1"};
 const feature16BitStorageNeed = [_][]const u8{"storageBuffer16BitAccess"};
+const featureShaderDrawParametersNeed = [_][]const u8{"shaderDrawParameters"};
 
 const typeNames = struct {
     featureType: type,
@@ -110,6 +112,7 @@ const featureTypeAndNames = [_]typeNames{
     .{ .featureType = vk.VkPhysicalDeviceBufferDeviceAddressFeatures, .names = &featureBufferDeviceAddressNeed },
     .{ .featureType = vk.VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR, .names = &featureSwapchainMaintenance1Need },
     .{ .featureType = vk.VkPhysicalDevice16BitStorageFeatures, .names = &feature16BitStorageNeed },
+    .{ .featureType = vk.VkPhysicalDeviceShaderDrawParametersFeatures, .names = &featureShaderDrawParametersNeed },
 };
 
 const VkQueueFamily = types.VkQueueFamily;
@@ -197,6 +200,7 @@ fn getSType(comptime T: type) vk.VkStructureType {
         vk.VkPhysicalDeviceBufferDeviceAddressFeatures => vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES,
         vk.VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR => vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR,
         vk.VkPhysicalDevice16BitStorageFeatures => vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES,
+        vk.VkPhysicalDeviceShaderDrawParameterFeatures => vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETER_FEATURES,
         // ... 在这里添加新类型的映射
         else => @compileError(std.fmt.comptimePrint("Unsupported feature type {s}", .{@typeName(T)})),
     };
@@ -587,8 +591,8 @@ pub fn createDevice(
         .flags = 0,
         .queueCreateInfoCount = queueCount,
         .pQueueCreateInfos = @ptrCast(&queueCreateInfo),
-        .enabledLayerCount = @truncate(layerNeeded.len),
-        .ppEnabledLayerNames = @ptrCast(&layerNeeded),
+        .enabledLayerCount = 0,
+        .ppEnabledLayerNames = null,
         .enabledExtensionCount = @truncate(deviceExtensionNeeded.len),
         .ppEnabledExtensionNames = @ptrCast(&deviceExtensionNeeded),
         .pEnabledFeatures = null,
@@ -621,6 +625,7 @@ pub fn debugCallback(
 
     if (messageSeverity >= vk.VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
         std.log.err("{s}", .{pCallbackData.*.pMessage});
+
         @breakpoint();
     } else {
         std.log.debug("{s}", .{pCallbackData.*.pMessage});

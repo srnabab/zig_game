@@ -59,7 +59,7 @@ pub const Pass = struct {
         );
     }
 
-    /// this function is only used for tell dependency, you should set draw data by yourself
+    /// this function is only used for tell dependency
     pub fn useTexture(self: *Pass, texture: Texture_t, gpa: std.mem.Allocator) !void {
         self.texture = try gpa.realloc(self.texture, self.texture.len + 1);
         self.texture[self.texture.len - 1] = texture;
@@ -108,6 +108,7 @@ pub fn initFromRenderFlow(io: std.Io, gpa: std.mem.Allocator, vulkan: *VkStruct,
     var skipCount: usize = 0;
     for (0..passCount) |i| {
         const pass = renderFlow.getPass(i);
+        std.log.debug("pass {s}", .{pass.name});
 
         if (pass.pipeline == null) {
             skipCount += 1;
@@ -137,12 +138,28 @@ pub fn initFromRenderFlow(io: std.Io, gpa: std.mem.Allocator, vulkan: *VkStruct,
                 const res = bufferMap.get(buffer.name);
 
                 if (res == null) {
-                    const buffer_t = try vulkan.createBufferByUsage(
-                        buffer.initSize,
-                        buffer.stride,
-                        buffer.usage,
-                        true,
-                    );
+                    var buffer_t: Buffer_t = undefined;
+
+                    if (buffer.parentName) |p| {
+                        if (bufferMap.get(p)) |parent| {
+                            buffer_t = try vulkan.createVirtualBlockBuffer(
+                                0,
+                                buffer.initSize,
+                                parent,
+                                buffer.offset,
+                                buffer.stride,
+                            );
+                        } else {
+                            return error.VirtualBlockWithoutParent;
+                        }
+                    } else {
+                        buffer_t = try vulkan.createBufferByUsage(
+                            buffer.initSize,
+                            buffer.stride,
+                            buffer.usage,
+                            true,
+                        );
+                    }
 
                     try bufferMap.put(buffer.name, buffer_t);
 
@@ -158,6 +175,15 @@ pub fn initFromRenderFlow(io: std.Io, gpa: std.mem.Allocator, vulkan: *VkStruct,
         try passMap.put(passes[passedIndex].name, &passes[passedIndex]);
     }
     const actualPassCount = passCount - skipCount;
+
+    for (0..passCount) |i| {
+        const pass = renderFlow.getPass(i);
+
+        if (pass.pipeline == null) {
+            skipCount += 1;
+            continue;
+        }
+    }
 
     return .{
         .passes = try gpa.realloc(passes, actualPassCount),

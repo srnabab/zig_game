@@ -409,7 +409,7 @@ pub fn createVirtualBlockBuffer(
     const pack = try self.buffers.addOne();
     defer self.mutex.unlock(self.io);
 
-    const index = getIndex(buffer);
+    const index = getIndex(@ptrCast(buffer)) orelse return error.VirtualBlockWithoutParent;
     const ptr = self.buffers.get(index);
     // std.log.debug("queue have ptr {*}", .{&ptr.queue.have});
 
@@ -431,9 +431,9 @@ pub fn createVirtualBlockBuffer(
 
     // std.log.debug("ptr {*}, {*}, index {d}", .{ pack.ptr.vkBuffer, ptr.vkBuffer, index });
 
-    const handle = handles.createHandle(@intCast(pack.index));
+    const handle = handles.createHandle(@intCast(pack.index), .buffer);
 
-    return handle;
+    return @ptrCast(handle);
 }
 
 pub const BufferAndOffset = struct {

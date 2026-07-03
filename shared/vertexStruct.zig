@@ -10,12 +10,11 @@ pub const mat4 = cglm.mat4;
 
 const Self = @This();
 
-pub const IndirectDrawComputePushConstants = extern struct {
-    instanceBuffer: u64,
-    indirectAddress: u64,
-    instanceIDs: u64,
-    viewBounds: vec4,
-    totalSpriteCount: u32,
+pub const MetaData = extern struct {
+    texIndex: u32,
+    samplerIndex: u32,
+    meshletCount: u32,
+    meshletOffset: u32,
 };
 
 pub const Instance = extern struct {

@@ -45,9 +45,12 @@ fn addCommandEmpty(
 
 pub const Buffer = struct {
     name: []const u8,
+    parentName: ?[]const u8,
     initSize: u64,
     usage: BufferUsage,
     stride: u64,
+    residuentCapacity: u64,
+    offset: u64 = 0,
 };
 
 pub const Pipeline = struct {
