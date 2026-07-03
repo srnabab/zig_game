@@ -1,0 +1,109 @@
+#version 460
+
+#extension GL_EXT_mesh_shader : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_EXT_buffer_reference : require
+
+layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+
+struct TaskPayload {
+    uint visibleMeshletIndices[32];
+    uint gl_DrawID;
+};
+taskPayloadSharedEXT TaskPayload payload;
+
+
+struct MetaData {
+    uint texIndex;
+    uint samplerIndex;
+    uint meshletCount;
+    uint meshletOffset;
+};
+// struct MeshletBounds {
+//     vec4 sphere;
+// };
+// layout(binding = 0, std430) readonly buffer MeshletBoundsBuffer {
+//     MeshletBounds meshletBounds[];
+// };
+
+// 各种变换矩阵和相机裁剪面
+// layout(binding = 1) uniform CameraBuffer {
+//     mat4 viewProj;
+//     vec4 frustumPlanes[6];
+// };
+
+layout(buffer_reference) readonly buffer MetaDataBuffer {
+    MetaData metadatas[];
+};
+
+layout(push_constant) uniform PushConstants {
+    uint64_t meshletBuffer;
+    uint64_t vertexBuffer;
+    uint64_t meshletVertices;
+    uint64_t meshletIndices;
+    MetaDataBuffer metadataBuffer;
+} pc;
+
+// 共享计数器，用于统计通过裁剪的 Meshlet 数量
+shared uint sharedActiveCount;
+
+// 简单的视锥体裁剪函数
+// bool isVisible(vec3 center, float radius) {
+//     for (int i = 0; i < 6; ++i) {
+//         if (dot(frustumPlanes[i], vec4(center, 1.0)) < -radius) {
+//             return false; // 在任意一个裁剪面外，则不可见
+//         }
+//     }
+//     return true;
+// }
+
+void main() {
+    uint localID = gl_LocalInvocationID.x;
+    uint groupID = gl_WorkGroupID.x;
+
+    // 线程 0 初始化共享数据
+    if (localID == 0) {
+        sharedActiveCount = 0;;
+        payload.gl_DrawID = gl_DrawID;
+    }
+    // 必须同步，确保初始化完成
+    barrier();
+
+    uint meshletCount = pc.metadataBuffer.metadatas[gl_DrawID].meshletCount;
+    uint meshletOffset = pc.metadataBuffer.metadatas[gl_DrawID].meshletOffset;
+
+    for (uint i = localID;i < meshletCount;i += 32)  {
+        uint index = meshletOffset + i;
+        
+        uint writeIndex = atomicAdd(sharedActiveCount, 1);
+        payload.visibleMeshletIndices[writeIndex] = index;
+    }
+
+    // 3. 每一个线程负责该物体下的一个 Meshlet 的裁剪检测 (最多 32 个)
+    // uint globalMeshletIndex = baseMeshletOffset + localMeshletIndex;
+    
+    // bool visible = false;
+
+    // 边界检查
+    // if (localMeshletIndex < totalMeshlets) {
+    //     MeshletBounds bounds = meshletBounds[globalMeshletIndex];
+        // 执行视锥体裁剪
+    //     visible = isVisible(bounds.sphere.xyz, bounds.sphere.w);
+    // }
+
+    // 4. 压入 Payload（数据紧凑化/Compaction）
+    // if (visible) {
+        // 使用原子操作在共享内存中占位，获取唯一的写入索引
+        // 将可见的 Meshlet 索引存入 Payload
+    // }
+
+    // 必须再次同步，确保所有线程都已将可见索引写入 Payload
+    barrier();
+
+    // 5. 关键步骤：发射 Mesh Shader 工作组
+    // 【重要安全规则】：EmitMeshTasksEXT 必须在“统一控制流（Uniform Control Flow）”中被执行！
+    // 也就是说，工作组中的所有线程都必须到达这一行，并且参数必须是统一的。
+    // 因此，千万不要把它写在 `if (localID == 0)` 的分支内部。
+    uint dispatchCount = sharedActiveCount;
+    EmitMeshTasksEXT(dispatchCount, 1, 1);
+}
