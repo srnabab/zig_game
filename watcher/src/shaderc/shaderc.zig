@@ -13,6 +13,7 @@ const shaderSuffixToShaderKind = a: {
         .{ ".frag", shaderc.shaderc_fragment_shader },
         .{ ".comp", shaderc.shaderc_compute_shader },
         .{ ".mesh", shaderc.shaderc_mesh_shader },
+        .{ ".task", shaderc.shaderc_task_shader },
     };
 
     break :a maptype.initComptime(list);
@@ -93,8 +94,13 @@ pub const Compiler = struct {
 
         var shaderKind: shaderc.shaderc_shader_kind = 0xFFFF;
         if (index) |i| {
-            shaderKind = shaderSuffixToShaderKind.get(fileName[i..]) orelse return error.unknownShaderKind;
+            shaderKind = shaderSuffixToShaderKind.get(fileName[i..]) orelse
+                {
+                    std.log.err("unknown shader kind", .{});
+                    return error.unknownShaderKind;
+                };
         } else {
+            std.log.err("unknown shader kind", .{});
             return error.unknownShaderKind;
         }
 

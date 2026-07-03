@@ -12,6 +12,9 @@ const vertexStruct = @import("vertexStruct");
 const meshopt = @import("meshopt");
 const Types = @import("types");
 
+const Allocator = std.mem.Allocator;
+const Io = std.Io;
+
 const assert = std.debug.assert;
 
 const SceneFileName = "Scenes.json";
@@ -70,6 +73,7 @@ const FileTypeHashTable = map: {
         .{ ".vert", FileType.Shader },
         .{ ".comp", FileType.Shader },
         .{ ".mesh", FileType.Shader },
+        .{ ".task", FileType.Shader },
         .{ ".pipe", FileType.Pipeline },
         .{ ".samp", FileType.Sampler },
         .{ ".pipeb", FileType.PipeB },
@@ -185,6 +189,7 @@ fn updateLoadParameter(
     fileName: []const u8,
     rpZ: []const u8,
 ) !void {
+    _ = cc;
     switch (tp) {
         .PNG => {
             const format: vk.VkFormat, const tiling: vk.VkImageTiling, const usage: vk.VkImageUsageFlags, const properties: vk.VkMemoryPropertyFlags = try judgeImageLoadParameter(fileName);
@@ -193,13 +198,10 @@ fn updateLoadParameter(
         },
         .GLTF => {
             std.log.debug("file name {s}", .{fileName});
-            var res = try cgltf.loadGltfFile(content, cc, gpa);
+            var res = try cgltf.loadGltfFile(content, gpa);
             defer res.arenaAllocator.deinit();
 
             const arena = SceneJson.arena.allocator();
-
-            var modelNameToNewName = std.StringHashMap([]u8).init(arena);
-            defer modelNameToNewName.deinit();
 
             for (res.primitives) |value| {
                 const vertex_opted = try optimizeVertex(value.vertex, value.index, gpa);
@@ -247,36 +249,29 @@ fn updateLoadParameter(
                 const hashh = hash.blake3HashContent(meshMem);
 
                 var buffer = [_:0]u8{0} ** 256;
-                var primFileName = try std.fmt.bufPrintZ(&buffer, "{s}.vtx", .{value.name});
+                const primFileName = try std.fmt.bufPrintZ(&buffer, "{s}.vtx", .{value.name});
+                checkGltfPrimitiveName(value.name) catch {
+                    var blob: sqlDB.BLOBForGet = undefined;
+                    var anys = [_]*anyopaque{&blob};
+                    var types = [_]sqlDB.innerType{.BLOB};
 
-                const have = try ContentPathT.have("FileName", "FileName = ?", .{primFileName});
-                if (have) {
-                    const have3 = try ContentPathT.have(
+                    ContentPathT.get(
                         "ContentHash",
-                        "ContentHash = ?",
-                        .{sqlDB.BLOB{ .data = &hashh, .len = hashh.len }},
-                    );
-                    if (have3) {
-                        continue;
-                    }
+                        null,
+                        "FileName = ?",
+                        .{primFileName},
+                        &anys,
+                        &types,
+                    ) catch continue;
 
-                    primFileName = try std.fmt.bufPrintZ(&buffer, "{s}_{s}.vtx", .{
-                        value.name,
-                        std.fmt.bytesToHex(hashh, .lower),
-                    });
+                    const same = std.mem.eql(u8, &hashh, blob.data[0..blob.len]);
+                    if (same) continue;
+                };
 
-                    const name_dupe = try arena.dupe(u8, value.name);
-                    const primFileName_dupe = try arena.dupe(u8, primFileName);
-
-                    try modelNameToNewName.put(name_dupe, primFileName_dupe);
-
-                    const have2 = try ContentPathT.have("FileName", "FileName = ?", .{primFileName});
-                    if (have2) {
-                        continue;
-                    }
-                }
-
-                var primFile = try dir.createFile(io, primFileName, .{ .read = true });
+                var primFile = try dir.createFile(io, primFileName, .{
+                    .read = true,
+                    .truncate = true,
+                });
                 defer primFile.close(io);
 
                 var primFileWriter = primFile.writer(io, &buffer);
@@ -440,6 +435,52 @@ fn updateLoadParameter(
     }
 }
 
+fn checkGltfMeshProcess(allocator: Allocator, content: []const u8) !bool {
+    const data = try cgltf.getGltfFileInfo(content);
+    defer cgltf.cgltf.cgltf_free(data);
+
+    const scenes = data.*.scenes;
+    const scenes_count = data.*.scenes_count;
+
+    for (0..scenes_count) |i| {
+        const scene = scenes[i];
+
+        const nodes = scene.nodes;
+        const nodes_count = scene.nodes_count;
+
+        for (0..nodes_count) |j| {
+            const node = nodes[j];
+
+            const mesh = node.*.mesh;
+
+            const mesh_name = mesh.*.name;
+            const mesh_name_len = std.mem.len(mesh_name);
+
+            const primitives_count = mesh.*.primitives_count;
+            for (0..primitives_count) |l| {
+                const primitive_name_mem = try allocator.alloc(u8, mesh_name_len + 4 + 5);
+                defer allocator.free(primitive_name_mem);
+
+                const primitive_name = try std.fmt.bufPrintZ(
+                    primitive_name_mem,
+                    "{s}_{d}.vtx",
+                    .{ mesh_name, l },
+                );
+
+                const have = try ContentPathT.have(
+                    "FileName",
+                    "FileName = ?",
+                    .{primitive_name},
+                );
+
+                if (!have) return false;
+            }
+        }
+    }
+
+    return true;
+}
+
 fn judgeFileTypeByContent(content: []u8) FileType {
     if (std.mem.eql(u8, content, @constCast(&PNG))) {
         return .PNG;
@@ -486,6 +527,15 @@ fn getDbModifiedTime(comptime where_clause: []const u8, params: anytype) !i64 {
         sqlDB.sqliteError.StepError, sqlDB.sqliteError.Empty => return -1,
     };
     return modifiedTime;
+}
+
+fn checkGltfPrimitiveName(
+    name: []const u8,
+) !void {
+    const have = try ContentPathT.have("FileName", "FileName = ?", .{name});
+    if (have) {
+        return error.Duplicated;
+    }
 }
 
 pub fn processFile(
@@ -550,7 +600,20 @@ pub fn processFile(
             rPZ[0 .. rPZ.len - name.len - 1],
         );
     } else {
-        const isModified = (currentModifiedTime != fileModifiedTime);
+        // std.log.debug("2", .{});
+        var isModified = (currentModifiedTime != fileModifiedTime);
+
+        switch (fType) {
+            .GLTF => {
+                var fileReader = tempFile.reader(io, &fileBuffer);
+                const content = try fileReader.interface.readAlloc(gpa, metadata.size);
+                defer gpa.free(content);
+
+                isModified = try checkGltfMeshProcess(gpa, content);
+            },
+            else => {},
+        }
+
         if (pathModifiedTime == -1) {
             if (isModified) {
                 // std.log.debug("2", .{});
@@ -838,7 +901,8 @@ pub fn processContentFolder(content: std.Io.Dir, io: std.Io, tablePack: AllTable
         else => return err,
     };
     {
-        errdefer sceneFile.close(io);
+        defer sceneFile.close(io);
+
         const sceneFileStat = try sceneFile.stat(io);
         var cacheBuffer = [_]u8{0} ** 256;
         var sceneFileReader = sceneFile.reader(io, &cacheBuffer);
@@ -877,12 +941,6 @@ pub fn processContentFolder(content: std.Io.Dir, io: std.Io, tablePack: AllTable
             };
             SceneJson.arena.* = std.heap.ArenaAllocator.init(gpa);
         }
-    }
-    errdefer sceneFile.close(io);
-    defer {
-        SceneNameStringMap.deinit();
-
-        SceneJson.deinit();
     }
 
     if (exist) {
@@ -924,7 +982,21 @@ pub fn processContentFolder(content: std.Io.Dir, io: std.Io, tablePack: AllTable
 
     try iterateFolderUpdate(io, content, "Content", &buffer);
 
+    try saveSceneJson(io, content);
+
+    try ContentPathT.delete("LastSeenTime < ?", .{time});
+}
+
+pub fn saveSceneJson(io: std.Io, content: std.Io.Dir) !void {
+    var sceneFile = content.openFile(io, SceneFileName, .{ .mode = .read_write }) catch |err| blk: switch (err) {
+        error.FileNotFound => break :blk try content.createFile(io, SceneFileName, .{ .read = true }),
+        else => return err,
+    };
+    defer sceneFile.close(io);
+
     if (SceneJson.value.?.len > 0) {
+        try sceneFile.setLength(io, 0);
+
         var cacheBuffer = [_]u8{0} ** 1024;
         var sceneFileWriter = sceneFile.writer(io, &cacheBuffer);
         var sceneJsonWrite = std.json.Stringify{
@@ -934,16 +1006,17 @@ pub fn processContentFolder(content: std.Io.Dir, io: std.Io, tablePack: AllTable
         try sceneJsonWrite.write(SceneJson.value);
         try sceneFileWriter.interface.flush();
 
-        sceneFile.close(io);
-
-        _ = try processFile(
-            io,
-            content,
-            SceneFileName,
-            "Content" ++ slash ++ SceneFileName,
-            &buffer,
-        );
+        // _ = try processFile(
+        //     io,
+        //     content,
+        //     SceneFileName,
+        //     "Content" ++ slash ++ SceneFileName,
+        //     &buffer,
+        // );
     }
+}
 
-    try ContentPathT.delete("LastSeenTime < ?", .{time});
+pub fn cleanSceneJson() void {
+    SceneJson.deinit();
+    SceneNameStringMap.deinit();
 }

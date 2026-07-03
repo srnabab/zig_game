@@ -314,6 +314,7 @@ pub fn main(init: std.process.Init) !void {
     defer removeArray.deinit();
 
     try database.processFolder(contentFolder, init.io, gpa);
+    defer db.iterateFolder.cleanSceneJson();
 
     std.log.info("watching {s}...", .{path.?});
 
@@ -371,6 +372,13 @@ pub fn main(init: std.process.Init) !void {
                 future = null;
             }
             database.saveToDrive();
+            // std.log.debug("database saved", .{});
+
+            // db.iterateFolder.saveSceneJson(init.io, contentFolder) catch |err| {
+            //     std.log.err("failed to save scene json {s}", .{@errorName(err)});
+            //     continue;
+            // };
+
             std.log.debug("Saved", .{});
             continue;
         }
@@ -583,9 +591,11 @@ pub fn main(init: std.process.Init) !void {
                                     var fType = db.FileType.UNKNOWN;
                                     var inContent = false;
 
+                                    // std.log.debug("{s}; {s}", .{watch.path, contentWatch.path});
+
                                     if (watch == contentWatch) {
                                         inContent = true;
-                                        // std.log.debug("in", .{});
+                                        // std.log.debug("in content", .{});
                                         const dir = try std.Io.Dir.openDirAbsolute(
                                             init.io,
                                             fullPath[0 .. startIndex - 1],
@@ -637,6 +647,7 @@ pub fn main(init: std.process.Init) !void {
                                             future = init.io.async(db.AutoCommitter.runMonitor, .{&committer});
                                         }
                                     } else {
+                                        std.log.debug("not in content", .{});
                                         const dotIndex = std.mem.findLast(u8, fileName, ".") orelse fileName.len;
 
                                         var readBuffer = [_]u8{0} ** 64;
@@ -647,6 +658,7 @@ pub fn main(init: std.process.Init) !void {
                                         reader.seekTo(0) catch continue;
 
                                         fType = db.judgeFileType(fileName[dotIndex..], content);
+                                        std.log.debug("fileType: {s}", .{@tagName(fType)});
 
                                         switch (fType) {
                                             .Shader => {

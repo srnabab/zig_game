@@ -97,9 +97,7 @@ fn getName(name: [*c]u8, allocator: std.mem.Allocator) ![]u8 {
 
         return try allocator.dupe(u8, n[0..len]);
     } else {
-        const buf = try allocator.alloc(u8, UUID.len);
-        try UUID.createNewUUID(buf.ptr);
-        return buf;
+        return error.UnNameMesh;
     }
 }
 
@@ -150,7 +148,7 @@ fn setTransform(node: [*c]cgltf.cgltf_node, nodePtr: *Node) void {
     }
 }
 
-pub fn loadGltfFile(fileMem: []const u8, fileStat: std.Io.File.Stat, allocator: std.mem.Allocator) !struct {
+pub fn loadGltfFile(fileMem: []const u8, allocator: std.mem.Allocator) !struct {
     scenes: []Scene,
     primitives: []Primitive,
     arenaAllocator: std.heap.ArenaAllocator,
@@ -158,7 +156,7 @@ pub fn loadGltfFile(fileMem: []const u8, fileStat: std.Io.File.Stat, allocator: 
     var options = cgltf.cgltf_options{};
 
     var data: [*c]cgltf.cgltf_data = null;
-    try cgltf_parse(&options, fileMem.ptr, fileStat.size, &data);
+    try cgltf_parse(&options, fileMem.ptr, fileMem.len, &data);
     defer cgltf.cgltf_free(data);
 
     var arenAllocator = std.heap.ArenaAllocator.init(allocator);
@@ -324,6 +322,16 @@ pub fn loadGltfFile(fileMem: []const u8, fileStat: std.Io.File.Stat, allocator: 
         .primitives = try primitive_array.toOwnedSlice(),
         .scenes = scene_array,
     };
+}
+
+// free with cgltf.cgltf_free
+pub fn getGltfFileInfo(fileMem: []const u8) ![*c]cgltf.cgltf_data {
+    var options = cgltf.cgltf_options{};
+
+    var data: [*c]cgltf.cgltf_data = null;
+    try cgltf_parse(&options, fileMem.ptr, fileMem.len, &data);
+
+    return data;
 }
 
 const Flag_VertexType = struct {

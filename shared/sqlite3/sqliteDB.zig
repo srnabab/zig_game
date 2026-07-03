@@ -666,9 +666,11 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                             // std.log.info("ptr {s}", .{ptr[0..len]});
                         },
                         .BLOB => {
-                            const ptr = @as(*BLOBForGet, @ptrCast(@alignCast(getValues[i]))).*;
-                            const str = @as([*]u8, @ptrCast(@constCast(sqlite.sqlite3_column_blob(stmt, ii).?)));
-                            @memcpy(ptr.data, str[0..ptr.len]);
+                            const ptr = @as(*BLOBForGet, @ptrCast(@alignCast(getValues[i])));
+                            const str = @as([*c]const u8, @ptrCast((sqlite.sqlite3_column_blob(stmt, ii).?)));
+                            const len = std.mem.len(str);
+                            @memcpy(ptr.data, str[0..len]);
+                            ptr.len = len;
                         },
                     }
                 }
