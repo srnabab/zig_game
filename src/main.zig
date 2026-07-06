@@ -16,6 +16,8 @@ const Window = @import("window.zig");
 const update = @import("update.zig");
 const render = @import("render.zig");
 const math = @import("math");
+const mesh = @import("mesh");
+const instance = @import("instance");
 
 const tracy = @import("tracy");
 
@@ -76,8 +78,8 @@ pub fn main(init: std.process.Init) !void {
     const temp = try std.Io.Dir.openDirAbsolute(init.io, args[0][0..index], .{});
     try std.process.setCurrentDir(init.io, temp);
 
-    handles = try .init(gpa);
-    defer handles.deinit(gpa);
+    handles = try .init(allocator_t.*);
+    defer handles.deinit(allocator_t.*);
 
     var input1 = try input.init(allocator_t.*);
     defer input1.deinit(allocator_t.*);
@@ -133,7 +135,7 @@ pub fn main(init: std.process.Init) !void {
     var resourceArrays: global.ResourceArrayType = .init();
     var arrays: [4]std.array_list.Managed(resource.Resource) = undefined;
     for (0..arrays.len) |i| {
-        arrays[i] = .init(gpa);
+        arrays[i] = .init(allocator_t.*);
     }
     defer for (0..arrays.len) |i| {
         arrays[i].deinit();
@@ -144,7 +146,7 @@ pub fn main(init: std.process.Init) !void {
     }
     _ = resourceArrays.putDataIntoChannel(&arrayPtrs);
 
-    var stateBuffering: global.StateBufferingType = .init(gpa);
+    var stateBuffering: global.StateBufferingType = .init(allocator_t.*);
     defer stateBuffering.deinit();
 
     var endSemaphore: std.Io.Semaphore = .{};
@@ -172,7 +174,17 @@ pub fn main(init: std.process.Init) !void {
     defer vulkan.deinit();
     defer pTextureSet.deinit(&vulkan);
 
-    renderFlow.init(gpa);
+    var meshes = mesh.init(
+        allocator_t.*,
+        &vulkan,
+        &handles,
+    );
+    defer meshes.deinit();
+
+    var instances = instance.init(allocator_t.*, &handles);
+    defer instances.deinit();
+
+    renderFlow.init(allocator_t.*);
     defer renderFlow.deinit();
 
     try setPass.setting();
@@ -183,12 +195,12 @@ pub fn main(init: std.process.Init) !void {
         file.init(init.io, &tempDb);
         defer file.deinit(tempDb);
 
-        passes = try pass.initFromRenderFlow(init.io, gpa, &vulkan, tempDb);
+        passes = try pass.initFromRenderFlow(init.io, allocator_t.*, &vulkan, tempDb);
     }
-    defer passes.deinit(gpa);
+    defer passes.deinit(allocator_t.*);
 
     for (passes.passes) |*value| {
-        try value.init(null, &vulkan, gpa);
+        try value.init(null, &vulkan, allocator_t.*);
     }
 
     var render_t = try Thread.spawn(
@@ -208,6 +220,8 @@ pub fn main(init: std.process.Init) !void {
             .pTextureSet = &pTextureSet,
             .vulkan = &vulkan,
             .passes = passes,
+            .meshes = &meshes,
+            .instances = &instances,
         }},
     );
     defer render_t.join();
@@ -226,6 +240,7 @@ pub fn main(init: std.process.Init) !void {
             .stateBuffering = &stateBuffering,
             .handles = &handles,
             .vulkan = &vulkan,
+            .meshes = &meshes,
         }},
     );
     defer update_t.join();

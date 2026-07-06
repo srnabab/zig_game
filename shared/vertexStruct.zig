@@ -7,14 +7,44 @@ pub const vec3 = cglm.vec3;
 pub const vec2 = cglm.vec2;
 pub const mat3 = cglm.mat3;
 pub const mat4 = cglm.mat4;
+pub const ivec3 = cglm.ivec3;
 
 const Self = @This();
 
-pub const MetaData = extern struct {
+pub const GroupMapping = extern struct {
+    instanceID: u32,
+    meshID: u32,
+};
+
+pub const Instance3D = extern struct {
+    matrix: mat4,
     texIndex: u32,
     samplerIndex: u32,
+};
+
+pub const Mesh = struct {
     meshletCount: u32,
     meshletOffset: u32,
+    verticesOffset: u32,
+    meshletVerticesOffset: u32,
+    meshletTrianglesOffset: u32,
+    verticeStride: u32,
+};
+
+pub const CustomDrawMeshTasksIndirectCommand = extern struct {
+    groupCountX: u32 = 0,
+    groupCountY: u32 = 0,
+    groupCountZ: u32 = 0,
+    workgroupOffset: u32 = 0,
+};
+
+pub const MetaData = extern struct {
+    meshletCount: u32,
+
+    meshletOffset: u32,
+    verticesOffset: u32,
+    meshletVerticesOffset: u32,
+    meshletTrianglesOffset: u32,
 };
 
 pub const Instance = extern struct {

@@ -11,7 +11,8 @@ layout(triangles, max_vertices = 64, max_primitives = 124) out;
 
 struct TaskPayload {
     uint visibleMeshletIndices[32];
-    uint gl_DrawID;
+    uint instanceID;
+    uint meshID;
 };
 
 taskPayloadSharedEXT TaskPayload payload;
@@ -31,11 +32,24 @@ struct Meshlet {
     uint primitiveCount;
 };
 
-struct MetaData {
+struct GroupMapping {
+    uint instanceID;
+    uint meshID;
+};
+
+struct Instance {
+    mat4 matrix;
     uint texIndex;
     uint samplerIndex;
+};
+
+struct Mesh {
     uint meshletCount;
     uint meshletOffset;
+    uint verticesOffset;
+    uint meshletVerticesOffset;
+    uint meshletTrianglesOffset;
+    uint verticeStride;
 };
 
 layout(set = 1, binding = 0) uniform UniformBufferObject {
@@ -60,8 +74,16 @@ layout(buffer_reference) readonly buffer MeshletIndices {
     uint8_t meshletIndices[]; 
 };
 
-layout(buffer_reference) readonly buffer MetaDataBuffer {
-    MetaData metadatas[];
+layout(buffer_reference) readonly buffer MappingBuffer {
+    GroupMapping mappings[];
+};
+
+layout(buffer_reference) readonly buffer InstanceBuffer {
+    Instance instances[];
+};
+
+layout(buffer_reference) readonly buffer MeshBuffer {
+    Mesh meshes[];
 };
 
 layout(push_constant) uniform PushConstants {
@@ -69,7 +91,10 @@ layout(push_constant) uniform PushConstants {
     VertexBuffer vertexBuffer;
     MeshletVertices meshletVertices;
     MeshletIndices meshletIndices;
-    MetaDataBuffer metadataBuffer;
+    uint64_t commands;
+    MappingBuffer mappings;
+    InstanceBuffer instances;
+    MeshBuffer meshes;
 } pc;
 
 layout(location = 0) out vec2 uv[];
@@ -81,15 +106,22 @@ void main() {
     uint mi = gl_WorkGroupID.x;
     uint tid = gl_LocalInvocationID.x;
 
+    uint meshID = payload.meshID;
+    uint instanceID = payload.instanceID;
+
     uint mii = payload.visibleMeshletIndices[mi];
     Meshlet m = pc.meshletBuffer.meshlets[mii];
     uint v_count = m.vertexCount;
     uint p_count = m.primitiveCount;
+    
+    uint globalVerticesOffset = pc.meshes.meshes[meshID].verticesOffset;
+    uint globalMeshletVerticesOffset = pc.meshes.meshes[meshID].meshletVerticesOffset;
+    uint globalMeshletTrianglesOffset = pc.meshes.meshes[meshID].meshletTrianglesOffset;
 
     SetMeshOutputsEXT(v_count, p_count);
 
     for(uint i = tid;i < v_count;i += 32) {
-        uint vertexIdx = pc.meshletVertices.meshletVertices[m.vertexOffset + i];
+        uint vertexIdx = pc.meshletVertices.meshletVertices[m.vertexOffset + i + globalMeshletVerticesOffset] + globalVerticesOffset;
         vec3 pos = pc.vertexBuffer.vertices[vertexIdx].pos;
 
         vec4 f_pos = ubo.proj * ubo.view * vec4(pos, 1.0);
@@ -104,16 +136,16 @@ void main() {
         gl_MeshVerticesEXT[i].gl_Position = f_pos;
 
         uv[i] = pc.vertexBuffer.vertices[vertexIdx].uv;
-        texIndex[i] = pc.metadataBuffer.metadatas[payload.gl_DrawID].texIndex;
-        samplerIndex[i] = pc.metadataBuffer.metadatas[payload.gl_DrawID].samplerIndex;
+        texIndex[i] = pc.instances.instances[instanceID].texIndex;
+        samplerIndex[i] = pc.instances.instances[instanceID].samplerIndex;
         
     }
 
     for (uint i = tid; i < p_count; i += 32) {
         gl_PrimitiveTriangleIndicesEXT[i] = uvec3(
-            pc.meshletIndices.meshletIndices[m.primitiveOffset + i * 3 + 0],
-            pc.meshletIndices.meshletIndices[m.primitiveOffset + i * 3 + 1],
-            pc.meshletIndices.meshletIndices[m.primitiveOffset + i * 3 + 2]
+            pc.meshletIndices.meshletIndices[m.primitiveOffset + i * 3 + 0 + globalMeshletTrianglesOffset],
+            pc.meshletIndices.meshletIndices[m.primitiveOffset + i * 3 + 1 + globalMeshletTrianglesOffset],
+            pc.meshletIndices.meshletIndices[m.primitiveOffset + i * 3 + 2 + globalMeshletTrianglesOffset]
         );
     }
 }

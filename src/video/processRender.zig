@@ -1824,29 +1824,43 @@ pub const commands = struct {
     fn inferBufferPipelineBarrierFlag(
         commandType: drawC.CommandType,
         bufferUsage: drawC.BufferUsage,
+        queueType: VkStruct.CommandPoolType,
     ) struct {
         srcAccessMask: vk.VkAccessFlags2,
         dstAccessMask: vk.VkAccessFlags2,
         sourceStage: vk.VkPipelineStageFlags2,
         destinationStage: vk.VkPipelineStageFlags2,
     } {
-        _ = commandType;
+        // _ = commandType;
+        // _ = queueType;
 
         const srcAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_2_TRANSFER_WRITE_BIT;
         var dstAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_2_NONE;
         const sourceStage: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_TRANSFER_BIT | vk.VK_PIPELINE_STAGE_2_CLEAR_BIT;
         var destinationStage: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
 
-        // switch (commandType) {
-        //     else => std.debug.panic("unsupported command type {s}", .{@tagName(commandType)}),
-        // }
-
-        switch (bufferUsage) {
-            .indirect => {
-                dstAccessMask = vk.VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
-                destinationStage = vk.VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
-            },
-            else => std.debug.panic("unsupported buffer usage {s}", .{@tagName(bufferUsage)}),
+        if (queueType == .transfer) {
+            switch (commandType) {
+                .copyBuffer => {
+                    dstAccessMask = vk.VK_ACCESS_2_TRANSFER_WRITE_BIT;
+                    destinationStage = vk.VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+                    // @breakpoint();
+                },
+                else => {},
+            }
+        } else {
+            switch (bufferUsage) {
+                .indirect => {
+                    dstAccessMask = vk.VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
+                    destinationStage = vk.VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
+                    // @breakpoint();
+                },
+                // .storage => {
+                //     dstAccessMask = vk.VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
+                //     destinationStage = vk.VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+                // },
+                else => std.debug.panic("unsupported buffer usage {s}", .{@tagName(bufferUsage)}),
+            }
         }
 
         return .{
@@ -2452,6 +2466,7 @@ pub const commands = struct {
                     const flags = inferBufferPipelineBarrierFlag(
                         enterCommandType,
                         bufferUsage,
+                        command.changeBufferQueue.dstQueueFamily,
                     );
 
                     const hash =

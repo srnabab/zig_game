@@ -13,6 +13,8 @@ const InvalidVersion = std.math.maxInt(u24);
 pub const ResourceType = enum(u8) {
     texture,
     buffer,
+    mesh,
+    instance,
     pipeline,
     viewport,
     scissor,

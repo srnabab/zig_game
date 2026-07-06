@@ -78,7 +78,7 @@ pub fn uploadInstance(graphic: *Commands, vulkan: *VkStruct) !void {
             false,
         );
 
-        vulkan.buffers.copyDataToMapped(stagingBuffer, vertexStruct.Instance, instances2D.items[updateStart..updateEnd]);
+        vulkan.buffers.copyDataToMapped(stagingBuffer, 0, vertexStruct.Instance, instances2D.items[updateStart..updateEnd]);
 
         var region = [_]vk.VkBufferCopy2{.{
             .sType = vk.VK_STRUCTURE_TYPE_BUFFER_COPY_2,

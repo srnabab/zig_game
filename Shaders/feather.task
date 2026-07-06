@@ -8,32 +8,52 @@ layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
 struct TaskPayload {
     uint visibleMeshletIndices[32];
-    uint gl_DrawID;
+    uint instanceID;
+    uint meshID;
 };
 taskPayloadSharedEXT TaskPayload payload;
 
+struct CustomCommand {
+    uint groupCountX;
+    uint groupCountY;
+    uint groupCountZ;
+    uint workgroupOffset;
+};
 
-struct MetaData {
+layout(buffer_reference) readonly buffer CommandBuffer {
+    CustomCommand commands[];
+};
+
+struct GroupMapping {
+    uint instanceID;
+    uint meshID;
+};
+
+layout(buffer_reference) readonly buffer MappingBuffer {
+    GroupMapping mappings[];
+};
+
+struct Instance {
+    mat4 matrix;
     uint texIndex;
     uint samplerIndex;
+};
+
+layout(buffer_reference) readonly buffer InstanceBuffer {
+    Instance instances[];
+};
+
+struct Mesh {
     uint meshletCount;
     uint meshletOffset;
+    uint verticesOffset;
+    uint meshletVerticesOffset;
+    uint meshletTrianglesOffset;
+    uint verticeStride;
 };
-// struct MeshletBounds {
-//     vec4 sphere;
-// };
-// layout(binding = 0, std430) readonly buffer MeshletBoundsBuffer {
-//     MeshletBounds meshletBounds[];
-// };
 
-// 各种变换矩阵和相机裁剪面
-// layout(binding = 1) uniform CameraBuffer {
-//     mat4 viewProj;
-//     vec4 frustumPlanes[6];
-// };
-
-layout(buffer_reference) readonly buffer MetaDataBuffer {
-    MetaData metadatas[];
+layout(buffer_reference) readonly buffer MeshBuffer {
+    Mesh meshes[];
 };
 
 layout(push_constant) uniform PushConstants {
@@ -41,7 +61,10 @@ layout(push_constant) uniform PushConstants {
     uint64_t vertexBuffer;
     uint64_t meshletVertices;
     uint64_t meshletIndices;
-    MetaDataBuffer metadataBuffer;
+    CommandBuffer commands;
+    MappingBuffer mappings;
+    InstanceBuffer instances;
+    MeshBuffer meshes;
 } pc;
 
 // 共享计数器，用于统计通过裁剪的 Meshlet 数量
@@ -61,16 +84,21 @@ void main() {
     uint localID = gl_LocalInvocationID.x;
     uint groupID = gl_WorkGroupID.x;
 
+    uint mappingID = pc.commands.commands[gl_DrawID].workgroupOffset + groupID;
+    uint instanceID = pc.mappings.mappings[mappingID].instanceID;
+    uint meshID = pc.mappings.mappings[mappingID].meshID;
+
     // 线程 0 初始化共享数据
     if (localID == 0) {
         sharedActiveCount = 0;;
-        payload.gl_DrawID = gl_DrawID;
+        payload.instanceID = instanceID;
+        payload.meshID = meshID;
     }
     // 必须同步，确保初始化完成
     barrier();
 
-    uint meshletCount = pc.metadataBuffer.metadatas[gl_DrawID].meshletCount;
-    uint meshletOffset = pc.metadataBuffer.metadatas[gl_DrawID].meshletOffset;
+    uint meshletCount = pc.meshes.meshes[meshID].meshletCount;
+    uint meshletOffset = pc.meshes.meshes[meshID].meshletOffset;
 
     for (uint i = localID;i < meshletCount;i += 32)  {
         uint index = meshletOffset + i;

@@ -188,7 +188,7 @@ pub fn createImageTexture(
         stagingBuffer = try vulkan.createBufferByUsage(pixelSize, 0, .staging, false);
         errdefer vulkan.destroyBuffer(stagingBuffer);
 
-        vulkan.buffers.copyDataToMapped(stagingBuffer, u8, imageMem[0..pixelSize]);
+        vulkan.buffers.copyDataToMapped(stagingBuffer, 0, u8, imageMem[0..pixelSize]);
         // @memcpy(@as([*c]u8, @ptrCast(stagingBuffer.pMappedData.?)), imageMem[0..pixelSize]);
 
         const image = try vulkan.createImage2D(
@@ -398,7 +398,7 @@ pub fn createTexturePackVkImage(
 pub fn createTextureFromResource(
     self: *Self,
     io: std.Io,
-    textureResource: resource.ResourceTexture,
+    textureResource: resource.Texture,
     vulkan: *VkStruct,
     graphic: *Commands,
 ) !Texture_t {

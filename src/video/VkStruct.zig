@@ -1,16 +1,24 @@
+const std = @import("std");
+const Thread = std.Thread;
+const Allocator = std.mem.Allocator;
+const builtin = @import("builtin");
+
+const Debug = @import("debug");
+const Descriptor = @import("vkStruct/descriptor.zig");
+const global = @import("global");
+const Handles = @import("handle");
+const Handle = Handles.Handle;
+
 pub const vk = @import("vulkan");
 const sdl = @import("sdl").sdl;
 const SDL_CheckResult = @import("sdl").SDL_CheckResult;
-const std = @import("std");
-const builtin = @import("builtin");
-const Thread = std.Thread;
-const Allocator = std.mem.Allocator;
 const VkResultToError = @import("resultToError");
+const checkVkResult = VkResultToError.checkVkResult;
+
 pub const vulkanType = VkResultToError.vulkanType;
 pub const VkError = vulkanType.VkError;
 const VkResult = vulkanType.VkResult;
 const VkPhysicalType = vulkanType.VkPhysicalDeviceType;
-const checkVkResult = VkResultToError.checkVkResult;
 const VulkanPipelineInfo = @import("translate").VulkanPipelineInfo;
 const textureSet = @import("textureSet");
 const tracy = @import("tracy");
@@ -20,18 +28,13 @@ const math = @import("math");
 pub const Samplers = @import("vkStruct/sampler.zig");
 const vmaStruct = @import("vkStruct/vma.zig");
 const vma = vmaStruct.vma;
-const global = @import("global");
 const Queue = @import("vkStruct/queue.zig");
 const InstanceDevice = @import("vkStruct/instance_device.zig");
 const Semaphore = @import("vkStruct/semaphore.zig");
 const Swapchain = @import("vkStruct/swapchain.zig");
-const Debug = @import("debug");
 const Types = @import("types");
-const Descriptor = @import("vkStruct/descriptor.zig");
 const viewportStruct = @import("vkStruct/viewport.zig");
 const scissorStruct = @import("vkStruct/scissor.zig");
-const Handles = @import("handle");
-const Handle = Handles.Handle;
 
 const bufferStruct = @import("vkStruct/buffer.zig");
 pub const Buffer_t = bufferStruct.Buffer_t;

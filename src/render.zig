@@ -20,6 +20,8 @@ const Queue = @import("queue").Queue;
 const Handles = @import("handle");
 const vertices2D = @import("video/indirect2D/vertices.zig");
 
+const PassGroupMapping = @import("passGroupMapping");
+
 const cglm = @import("cglm");
 
 const math = @import("math");
@@ -30,6 +32,8 @@ const file = @import("fileSystem");
 
 const mesh = @import("mesh");
 const pass = @import("pass");
+
+const instance = @import("instance");
 
 const ViewBoundsAndTotalSpriteCount = @import("setPass.zig").ViewBoundsAndTotalSpriteCount;
 
@@ -47,6 +51,8 @@ pub const Args = struct {
     pTextureSet: *textureSet,
     vulkan: *VkStruct,
     passes: pass,
+    meshes: *mesh,
+    instances: *instance,
 };
 
 pub fn render_thread_func(args: Args) !void {
@@ -65,7 +71,10 @@ pub fn render_thread_func(args: Args) !void {
     const stateBuffering = args.stateBuffering;
     const pTextureSet = args.pTextureSet;
     const vulkan = args.vulkan;
+    const handles = args.handles;
     var passes = args.passes;
+    const meshes = args.meshes;
+    const instances = args.instances;
 
     const zone = tracy.initZone(@src(), .{ .name = "render" });
     defer zone.deinit();
@@ -105,6 +114,9 @@ pub fn render_thread_func(args: Args) !void {
     }
 
     try vulkan.createAllPipelinesAdded();
+
+    var passGroupMapping = PassGroupMapping.init(gpa);
+    defer passGroupMapping.deinit();
 
     const ubo_test = try vulkan.createBufferByUsage(
         @sizeOf(shaderStruct.UniformBufferObject),
@@ -161,50 +173,6 @@ pub fn render_thread_func(args: Args) !void {
     cglm.glmc_perspective(std.math.rad_per_deg * 60.0, (aspect / 300) * VIEW_SCALE, 0.1, 100.0, &pUIUbo2.proj);
     const pData2 = @as(*shaderStruct.UniformBufferObject, @ptrCast(@alignCast(ubo2.pMappedData)));
     pData2.* = pUIUbo2;
-
-    // const ssbo_test = try vulkan.createBufferByUsage(
-    //     global.MeshletStorageBufferSize,
-    //     0,
-    //     .storage,
-    //     false,
-    // );
-    // const ssbo_test_meshlets = try vulkan.createVirtualBlockBuffer(
-    //     0,
-    //     global.StorageBufferMeshletsSize,
-    //     ssbo_test,
-    //     0,
-    //     @sizeOf(vertexStruct.Vertex_f3pf3nf2u),
-    // );
-    // const ssbo_test_vertices = try vulkan.createVirtualBlockBuffer(
-    //     0,
-    //     global.StorageBufferVerticesSize,
-    //     ssbo_test,
-    //     global.StorageBufferMeshletsEnd,
-    //     @sizeOf(vertexStruct.Meshlet),
-    // );
-    // const ssbo_test_meshletVertices = try vulkan.createVirtualBlockBuffer(
-    //     0,
-    //     global.StorageBufferMeshletVerticesSize,
-    //     ssbo_test,
-    //     global.StorageBufferVerticesEnd,
-    //     @sizeOf(u32),
-    // );
-    // const ssbo_test_meshletTriangles = try vulkan.createVirtualBlockBuffer(
-    //     0,
-    //     global.StorageBufferMeshletTrianglesSize,
-    //     ssbo_test,
-    //     global.StorageBufferMeshletVerticesEnd,
-    //     @sizeOf(u8),
-    // );
-    // var meshes = mesh.init(
-    //     ssbo_test_meshlets,
-    //     ssbo_test_vertices,
-    //     ssbo_test_meshletVertices,
-    //     ssbo_test_meshletTriangles,
-    //     null,
-    //     io,
-    // );
-    // try meshes.loadMeshlet(comptime file.comptimeGetID("Suzanne_0.vtx"), gpa, &vulkan, &commands);
 
     try vulkan.addWriteDescriptorSetBuffer(
         0,
@@ -342,6 +310,95 @@ pub fn render_thread_func(args: Args) !void {
                             );
                             // std.log.debug("set", .{});
                         },
+                        .mesh => |m| {
+                            // getMeshBuffer();
+                            const usePass = passes.passMap.get("im_feather").?;
+
+                            const sizes = [_]u64{
+                                m.meshletSize,
+                                m.verticesSize,
+                                m.meshletVerticesSize,
+                                m.meshletTrianglesSize,
+                            };
+
+                            var buffers = [_]VkStruct.Buffer_t{
+                                m.meshletStagingBuffer,
+                                m.verticesStagingBuffer,
+                                m.meshletVerticesStagingBuffer,
+                                m.meshletTrianglesStagingBuffer,
+                            };
+
+                            for (0..4) |i| {
+                                const bufferAndOffset = try vulkan.buffers.createVirtualBuffer(
+                                    usePass.buffer[i + 2],
+                                    0,
+                                    sizes[i],
+                                    16,
+                                    handles,
+                                );
+
+                                var copyRegion = [1]vk.VkBufferCopy2{.{
+                                    .sType = vk.VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+                                    .pNext = null,
+                                    .srcOffset = 0,
+                                    .dstOffset = bufferAndOffset.offset,
+                                    .size = sizes[i],
+                                }};
+
+                                try commands.cacheCommand(.{
+                                    .copyBuffer = .{
+                                        .srcBuffer = buffers[i],
+                                        .dstBuffer = bufferAndOffset.buffer,
+                                        .regions = &copyRegion,
+                                    },
+                                });
+                                buffers[i] = bufferAndOffset.buffer;
+                            }
+
+                            _ = try meshes.addMesh(
+                                m.fileID,
+                                buffers[0],
+                                sizes[0],
+                                buffers[1],
+                                sizes[1],
+                                buffers[2],
+                                sizes[2],
+                                buffers[3],
+                                sizes[3],
+                                m.vertexStride,
+                                m.handle,
+                            );
+                        },
+                        .instance => |i| {
+                            const texIdx = if (i.texture) |t|
+                                pTextureSet.getDescriptorSetIndex(t)
+                            else
+                                0;
+
+                            _ = try instances.add(
+                                texIdx,
+                                i.sampler,
+                                i.pos,
+                                i.rotation,
+                                i.scale,
+                                i.handle,
+                            );
+                        },
+                        .meshInstance => |mi| {
+                            const idx1 = Handles.getIndex(@ptrCast(mi.instance)) orelse {
+                                try resources.pushLast(r);
+                                continue;
+                            };
+                            const idx2 = Handles.getIndex(@ptrCast(mi.mesh)) orelse {
+                                try resources.pushLast(r);
+                                continue;
+                            };
+
+                            try passGroupMapping.add(mi.passName, .{
+                                .instanceID = idx1,
+                                .meshID = idx2,
+                            });
+                        },
                         .others => {},
                     }
                 }
@@ -350,6 +407,15 @@ pub fn render_thread_func(args: Args) !void {
             const infos = stateBuffering.getReadyBuffer();
             defer stateBuffering.returnReadyBuffer(infos);
 
+            try meshes.upload(&commands, passes.passMap.get("im_feather").?.buffer[8]);
+            try instances.upload(&commands, vulkan, passes.passMap.get("im_feather").?.buffer[7]);
+            try passGroupMapping.upload(
+                vulkan,
+                &commands,
+                "im_feather",
+                passes.passMap.get("im_feather").?.buffer[0],
+                passes.passMap.get("im_feather").?.buffer[6],
+            );
             try vertices2D.uploadInstance(&commands, vulkan);
             vulkan.writeCachedDescriptorSetResources();
 

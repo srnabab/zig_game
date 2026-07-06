@@ -260,7 +260,7 @@ const meshLoad = struct {
 };
 
 pub fn getMeshLoadParam(id: i32, db: ?*sqlite.sqlite3) !meshLoad {
-    const fType = try getFileType(id);
+    const fType = try getFileType(id, db);
     switch (fType) {
         .VTX => {
             var ModelLoadParameterT = ModelLoadParameter.init(db);

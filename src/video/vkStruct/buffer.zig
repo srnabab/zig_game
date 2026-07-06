@@ -273,14 +273,14 @@ pub fn createBufferByUsage(
     );
 }
 
-pub fn copyDataToMapped(self: *Self, buffer: Buffer_t, srcType: type, src: []const srcType) void {
+pub fn copyDataToMapped(self: *Self, buffer: Buffer_t, offset: usize, srcType: type, src: []const srcType) void {
     const index = getIndex(@ptrCast(buffer));
 
     if (index == null) return;
 
     const ptr = self.buffers.get(index.?);
 
-    @memcpy(@as([*c]srcType, @ptrCast(@alignCast(ptr.pMappedData))), src);
+    @memcpy(@as([*c]srcType, @ptrCast(@alignCast(ptr.pMappedData)))[offset .. offset + src.len], src);
 }
 
 pub fn getBufferQueueType(self: *Self, buffer: Buffer_t) QueueType {
@@ -454,7 +454,7 @@ pub fn createVirtualBuffer(
     const pack = try self.buffers.addOne();
     defer self.mutex.unlock(self.io);
 
-    const index = getIndex(blockBuffer);
+    const index = getIndex(@ptrCast(blockBuffer)) orelse return error.VirtualBlockWithoutParent;
     const ptr = self.buffers.get(index);
 
     // std.log.debug("buffer {*}, queue {s}", .{ ptr.vkBuffer, @tagName(self.getBufferQueueType(ptr.queue.ref)) });
@@ -475,7 +475,7 @@ pub fn createVirtualBuffer(
     );
 
     pack.ptr.* = Buffer{
-        .queue = .{ .ref = ptr.queue.ref },
+        .queue = .{ .ref = blockBuffer },
         .vkBuffer = ptr.vkBuffer,
         .allocation = .{ .virtual = allocation },
         .size = size,
@@ -490,9 +490,12 @@ pub fn createVirtualBuffer(
     // std.log.debug("virtual buffer queue {s}", .{@tagName(self.getBufferQueueType(pack.ptr.queue.ref))});
     // std.log.debug("queue ptr {*}", .{pack.ptr.queue.ref});
 
-    const handle = handles.createHandle(@intCast(pack.index));
+    const handle = handles.createHandle(@intCast(pack.index), .buffer);
 
-    return .{ .buffer = handle, .offset = offset + ptr.offset };
+    return .{
+        .buffer = @ptrCast(handle),
+        .offset = offset + ptr.offset,
+    };
 }
 
 pub fn destroyVirtualBlockBuffer(self: *Self, buffer: Buffer_t) void {
