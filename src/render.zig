@@ -128,12 +128,12 @@ pub fn render_thread_func(args: Args) !void {
     const ubo = vulkan.buffers.getBufferContent(ubo_test);
 
     const ubo_test2 = try vulkan.createBufferByUsage(
-        @sizeOf(shaderStruct.UniformBufferObject),
+        @sizeOf(shaderStruct.UniformBufferObjectCamera),
         0,
         .uniform,
         false,
     );
-    var pUIUbo2: shaderStruct.UniformBufferObject = undefined;
+    var pUIUbo2: shaderStruct.UniformBufferObjectCamera = undefined;
     const ubo2 = vulkan.buffers.getBufferContent(ubo_test2);
 
     const aspect2: f32 = 1.0 * (@as(f32, @floatFromInt(vulkan.windowHeight))) / 2;
@@ -161,7 +161,7 @@ pub fn render_thread_func(args: Args) !void {
     const pData = @as(*shaderStruct.UniformBufferObject, @ptrCast(@alignCast(ubo.pMappedData)));
     pData.* = pUIUbo;
 
-    var eye2 = cglm.vec3{ 0.0, 0.0, 10.0 };
+    var eye2 = cglm.vec3{ 1.0, 1.0, 1.0 };
     var center2 = cglm.vec3{ 0.0, 0.0, 0.0 };
     var up2 = cglm.vec3{ 0.0, 1.0, 0.0 };
     cglm.glmc_lookat(
@@ -171,7 +171,9 @@ pub fn render_thread_func(args: Args) !void {
         &pUIUbo2.view,
     );
     cglm.glmc_perspective(std.math.rad_per_deg * 60.0, (aspect / 300) * VIEW_SCALE, 0.1, 100.0, &pUIUbo2.proj);
-    const pData2 = @as(*shaderStruct.UniformBufferObject, @ptrCast(@alignCast(ubo2.pMappedData)));
+    // pUIUbo2.proj[1][1] *= -1;
+    pUIUbo2.cameraPos = eye2;
+    const pData2 = @as(*shaderStruct.UniformBufferObjectCamera, @ptrCast(@alignCast(ubo2.pMappedData)));
     pData2.* = pUIUbo2;
 
     try vulkan.addWriteDescriptorSetBuffer(
@@ -183,6 +185,18 @@ pub fn render_thread_func(args: Args) !void {
         0,
         vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
     );
+    try vulkan.addWriteDescriptorSetBuffer(
+        0,
+        vulkan.buffers.getVkBuffer(ubo_test2),
+        0,
+        vulkan.buffers.getBufferSize(ubo_test2),
+        vulkan.global3dMVPMatrixDescriptorSet,
+        0,
+        vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+    );
+
+    std.log.debug("f3pf3nf2u size {d}", .{@sizeOf(vertexStruct.Vertex_f3pf3nf2u)});
+    std.log.debug("f3pf3nf4tf2u size {d}", .{@sizeOf(vertexStruct.Vertex_f3pf3nf4tf2u)});
 
     vulkan.writeCachedDescriptorSetResources();
 
@@ -227,7 +241,7 @@ pub fn render_thread_func(args: Args) !void {
     // global.stopExecuteNodePrint = false;
     // global.game_end.store(1, .seq_cst);
 
-    // vulkan.logBufferPtr();
+    vulkan.logBufferPtr();
     // vulkan.logPipeline();
     var resources: Queue(resource.Resource) = try .init(gpa, io);
     defer resources.deinit();
@@ -246,7 +260,7 @@ pub fn render_thread_func(args: Args) !void {
             // std.log.debug("frame {d}", .{frame});
             // _ = frame;
 
-            if (frame == 0) {
+            if (frame == 10) {
                 // global.stopNodeDagPrint = false;
                 // global.printDagToDot = true;
                 // global.stopNodeDagDetailPrint = false;
@@ -255,7 +269,7 @@ pub fn render_thread_func(args: Args) !void {
                 //     passes.enablePass("present");
                 //     // testDraw = true;
             }
-            if (frame == 2) {
+            if (frame == 11) {
                 // global.stopNodeDagPrint = true;
                 // global.storExecuteSequencePrint = true;
                 //     passes.disablePass("indirect2D");
@@ -398,6 +412,9 @@ pub fn render_thread_func(args: Args) !void {
                                 .instanceID = idx1,
                                 .meshID = idx2,
                             });
+                            std.log.debug("aaaaaaa", .{});
+                            passes.enablePass(mi.passName);
+                            std.log.debug("name {s}", .{mi.passName});
                         },
                         .others => {},
                     }
@@ -428,8 +445,19 @@ pub fn render_thread_func(args: Args) !void {
             try commands.addCachedCommand();
 
             for (infos.items) |value| {
-                _ = value;
+                var f_v: f32 = @floatFromInt(value);
+                f_v *= 0.1;
+                eye2 = cglm.vec3{ f_v, f_v, f_v };
+                cglm.glmc_lookat(
+                    &eye2,
+                    &center2,
+                    &up2,
+                    &pUIUbo2.view,
+                );
+                // _ = value;
                 // std.log.debug("info {d}", .{value});
+                const pData3 = @as(*shaderStruct.UniformBufferObjectCamera, @ptrCast(@alignCast(ubo2.pMappedData)));
+                pData3.* = pUIUbo2;
             }
 
             const zone2 = tracy.initZone(@src(), .{ .name = "pass add" });

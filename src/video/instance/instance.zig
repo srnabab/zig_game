@@ -60,15 +60,16 @@ pub fn add(
     var matrix: mat4 align(16) = undefined;
 
     var x = vec3{ 1.0, 0, 0 };
-    var y = vec3{ 0, 1.0, 0 };
-    var z = vec3{ 0, 0, 1.0 };
+    // var y = vec3{ 0, 1.0, 0 };
+    // var z = vec3{ 0, 0, 1.0 };
 
     cglm.glmc_mat4_identity(&matrix);
-    cglm.glmc_scale(&matrix, @constCast(&scale));
-    cglm.glmc_rotate(&matrix, rotation[0], &x);
-    cglm.glmc_rotate(&matrix, rotation[1], &y);
-    cglm.glmc_rotate(&matrix, rotation[2], &z);
+
     cglm.glmc_translate(&matrix, @constCast(&pos));
+    cglm.glmc_rotate(&matrix, rotation[0] * std.math.rad_per_deg, &x);
+    // cglm.glmc_rotate(&matrix, rotation[1] * std.math.rad_per_deg, &y);
+    // cglm.glmc_rotate(&matrix, rotation[2] * std.math.rad_per_deg, &z);
+    cglm.glmc_scale(&matrix, @constCast(&scale));
 
     instance.matrix = matrix;
 
@@ -109,6 +110,7 @@ pub fn upload(self: *Self, commands: *Commands, vulkan: *VkStruct, buffer: VkStr
         .staging,
         false,
     );
+    vulkan.buffers.copyDataToMapped(stagingBuffer, 0, Instance, instances);
 
     var copyRegion = [1]vk.VkBufferCopy2{.{
         .sType = vk.VK_STRUCTURE_TYPE_BUFFER_COPY_2,

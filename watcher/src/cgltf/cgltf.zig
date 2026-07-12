@@ -286,8 +286,8 @@ pub fn loadGltfFile(fileMem: []const u8, allocator: std.mem.Allocator) !struct {
                         },
                         .cgltf_attribute_type_tangent => {
                             for (0..attributes[o].data.*.count) |p| {
-                                var pos: vertexStruct.vec3 = undefined;
-                                _ = cgltf.cgltf_accessor_read_float(&data.*.accessors[o], p, &pos, 3);
+                                var pos: vertexStruct.vec4 = undefined;
+                                _ = cgltf.cgltf_accessor_read_float(&data.*.accessors[o], p, &pos, 4);
 
                                 setValue(
                                     primPtr.vertex,
@@ -343,7 +343,7 @@ const list = [_]Flag_VertexType{
     .{ .flag = 0xC000000000000000, ._type = vertexStruct.VertexType.f3pf3n },
     .{ .flag = 0x9000000000000000, ._type = vertexStruct.VertexType.f3pf2u },
     .{ .flag = 0xD000000000000000, ._type = vertexStruct.VertexType.f3pf3nf2u },
-    .{ .flag = 0xF000000000000000, ._type = vertexStruct.VertexType.f3pf3nf3tf2u },
+    .{ .flag = 0xF000000000000000, ._type = vertexStruct.VertexType.f3pf3nf4tf2u },
 };
 
 pub fn judgePrimitiveVertexType(primitives: [*c]cgltf.cgltf_primitive) vertexStruct.VertexType {

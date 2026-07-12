@@ -1,5 +1,7 @@
 const vk = @import("vulkan");
 
+const renderDebug = @import("renderDebug");
+
 const VkResultToError = @import("resultToError");
 const vulkanType = VkResultToError.vulkanType;
 pub const VkError = vulkanType.VkError;
@@ -25,7 +27,14 @@ pub fn destroyDescriptorPool(device: vk.VkDevice, pAllocCallBacks: [*c]vk.VkAllo
     vk.vkDestroyDescriptorPool(device, pool, pAllocCallBacks);
 }
 
-pub fn createDescriptorSetLayout(device: vk.VkDevice, pAllocCallBacks: [*c]vk.VkAllocationCallbacks, pNext: ?*anyopaque, flags: vk.VkDescriptorSetLayoutCreateFlags, bindingCount: u32, pBindings: [*]vk.VkDescriptorSetLayoutBinding) !vk.VkDescriptorSetLayout {
+pub fn createDescriptorSetLayout(
+    device: vk.VkDevice,
+    pAllocCallBacks: [*c]vk.VkAllocationCallbacks,
+    pNext: ?*anyopaque,
+    flags: vk.VkDescriptorSetLayoutCreateFlags,
+    bindingCount: u32,
+    pBindings: [*]vk.VkDescriptorSetLayoutBinding,
+) !vk.VkDescriptorSetLayout {
     var setLayoutCreateInfo = vk.VkDescriptorSetLayoutCreateInfo{
         .sType = vk.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
         .pNext = pNext,

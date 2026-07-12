@@ -2,6 +2,8 @@ const std = @import("std");
 const builtin = @import("builtin");
 const global = @import("global");
 
+const renderDebug = @import("renderDebug");
+
 const errorProcess = @import("error");
 
 const vk = @import("vulkan");
@@ -48,6 +50,7 @@ const deviceExtensionNeeded = [_][*c]const u8{
     "VK_EXT_extended_dynamic_state",
     "VK_EXT_robustness2",
     "VK_EXT_mesh_shader",
+    // "VK_KHR_device_address_commands",
 };
 const deviceExtensionOptional = [_][*c]const u8{
     "VK_EXT_mesh_shader",
@@ -288,7 +291,7 @@ pub fn createInstance(pAllocCallBacks: [*c]vk.VkAllocationCallbacks, allocator: 
         .messageType = vk.VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
             vk.VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
             vk.VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
-        .pfnUserCallback = debugCallback,
+        .pfnUserCallback = renderDebug.debugCallback,
         .pUserData = null,
     };
 
@@ -434,6 +437,10 @@ pub fn pickPhysicalDevice(instance: vk.VkInstance, allocator: std.mem.Allocator,
         );
         defer array.deinit();
         if (array.items.len != deviceExtensionNeeded.len) {
+            std.log.debug("device extension not supported, need {d}, actual {d}", .{ deviceExtensionNeeded.len, array.items.len });
+            for (array.items) |name| {
+                std.log.debug("{s}", .{name});
+            }
             continue;
         }
 
@@ -465,6 +472,7 @@ pub fn pickPhysicalDevice(instance: vk.VkInstance, allocator: std.mem.Allocator,
         // TODO memory requirement undeclared
         const memoryCount = calculateMemoryGPU(deviceMemoryProperty2.memoryProperties);
         if (memoryCount < biggestMemory) {
+            std.log.debug("b", .{});
             continue;
         }
 
@@ -612,24 +620,4 @@ fn calculateMemoryGPU(memoryProperty: vk.VkPhysicalDeviceMemoryProperties) u64 {
         }
     }
     return totalCount;
-}
-
-pub fn debugCallback(
-    messageSeverity: vk.VkDebugUtilsMessageSeverityFlagBitsEXT,
-    messageType: vk.VkDebugUtilsMessageTypeFlagsEXT,
-    pCallbackData: [*c]const vk.VkDebugUtilsMessengerCallbackDataEXT,
-    pUserData: ?*anyopaque,
-) callconv(.c) vk.VkBool32 {
-    _ = messageType;
-    _ = pUserData;
-
-    if (messageSeverity >= vk.VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
-        std.log.err("{s}", .{pCallbackData.*.pMessage});
-
-        @breakpoint();
-    } else {
-        std.log.debug("{s}", .{pCallbackData.*.pMessage});
-    }
-
-    return vk.VK_FALSE;
 }

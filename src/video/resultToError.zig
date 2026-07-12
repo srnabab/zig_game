@@ -16,7 +16,7 @@ pub fn checkVkResult(result: vk.VkResult) VkError!void {
         std.log.err("error: {s}", .{@tagName(@as(VkResult, @enumFromInt(result)))});
         renderDebug.printToDot();
         renderDebug.printAllInfoToTxt();
-        @breakpoint();
+        // @breakpoint();
         return err;
     };
 }

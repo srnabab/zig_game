@@ -6,6 +6,14 @@ const global = @import("global");
 const processRender = @import("processRender");
 const Commands = processRender.commands;
 
+const VkStruct = @import("video");
+const vk = VkStruct.vk;
+
+const mvzr = @import("mvzr");
+
+const regex: mvzr.Regex = mvzr.compile("0[xX][0-9a-fA-F]+").?;
+
+pub var errorOccured: std.atomic.Value(u8) = .init(0);
 var commands: *Commands = undefined;
 var io: std.Io = undefined;
 
@@ -68,16 +76,56 @@ pub fn printAllInfoToTxt() void {
         const com = commands.queue.getPtr(entry.key_ptr.*);
         if (com == null) continue;
 
-        var infoBuffer = [_]u8{0} ** 512;
+        var infoBuffer = [_]u8{0} ** 10240;
         var len: usize = 0;
         switch (com.?.command) {
             .computeRecord => |r| {
                 const info = std.fmt.bufPrint(
                     &infoBuffer,
-                    "group count = {d}",
-                    .{r.groupCount},
+                    "ID: {d}\ngroup count = {d}\n\n",
+                    .{ entry.key_ptr.*, r.groupCount },
                 ) catch continue;
                 len = info.len;
+            },
+            .copyBuffer => |r| {
+                const info = std.fmt.bufPrint(
+                    &infoBuffer,
+                    "ID: {d}\nsrc: {*}, size {d}\ndst: {*}, size {d}\nregion: src offset {d}, dst offset {d}, size {d}\n\n",
+                    .{
+                        entry.key_ptr.*,
+                        commands.vulkan.buffers.getVkBuffer(r.srcBuffer),
+                        commands.vulkan.buffers.getBufferSize(r.srcBuffer),
+                        commands.vulkan.buffers.getVkBuffer(r.dstBuffer),
+                        commands.vulkan.buffers.getBufferSize(r.dstBuffer),
+                        r.regions[0].srcOffset,
+                        r.regions[0].dstOffset,
+                        r.regions[0].size,
+                    },
+                ) catch continue;
+                len = info.len;
+            },
+            .pipelineBarrier => |r| {
+                for (r.barriers) |value| {
+                    var info: []u8 = &.{};
+                    switch (value) {
+                        .bufferMemory => |b| {
+                            info = std.fmt.bufPrint(
+                                infoBuffer[len..],
+                                "ID: {d}\n{}\n\n",
+                                .{ entry.key_ptr.*, b },
+                            ) catch continue;
+                        },
+                        .imageMemory => |b| {
+                            info = std.fmt.bufPrint(
+                                infoBuffer[len..],
+                                "ID: {d}\n{}\n\n",
+                                .{ entry.key_ptr.*, b },
+                            ) catch continue;
+                        },
+                        else => continue,
+                    }
+                    len += info.len;
+                }
             },
             else => continue,
         }
@@ -96,4 +144,48 @@ pub fn printAllInfoToTxt() void {
         std.log.err("write err: {s} 8", .{@errorName(err)});
         return;
     };
+}
+
+pub fn debugCallback(
+    messageSeverity: vk.VkDebugUtilsMessageSeverityFlagBitsEXT,
+    messageType: vk.VkDebugUtilsMessageTypeFlagsEXT,
+    pCallbackData: [*c]const vk.VkDebugUtilsMessengerCallbackDataEXT,
+    pUserData: ?*anyopaque,
+) callconv(.c) vk.VkBool32 {
+    _ = messageType;
+    _ = pUserData;
+
+    if (messageSeverity >= vk.VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
+        std.log.err("{s}", .{pCallbackData.*.pMessage});
+
+        // for (0..pCallbackData.*.objectCount) |i| {
+        //     std.log.debug("{s}", .{std.fmt.hex(pCallbackData.*.pObjects[i].objectHandle)});
+        // }
+
+        // @breakpoint();
+        errorOccured.store(1, .monotonic);
+    } else {
+        std.log.debug("{s}", .{pCallbackData.*.pMessage});
+    }
+
+    return vk.VK_FALSE;
+}
+
+pub fn setObjectName(
+    device: vk.VkDevice,
+    objectType: vk.VkObjectType,
+    handle: u64,
+    name: [:0]const u8,
+) void {
+    if (builtin.mode == .Debug or builtin.mode == .ReleaseSafe) {
+        var info = vk.VkDebugUtilsObjectNameInfoEXT{
+            .sType = vk.VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+            .pNext = null,
+            .objectType = objectType,
+            .objectHandle = handle,
+            .pObjectName = name.ptr,
+        };
+
+        _ = VkStruct.vkSetDebugUtilsObjectNameEXT.?(device, &info);
+    }
 }

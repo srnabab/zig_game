@@ -8,3 +8,9 @@ pub const UniformBufferObject = extern struct {
     view: mat4,
     proj: mat4,
 };
+
+pub const UniformBufferObjectCamera = extern struct {
+    view: mat4,
+    proj: mat4,
+    cameraPos: cglm.vec3,
+};

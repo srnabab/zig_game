@@ -82,10 +82,10 @@ pub const Vertex_f3pf3n = extern struct {
     normal: vec3,
 };
 
-pub const Vertex_f3pf3nf3tf2u = extern struct {
+pub const Vertex_f3pf3nf4tf2u = extern struct {
     position: vec3,
     normal: vec3,
-    tangent: vec3,
+    tangent: vec4,
     uv: vec2,
 };
 
@@ -95,7 +95,7 @@ pub const VertexType = enum {
     f3pf3n,
     f3pf2u,
     f3pf3nf2u,
-    f3pf3nf3tf2u,
+    f3pf3nf4tf2u,
 };
 
 pub const Vertex = union(VertexType) {
@@ -104,7 +104,7 @@ pub const Vertex = union(VertexType) {
     f3pf3n: []Vertex_f3pf3n,
     f3pf2u: []Vertex_f3pf2u,
     f3pf3nf2u: []Vertex_f3pf3nf2u,
-    f3pf3nf3tf2u: []Vertex_f3pf3nf3tf2u,
+    f3pf3nf4tf2u: []Vertex_f3pf3nf4tf2u,
 };
 
 pub fn enumToType(vType: VertexType) type {

@@ -3,11 +3,12 @@ const Thread = std.Thread;
 const Allocator = std.mem.Allocator;
 const builtin = @import("builtin");
 
-const Debug = @import("debug");
+// const Debug = @import("debug");
 const Descriptor = @import("vkStruct/descriptor.zig");
 const global = @import("global");
 const Handles = @import("handle");
 const Handle = Handles.Handle;
+const renderDebug = @import("renderDebug");
 
 pub const vk = @import("vulkan");
 const sdl = @import("sdl").sdl;
@@ -199,12 +200,16 @@ const Self = @This();
 
 const dynamicFuncNeeded = [_][]const u8{
     "vkCmdDrawMeshTasksEXT",
+    "vkCmdDrawMeshTasksIndirectEXT",
     "vkCmdDrawMeshTasksIndirect2EXT",
+    "vkSetDebugUtilsObjectNameEXT",
     // "vkCmdDrawMeshTasksIndirectCountEXT",
 };
 
 pub var vkCmdDrawMeshTasksEXT: vk.PFN_vkCmdDrawMeshTasksEXT = null;
+pub var vkCmdDrawMeshTasksIndirectEXT: vk.PFN_vkCmdDrawMeshTasksIndirectEXT = null;
 pub var vkCmdDrawMeshTasksIndirect2EXT: vk.PFN_vkCmdDrawMeshTasksIndirect2EXT = null;
+pub var vkSetDebugUtilsObjectNameEXT: vk.PFN_vkSetDebugUtilsObjectNameEXT = null;
 
 currentFrame: std.atomic.Value(u32) = .init(0),
 
@@ -360,6 +365,10 @@ pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet, db: file.sq
 
     inline for (dynamicFuncNeeded) |name| {
         @field(Self, name) = @ptrCast(vk.vkGetDeviceProcAddr(self.device, name.ptr));
+
+        if (@field(Self, name) == null) {
+            std.log.err("failed to get {s}", .{name});
+        }
     }
 
     var queueTypeArray = [_]i32{100} ** 3;
@@ -485,6 +494,12 @@ pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet, db: file.sq
         0,
     );
     self.globalTimelineSemaphore = semaphores2[0];
+    renderDebug.setObjectName(
+        self.device,
+        vk.VK_OBJECT_TYPE_SEMAPHORE,
+        @intFromPtr(self.globalTimelineSemaphore),
+        "global timeline semaphore",
+    );
 
     try self._createFence(
         null,
@@ -492,18 +507,37 @@ pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet, db: file.sq
         &self.endFence,
         @intCast(self.endFence.len),
     );
-    // for (self.endFence) |value| {
-    //     std.log.debug("fence {*}", .{value});
-    // }
+    renderDebug.setObjectName(
+        self.device,
+        vk.VK_OBJECT_TYPE_FENCE,
+        @intFromPtr(self.endFence[0]),
+        "end fence",
+    );
+    renderDebug.setObjectName(
+        self.device,
+        vk.VK_OBJECT_TYPE_FENCE,
+        @intFromPtr(self.endFence[1]),
+        "end fence",
+    );
+
     try self._createFence(
         null,
         vk.VK_FENCE_CREATE_SIGNALED_BIT,
         &self.presentDoneFence,
         @intCast(self.presentDoneFence.len),
     );
-    // for (self.presentDoneFence) |value| {
-    //     std.log.debug("fence {*}", .{value});
-    // }
+    renderDebug.setObjectName(
+        self.device,
+        vk.VK_OBJECT_TYPE_FENCE,
+        @intFromPtr(self.presentDoneFence[0]),
+        "present done fence",
+    );
+    renderDebug.setObjectName(
+        self.device,
+        vk.VK_OBJECT_TYPE_FENCE,
+        @intFromPtr(self.presentDoneFence[1]),
+        "present done fence",
+    );
 
     try self.samplers.initSamplers(
         io,
@@ -531,6 +565,12 @@ pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet, db: file.sq
         vertexSet1SetLayoutCreateInfos.bindingCount,
         @constCast(&vertexSet1SetLayoutCreateInfos.bindings),
     );
+    renderDebug.setObjectName(
+        self.device,
+        vk.VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
+        @intFromPtr(self.drawDescriptorSetLayout[1]),
+        "vertex set 1 layout",
+    );
 
     var bindingFlagsInfo = vk.VkDescriptorSetLayoutBindingFlagsCreateInfo{
         .sType = vk.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
@@ -546,6 +586,12 @@ pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet, db: file.sq
         set0SetLayoutCreateInfos.bindingCount,
         @constCast(&set0SetLayoutCreateInfos.bindings),
     );
+    renderDebug.setObjectName(
+        self.device,
+        vk.VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
+        @intFromPtr(self.drawDescriptorSetLayout[0]),
+        "global texture set 0 layout",
+    );
 
     self.meshDrawDescriptorSetLayout[1] = try Descriptor.createDescriptorSetLayout(
         self.device,
@@ -554,6 +600,12 @@ pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet, db: file.sq
         meshSet1SetLayoutCreateInfos.flag,
         meshSet1SetLayoutCreateInfos.bindingCount,
         @constCast(&meshSet1SetLayoutCreateInfos.bindings),
+    );
+    renderDebug.setObjectName(
+        self.device,
+        vk.VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
+        @intFromPtr(self.meshDrawDescriptorSetLayout[1]),
+        "mesh set 1 layout",
     );
 
     self.meshDrawDescriptorSetLayout[0] = self.drawDescriptorSetLayout[0];
@@ -570,6 +622,19 @@ pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet, db: file.sq
     self.globalFixed2dMVPMatrixDescriptorSet = set1Sets[0];
     self.global2dMVPMatrixDescriptorSet = set1Sets[1];
 
+    renderDebug.setObjectName(
+        self.device,
+        vk.VK_OBJECT_TYPE_DESCRIPTOR_SET,
+        @intFromPtr(self.globalFixed2dMVPMatrixDescriptorSet),
+        "ui set 1",
+    );
+    renderDebug.setObjectName(
+        self.device,
+        vk.VK_OBJECT_TYPE_DESCRIPTOR_SET,
+        @intFromPtr(self.global2dMVPMatrixDescriptorSet),
+        "2d set 1",
+    );
+
     var meshSet1Sets: [1]vk.VkDescriptorSet = undefined;
     var meshSet1Setlayout = [_]vk.VkDescriptorSetLayout{self.meshDrawDescriptorSetLayout[1]};
     try Descriptor.allocateDescriptorSets(
@@ -579,6 +644,13 @@ pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet, db: file.sq
         &meshSet1Sets,
     );
     self.global3dMVPMatrixDescriptorSet = meshSet1Sets[0];
+
+    renderDebug.setObjectName(
+        self.device,
+        vk.VK_OBJECT_TYPE_DESCRIPTOR_SET,
+        @intFromPtr(self.global3dMVPMatrixDescriptorSet),
+        "3d set 1",
+    );
 
     var set0Sets: [1]vk.VkDescriptorSet = undefined;
     var set0Setlayout = [_]vk.VkDescriptorSetLayout{self.drawDescriptorSetLayout[0]};
@@ -590,6 +662,12 @@ pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet, db: file.sq
     );
 
     self.globalTextureDescriptorSet = set0Sets[0];
+    renderDebug.setObjectName(
+        self.device,
+        vk.VK_OBJECT_TYPE_DESCRIPTOR_SET,
+        @intFromPtr(self.globalTextureDescriptorSet),
+        "texture set 0",
+    );
 
     // try self.samplers.initSamplers(io, self.device, self.pAllocCallBacks, self.allocator);
 }

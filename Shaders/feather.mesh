@@ -20,9 +20,9 @@ taskPayloadSharedEXT TaskPayload payload;
 struct Vertex {
     vec3 pos;
     vec3 normal;
-    vec3 tangent;
+    vec4 tangent;
     vec2 uv;
-    float padding;
+    // float padding;
 };
 
 struct Meshlet {
@@ -62,7 +62,7 @@ layout(buffer_reference) readonly buffer MeshletBuffer {
     Meshlet meshlets[]; 
 };
 
-layout(buffer_reference) readonly buffer VertexBuffer {
+layout(buffer_reference, scalar) readonly buffer VertexBuffer {
     Vertex vertices[]; 
 };
 
@@ -78,7 +78,7 @@ layout(buffer_reference) readonly buffer MappingBuffer {
     GroupMapping mappings[];
 };
 
-layout(buffer_reference) readonly buffer InstanceBuffer {
+layout(buffer_reference, scalar) readonly buffer InstanceBuffer {
     Instance instances[];
 };
 
@@ -118,17 +118,22 @@ void main() {
     uint globalMeshletVerticesOffset = pc.meshes.meshes[meshID].meshletVerticesOffset;
     uint globalMeshletTrianglesOffset = pc.meshes.meshes[meshID].meshletTrianglesOffset;
 
+    mat4 model = pc.instances.instances[instanceID].matrix;
+
     SetMeshOutputsEXT(v_count, p_count);
 
     for(uint i = tid;i < v_count;i += 32) {
         uint vertexIdx = pc.meshletVertices.meshletVertices[m.vertexOffset + i + globalMeshletVerticesOffset] + globalVerticesOffset;
         vec3 pos = pc.vertexBuffer.vertices[vertexIdx].pos;
 
-        vec4 f_pos = ubo.proj * ubo.view * vec4(pos, 1.0);
+        vec4 f_pos = ubo.proj * ubo.view *  vec4(pos, 1.0);
+        // vec4 f_pos = vec4(pos, 1.0);
+
+        vec4 tangent = pc.vertexBuffer.vertices[vertexIdx].tangent;
 
         vec3 v = normalize(ubo.cameraPos - f_pos.xyz);
         vec3 n = normalize(pc.vertexBuffer.vertices[vertexIdx].normal);
-        vec3 t = normalize(pc.vertexBuffer.vertices[vertexIdx].tangent);
+        vec3 t = normalize(tangent.xyz) * tangent.w;
         vec3 b = normalize(cross(t, n));
 
         view[i] = normalize(mat3(t, b, n) * v);

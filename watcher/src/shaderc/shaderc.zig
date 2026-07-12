@@ -76,6 +76,7 @@ pub const Compiler = struct {
         );
 
         shaderc.shaderc_compile_options_set_optimization_level(options, @intFromEnum(optimizationLevel));
+        shaderc.shaderc_compile_options_set_generate_debug_info(options);
 
         return .{
             .compiler = compiler,

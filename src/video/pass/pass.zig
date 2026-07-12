@@ -33,6 +33,9 @@ pub fn deinit(self: *Self) void {
     while (it.next()) |entry| {
         entry.value_ptr.meshIdList.deinit(self.allocator);
         self.allocator.free(entry.value_ptr.commands);
+        for (entry.value_ptr.mappings) |*value| {
+            value.deinit(self.allocator);
+        }
         self.allocator.free(entry.value_ptr.mappings);
     }
     self.passCommandsMap.deinit();
@@ -65,7 +68,10 @@ pub fn add(self: *Self, passName: []const u8, mapping: vertexStruct.GroupMapping
             getOrPut.value_ptr.commands,
             getOrPut.value_ptr.commands.len + 1,
         );
-        getOrPut.value_ptr.commands[idx] = .{};
+        getOrPut.value_ptr.commands[idx] = .{
+            .groupCountY = 1,
+            .groupCountZ = 1,
+        };
         getOrPut.value_ptr.mappings = try self.allocator.realloc(
             getOrPut.value_ptr.mappings,
             getOrPut.value_ptr.mappings.len + 1,
@@ -82,6 +88,8 @@ pub fn add(self: *Self, passName: []const u8, mapping: vertexStruct.GroupMapping
 }
 
 pub fn upload(self: *Self, vulkan: *VkStruct, commands: *Commands, passName: []const u8, indirectBuffer: VkStruct.Buffer_t, mappingBuffer: VkStruct.Buffer_t) !void {
+    // if (self)
+
     const records = self.passCommandsMap.get(passName) orelse return;
 
     const commandLen = records.commands.len;

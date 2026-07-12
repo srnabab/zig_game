@@ -43,7 +43,7 @@ pub const CommandType2 = enum {
     draw2DRecord,
     drawIndirectRecord,
     drawMeshRecord,
-    drawMeshIndirectRecord,
+    drawMeshIndirectRecord2,
     empty,
     end,
     endRecord,
@@ -73,7 +73,7 @@ pub const comm2 = union(CommandType2) {
     draw2DRecord: Draw2DRecord,
     drawIndirectRecord: DrawIndirectRecord,
     drawMeshRecord: DrawMeshRecord,
-    drawMeshIndirectRecord: DrawMeshIndirectRecord,
+    drawMeshIndirectRecord2: DrawMeshIndirectRecord2,
     empty: void,
     end: void,
     endRecord: void,
@@ -324,7 +324,8 @@ pub const DrawMeshIndirect = struct {
     pushConstants: PushConstantPack,
 };
 
-pub const DrawMeshIndirectRecord = struct {
+pub const DrawMeshIndirectRecord2 = struct {
+    buffer: vk.VkBuffer,
     addressRange: vk.VkStridedDeviceAddressRangeKHR,
     addressFlags: u32,
     drawCount: u32,

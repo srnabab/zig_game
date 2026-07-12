@@ -72,6 +72,7 @@ pub fn addMesh(
     const meshletVerticesCount = meshletVerticesSize / @sizeOf(u32);
     const meshletTrianglesCount = meshletTrianglesSize / @sizeOf(u8);
 
+    // @breakpoint();
     const counts = [_]u64{
         meshletCount,
         verticesCount,
@@ -87,7 +88,7 @@ pub fn addMesh(
     };
 
     const strides = [_]u64{
-        @sizeOf(vertexStruct.Meshlet),
+        @sizeOf(vertexStruct.Mesh),
         verticeStride,
         @sizeOf(u32),
         @sizeOf(u8),
@@ -165,6 +166,7 @@ pub fn upload(self: *Self, commands: *Commands, buffer: VkStruct.Buffer_t) !void
     self.updated = false;
 
     const meshs = self.meshs.items[self.updateStart .. self.updateEnd + 1];
+    std.log.debug("mesh count {d}", .{meshs[0].meshletCount});
 
     const stagingBuffer = try self.vulkan.createBufferByUsage(
         meshs.len * @sizeOf(Mesh),
@@ -172,6 +174,7 @@ pub fn upload(self: *Self, commands: *Commands, buffer: VkStruct.Buffer_t) !void
         .staging,
         false,
     );
+    self.vulkan.buffers.copyDataToMapped(stagingBuffer, 0, vertexStruct.Mesh, meshs);
 
     var copyRegion = [1]vk.VkBufferCopy2{.{
         .sType = vk.VK_STRUCTURE_TYPE_BUFFER_COPY_2,

@@ -19,7 +19,7 @@ pub fn szudzikPairing(a: anytype, b: @TypeOf(a)) doubleWidthIntType(@TypeOf(b)) 
     return if (a >= b) doubleA * doubleA + doubleA + doubleB else doubleB * doubleB + doubleA;
 }
 
-pub inline fn round(comptime integer: usize, value: usize) usize {
+pub inline fn round(integer: usize, value: usize) usize {
     std.debug.assert(integer % 2 == 0);
 
     const minus1 = integer - 1;

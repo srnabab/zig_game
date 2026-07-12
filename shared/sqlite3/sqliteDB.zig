@@ -998,6 +998,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
 
         fn prepare_v2(db: ?*sqlite.sqlite3, zSql: [*c]const u8, nByte: c_int, ppStmt: [*c]?*sqlite.sqlite3_stmt, pzTail: [*c][*c]const u8) !void {
             if (sqlite.sqlite3_prepare_v2(db, zSql, nByte, ppStmt, pzTail) != sqlite.SQLITE_OK) {
+                @breakpoint();
                 std.log.warn("failed to prepare stmt\n {s}\n{s}", .{ sqlite.sqlite3_errmsg(db), zSql });
                 return sqliteError.SQLError;
             }

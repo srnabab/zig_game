@@ -204,7 +204,21 @@ fn updateLoadParameter(
             const arena = SceneJson.arena.allocator();
 
             for (res.primitives) |value| {
+                // for (value.index) |i| {
+                //     std.log.debug("{d}", .{i});
+                // }
+
                 const vertex_opted = try optimizeVertex(value.vertex, value.index, gpa);
+
+                // const vertex = @as([*]vertexStruct.Vertex_f3pf3nf3tf2u, @ptrCast(@alignCast(vertex_opted.remap.vertices)))[0..vertex_opted.remap.newVertexCount];
+                // for (vertex) |i| {
+                //     std.log.debug("{d} {d} {d}", .{ i.position[0], i.position[1], i.position[2] });
+                // }
+
+                // for (vertex_opted.remap.indices) |i| {
+                //     std.log.debug("{d}", .{i});
+                // }
+
                 defer {
                     gpa.free(vertex_opted.remap.indices);
                     const vertices = @as([*]u8, @ptrCast(@alignCast(vertex_opted.remap.vertices)))[0..vertex_opted.remap.totalVerticesSize];

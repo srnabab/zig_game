@@ -30,6 +30,9 @@ pub fn build(b: *std.Build) void {
     const cglm_dep = b.dependency("cglm", .{});
     const cglm_install_step = cglm_dep.builder.getInstallStep();
 
+    const mvzr = b.dependency("mvzr", .{});
+    const mvzr_mod = mvzr.module("mvzr");
+
     const vma_c = b.addTranslateC(.{
         .root_source_file = b.path("include/vma/vk_mem_alloc_namespace.h"),
         .target = target,
@@ -354,6 +357,8 @@ pub fn build(b: *std.Build) void {
 
     renderDebug_mod.addImport("processRender", processRender_mod);
     renderDebug_mod.addImport("global", global_mod);
+    renderDebug_mod.addImport("mvzr", mvzr_mod);
+    renderDebug_mod.addImport("video", video_mod);
 
     renderFlow_mod.addImport("processRender", processRender_mod);
     renderFlow_mod.addImport("video", video_mod);
@@ -505,6 +510,7 @@ pub fn build(b: *std.Build) void {
     video_mod.addImport("error", error_mod);
     video_mod.addImport("types", vk_types_mod);
     video_mod.addImport("debug", debug_mod);
+    video_mod.addImport("renderDebug", renderDebug_mod);
 
     queue_mod.addImport("tracy", tracy.module("tracy"));
 
@@ -521,6 +527,7 @@ pub fn build(b: *std.Build) void {
     processRender_mod.addImport("uniqueArrayList", uniqueArrayList_mod);
     processRender_mod.addImport("handle", handle_mod);
     processRender_mod.addImport("logStructSize", logStructSize_mod);
+    processRender_mod.addImport("renderDebug", renderDebug_mod);
 
     uniqueArrayList_mod.addImport("tracy", tracy.module("tracy"));
 

@@ -14,6 +14,7 @@ const math = @import("math");
 const uniqueArrayList = @import("uniqueArrayList").UniqueArrayList;
 const Handles = @import("handle");
 const Handle = Handles.Handle;
+const renderDebug = @import("renderDebug");
 
 const logStructSize = @import("logStructSize").logStructSize;
 
@@ -1977,6 +1978,8 @@ pub const commands = struct {
                 } else if (enterCommandType == .compute) {
                     rootNode.data.commandPoolType = .compute;
                 } else if (enterCommandType == .present) {
+                    rootNode.data.commandPoolType = .graphic;
+                } else if (enterCommandType == .drawMeshIndirect) {
                     rootNode.data.commandPoolType = .graphic;
                 } else {
                     std.debug.panic("pushconstant unprocessed enterCommandType {s}", .{@tagName(enterCommandType)});
@@ -4107,7 +4110,7 @@ pub const commands = struct {
                 try self.nodeDag.childrenAppend(linkNodeStart.?, node);
                 try node.parentsAppend(&linkNodeStart.?.ID);
             },
-            .draw2D, .present, .drawMesh, .drawIndirect => {
+            .drawMeshIndirect, .draw2D, .present, .drawMesh, .drawIndirect => {
                 node.data.commandPoolType = .graphic;
 
                 try self.drawCacheMap.put(ID, void{});
@@ -4322,7 +4325,8 @@ pub const commands = struct {
                     buffers[buffers.len - 1] = drawMeshIndirect.indirectBuffer;
 
                     ptr.value_ptr.command = .{
-                        .drawMeshIndirectRecord = .{
+                        .drawMeshIndirectRecord2 = .{
+                            .buffer = self.vulkan.buffers.getVkBuffer(drawMeshIndirect.indirectBuffer),
                             .addressRange = .{
                                 .address = self.vulkan.getBufferAddress(drawMeshIndirect.indirectBuffer),
                                 .size = self.vulkan.buffers.getBufferSize(drawMeshIndirect.indirectBuffer),
@@ -5319,19 +5323,27 @@ pub const oneTimeCommand = struct {
                 // vk.vkCmdDrawMeshTasksIndirectEXT(commandBuffer: ?*struct_VkCommandBuffer_T, buffer: ?*struct_VkBuffer_T, offset: u64, drawCount: u32, stride: u32)
 
             },
-            .drawMeshIndirectRecord => {
+            .drawMeshIndirectRecord2 => {
                 const innerZone = tracy.initZone(@src(), .{ .name = "draw mesh indirect" });
                 defer innerZone.deinit();
 
-                var info = vk.VkDrawIndirect2InfoKHR{
+                const info = vk.VkDrawIndirect2InfoKHR{
                     .sType = vk.VK_STRUCTURE_TYPE_DRAW_INDIRECT_2_INFO_KHR,
                     .pNext = null,
-                    .addressRange = command.command.drawMeshIndirectRecord.addressRange,
-                    .addressFlags = command.command.drawMeshIndirectRecord.addressFlags,
-                    .drawCount = command.command.drawMeshIndirectRecord.drawCount,
+                    .addressRange = command.command.drawMeshIndirectRecord2.addressRange,
+                    .addressFlags = command.command.drawMeshIndirectRecord2.addressFlags,
+                    .drawCount = command.command.drawMeshIndirectRecord2.drawCount,
                 };
+                _ = info;
 
-                VkStruct.vkCmdDrawMeshTasksIndirect2EXT.?(commandBuffer, &info);
+                // VkStruct.vkCmdDrawMeshTasksIndirect2EXT.?(commandBuffer, &info);
+                VkStruct.vkCmdDrawMeshTasksIndirectEXT.?(
+                    commandBuffer,
+                    command.command.drawMeshIndirectRecord2.buffer,
+                    0,
+                    command.command.drawMeshIndirectRecord2.drawCount,
+                    @intCast(command.command.drawMeshIndirectRecord2.addressRange.stride),
+                );
             },
             else => {
                 std.debug.panic("unsupported command type {s}", .{@tagName(command.command)});
@@ -5446,7 +5458,7 @@ pub const oneTimeCommand = struct {
             },
             .draw2DRecord, .presentRecord, .bindVertexBuffers, .bindDescriptorSets, .setViewport => null,
             .setScissor, .bindIndexBuffer, .bindPipeline, .start, .beginRendering, .endRendering => null,
-            .drawMeshRecord, .drawIndirectRecord, .computeRecord, .fillBuffer => null,
+            .drawMeshRecord, .drawIndirectRecord, .computeRecord, .fillBuffer, .drawMeshIndirectRecord2 => null,
             else => {
                 std.debug.panic("not support {s}", .{@tagName(command.command)});
             },
@@ -5682,7 +5694,10 @@ pub const oneTimeCommand = struct {
                     submitInfo.signalSemaphoreInfoCount = @intCast(signalSemaphoreSubmitInfos.items.len);
                     submitInfo.pSignalSemaphoreInfos = @ptrCast(signalSemaphoreSubmitInfos.items.ptr);
 
-                    try self.vulkan.queueSubmit(self.io, currentType, 1, submitInfo, null);
+                    self.vulkan.queueSubmit(self.io, currentType, 1, submitInfo, null) catch {
+                        std.log.debug("error ID {d}", .{nn.ID});
+                        @breakpoint();
+                    };
 
                     switch (currentType) {
                         .graphic => graphicSemaphoreValue = currentSemaphoreValue,
@@ -5778,6 +5793,13 @@ pub const oneTimeCommand = struct {
 
                     record(pCommands.queue.getPtr(nn.ID).?, currentCommandBuffer, allocator, self.vulkan, pCommands.pTextureSet);
 
+                    if (renderDebug.errorOccured.load(.monotonic) == 1) {
+                        global.stopNodeDagPrint = false;
+                        global.printDagToDot = true;
+                        nodeDagPrint(&pCommands.nodeDag, pCommands);
+                        std.log.debug("id {d}", .{nn.ID});
+                        unreachable;
+                    }
                     if (!global.stopExecuteNodePrint) std.log.debug("e ID {d}", .{nn.ID});
                 }
             }

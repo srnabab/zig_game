@@ -151,6 +151,33 @@ pub fn update_thread_func(args: Args) !void {
         false,
     );
 
+    const test_D = try inputFunc1.registerAction(
+        inputTrigger1,
+        "test_D",
+        sdl.SDL_SCANCODE_D,
+        null,
+        null,
+        false,
+    );
+
+    const test_Q = try inputFunc1.registerAction(
+        inputTrigger1,
+        "test_Q",
+        sdl.SDL_SCANCODE_Q,
+        null,
+        null,
+        false,
+    );
+
+    const test_E = try inputFunc1.registerAction(
+        inputTrigger1,
+        "test_E",
+        sdl.SDL_SCANCODE_E,
+        null,
+        null,
+        false,
+    );
+
     var resourceGroup: Io.Group = .init;
 
     var rwSqlite: sqlite3 = null;
@@ -255,7 +282,7 @@ pub fn update_thread_func(args: Args) !void {
                 ptr.* = .{ .instance = .{
                     .texture = null,
                     .pos = vec3{ 0, 0, 0 },
-                    .scale = vec3{ 0.5, 1, 1.5 },
+                    .scale = vec3{ 1, 1, 1 },
                     .rotation = vec3{ 0, 0, 0 },
                     .sampler = null,
                     .handle = handles.createHandle(Handles.WaitFill, .instance),
@@ -264,11 +291,14 @@ pub fn update_thread_func(args: Args) !void {
             }
 
             if (test_C.downIsTrue()) a: {
+                std.log.debug("x", .{});
                 resourceArray.mutex.lockUncancelable(io);
                 defer resourceArray.mutex.unlock(io);
 
+                std.log.debug("c", .{});
                 if (!Handles.handleIsValid(testHandle)) break :a;
 
+                std.log.debug("cc", .{});
                 const ptr = try resourceArray.array.addOne();
                 const m = meshes.getMesh(@intCast(file.getID("Plane.001_0.vtx"))) catch {
                     _ = resourceArray.array.pop();
@@ -279,6 +309,18 @@ pub fn update_thread_func(args: Args) !void {
                     .mesh = m,
                     .passName = "im_feather",
                 } };
+                std.log.debug("ccc", .{});
+            }
+
+            if (test_D.downIsTrue()) {
+                _ = try readResource(
+                    io,
+                    gpa,
+                    handles,
+                    &nameArray,
+                    mainRoSqlite,
+                    "Plane.001_0.vtx",
+                );
             }
 
             if (sceneChanged) {
@@ -327,8 +369,17 @@ pub fn update_thread_func(args: Args) !void {
             const infos = stateBuffering.getWriteBuffer();
             defer stateBuffering.returnWriteBuffer(infos);
 
+            // stateBufferValue += 1;
+
+            if (test_Q.downIsTrue()) {
+                stateBufferValue -= 1;
+            }
+
+            if (test_E.downIsTrue()) {
+                stateBufferValue += 1;
+            }
+
             try infos.append(stateBufferValue);
-            stateBufferValue += 1;
 
             accumulateTime += sdl.SDL_GetTicksNS() - lastTimestamp;
 
@@ -361,6 +412,9 @@ fn readResource(io: Io, gpa: std.mem.Allocator, handles: *global.HandlesType, na
     switch (fileType) {
         .PNG => {
             handleType = .texture;
+        },
+        .VTX => {
+            handleType = .mesh;
         },
         .UNKNOWN => {},
         else => return null,
@@ -430,6 +484,7 @@ fn processResource(args: ResourceThreadArgs) Io.Cancelable!void {
                     ) catch continue;
                 },
                 .VTX => {
+                    // std.log.debug("d", .{});
                     processResource_VTX(
                         io,
                         gpa,
@@ -652,6 +707,10 @@ fn processResource_VTX(
     const meshlets = content[meshletsStart..meshletVerticesStart];
     const meshletVertices = content[meshletVerticesStart..meshletTrianglesStart];
     const meshletTriangles = content[meshletTrianglesStart..end];
+
+    // for (meshletTriangles) |value| {
+    //     std.log.debug("value {d}", .{value});
+    // }
 
     const stagingBuffer0 = vulkan.createBufferByUsage(
         vertices.len,

@@ -219,6 +219,7 @@ pub fn createBufferByUsage(
     var usageFlags: vk.VkBufferUsageFlags = 0;
     var vmaFlags: vma.VmaAllocationCreateFlags = 0;
     var vmaUsage: vma.VmaMemoryUsage = 0;
+    var alignment: vk.VkDeviceSize = BufferAlign;
 
     switch (usage) {
         .index => {
@@ -236,6 +237,7 @@ pub fn createBufferByUsage(
             vmaFlags |= vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT |
                 vma.VMA_ALLOCATION_CREATE_MAPPED_BIT;
             vmaUsage = vma.VMA_MEMORY_USAGE_AUTO;
+            alignment = UniformBufferAlign;
         },
         .staging => {
             usageFlags |= vk.VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
@@ -264,7 +266,7 @@ pub fn createBufferByUsage(
         0,
         null,
         vk.VK_SHARING_MODE_EXCLUSIVE,
-        @intCast(math.round(BufferAlign, size)),
+        @intCast(math.round(alignment, size)),
         stride,
         @intCast(usageFlags),
         vmaFlags,
