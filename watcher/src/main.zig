@@ -151,7 +151,12 @@ const NotifyInformation = struct {
 
 var global_iocp: ?windows.HANDLE = null;
 
+var contentWatch: *DirectoryWatch = undefined;
+
+var database: *db = undefined;
+
 pub fn main(init: std.process.Init) !void {
+    const io = init.io;
     const gpa = init.gpa;
     var arena = std.heap.ArenaAllocator.init(gpa);
     defer arena.deinit();
@@ -201,13 +206,13 @@ pub fn main(init: std.process.Init) !void {
     if (folder == null) return error.NoFolder;
 
     var contentFolder = try std.Io.Dir.openDirAbsolute(
-        init.io,
+        io,
         contentDatabaseRelativePathStart.?,
         .{ .iterate = true },
     );
-    defer contentFolder.close(init.io);
+    defer contentFolder.close(io);
 
-    var database = try db.init(allocator, databaseFilePath);
+    database = try db.init(allocator, databaseFilePath);
     errdefer database.rollback();
     defer database.deinit(allocator);
 
@@ -227,7 +232,7 @@ pub fn main(init: std.process.Init) !void {
     defer gpa.free(watchingFileFullPath);
 
     const watchingFile: ?std.Io.File = std.Io.Dir.openFileAbsolute(
-        init.io,
+        io,
         watchingFileFullPath,
         .{ .mode = .read_only },
     ) catch |err| bl: switch (err) {
@@ -242,12 +247,12 @@ pub fn main(init: std.process.Init) !void {
     var fileBuffer = [_]u8{0} ** 1024;
     var watchingFileReader: std.Io.File.Reader = undefined;
     if (watchingFile) |file| {
-        watchingFileReader = file.reader(init.io, &fileBuffer);
-        const fileSize = (try file.stat(init.io)).size;
+        watchingFileReader = file.reader(io, &fileBuffer);
+        const fileSize = (try file.stat(io)).size;
         const content = try watchingFileReader.interface.readAlloc(gpa, fileSize);
         defer gpa.free(content);
 
-        const tempTime = std.Io.Timestamp.now(init.io, .real).toMilliseconds();
+        const tempTime = std.Io.Timestamp.now(io, .real).toMilliseconds();
 
         while (watchingFilePos < fileSize) {
             const index = std.mem.indexOf(u8, content[watchingFilePos..], "\n") orelse break;
@@ -273,8 +278,6 @@ pub fn main(init: std.process.Init) !void {
 
     global_iocp = iocp;
     _ = win32.SetConsoleCtrlHandler(consoleCtrlHandler, windows.BOOL.TRUE);
-
-    var contentWatch: *DirectoryWatch = undefined;
 
     defer windows.CloseHandle(iocp.?);
     {
@@ -313,22 +316,22 @@ pub fn main(init: std.process.Init) !void {
     var removeArray: std.array_list.Managed([]const u8) = .init(allocator);
     defer removeArray.deinit();
 
-    try database.processFolder(contentFolder, init.io, gpa);
+    try database.processFolder(contentFolder, io, gpa);
     defer db.iterateFolder.cleanSceneJson();
 
     std.log.info("watching {s}...", .{path.?});
 
     var pending_old_name: ?[]u8 = null;
-    var committer: db.AutoCommitter = .init(database, init.io, 2000);
+    var committer: db.AutoCommitter = .init(database, io, 2000);
     var future: ?Io.Future(@typeInfo(@TypeOf(db.AutoCommitter.runMonitor)).@"fn".return_type.?) = null;
     errdefer {
         if (future) |_| {
-            _ = future.?.cancel(init.io) catch |err| std.log.err("AutoCommitter.runMonitor failed: {}", .{err});
+            _ = future.?.cancel(io) catch |err| std.log.err("AutoCommitter.runMonitor failed: {}", .{err});
         }
     }
     defer {
         if (future) |_| {
-            _ = future.?.await(init.io) catch |err| std.log.err("AutoCommitter.runMonitor failed: {}", .{err});
+            _ = future.?.await(io) catch |err| std.log.err("AutoCommitter.runMonitor failed: {}", .{err});
         }
     }
 
@@ -368,13 +371,13 @@ pub fn main(init: std.process.Init) !void {
 
         if (completion_key == SAVE_COMPLETION_KEY) {
             if (future) |_| {
-                _ = future.?.await(init.io) catch |err| std.log.err("AutoCommitter.runMonitor failed: {}", .{err});
+                _ = future.?.await(io) catch |err| std.log.err("AutoCommitter.runMonitor failed: {}", .{err});
                 future = null;
             }
             database.saveToDrive();
             // std.log.debug("database saved", .{});
 
-            // db.iterateFolder.saveSceneJson(init.io, contentFolder) catch |err| {
+            // db.iterateFolder.saveSceneJson(io, contentFolder) catch |err| {
             //     std.log.err("failed to save scene json {s}", .{@errorName(err)});
             //     continue;
             // };
@@ -415,7 +418,7 @@ pub fn main(init: std.process.Init) !void {
                         }
                     }
 
-                    const time = std.Io.Timestamp.now(init.io, .real).toMilliseconds();
+                    const time = std.Io.Timestamp.now(io, .real).toMilliseconds();
 
                     const last = notifyArray.getLastOrNull();
                     if (last) |l| {
@@ -438,7 +441,7 @@ pub fn main(init: std.process.Init) !void {
                     try notifyArray.append(.{
                         .Action = info.Action,
                         .name = name_utf8,
-                        .time = std.Io.Timestamp.now(init.io, .real).toMilliseconds(),
+                        .time = std.Io.Timestamp.now(io, .real).toMilliseconds(),
                     });
                     try notifyTimeMap.put(name_utf8, time);
                 }
@@ -482,11 +485,11 @@ pub fn main(init: std.process.Init) !void {
                                 continue;
                             }
 
-                            const curTime = std.Io.Timestamp.now(init.io, .real).toMilliseconds();
+                            const curTime = std.Io.Timestamp.now(io, .real).toMilliseconds();
 
-                            try std.Io.sleep(init.io, .fromMilliseconds(10), .real);
+                            try std.Io.sleep(io, .fromMilliseconds(10), .real);
 
-                            const fileSize = (try watchingFile.?.stat(init.io)).size;
+                            const fileSize = (try watchingFile.?.stat(io)).size;
 
                             _ = try watchingFileReader.seekTo(0);
 
@@ -566,10 +569,10 @@ pub fn main(init: std.process.Init) !void {
                             );
                             defer gpa.free(fullPath);
 
-                            try std.Io.sleep(init.io, .fromMilliseconds(1), .real);
+                            try std.Io.sleep(io, .fromMilliseconds(1), .real);
 
                             const file: ?std.Io.File = std.Io.Dir.openFileAbsolute(
-                                init.io,
+                                io,
                                 fullPath,
                                 .{},
                             ) catch |err| s: switch (err) {
@@ -580,8 +583,8 @@ pub fn main(init: std.process.Init) !void {
                             };
 
                             if (file) |f| {
-                                defer f.close(init.io);
-                                const stat = try f.stat(init.io);
+                                defer f.close(io);
+                                const stat = try f.stat(io);
 
                                 if (stat.kind == .file) {
                                     var startIndex = std.mem.findLast(u8, fullPath, "\\") orelse 0;
@@ -597,11 +600,11 @@ pub fn main(init: std.process.Init) !void {
                                         inContent = true;
                                         // std.log.debug("in content", .{});
                                         const dir = try std.Io.Dir.openDirAbsolute(
-                                            init.io,
+                                            io,
                                             fullPath[0 .. startIndex - 1],
                                             .{},
                                         );
-                                        defer dir.close(init.io);
+                                        defer dir.close(io);
 
                                         const idx = std.mem.findLast(u8, fullPath, "Content");
 
@@ -628,7 +631,7 @@ pub fn main(init: std.process.Init) !void {
                                             );
                                             std.log.debug("{s}", .{parentPathZ});
                                             fType = try db.iterateFolder.processFile(
-                                                init.io,
+                                                io,
                                                 dir,
                                                 fileName,
                                                 fullPath[i..],
@@ -640,18 +643,18 @@ pub fn main(init: std.process.Init) !void {
                                             committer.poke();
                                         } else {
                                             if (future) |_| {
-                                                _ = try future.?.await(init.io);
+                                                _ = try future.?.await(io);
                                                 future = null;
                                             }
                                             committer.activate();
-                                            future = init.io.async(db.AutoCommitter.runMonitor, .{&committer});
+                                            future = io.async(db.AutoCommitter.runMonitor, .{&committer});
                                         }
                                     } else {
                                         std.log.debug("not in content", .{});
                                         const dotIndex = std.mem.findLast(u8, fileName, ".") orelse fileName.len;
 
                                         var readBuffer = [_]u8{0} ** 64;
-                                        var reader = f.reader(init.io, &readBuffer);
+                                        var reader = f.reader(io, &readBuffer);
                                         const content = try reader.interface.readAlloc(gpa, stat.size);
                                         defer gpa.free(content);
 
@@ -689,16 +692,16 @@ pub fn main(init: std.process.Init) !void {
                                                 defer gpa.free(spvFullPath);
 
                                                 const spvFile = std.Io.Dir.createFileAbsolute(
-                                                    init.io,
+                                                    io,
                                                     spvFullPath,
                                                     .{},
                                                 ) catch {
                                                     std.log.err("create file {s} failed", .{spvFullPath});
                                                     continue;
                                                 };
-                                                defer spvFile.close(init.io);
+                                                defer spvFile.close(io);
 
-                                                var writer = spvFile.writer(init.io, &fileWriterBuffer);
+                                                var writer = spvFile.writer(io, &fileWriterBuffer);
                                                 writer.interface.writeAll(spv) catch {
                                                     std.log.err("write file {s} failed", .{spvFullPath});
                                                     continue;
@@ -709,11 +712,14 @@ pub fn main(init: std.process.Init) !void {
                                                 };
 
                                                 const nodeType_u32: u32 = @intFromEnum(db.NodeType.Shader);
-                                                try database.ShaderPipelineGraphNodeT.insert(.{
+                                                database.ShaderPipelineGraphNodeT.insert(.{
                                                     .Name = fileName.ptr,
                                                     .Path = fullPath.ptr,
                                                     .Type = nodeType_u32,
-                                                });
+                                                }) catch {
+                                                    std.log.err("insert shader failed", .{});
+                                                    continue;
+                                                };
 
                                                 var fromNodeID: i32 = -1;
                                                 var gets = [_]*anyopaque{@ptrCast(&fromNodeID)};
@@ -826,7 +832,7 @@ pub fn main(init: std.process.Init) !void {
                                                         defer gpa.free(shaderFolderFullPath);
 
                                                         const pipelineFile = std.Io.Dir.openFileAbsolute(
-                                                            init.io,
+                                                            io,
                                                             pipelinePath[0..pipelinePathLen],
                                                             .{},
                                                         ) catch |err| {
@@ -837,7 +843,7 @@ pub fn main(init: std.process.Init) !void {
                                                             continue;
                                                         };
 
-                                                        const pipelineFileStat = pipelineFile.stat(init.io) catch |err| {
+                                                        const pipelineFileStat = pipelineFile.stat(io) catch |err| {
                                                             std.log.err(
                                                                 "failed to stat pipeline file {s} {s}",
                                                                 .{ pipelinePath[0..pipelinePathLen], @errorName(err) },
@@ -845,12 +851,12 @@ pub fn main(init: std.process.Init) !void {
                                                             continue;
                                                         };
 
-                                                        var pipelineReader = pipelineFile.reader(init.io, &readBuffer);
+                                                        var pipelineReader = pipelineFile.reader(io, &readBuffer);
                                                         const pipelineContent = try pipelineReader.interface.readAlloc(gpa, pipelineFileStat.size);
                                                         defer gpa.free(pipelineContent);
 
                                                         const shaderNames = pipelineParse.pipelineJsonParse(
-                                                            init.io,
+                                                            io,
                                                             pipelineContent,
                                                             shaderFolderFullPath,
                                                             pipebFullPath,
@@ -883,7 +889,7 @@ pub fn main(init: std.process.Init) !void {
                                                 );
                                                 defer gpa.free(samplerFullPath);
 
-                                                sampler.praseSampler(init.io, content, samplerFullPath, gpa) catch |err| {
+                                                sampler.praseSampler(io, content, samplerFullPath, gpa) catch |err| {
                                                     std.log.err("write file {s} failed {s}", .{ samplerFullPath, @errorName(err) });
                                                     continue;
                                                 };
@@ -917,7 +923,7 @@ pub fn main(init: std.process.Init) !void {
                                                 defer gpa.free(shaderFolderFullPath);
 
                                                 const shaderNames = pipelineParse.pipelineJsonParse(
-                                                    init.io,
+                                                    io,
                                                     content,
                                                     shaderFolderFullPath,
                                                     pipebFullPath,
@@ -937,10 +943,7 @@ pub fn main(init: std.process.Init) !void {
                                                     .Name = fileName.ptr,
                                                     .Path = fullPath.ptr,
                                                     .Type = @as(u32, @intFromEnum(db.NodeType.Pipeline)),
-                                                }) catch {
-                                                    std.log.err("insert pipeline failed", .{});
-                                                    continue;
-                                                };
+                                                }) catch {};
 
                                                 var nodeID: i32 = -1;
                                                 var gets = [_]*anyopaque{@ptrCast(&nodeID)};
@@ -956,6 +959,9 @@ pub fn main(init: std.process.Init) !void {
                                                     std.log.err("get pipeline id failed", .{});
                                                     continue;
                                                 };
+
+                                                database.ShaderPipelineGraphEdgeT.delete("ToNodeID = ?", .{nodeID}) catch {};
+
                                                 for (shaderNames) |shaderName| {
                                                     const shaderNameNoSpv = gpa.allocSentinel(
                                                         u8,
@@ -976,7 +982,10 @@ pub fn main(init: std.process.Init) !void {
                                                         &gets2,
                                                         &types2,
                                                     ) catch {
-                                                        std.log.err("insert pipeline failed", .{});
+                                                        // @breakpoint();
+                                                        std.log.err("get shader id failed (shader name: {s})", .{
+                                                            shaderNameNoSpv,
+                                                        });
                                                         continue;
                                                     };
 
@@ -984,8 +993,14 @@ pub fn main(init: std.process.Init) !void {
                                                         .FromNodeID = shaderID,
                                                         .ToNodeID = nodeID,
                                                     }) catch {
-                                                        std.log.err("insert pipeline failed", .{});
-                                                        continue;
+                                                        database.ShaderPipelineGraphEdgeT.update(
+                                                            "FromNodeID",
+                                                            "ToNodeID = ?",
+                                                            .{ shaderID, nodeID },
+                                                        ) catch {
+                                                            std.log.err("insert pipeline edge failed", .{});
+                                                            continue;
+                                                        };
                                                     };
                                                     std.log.debug("{s}", .{shaderName});
                                                 }
@@ -997,7 +1012,7 @@ pub fn main(init: std.process.Init) !void {
                                     std.log.debug("{s} {s} {s}", .{ fileName, @tagName(fType), if (inContent) "in content" else " " });
                                 } else if (stat.kind == .directory) {
                                     const dir: ?std.Io.Dir = std.Io.Dir.openDirAbsolute(
-                                        init.io,
+                                        io,
                                         fullPath,
                                         .{},
                                     ) catch |err| s: switch (err) {
@@ -1012,17 +1027,17 @@ pub fn main(init: std.process.Init) !void {
                                     const dirname = fullPath[startIndex..];
 
                                     if (dir) |d| {
-                                        defer d.close(init.io);
+                                        defer d.close(io);
 
                                         std.log.debug("in", .{});
 
                                         if (watch == contentWatch) {
                                             const parentDir = try std.Io.Dir.openDirAbsolute(
-                                                init.io,
+                                                io,
                                                 fullPath[0 .. startIndex - 1],
                                                 .{},
                                             );
-                                            defer parentDir.close(init.io);
+                                            defer parentDir.close(io);
 
                                             const idx = std.mem.findLast(u8, fullPath, "Content");
 
@@ -1050,7 +1065,7 @@ pub fn main(init: std.process.Init) !void {
                                                 // std.log.debug("{s}", .{parentPathZ});
 
                                                 try db.iterateFolder.processDirectory(
-                                                    init.io,
+                                                    io,
                                                     parentDir,
                                                     dirname,
                                                     fullPath[i..],
@@ -1063,11 +1078,11 @@ pub fn main(init: std.process.Init) !void {
                                                 committer.poke();
                                             } else {
                                                 if (future) |_| {
-                                                    _ = try future.?.await(init.io);
+                                                    _ = try future.?.await(io);
                                                     future = null;
                                                 }
                                                 committer.activate();
-                                                future = init.io.async(db.AutoCommitter.runMonitor, .{&committer});
+                                                future = io.async(db.AutoCommitter.runMonitor, .{&committer});
                                             }
                                         }
 
@@ -1099,11 +1114,11 @@ pub fn main(init: std.process.Init) !void {
                                 committer.poke();
                             } else {
                                 if (future) |_| {
-                                    _ = try future.?.await(init.io);
+                                    _ = try future.?.await(io);
                                     future = null;
                                 }
                                 committer.activate();
-                                future = init.io.async(db.AutoCommitter.runMonitor, .{&committer});
+                                future = io.async(db.AutoCommitter.runMonitor, .{&committer});
                             }
                         }
                     },
@@ -1112,60 +1127,8 @@ pub fn main(init: std.process.Init) !void {
                         pending_old_name = try allocator.dupe(u8, name_utf8);
                     },
                     5 => {
-                        if (pending_old_name) |old| {
-                            const fullPath = try std.fs.path.joinZ(
-                                gpa,
-                                &[_][]const u8{ watch.path, name_utf8 },
-                            );
-                            defer gpa.free(fullPath);
-
-                            if (watch == contentWatch) {
-                                var startIndex = std.mem.findLast(u8, fullPath, "\\") orelse 0;
-                                if (startIndex != 0) startIndex += 1;
-                                const fileName = fullPath[startIndex..];
-
-                                var oldStartIndex = std.mem.findLast(u8, old, "\\") orelse 0;
-                                if (oldStartIndex != 0) oldStartIndex += 1;
-
-                                const idx = std.mem.findLast(u8, fullPath, "Content");
-
-                                if (idx) |i| {
-                                    var parentUUID = [_]u8{0} ** db.UUID.len;
-                                    parentUUID[db.UUID.len - 2] = 0;
-                                    parentUUID[db.UUID.len - 1] = 0;
-
-                                    var getValues: [1]*anyopaque = undefined;
-                                    getValues[0] = @ptrCast(&parentUUID);
-                                    var types = [_]db.innerType{.TEXT};
-
-                                    const parentPathZ = try std.fs.path.joinZ(
-                                        gpa,
-                                        &[_][]const u8{fullPath[i .. startIndex - 1]},
-                                    );
-                                    defer gpa.free(parentPathZ);
-
-                                    std.log.debug("{s}", .{parentPathZ});
-
-                                    try database.ContentPathT.get(
-                                        "UUID",
-                                        null,
-                                        "RelativePath = ?",
-                                        .{parentPathZ},
-                                        &getValues,
-                                        &types,
-                                    );
-                                    try database.ContentPathT.update(
-                                        "FileName, RelativePath, ParentUUID",
-                                        "FileName = ?",
-                                        .{ fileName, fullPath[i..], parentUUID, old[oldStartIndex..] },
-                                    );
-                                }
-                            }
-
-                            std.log.info("rename {s} -> {s}", .{ old, name_utf8 });
-                            allocator.free(old);
-                            pending_old_name = null;
-                        }
+                        renameNew(io, gpa, allocator, watch, name_utf8, pending_old_name) catch continue;
+                        pending_old_name = null;
                     },
                     else => {},
                 }
@@ -1229,4 +1192,96 @@ fn consoleCtrlHandler(ctrl_type: windows.DWORD) callconv(.winapi) windows.BOOL {
         }
     }
     return windows.BOOL.fromBool(true);
+}
+
+fn renameNew(io: Io, gpa: std.mem.Allocator, arena: std.mem.Allocator, watch: *DirectoryWatch, name_utf8: []const u8, pending_old_name: ?[]u8) !void {
+    if (pending_old_name) |old| {
+        const fullPath = try std.fs.path.joinZ(
+            gpa,
+            &[_][]const u8{ watch.path, name_utf8 },
+        );
+        defer gpa.free(fullPath);
+        var startIndex = std.mem.findLast(u8, fullPath, "\\") orelse 0;
+        if (startIndex != 0) startIndex += 1;
+        const fileName = fullPath[startIndex..];
+
+        var fType = db.FileType.UNKNOWN;
+
+        if (watch == contentWatch) {
+            var oldStartIndex = std.mem.findLast(u8, old, "\\") orelse 0;
+            if (oldStartIndex != 0) oldStartIndex += 1;
+
+            const idx = std.mem.findLast(u8, fullPath, "Content");
+
+            if (idx) |i| {
+                var parentUUID = [_]u8{0} ** db.UUID.len;
+                parentUUID[db.UUID.len - 2] = 0;
+                parentUUID[db.UUID.len - 1] = 0;
+
+                var getValues: [1]*anyopaque = undefined;
+                getValues[0] = @ptrCast(&parentUUID);
+                var types = [_]db.innerType{.TEXT};
+
+                const parentPathZ = try std.fs.path.joinZ(
+                    gpa,
+                    &[_][]const u8{fullPath[i .. startIndex - 1]},
+                );
+                defer gpa.free(parentPathZ);
+
+                std.log.debug("{s}", .{parentPathZ});
+
+                try database.ContentPathT.get(
+                    "UUID",
+                    null,
+                    "RelativePath = ?",
+                    .{parentPathZ},
+                    &getValues,
+                    &types,
+                );
+                try database.ContentPathT.update(
+                    "FileName, RelativePath, ParentUUID",
+                    "FileName = ?",
+                    .{ fileName, fullPath[i..], parentUUID, old[oldStartIndex..] },
+                );
+            }
+        } else {
+            const dotIndex = std.mem.findLast(u8, fileName, ".") orelse fileName.len;
+
+            const file: std.Io.File = std.Io.Dir.openFileAbsolute(
+                io,
+                fullPath,
+                .{},
+            ) catch |err| switch (err) {
+                else => {
+                    std.log.err("failed to open file {s} {s}", .{ fullPath, @errorName(err) });
+                    return err;
+                },
+            };
+            defer file.close(io);
+            const stat = try file.stat(io);
+
+            var readBuffer = [_]u8{0} ** 64;
+            var reader = file.reader(io, &readBuffer);
+            const content = try reader.interface.readAlloc(gpa, stat.size);
+            defer gpa.free(content);
+
+            reader.seekTo(0) catch return;
+
+            fType = db.judgeFileType(fileName[dotIndex..], content);
+
+            switch (fType) {
+                .Shader => {
+                    try database.ShaderPipelineGraphNodeT.update(
+                        "Path, Name",
+                        "Name = ?",
+                        .{ fullPath, name_utf8, old },
+                    );
+                },
+                else => {},
+            }
+        }
+
+        std.log.info("rename {s} -> {s}", .{ old, name_utf8 });
+        arena.free(old);
+    }
 }
