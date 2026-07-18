@@ -1,0 +1,154 @@
+#version 460
+
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_EXT_buffer_reference : require
+#extension GL_EXT_scalar_block_layout : require
+#extension GL_KHR_shader_subgroup_ballot : require
+
+layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+
+struct TaskPayload {
+    uint meshletID;
+    uint instanceID;
+    uint meshID;
+};
+
+layout(buffer_reference) readonly buffer TaskPayloads {
+    TaskPayload payloads[];
+};
+
+struct CustomCommand {
+    uint groupCountX;
+    uint groupCountY;
+    uint groupCountZ;
+    uint workgroupOffset;
+};
+
+layout(buffer_reference) readonly buffer CommandBuffer {
+    CustomCommand commands[];
+};
+
+struct GroupMapping {
+    uint instanceID;
+    uint meshID;
+};
+
+layout(buffer_reference) readonly buffer MappingBuffer {
+    GroupMapping mappings[];
+};
+
+struct Instance {
+    mat4 matrix;
+    uint texIndex;
+    uint samplerIndex;
+};
+
+layout(buffer_reference, scalar) readonly buffer InstanceBuffer {
+    Instance instances[];
+};
+
+struct Mesh {
+    uint meshletCount;
+    uint meshletOffset;
+    uint verticesOffset;
+    uint meshletVerticesOffset;
+    uint meshletTrianglesOffset;
+    uint verticeStride;
+};
+
+layout(buffer_reference) readonly buffer MeshBuffer {
+    Mesh meshes[];
+};
+
+struct CustomIndirectDrawCommand {
+    uint vertexCount;
+    uint instanceCount;
+    uint firstVertex;
+    uint firstInstance;
+};
+
+layout(buffer_reference) readonly buffer IndirectCommand {
+    CustomIndirectDrawCommand commands;
+};
+
+layout(push_constant) uniform PushConstants {
+    CommandBuffer commands;
+    MappingBuffer mappings;
+    InstanceBuffer instances;
+    MeshBuffer meshes;
+    TaskPayloads payloads;
+    IndirectCommand iCommands;
+
+    uint drawCount;
+} pc;
+
+uint binarySearchDrawID(uint groupID) {
+    uint start = 0;
+    uint end = pc.drawCount;
+
+    uint mid = (start + end) / 2;
+
+    while (true) {
+        uint lower = pc.commands.commands[mid].workgroupOffset;
+        uint upper = pc.commands.commands[mid].groupCountX + lower;
+
+        if (groupID >= lower && groupID < upper) {
+            return mid;
+        } else if (groupID < lower) {
+            end = mid;
+
+            mid = (start + end) / 2;
+        } else if (groupID >= upper) {
+            start = mid;
+            
+            mid = (start + end) / 2;
+        }
+    }
+}
+
+layout(set = 0, binding = 0) uniform texture2D textures[];
+layout(set = 0, binding = 1) uniform writeonly image2D images[];
+layout(set = 0, binding = 2) uniform sampler samplers[1];
+layout(set = 0, binding = 2) uniform samplerShadow shadowSamplers[1];
+
+shared uint global_start_offset;
+
+void main() {
+    uint localID = gl_LocalInvocationID.x;
+    uint groupID = gl_WorkGroupID.x;
+
+    uint DrawID = binarySearchDrawID(groupID);
+
+    uint mappingID = pc.commands.commands[DrawID].workgroupOffset + groupID;
+    uint instanceID = pc.mappings.mappings[mappingID].instanceID;
+    uint meshID = pc.mappings.mappings[mappingID].meshID;
+
+    uint meshletCount = pc.meshes.meshes[meshID].meshletCount;
+    uint meshletOffset = pc.meshes.meshes[meshID].meshletOffset;
+
+    bool is_visible = false;
+
+    if (localID < meshletCount) is_visible = true;
+
+    uvec4 ballot = subgroupBallot(is_visible);
+    uint groupCount = subgroupBallotBitCount(ballot);
+
+    uint local_offset = subgroupBallotExclusiveBitCount(ballot);
+
+    if (subgroupElect()) {
+        uint start_vertex = atomicAdd(pc.iCommands.commands.vertexCount, groupCount * 372);
+        global_start_offset = start_vertex / 372; 
+    }
+    barrier();
+
+    if (is_visible) {
+
+        uint index = meshletOffset + localID;
+        
+        pc.payloads.payloads[global_start_offset + local_offset] = TaskPayload(
+            index,
+            instanceID,
+            meshID
+        );
+    }
+}

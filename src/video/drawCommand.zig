@@ -5,6 +5,7 @@ const vk = VkStruct.vk;
 
 pub const CommandType = enum {
     compute,
+    computeIndirect,
     copyBuffer,
     copyBufferToImage,
     draw2D,
@@ -18,6 +19,7 @@ pub const CommandType = enum {
 
 pub const comm = union(CommandType) {
     compute: Compute,
+    computeIndirect: ComputeIndirect,
     copyBuffer: CopyBuffer,
     copyBufferToImage: CopyBufferToImage,
     draw2D: Draw2D,
@@ -38,6 +40,7 @@ pub const CommandType2 = enum {
     bindVertexBuffers,
     changeBufferQueue,
     computeRecord,
+    computeIndirectRecord,
     copyBuffer,
     copyBufferToImage,
     draw2DRecord,
@@ -68,6 +71,7 @@ pub const comm2 = union(CommandType2) {
     bindVertexBuffers: BindVertexBuffers,
     changeBufferQueue: ChangeBufferQueue,
     computeRecord: ComputeRecord,
+    computeIndirectRecord: ComputeIndirectRecord,
     copyBuffer: CopyBuffer,
     copyBufferToImage: CopyBufferToImage,
     draw2DRecord: Draw2DRecord,
@@ -322,6 +326,7 @@ pub const DrawMeshIndirect = struct {
     usedBuffers: []VkStruct.Buffer_t,
     indirectBuffer: VkStruct.Buffer_t,
     pushConstants: PushConstantPack,
+    drawCount: u32,
 };
 
 pub const DrawMeshIndirectRecord2 = struct {
@@ -356,6 +361,20 @@ pub const Compute = struct {
 
 pub const ComputeRecord = struct {
     groupCount: u32,
+};
+
+pub const ComputeIndirect = struct {
+    pipeline: VkStruct.Pipeline_t,
+    descriptorSets: []vk.VkDescriptorSet,
+    pTextures: []texture.Texture_t,
+    usedBuffers: []VkStruct.Buffer_t,
+    indirectBuffer: VkStruct.Buffer_t,
+    pushConstants: PushConstantPack,
+};
+
+pub const ComputeIndirectRecord = struct {
+    buffer: vk.VkBuffer,
+    offset: vk.VkDeviceSize,
 };
 
 pub const FillBuffer = struct {

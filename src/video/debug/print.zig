@@ -50,14 +50,19 @@ pub fn printAllInfoToTxt() void {
     const minute = daySeconds.getMinutesIntoHour();
     const second = daySeconds.getSecondsIntoMinute();
 
-    var pathBuffer = [_]u8{0} ** 25;
-    const path = std.fmt.bufPrint(&pathBuffer, "{d}-{s}-{d}-{d} {d} {d}.txt", .{
+    const rng_impl: std.Random.IoSource = .{ .io = io };
+    const rng = rng_impl.interface();
+    const ri = rng.int(u6);
+
+    var pathBuffer = [_]u8{0} ** 29;
+    const path = std.fmt.bufPrint(&pathBuffer, "{d}-{s}-{d}-{d}_{d}_{d}-{d}.txt", .{
         year,
         @tagName(month),
         day,
         hour,
         minute,
         second,
+        ri,
     }) catch |err| {
         std.log.err("write err: {s} 6", .{@errorName(err)});
         return;
@@ -126,6 +131,31 @@ pub fn printAllInfoToTxt() void {
                     }
                     len += info.len;
                 }
+            },
+            .fillBuffer => |f| {
+                const info = std.fmt.bufPrint(
+                    &infoBuffer,
+                    "ID: {d}\nbuffer: {*}, size {d}, offset {d}, value {d}\n\n",
+                    .{
+                        entry.key_ptr.*,
+                        commands.vulkan.buffers.getVkBuffer(f.buffer),
+                        f.size,
+                        f.offset,
+                        f.value,
+                    },
+                ) catch continue;
+                len = info.len;
+            },
+            .bindDescriptorSets => |r| {
+                const info = std.fmt.bufPrint(
+                    &infoBuffer,
+                    "ID: {d}\ndescriptor set count: {d}\n\n",
+                    .{
+                        entry.key_ptr.*,
+                        r.bindDescriptorSetsInfo.descriptorSetCount,
+                    },
+                ) catch continue;
+                len = info.len;
             },
             else => continue,
         }

@@ -341,6 +341,11 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const vulkanCapability_mod = b.createModule(.{
+        .root_source_file = b.path("src/video/capability.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     // dependency
     passGroupMapping_mod.addImport("vertexStruct", vertexStruct_mod);
@@ -511,6 +516,7 @@ pub fn build(b: *std.Build) void {
     video_mod.addImport("types", vk_types_mod);
     video_mod.addImport("debug", debug_mod);
     video_mod.addImport("renderDebug", renderDebug_mod);
+    video_mod.addImport("capability", vulkanCapability_mod);
 
     queue_mod.addImport("tracy", tracy.module("tracy"));
 
@@ -528,6 +534,7 @@ pub fn build(b: *std.Build) void {
     processRender_mod.addImport("handle", handle_mod);
     processRender_mod.addImport("logStructSize", logStructSize_mod);
     processRender_mod.addImport("renderDebug", renderDebug_mod);
+    processRender_mod.addImport("capability", vulkanCapability_mod);
 
     uniqueArrayList_mod.addImport("tracy", tracy.module("tracy"));
 

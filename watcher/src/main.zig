@@ -718,7 +718,6 @@ pub fn main(init: std.process.Init) !void {
                                                     .Type = nodeType_u32,
                                                 }) catch {
                                                     std.log.err("insert shader failed", .{});
-                                                    continue;
                                                 };
 
                                                 var fromNodeID: i32 = -1;

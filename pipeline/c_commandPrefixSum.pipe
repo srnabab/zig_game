@@ -1,0 +1,8 @@
+{
+    "Name": "commandPrefixSum",
+    "PipelineType": "Compute",
+    "Shaders": [
+      "c_commandPrefixsum.comp.spv"
+    ],
+    "VersionCount": 0
+  }

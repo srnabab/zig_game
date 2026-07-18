@@ -1,0 +1,8 @@
+{
+    "Name": "ic_task",
+    "PipelineType": "Compute",
+    "Shaders": [
+      "ic_task.comp.spv"
+    ],
+    "VersionCount": 0
+  }

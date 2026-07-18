@@ -307,8 +307,9 @@ pub fn update_thread_func(args: Args) !void {
                 ptr.* = .{ .meshInstance = .{
                     .instance = @ptrCast(testHandle),
                     .mesh = m,
-                    .passName = "im_feather",
+                    .passName = "ic_task",
                 } };
+                // @breakpoint();
                 std.log.debug("ccc", .{});
             }
 

@@ -238,6 +238,10 @@ pub fn render_thread_func(args: Args) !void {
         .totalSpriteCount = 0,
     };
 
+    var cs_mesh_drawCount: u32 = 0;
+    passes.passMap.get("c_command_prefix_sum").?.setUserdata(&cs_mesh_drawCount);
+    passes.passMap.get("ic_task").?.setUserdata(&cs_mesh_drawCount);
+
     // global.stopExecuteNodePrint = false;
     // global.game_end.store(1, .seq_cst);
 
@@ -257,19 +261,21 @@ pub fn render_thread_func(args: Args) !void {
     while (true) {
         {
             const frame = vulkan.totalFrame.load(.seq_cst);
+            // @breakpoint();
             // std.log.debug("frame {d}", .{frame});
             // _ = frame;
 
-            if (frame == 10) {
+            if (frame == 0) {
                 // global.stopNodeDagPrint = false;
                 // global.printDagToDot = true;
+                // global.game_end.store(1, .seq_cst);
                 // global.stopNodeDagDetailPrint = false;
                 // global.storExecuteSequencePrint = false;
                 //     passes.enablePass("indirect2D");
                 //     passes.enablePass("present");
                 //     // testDraw = true;
             }
-            if (frame == 11) {
+            if (frame == 1) {
                 // global.stopNodeDagPrint = true;
                 // global.storExecuteSequencePrint = true;
                 //     passes.disablePass("indirect2D");
@@ -326,7 +332,7 @@ pub fn render_thread_func(args: Args) !void {
                         },
                         .mesh => |m| {
                             // getMeshBuffer();
-                            const usePass = passes.passMap.get("im_feather").?;
+                            const usePass = passes.passMap.get("iv_feather").?;
 
                             const sizes = [_]u64{
                                 m.meshletSize,
@@ -408,13 +414,19 @@ pub fn render_thread_func(args: Args) !void {
                                 continue;
                             };
 
-                            try passGroupMapping.add(mi.passName, .{
+                            cs_mesh_drawCount = try passGroupMapping.add(mi.passName, .{
                                 .instanceID = idx1,
                                 .meshID = idx2,
                             });
                             std.log.debug("aaaaaaa", .{});
-                            passes.enablePass(mi.passName);
-                            std.log.debug("name {s}", .{mi.passName});
+                            // passes.enablePass(mi.passName);
+                            passes.enablePass("c_command_prefix_sum");
+                            passes.enablePass("ic_task");
+                            passes.enablePass("iv_feather");
+                            global.storExecuteSequencePrint = false;
+                            global.stopNodeDagPrint = false;
+                            global.printDagToDot = true;
+                            // std.log.debug("name {s}", .{mi.passName});
                         },
                         .others => {},
                     }
@@ -424,17 +436,16 @@ pub fn render_thread_func(args: Args) !void {
             const infos = stateBuffering.getReadyBuffer();
             defer stateBuffering.returnReadyBuffer(infos);
 
-            try meshes.upload(&commands, passes.passMap.get("im_feather").?.buffer[8]);
-            try instances.upload(&commands, vulkan, passes.passMap.get("im_feather").?.buffer[7]);
+            try meshes.upload(&commands, passes.passMap.get("ic_task").?.buffer[4]);
+            try instances.upload(&commands, vulkan, passes.passMap.get("ic_task").?.buffer[3]);
             try passGroupMapping.upload(
                 vulkan,
                 &commands,
-                "im_feather",
-                passes.passMap.get("im_feather").?.buffer[0],
-                passes.passMap.get("im_feather").?.buffer[6],
+                "ic_task",
+                passes.passMap.get("ic_task").?.buffer[1],
+                passes.passMap.get("ic_task").?.buffer[2],
             );
             try vertices2D.uploadInstance(&commands, vulkan);
-            vulkan.writeCachedDescriptorSetResources();
 
             viewBoundsAndTotalSpriteCount.totalSpriteCount = vertices2D.getTotalCount();
             viewBoundsAndTotalSpriteCount.viewBounds = .{ -300, 300, -400, 400 };
@@ -477,6 +488,8 @@ pub fn render_thread_func(args: Args) !void {
             zone2.deinit();
 
             try commands.addCommandEnd();
+            vulkan.writeCachedDescriptorSetResources();
+            // renderDebug.printAllInfoToTxt();
 
             try graphic.executeCommands(&commands);
 

@@ -15,6 +15,7 @@ const getIndex = @import("handle").getIndex;
 const global = @import("global");
 const tracy = @import("tracy");
 const math = @import("math");
+const VulkanCapability = @import("capability");
 
 const assert = std.debug.assert;
 
@@ -220,6 +221,8 @@ pub fn createBufferByUsage(
     var vmaFlags: vma.VmaAllocationCreateFlags = 0;
     var vmaUsage: vma.VmaMemoryUsage = 0;
     var alignment: vk.VkDeviceSize = BufferAlign;
+
+    if (VulkanCapability.is_integrated_gpu) alignment = UniformBufferAlign;
 
     switch (usage) {
         .index => {

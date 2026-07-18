@@ -9,6 +9,7 @@ const global = @import("global");
 const Handles = @import("handle");
 const Handle = Handles.Handle;
 const renderDebug = @import("renderDebug");
+const VulkanCapability = @import("capability");
 
 pub const vk = @import("vulkan");
 const sdl = @import("sdl").sdl;
@@ -214,6 +215,7 @@ pub var vkSetDebugUtilsObjectNameEXT: vk.PFN_vkSetDebugUtilsObjectNameEXT = null
 currentFrame: std.atomic.Value(u32) = .init(0),
 
 totalFrame: std.atomic.Value(u32) = .init(0),
+
 allocator: Allocator,
 allocCallBacks: vk.VkAllocationCallbacks = undefined,
 pAllocCallBacks: [*c]vk.VkAllocationCallbacks = null,
@@ -266,6 +268,8 @@ imageAvailableSemaphore: [global.MaxFrameInFlight]vk.VkSemaphore = undefined,
 /// binary semaphore
 renderFinishSemaphore: [global.MaxFrameInFlight]vk.VkSemaphore = undefined,
 presentDoneFence: [global.MaxFrameInFlight]vk.VkFence = undefined,
+renderFinishSemaphores: []vk.VkSemaphore = undefined,
+
 globalTimelineSemaphore: vk.VkSemaphore = null,
 globalTimelineValue: std.atomic.Value(u64) = .init(0),
 
@@ -340,8 +344,11 @@ pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet, db: file.sq
         self.allocator,
         &self.physicalDeviceMemoryCount,
     );
+    defer self.allocator.free(deviceGroup.unSupportedList);
+
     self.physicalDevice = deviceGroup.physicalDevices[0];
     self.gpuType = deviceGroup.gpuType;
+    VulkanCapability.is_integrated_gpu = if (deviceGroup.gpuType == vk.VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU) true else false;
 
     self.graphicQueueFamily, self.computeQueueFamily, self.transferQueueFamily = kl: {
         const res = try Queue.setQueueFamilies(self.physicalDevice, self.allocator, self.surface);
@@ -360,6 +367,7 @@ pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet, db: file.sq
         self.graphicQueueFamily,
         self.computeQueueFamily,
         self.transferQueueFamily,
+        deviceGroup.unSupportedList,
         self.allocator,
     );
 
@@ -484,6 +492,14 @@ pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet, db: file.sq
     self.renderFinishSemaphore[0] = semaphores[3];
     self.renderFinishSemaphore[1] = semaphores[4];
     self.renderFinishSemaphore[2] = semaphores[5];
+
+    // @breakpoint();
+    if (VulkanCapability.swapchain_maintenance1) {
+        self.renderFinishSemaphores = self.renderFinishSemaphore[0..];
+    } else {
+        self.renderFinishSemaphores = try self.allocator.alloc(vk.VkSemaphore, swapchainImages.len);
+        try Semaphore.createBinarySemaphore(self.device, self.pAllocCallBacks, 0, self.renderFinishSemaphores);
+    }
 
     var semaphores2: [1]vk.VkSemaphore = undefined;
     try Semaphore.createTimelineSemaphore(
@@ -635,8 +651,15 @@ pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet, db: file.sq
         "2d set 1",
     );
 
+    // std.log.debug("{}", .{VulkanCapability.mesh_shader});
+
     var meshSet1Sets: [1]vk.VkDescriptorSet = undefined;
-    var meshSet1Setlayout = [_]vk.VkDescriptorSetLayout{self.meshDrawDescriptorSetLayout[1]};
+    var meshSet1Setlayout = [_]vk.VkDescriptorSetLayout{
+        if (VulkanCapability.mesh_shader)
+            self.meshDrawDescriptorSetLayout[1]
+        else
+            self.drawDescriptorSetLayout[1],
+    };
     try Descriptor.allocateDescriptorSets(
         self.device,
         self.globalDescriptorPool,
@@ -763,13 +786,20 @@ pub fn deinit(self: *Self) void {
     self.allocator.free(self.presentModes.modes);
     self.destroySwapchain(self.swapchain);
 
-    for (self.renderFinishSemaphore) |value| {
+    for (self.renderFinishSemaphores) |value| {
         self.destroySemaphore(value);
     }
     for (self.imageAvailableSemaphore) |value| {
         self.destroySemaphore(value);
     }
     self.destroySemaphore(self.globalTimelineSemaphore);
+
+    if (self.renderFinishSemaphore[0] != self.renderFinishSemaphores[0]) {
+        self.allocator.free(self.renderFinishSemaphores);
+        for (self.renderFinishSemaphore) |value| {
+            self.destroySemaphore(value);
+        }
+    }
 
     for (self.endFence) |value| {
         vk.vkDestroyFence(self.device, value, self.pAllocCallBacks);
@@ -867,8 +897,7 @@ pub fn collectEntryName(self: *Self, entryName: []const u8) !*[]const u8 {
     const name = try self.allocator.allocSentinel(u8, len, 0);
     @memcpy(name, entryName[0..len]);
     const res = try self.entryNames.getOrPutValue(name, void{});
-    // std.log.debug("entry name {s}", .{res.key_ptr.*});
-    // @breakpoint();
+
     return res.key_ptr;
 }
 
@@ -1303,15 +1332,6 @@ pub fn queueSubmit(self: *Self, io: std.Io, kind: CommandPoolType, submitCount: 
     } else {
         try checkVkResult(vk.vkQueueSubmit2(queue.queue, submitCount, @ptrCast(pSubmits), null));
     }
-    // checkVkResult(vk.vkQueueWaitIdle(queue.queue)) catch |err| {
-    //     std.log.err("queue type {s}", .{@tagName(kind)});
-
-    //     // @breakpoint();
-    //     std.Thread.sleep(std.time.ns_per_s * 1);
-
-    //     return err;
-    // };
-
 }
 
 pub fn presentSubmit(self: *Self, io: std.Io, pPresentInfo: [*c]vk.VkPresentInfoKHR) !void {
@@ -1370,7 +1390,8 @@ pub fn waitSemaphore(self: *Self, semaphoreCount: u32, pSemaphores: *vk.VkSemaph
         .pValues = @ptrCast(pValues),
     };
 
-    try checkVkResult(vk.vkWaitSemaphores(self.device, @ptrCast(&semaphoreWaitInfo), std.math.maxInt(u64)));
+    // try checkVkResult(vk.vkWaitSemaphores(self.device, @ptrCast(&semaphoreWaitInfo), std.math.maxInt(u64)));
+    try checkVkResult(vk.vkWaitSemaphores(self.device, @ptrCast(&semaphoreWaitInfo), 500_000_000));
 }
 
 pub fn getSemaphoreCounterValue(self: *Self, semaphore: vk.VkSemaphore) !u64 {
@@ -1550,6 +1571,7 @@ pub fn writeCachedDescriptorSetResources(self: *Self) void {
     defer zone.deinit();
 
     if (self.writeDescriptorSets.items.len == 0) return;
+    std.log.debug("write descriptor sets len {d}", .{self.writeDescriptorSets.items.len});
 
     vk.vkUpdateDescriptorSets(
         self.device,
@@ -1720,10 +1742,14 @@ pub fn destroyScissor(self: *Self, scissor: Scissor_t) void {
 pub fn logBufferPtr(self: *Self) void {
     for (self.buffers.buffers.items.items) |v| {
         if (v == .data and v.data.allocation == .real) {
-            std.log.debug("{*} {s} {s}", .{ v.data.vkBuffer, @tagName(v.data.usage), @tagName(switch (v.data.queue) {
-                .have => |have| have,
-                .ref => |ref| self.buffers.getBufferQueueType(ref),
-            }) });
+            std.log.debug("{*} {s} {s} size: {d}", .{
+                v.data.vkBuffer, @tagName(v.data.usage),
+                @tagName(switch (v.data.queue) {
+                    .have => |have| have,
+                    .ref => |ref| self.buffers.getBufferQueueType(ref),
+                }),
+                v.data.size,
+            });
         }
     }
 }

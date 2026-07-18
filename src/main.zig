@@ -203,6 +203,8 @@ pub fn main(init: std.process.Init) !void {
         try value.init(null, &vulkan, allocator_t.*);
     }
 
+    vulkan.logBufferPtr();
+
     var render_t = try Thread.spawn(
         .{},
         render.render_thread_func,

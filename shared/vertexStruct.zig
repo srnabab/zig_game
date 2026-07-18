@@ -11,6 +11,12 @@ pub const ivec3 = cglm.ivec3;
 
 const Self = @This();
 
+pub const ComputeTaskPayload = extern struct {
+    meshletID: u32,
+    instanceID: u32,
+    meshID: u32,
+};
+
 pub const GroupMapping = extern struct {
     instanceID: u32,
     meshID: u32,

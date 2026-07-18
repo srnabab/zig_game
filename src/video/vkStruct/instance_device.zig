@@ -11,6 +11,7 @@ const vk = @import("vulkan");
 const tracy = @import("tracy");
 
 const types = @import("types");
+const Capability = @import("capability");
 
 const VkResultToError = @import("resultToError");
 const checkVkResult = VkResultToError.checkVkResult;
@@ -22,6 +23,7 @@ const layerNeeded = layer: {
     break :layer switch (builtin.mode) {
         .Debug, .ReleaseSafe => [_][*c]const u8{
             "VK_LAYER_KHRONOS_validation",
+            "VK_LAYER_LUNARG_crash_diagnostic",
         },
         .ReleaseFast, .ReleaseSmall => [_][*c]const u8{},
     };
@@ -29,8 +31,11 @@ const layerNeeded = layer: {
 const validationFeature = [_]vk.VkValidationFeatureEnableEXT{
     vk.VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT,
     vk.VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,
-    // vk.VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
+    vk.VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
     // vk.VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT,
+};
+const diabledValidationFeature = [_]vk.VkValidationFeatureDisableEXT{
+    vk.VK_VALIDATION_FEATURE_DISABLE_CORE_CHECKS_EXT,
 };
 const extensionNeeded = [_][*c]const u8{
     "VK_KHR_surface",
@@ -49,11 +54,12 @@ const deviceExtensionNeeded = [_][*c]const u8{
     "VK_KHR_dynamic_rendering",
     "VK_EXT_extended_dynamic_state",
     "VK_EXT_robustness2",
-    "VK_EXT_mesh_shader",
+    // "VK_EXT_mesh_shader",
     // "VK_KHR_device_address_commands",
 };
 const deviceExtensionOptional = [_][*c]const u8{
     "VK_EXT_mesh_shader",
+    "VK_KHR_device_address_commands",
 };
 
 const featureNeed = [_][]const u8{
@@ -117,6 +123,24 @@ const featureTypeAndNames = [_]typeNames{
     .{ .featureType = vk.VkPhysicalDevice16BitStorageFeatures, .names = &feature16BitStorageNeed },
     .{ .featureType = vk.VkPhysicalDeviceShaderDrawParametersFeatures, .names = &featureShaderDrawParametersNeed },
 };
+const featureOptional = [_]type{
+    vk.VkPhysicalDeviceMeshShaderFeaturesEXT,
+    vk.VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR,
+};
+
+fn setCapability(array: [featureOptional.len]u32, count: u32) void {
+    for (0..count) |i| {
+        const index = array[i];
+
+        if (index == 0) {
+            Capability.mesh_shader = false;
+            std.log.debug("mesh shader: {}", .{Capability.mesh_shader});
+        } else if (index == 1) {
+            Capability.swapchain_maintenance1 = false;
+            std.log.debug("swapchain maintenance1: {}", .{Capability.swapchain_maintenance1});
+        }
+    }
+}
 
 const VkQueueFamily = types.VkQueueFamily;
 
@@ -127,6 +151,8 @@ fn featureNeededCheck(featurePack: anytype) bool {
     var len: u32 = 0;
 
     comptime var fType = false;
+
+    if (featureType == vk.VkPhysicalDeviceFeatures2) return true;
 
     inline for (featureTypeAndNames) |value| {
         if (featureType == value.featureType) {
@@ -209,7 +235,7 @@ fn getSType(comptime T: type) vk.VkStructureType {
     };
 }
 
-fn initFeatures(allocator: std.mem.Allocator) !*Features {
+fn initFeatures(allocator: std.mem.Allocator, skips: ?[]u32) !*Features {
     const self = try allocator.create(Features);
     const fields = @typeInfo(Features).@"struct".fields;
 
@@ -226,14 +252,52 @@ fn initFeatures(allocator: std.mem.Allocator) !*Features {
         if (std.mem.eql(u8, field.name, "_Features2")) {
             // features2 作为头，它的 pNext 指向字段列表的第一个
             current_ptr.pNext = &@field(self.*, fields[0].name);
-        } else if (i + 1 < fields.len and !std.mem.eql(u8, fields[i + 1].name, "_Features2")) {
+        } else if (i + 1 < fields.len and !std.mem.eql(u8, fields[i + 1].name, "_Features2")) el: {
             // 中间节点指向下一个字段
+
+            if (skips) |skip| {
+                for (skip) |s| {
+                    if (s == i + 1) {
+                        break :el;
+                    }
+                }
+            }
+
             current_ptr.pNext = &@field(self.*, fields[i + 1].name);
         } else {
             // 最后一个节点 (在 features2 之前的那个) 指向 null
             current_ptr.pNext = null;
         }
     }
+
+    if (skips) |skip| {
+        var ppNext: ?*?*anyopaque = null;
+        inline for (fields, 0..) |field, i| {
+            var ss = true;
+            for (skip) |s| {
+                if (s == i) {
+                    ss = false;
+                    break;
+                }
+            }
+
+            if (field.type == vk.VkPhysicalDeviceFeatures2) {
+                ss = false;
+            }
+
+            if (ss) {
+                if (ppNext == null) {
+                    if (@field(self.*, field.name).pNext == null) {
+                        ppNext = &@field(self.*, field.name).pNext;
+                    }
+                } else {
+                    ppNext.?.* = &@field(self.*, field.name);
+                    ppNext = null;
+                }
+            }
+        }
+    }
+
     return self;
 }
 
@@ -300,6 +364,8 @@ pub fn createInstance(pAllocCallBacks: [*c]vk.VkAllocationCallbacks, allocator: 
         .pNext = &debug,
         .enabledValidationFeatureCount = @intCast(validationFeature.len),
         .pEnabledValidationFeatures = &validationFeature,
+        .disabledValidationFeatureCount = @intCast(diabledValidationFeature.len),
+        .pDisabledValidationFeatures = &diabledValidationFeature,
     };
 
     const createInfo = vk.VkInstanceCreateInfo{
@@ -397,6 +463,7 @@ pub fn pickPhysicalDevice(instance: vk.VkInstance, allocator: std.mem.Allocator,
     count: u32,
     physicalDevices: [32]vk.VkPhysicalDevice,
     gpuType: vk.VkPhysicalDeviceType,
+    unSupportedList: []u32,
 } {
     const zone = tracy.initZone(@src(), .{ .name = "pick physical device" });
     defer zone.deinit();
@@ -423,6 +490,12 @@ pub fn pickPhysicalDevice(instance: vk.VkInstance, allocator: std.mem.Allocator,
 
     std.log.debug("device group count: {d}", .{deviceGroupCount});
     try checkVkResult(vk.vkEnumeratePhysicalDeviceGroups(instance, @ptrCast(&deviceGroupCount), @ptrCast(physicalDeviceGroups.ptr)));
+
+    var originalIndexes = [_]u32{0} ** featureOptional.len;
+    var originalCount: u32 = 0;
+
+    var unsupportedList = try allocator.alloc(u32, featureTypeAndNames.len);
+    var unsupportedCount: u32 = 0;
 
     var biggestMemory: u64 = 0;
     var resIndex: u32 = 0;
@@ -462,7 +535,7 @@ pub fn pickPhysicalDevice(instance: vk.VkInstance, allocator: std.mem.Allocator,
             .pNext = null,
         };
 
-        var features = try initFeatures(allocator);
+        var features = try initFeatures(allocator, null);
         defer allocator.destroy(features);
 
         vk.vkGetPhysicalDeviceProperties2(deviceGroup.physicalDevices[0].?, @ptrCast(&deviceProperty2));
@@ -476,23 +549,48 @@ pub fn pickPhysicalDevice(instance: vk.VkInstance, allocator: std.mem.Allocator,
             continue;
         }
 
-        const featureSupported = featureNeededCheck(features._Features2.features);
-        const featureIndexingSupported = featureNeededCheck(features._DescriptorIndexingFeatures);
-        const featureTimelineSemaphoreSupported = featureNeededCheck(features._TimelineSemaphoreFeatures);
-        const featureDynamicRenderingSupported = featureNeededCheck(features._DynamicRenderingFeatures);
-        const featureSynchronization2Supported = featureNeededCheck(features._Synchronization2Features);
-        const featureMaintenance5Supported = featureNeededCheck(features._Maintenance5Features);
-        const featureRobustnessSupported = featureNeededCheck(features._Robustness2Features);
-        const featureMeshShaderSupported = featureNeededCheck(features._MeshShaderFeatures);
-        const feature8BitStorageSupported = featureNeededCheck(features._8BitStorageFeatures);
+        var innerUnsupportedCount: u32 = 0;
+        var innerOriginalCount: u32 = 0;
 
-        if (featureSupported and featureIndexingSupported and featureTimelineSemaphoreSupported and featureDynamicRenderingSupported and featureSynchronization2Supported and featureMaintenance5Supported and featureRobustnessSupported and featureMeshShaderSupported and feature8BitStorageSupported) {
+        const supported = blk: {
+            const featuresInfo = @typeInfo(Features);
+            var isSupported = true;
+
+            inline for (featuresInfo.@"struct".fields, 0..) |field, j| {
+                var fff = featureNeededCheck(@field(features, field.name));
+
+                if (!fff) {
+                    inline for (featureOptional, 0..) |feature, k| {
+                        if (@TypeOf(@field(features, field.name)) == feature) {
+                            fff = true;
+
+                            originalIndexes[innerOriginalCount] = @intCast(k);
+                            innerOriginalCount += 1;
+
+                            break;
+                        }
+                    }
+
+                    unsupportedList[innerUnsupportedCount] = @intCast(j);
+                    innerUnsupportedCount += 1;
+                }
+
+                isSupported = fff and isSupported;
+            }
+
+            break :blk isSupported;
+        };
+
+        if (supported) {
             switch (deviceProperty2.properties.deviceType) {
                 vk.VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU => {
                     resIndex = @intCast(i + 1);
                     biggestMemory = @max(biggestMemory, memoryCount);
 
                     gpuType = deviceProperty2.properties.deviceType;
+
+                    unsupportedCount = innerUnsupportedCount;
+                    originalCount = innerOriginalCount;
 
                     std.log.debug("device: choosed {s}", .{@tagName(@as(VkPhysicalType, @enumFromInt(deviceProperty2.properties.deviceType)))});
                 },
@@ -503,6 +601,9 @@ pub fn pickPhysicalDevice(instance: vk.VkInstance, allocator: std.mem.Allocator,
 
                         gpuType = deviceProperty2.properties.deviceType;
 
+                        unsupportedCount = innerUnsupportedCount;
+                        originalCount = innerOriginalCount;
+
                         std.log.debug("device: choosed {s}", .{@tagName(@as(VkPhysicalType, @enumFromInt(deviceProperty2.properties.deviceType)))});
                     }
                 },
@@ -512,26 +613,35 @@ pub fn pickPhysicalDevice(instance: vk.VkInstance, allocator: std.mem.Allocator,
                 },
             }
         } else {
-            std.log.debug("feature2 {}", .{featureSupported});
-            std.log.debug("indexing {}", .{featureIndexingSupported});
-            std.log.debug("timeline {}", .{featureTimelineSemaphoreSupported});
-            std.log.debug("dynamic rendering {}", .{featureDynamicRenderingSupported});
-            std.log.debug("synchronization2 {}", .{featureSynchronization2Supported});
-            std.log.debug("maintenance5 {}", .{featureMaintenance5Supported});
-            std.log.debug("robustness {}", .{featureRobustnessSupported});
-            std.log.debug("mesh shader {}", .{featureMeshShaderSupported});
-            // std.debug.panic("", .{});
-            std.log.debug("feature not supported", .{});
+            const featuresInfo = @typeInfo(Features);
+            var isSupported = false;
+
+            inline for (featuresInfo.@"struct".fields) |field| {
+                isSupported = featureNeededCheck(@field(features, field.name));
+
+                if (!isSupported)
+                    std.log.debug("{s} {}", .{ field.name, isSupported });
+            }
+            std.log.debug("\n", .{});
         }
     }
 
     physicalDeviceMemory.* = biggestMemory;
     std.log.debug("gpu memory: {d} GB", .{@as(f64, @floatFromInt(physicalDeviceMemory.*)) / (1024 * 1024 * 1024)});
 
+    if (resIndex == 0) {
+        std.debug.panic("gpu not supported", .{});
+    }
+
+    unsupportedList = try allocator.realloc(unsupportedList, unsupportedCount);
+
+    setCapability(originalIndexes, originalCount);
+
     return .{
         .count = physicalDeviceGroups[resIndex - 1].physicalDeviceCount,
         .physicalDevices = physicalDeviceGroups[resIndex - 1].physicalDevices,
         .gpuType = gpuType,
+        .unSupportedList = unsupportedList,
     };
 }
 
@@ -542,10 +652,15 @@ pub fn createDevice(
     graphicQueueFamily: VkQueueFamily,
     computeQueueFamily: VkQueueFamily,
     transferQueueFamily: VkQueueFamily,
+    unSupportedList: []u32,
     allocator: std.mem.Allocator,
 ) !vk.VkDevice {
     const zone = tracy.initZone(@src(), .{ .name = "create logical device" });
     defer zone.deinit();
+
+    // for (unSupportedList) |value| {
+    //     std.log.debug("{d}", .{value});
+    // }
 
     var groupCreateInfo = vk.VkDeviceGroupDeviceCreateInfo{
         .sType = vk.VK_STRUCTURE_TYPE_DEVICE_GROUP_DEVICE_CREATE_INFO,
@@ -555,7 +670,7 @@ pub fn createDevice(
     };
 
     const featuresFields = @typeInfo(Features).@"struct".fields;
-    const features = try initFeatures(allocator);
+    const features = try initFeatures(allocator, unSupportedList);
     defer allocator.destroy(features);
 
     inline for (featuresFields) |field| {
@@ -573,6 +688,14 @@ pub fn createDevice(
     inline for (featureNeed) |feature| {
         @field(features.*._Features2.features, feature) = 1;
     }
+
+    // inline for (featuresFields) |field| {
+    //     std.log.debug("{*}", .{&@field(features, field.name)});
+    // }
+
+    // inline for (featuresFields) |field| {
+    //     std.log.debug("{}", .{@field(features, field.name)});
+    // }
 
     const queueCreateInfo, const queueCount = blk: {
         const queuePriorities = [_]f32{0.0} ** 16;

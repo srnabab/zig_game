@@ -1,0 +1,54 @@
+#version 460
+
+#extension GL_EXT_buffer_reference : require
+
+layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+
+struct CustomCommand {
+    uint groupCountX;
+    uint groupCountY;
+    uint groupCountZ;
+    uint workgroupOffset;
+};
+
+struct Command {
+    uint groupCountX;
+    uint groupCountY;
+    uint groupCountZ;
+};
+
+layout(buffer_reference) readonly buffer CommandBuffer {
+    CustomCommand commands[];
+};
+
+layout(buffer_reference) readonly buffer iCommandBuffer {
+    Command command;
+};
+
+layout(push_constant) uniform PushConstants {
+    CommandBuffer commands;
+    iCommandBuffer iCommand;
+} pc;
+
+layout(set = 0, binding = 0) uniform texture2D textures[];
+layout(set = 0, binding = 1) uniform writeonly image2D images[];
+layout(set = 0, binding = 2) uniform sampler samplers[1];
+layout(set = 0, binding = 2) uniform samplerShadow shadowSamplers[1];
+
+void main() {
+    uint groupID = gl_WorkGroupID.x;
+
+    if (groupID == 0) {
+        pc.iCommand.command = Command(0, 1, 1);
+    }
+    barrier();
+
+    if (groupID == 0) {
+        pc.commands.commands[groupID].workgroupOffset = 0;
+    } else {
+        uint xCount = pc.commands.commands[groupID - 1].groupCountX;
+        pc.commands.commands[groupID].workgroupOffset = xCount;
+    }
+
+    atomicAdd(pc.iCommand.command.groupCountX, pc.commands.commands[groupID].groupCountX);
+}

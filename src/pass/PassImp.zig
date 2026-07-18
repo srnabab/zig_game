@@ -66,6 +66,8 @@ pub const Pass = struct {
     }
 
     pub fn clearTexture(self: *Pass, gpa: std.mem.Allocator) void {
+        if (self.texture.len == 0) return;
+
         gpa.free(self.texture);
         self.texture = &.{};
     }

@@ -16,6 +16,7 @@ const Records = struct {
     commands: []Command,
 
     mappings: []std.array_list.Aligned(vertexStruct.GroupMapping, null),
+    updated: bool,
 };
 
 passCommandsMap: std.StringHashMap(Records),
@@ -41,7 +42,7 @@ pub fn deinit(self: *Self) void {
     self.passCommandsMap.deinit();
 }
 
-pub fn add(self: *Self, passName: []const u8, mapping: vertexStruct.GroupMapping) !void {
+pub fn add(self: *Self, passName: []const u8, mapping: vertexStruct.GroupMapping) !u32 {
     const getOrPut = try self.passCommandsMap.getOrPut(passName);
 
     if (!getOrPut.found_existing) {
@@ -49,6 +50,7 @@ pub fn add(self: *Self, passName: []const u8, mapping: vertexStruct.GroupMapping
             .commands = &.{},
             .mappings = &.{},
             .meshIdList = try .initCapacity(self.allocator, 2),
+            .updated = false,
         };
     }
 
@@ -85,12 +87,20 @@ pub fn add(self: *Self, passName: []const u8, mapping: vertexStruct.GroupMapping
     for (getOrPut.value_ptr.commands[idx + 1 ..]) |*i| {
         i.workgroupOffset += 1;
     }
+
+    const drawCount = getOrPut.value_ptr.meshIdList.items.len;
+
+    getOrPut.value_ptr.updated = true;
+
+    return @intCast(drawCount);
 }
 
 pub fn upload(self: *Self, vulkan: *VkStruct, commands: *Commands, passName: []const u8, indirectBuffer: VkStruct.Buffer_t, mappingBuffer: VkStruct.Buffer_t) !void {
-    // if (self)
+    const records = self.passCommandsMap.getPtr(passName) orelse return;
 
-    const records = self.passCommandsMap.get(passName) orelse return;
+    if (!records.updated) return;
+
+    records.updated = false;
 
     const commandLen = records.commands.len;
 
@@ -102,6 +112,8 @@ pub fn upload(self: *Self, vulkan: *VkStruct, commands: *Commands, passName: []c
 
         break :a size;
     };
+    std.log.debug("command len {d}", .{commandLen});
+    std.log.debug("mapping len {d}", .{mappingLen});
 
     const stagingBuffer1 = try vulkan.createBufferByUsage(
         commandLen * @sizeOf(Command),

@@ -16,7 +16,7 @@ const ImageLoadParameter = tables.ImageLoadParameter;
 const ModelLoadParameter = tables.ModelLoadParameter;
 
 fn assertEqual(a: c_int, b: c_int) void {
-    std.log.debug("a {d}", .{a});
+    // std.log.debug("a {d}", .{a});
     std.debug.assert(a == b);
 }
 

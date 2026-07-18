@@ -11,12 +11,16 @@ pub fn VkResultToError(result: vk.VkResult) VkError!void {
     }
 }
 pub fn checkVkResult(result: vk.VkResult) VkError!void {
-    VkResultToError(result) catch |err| {
-        std.debug.dumpCurrentStackTrace(.{});
-        std.log.err("error: {s}", .{@tagName(@as(VkResult, @enumFromInt(result)))});
-        renderDebug.printToDot();
-        renderDebug.printAllInfoToTxt();
-        // @breakpoint();
-        return err;
-    };
+    switch (result) {
+        else => {
+            VkResultToError(result) catch |err| {
+                std.log.err("error: {s}", .{@tagName(@as(VkResult, @enumFromInt(result)))});
+                renderDebug.printToDot();
+                // renderDebug.printAllInfoToTxt();
+                std.debug.dumpCurrentStackTrace(.{});
+                @breakpoint();
+                return err;
+            };
+        },
+    }
 }
