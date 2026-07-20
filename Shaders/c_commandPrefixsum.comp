@@ -1,5 +1,6 @@
 #version 460
 
+#extension GL_KHR_shader_subgroup_basic : require
 #extension GL_EXT_buffer_reference : require
 
 layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
@@ -17,11 +18,11 @@ struct Command {
     uint groupCountZ;
 };
 
-layout(buffer_reference) readonly buffer CommandBuffer {
+layout(buffer_reference) buffer CommandBuffer {
     CustomCommand commands[];
 };
 
-layout(buffer_reference) readonly buffer iCommandBuffer {
+layout(buffer_reference) buffer iCommandBuffer {
     Command command;
 };
 
@@ -35,20 +36,29 @@ layout(set = 0, binding = 1) uniform writeonly image2D images[];
 layout(set = 0, binding = 2) uniform sampler samplers[1];
 layout(set = 0, binding = 2) uniform samplerShadow shadowSamplers[1];
 
-void main() {
-    uint groupID = gl_WorkGroupID.x;
+shared uint xCount;
 
-    if (groupID == 0) {
-        pc.iCommand.command = Command(0, 1, 1);
+void main() {
+    uint actualGroupID = gl_WorkGroupID.x;
+
+    uint groupCount = gl_NumWorkGroups.x;
+    uint localID = gl_LocalInvocationID.x;
+    
+    uint groupID = groupCount - 1 - actualGroupID;
+
+    if (subgroupElect()) {
+        xCount = 0;
+        pc.commands.commands[groupID].workgroupOffset = 0;
     }
     barrier();
 
-    if (groupID == 0) {
-        pc.commands.commands[groupID].workgroupOffset = 0;
-    } else {
-        uint xCount = pc.commands.commands[groupID - 1].groupCountX;
-        pc.commands.commands[groupID].workgroupOffset = xCount;
+    for (uint i = localID;i < groupID;i += 32) {
+        atomicAdd(xCount, pc.commands.commands[i].groupCountX);
     }
-
-    atomicAdd(pc.iCommand.command.groupCountX, pc.commands.commands[groupID].groupCountX);
+    barrier();
+    
+    if (subgroupElect()) {
+        pc.commands.commands[groupID].workgroupOffset = xCount;
+        atomicAdd(pc.iCommand.command.groupCountX, pc.commands.commands[groupID].groupCountX);
+    }
 }

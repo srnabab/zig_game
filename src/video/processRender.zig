@@ -1728,6 +1728,7 @@ pub const commands = struct {
         release: bool,
         acquire: bool,
         copySrc: bool,
+        useAsIndirect: bool,
     ) !struct {
         srcAccessMask: vk.VkAccessFlags2,
         dstAccessMask: vk.VkAccessFlags2,
@@ -1860,7 +1861,12 @@ pub const commands = struct {
                         dstAccessMask = vk.VK_ACCESS_2_SHADER_STORAGE_READ_BIT | vk.VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
                     },
                     .indirect => {
-                        dstAccessMask = vk.VK_ACCESS_2_SHADER_READ_BIT;
+                        dstAccessMask = vk.VK_ACCESS_2_SHADER_READ_BIT | vk.VK_ACCESS_2_SHADER_WRITE_BIT;
+
+                        if (useAsIndirect) {
+                            destinationStage = vk.VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
+                            dstAccessMask = vk.VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
+                        }
                     },
                     else => {
                         std.log.err("unsupported buffer usage {s}", .{@tagName(bufferUsage)});
@@ -2251,6 +2257,7 @@ pub const commands = struct {
                         true,
                         false,
                         changeBufferQueue.isCopySrc,
+                        changeBufferQueue.useAsIndirect,
                     );
 
                     const releaseHash =
@@ -2354,6 +2361,7 @@ pub const commands = struct {
                         false,
                         true,
                         changeBufferQueue.isCopySrc,
+                        changeBufferQueue.useAsIndirect,
                     );
 
                     const acquireHash =
@@ -2446,6 +2454,7 @@ pub const commands = struct {
                         false,
                         false,
                         changeBufferQueue.isCopySrc,
+                        changeBufferQueue.useAsIndirect,
                     )
                     // catch |err| {
                     //     std.log.debug("type {s} {}", .{
@@ -2739,6 +2748,7 @@ pub const commands = struct {
         commandType: drawC.CommandType,
         commandID: u32,
         isCopySrc: bool,
+        useAsIndirect: bool,
     ) !twoQueueNode {
         var resNode = twoQueueNode{};
 
@@ -2763,6 +2773,7 @@ pub const commands = struct {
                 .dstQueueFamily = newQueue,
                 .regions = regions,
                 .isCopySrc = isCopySrc,
+                .useAsIndirect = useAsIndirect,
             } }, commandType, commandID);
 
             self.vulkan.buffers.unWriteBuffer(pBuffer);
@@ -3078,6 +3089,7 @@ pub const commands = struct {
         pRendering: *Rendering,
         buffers: ?[]VkStruct.Buffer_t,
         textures: ?[]texture.Texture_t,
+        indirectBuffer: ?VkStruct.Buffer_t,
         currentNode: **QueueNode,
         graphicCurrentNode: *?*QueueNode,
         computeCurrentNode: *?*QueueNode,
@@ -3105,10 +3117,18 @@ pub const commands = struct {
 
         if (buffers) |bs| {
             for (bs, 0..) |buffer, i| {
+                var useAsIndirect = false;
+
                 var bufferOffset = [_]drawC.SizeOffset{.{
                     .offset = 0,
                     .size = self.vulkan.buffers.getBufferSize(buffer),
                 }};
+
+                if (indirectBuffer) |indirect| {
+                    if (buffer == indirect) {
+                        useAsIndirect = true;
+                    }
+                }
                 totalQueueNodes[i] = try self.changeBufferQueueHelper(
                     buffer,
                     .graphic,
@@ -3116,6 +3136,7 @@ pub const commands = struct {
                     commandType,
                     commandID,
                     false,
+                    useAsIndirect,
                 );
             }
         }
@@ -3926,6 +3947,7 @@ pub const commands = struct {
                     .fillBuffer,
                     ID,
                     false,
+                    false,
                 );
                 const dependencyPtr = try dependenciesArray.addOne();
                 self.addBuffer_tDependency(dependencyPtr, fillBuffer.buffer);
@@ -3961,6 +3983,7 @@ pub const commands = struct {
                 var usedBuffers: []VkStruct.Buffer_t = undefined;
                 var descriptorSets: []vk.VkDescriptorSet = undefined;
                 var pushConstants: drawC.PushConstantPack = undefined;
+                var indirectBuffer: ?VkStruct.Buffer_t = null;
 
                 if (command == .computeIndirect) {
                     const computeIndirect = command.computeIndirect;
@@ -3970,6 +3993,7 @@ pub const commands = struct {
                     usedBuffers = computeIndirect.usedBuffers;
                     descriptorSets = computeIndirect.descriptorSets;
                     pushConstants = computeIndirect.pushConstants;
+                    indirectBuffer = computeIndirect.indirectBuffer;
 
                     const bufferContent = self.vulkan.buffers.getBufferContent(computeIndirect.indirectBuffer);
 
@@ -4056,10 +4080,18 @@ pub const commands = struct {
                     twoNodeIndex += 1;
                 }
                 for (usedBuffers) |value| {
+                    var useAsIndirect = false;
+
                     var region = [_]drawC.SizeOffset{.{
                         .offset = 0,
                         .size = self.vulkan.buffers.getBufferSize(value),
                     }};
+
+                    if (indirectBuffer) |indirect| {
+                        if (value == indirect) {
+                            useAsIndirect = true;
+                        }
+                    }
                     // std.log.debug("buffer {*}, size {d}", .{ self.vulkan.buffers.getVkBuffer(value), region[0].size });
                     allTwoNodes[twoNodeIndex] = try self.changeBufferQueueHelper(
                         value,
@@ -4068,6 +4100,7 @@ pub const commands = struct {
                         commandType,
                         ID,
                         false,
+                        useAsIndirect,
                     );
                     twoNodeIndex += 1;
                 }
@@ -4176,6 +4209,7 @@ pub const commands = struct {
                 var pushConstants: ?drawC.PushConstantPack = null;
                 var indexBuffer: ?VkStruct.Buffer_t = null;
                 var pRendering: *Rendering = undefined;
+                var indirectBuffer: ?VkStruct.Buffer_t = null;
                 var isPresent = false;
 
                 if (command == .drawIndirect) {
@@ -4205,6 +4239,7 @@ pub const commands = struct {
                     pipeline = drawIndirect.pipeline;
                     pushConstants = drawIndirect.pushConstants;
                     pRendering = &self.rendering;
+                    indirectBuffer = drawIndirect.indirectBuffer;
 
                     buffers = try allocator.alloc(
                         VkStruct.Buffer_t,
@@ -4395,6 +4430,7 @@ pub const commands = struct {
                     pRendering,
                     buffers,
                     pTextures,
+                    indirectBuffer,
                     &currentNode,
                     &graphicCurrentNode,
                     &computeCurrentNode,
@@ -4514,6 +4550,7 @@ pub const commands = struct {
                     std.meta.activeTag(command),
                     ID,
                     true,
+                    false,
                 );
 
                 // inputs may have dependency
@@ -4538,6 +4575,7 @@ pub const commands = struct {
                     dstOffsets,
                     std.meta.activeTag(command),
                     ID,
+                    false,
                     false,
                 );
 
@@ -4607,6 +4645,7 @@ pub const commands = struct {
                     std.meta.activeTag(command),
                     ID,
                     true,
+                    false,
                 );
 
                 // inputs may have dependency

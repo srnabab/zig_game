@@ -265,6 +265,7 @@ pub const ChangeBufferQueue = struct {
     dstQueueFamily: VkStruct.CommandPoolType,
     regions: []SizeOffset,
     isCopySrc: bool,
+    useAsIndirect: bool,
 };
 
 pub const BindPipeline = struct {

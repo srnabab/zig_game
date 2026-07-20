@@ -16,12 +16,14 @@ fn initEmpty(
     userdata: ?*anyopaque,
     pass: *PassImp.Pass,
     vulkan: *VkStruct,
+    commands: *Commands,
     gpa: std.mem.Allocator,
 ) !void {
     _ = userdata;
     _ = pass;
     _ = vulkan;
     _ = gpa;
+    _ = commands;
 }
 fn setPushConstantsEmpty(userdata: ?*anyopaque, pValues: *anyopaque) void {
     _ = userdata;
@@ -71,6 +73,7 @@ pub const VTable = struct {
         userdata: ?*anyopaque,
         pass: *PassImp.Pass,
         vulkan: *VkStruct,
+        commands: *Commands,
         gpa: std.mem.Allocator,
     ) anyerror!void,
 

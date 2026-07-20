@@ -96,6 +96,12 @@ pub fn render_thread_func(args: Args) !void {
     defer commands.deinit();
     renderDebug.init(io, &commands);
 
+    for (passes.passes) |*value| {
+        try value.init(null, vulkan, &commands, allocator_t.*);
+    }
+
+    vulkan.logBufferPtr();
+
     var graphic = OneTimeCommand.init(io, allocator_t.*, vulkan);
     defer graphic.deinit() catch |err| {
         std.debug.panic("error {s}", .{@errorName(err)});

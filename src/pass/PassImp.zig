@@ -32,9 +32,10 @@ pub const Pass = struct {
         self: *Pass,
         userdata: ?*anyopaque,
         vulkan: *VkStruct,
+        commands: *Commands,
         gpa: std.mem.Allocator,
     ) !void {
-        try self.vtable.init(userdata, self, vulkan, gpa);
+        try self.vtable.init(userdata, self, vulkan, commands, gpa);
     }
 
     pub fn setPushConstants(self: *Pass, userdata: ?*anyopaque) void {

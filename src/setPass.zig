@@ -23,9 +23,11 @@ fn initIndirectDraw(
     userdata: ?*anyopaque,
     pass: *Pass,
     vulkan: *VkStruct,
+    commands: *Commands,
     gpa: std.mem.Allocator,
 ) !void {
     _ = userdata;
+    _ = commands;
 
     var values = indirectPushConstant{
         .instanceBuffer = vulkan.getBufferAddress(pass.buffer[1]),
@@ -178,8 +180,10 @@ fn initPresent(
     userdata: ?*anyopaque,
     pass: *Pass,
     vulkan: *VkStruct,
+    commands: *Commands,
     gpa: std.mem.Allocator,
 ) !void {
+    _ = commands;
     _ = userdata;
 
     var descriptorSets = [_]vk.VkDescriptorSet{
@@ -291,9 +295,11 @@ fn initIndirectCompute(
     userdata: ?*anyopaque,
     pass: *Pass,
     vulkan: *VkStruct,
+    commands: *Commands,
     gpa: std.mem.Allocator,
 ) !void {
     _ = userdata;
+    _ = commands;
 
     const values = IndirectComputePushConstant{
         .instanceBuffer = vulkan.getBufferAddress(pass.buffer[1]),
@@ -621,7 +627,7 @@ const twoU64 = extern struct {
     b: u64,
 };
 
-fn initC_CommandPrefixSum(userdata: ?*anyopaque, pass: *Pass, vulkan: *VkStruct, gpa: std.mem.Allocator) !void {
+fn initC_CommandPrefixSum(userdata: ?*anyopaque, pass: *Pass, vulkan: *VkStruct, commands: *Commands, gpa: std.mem.Allocator) !void {
     _ = userdata;
     _ = gpa;
 
@@ -633,6 +639,13 @@ fn initC_CommandPrefixSum(userdata: ?*anyopaque, pass: *Pass, vulkan: *VkStruct,
         .b = BufferAddress1,
     };
     pass.setPushConstants(&push);
+
+    try commands.cacheCommand(.{ .fillBuffer = .{
+        .buffer = pass.buffer[1],
+        .offset = 0,
+        .size = 12,
+        .value = 1,
+    } });
 }
 
 fn addC_CommandPrefixSumCommand(
@@ -646,7 +659,14 @@ fn addC_CommandPrefixSumCommand(
     _ = textureSet;
 
     const groupCount = @as(*u32, @ptrCast(@alignCast(userdata.?))).*;
-    std.log.debug("groupCount : {d}", .{groupCount});
+    // std.log.debug("groupCount : {d}", .{groupCount});
+
+    try commands.addCommand(.fillBuffer, .{ .fillBuffer = .{
+        .buffer = pass.buffer[1],
+        .offset = 0,
+        .size = 4,
+        .value = 0,
+    } });
 
     try commands.addCommand(.compute, .{ .compute = .{
         .pipeline = pass.pipeline,
@@ -725,9 +745,10 @@ const ic_Task_PushConstant = extern struct {
     drawCount: u32,
 };
 
-fn initIc_Task(userdata: ?*anyopaque, pass: *Pass, vulkan: *VkStruct, gpa: std.mem.Allocator) !void {
+fn initIc_Task(userdata: ?*anyopaque, pass: *Pass, vulkan: *VkStruct, commands: *Commands, gpa: std.mem.Allocator) !void {
     _ = userdata;
     _ = gpa;
+    _ = commands;
 
     const commnadAddress = vulkan.getBufferAddress(pass.buffer[1]);
     const mappingAddress = vulkan.getBufferAddress(pass.buffer[2]);
@@ -736,7 +757,7 @@ fn initIc_Task(userdata: ?*anyopaque, pass: *Pass, vulkan: *VkStruct, gpa: std.m
     const payloadAddress = vulkan.getBufferAddress(pass.buffer[5]);
     const indirectAddress = vulkan.getBufferAddress(pass.buffer[6]);
 
-    var push = ic_Task_PushConstant{
+    const push = ic_Task_PushConstant{
         .commands = commnadAddress,
         .mappings = mappingAddress,
         .instances = instanceAddress,
@@ -745,7 +766,8 @@ fn initIc_Task(userdata: ?*anyopaque, pass: *Pass, vulkan: *VkStruct, gpa: std.m
         .iCommands = indirectAddress,
         .drawCount = 0,
     };
-    pass.setPushConstants(&push);
+    const dst: *ic_Task_PushConstant = @ptrCast(@alignCast(pass.pushConstant.pValues));
+    dst.* = push;
 }
 
 fn addIc_TaskCommand(
@@ -888,7 +910,7 @@ const Iv_feather_PushConstant = extern struct {
     payloads: u64,
 };
 
-fn initIv_Feather(userdata: ?*anyopaque, pass: *Pass, vulkan: *VkStruct, gpa: std.mem.Allocator) !void {
+fn initIv_Feather(userdata: ?*anyopaque, pass: *Pass, vulkan: *VkStruct, commands: *Commands, gpa: std.mem.Allocator) !void {
     _ = userdata;
 
     const storageBufferAddress = vulkan.getBufferAddress(pass.buffer[1]);
@@ -925,6 +947,13 @@ fn initIv_Feather(userdata: ?*anyopaque, pass: *Pass, vulkan: *VkStruct, gpa: st
     };
 
     try pass.setDescriptorSets(&descriptorSets, gpa);
+
+    try commands.cacheCommand(.{ .fillBuffer = .{
+        .buffer = pass.buffer[0],
+        .offset = 4,
+        .size = 4,
+        .value = 1,
+    } });
 }
 
 fn setIv_FeatherPushConstant(userdata: ?*anyopaque, pValues: *anyopaque) void {
@@ -945,6 +974,13 @@ fn addIv_FeatherCommand(
     _ = vulkan;
     _ = textureSet;
     _ = userdata;
+
+    try commands.addCommand(.fillBuffer, .{ .fillBuffer = .{
+        .buffer = pass.buffer[0],
+        .offset = 0,
+        .size = 4,
+        .value = 0,
+    } });
 
     try commands.addCommand(.drawIndirect, .{ .drawIndirect = .{
         .descriptorSets = pass.descriptorSet,

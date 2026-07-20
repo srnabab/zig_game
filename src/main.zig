@@ -199,12 +199,6 @@ pub fn main(init: std.process.Init) !void {
     }
     defer passes.deinit(allocator_t.*);
 
-    for (passes.passes) |*value| {
-        try value.init(null, &vulkan, allocator_t.*);
-    }
-
-    vulkan.logBufferPtr();
-
     var render_t = try Thread.spawn(
         .{},
         render.render_thread_func,

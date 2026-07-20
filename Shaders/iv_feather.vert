@@ -126,14 +126,16 @@ void main() {
 
     uint vertexIdx = pc.meshletVertices.meshletVertices[m.vertexOffset + triangleOffset + globalMeshletVerticesOffset] + globalVerticesOffset;
 
-    vec3 pos = pc.vertexBuffer.vertices[vertexIdx].pos;
+    mat4 model = pc.instances.instances[instanceID].matrix;
+    vec4 pos = vec4(pc.vertexBuffer.vertices[vertexIdx].pos, 1.0);
+    // model *
 
-    vec4 f_pos = ubo.proj * ubo.view *  vec4(pos, 1.0);
+    vec4 f_pos = ubo.proj * ubo.view * pos;
     // vec4 f_pos = vec4(pos, 1.0);
 
     vec4 tangent = pc.vertexBuffer.vertices[vertexIdx].tangent;
 
-    vec3 v = normalize(ubo.cameraPos - f_pos.xyz);
+    vec3 v = normalize(ubo.cameraPos - pos.xyz);
     vec3 n = normalize(pc.vertexBuffer.vertices[vertexIdx].normal);
     vec3 t = normalize(tangent.xyz) * tangent.w;
     vec3 b = normalize(cross(t, n));
