@@ -43,6 +43,7 @@ pub const Buffer_t = bufferStruct.Buffer_t;
 pub const Pipeline_t = *opaque {};
 pub const Viewport_t = viewportStruct.Viewport_t;
 pub const Scissor_t = scissorStruct.Scissor_t;
+pub const WritedType = bufferStruct.WritedType;
 
 const globalDescriptorPoolSizes = [_]vk.VkDescriptorPoolSize{
     .{ .type = vk.VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, .descriptorCount = 2048 },
@@ -479,6 +480,7 @@ pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet, db: file.sq
             image,
             imageView,
         );
+        textureSets.changeTextureLayout(texture.*, 0, 1, vk.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
     }
 
     var semaphores: [global.MaxFrameInFlight * 2]vk.VkSemaphore = undefined;

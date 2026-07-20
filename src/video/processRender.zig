@@ -378,7 +378,7 @@ fn Graph(T: type) type {
             if (!(try self.children.append(ID))) {
                 self.childrenLen += 1;
 
-                // if (self.ID == 12 and ID.* == 9) {
+                // if (self.ID == 26 and ID.* == 22) {
                 //     @breakpoint();
                 // }
                 // if (self.ID == 20 and ID.* == 3) {
@@ -893,11 +893,9 @@ pub fn nodeDagPrint(self: *QueueNodes, self2: *commands) void {
         const minute = daySeconds.getMinutesIntoHour();
         const second = daySeconds.getSecondsIntoMinute();
 
-        const rng_impl: std.Random.IoSource = .{ .io = self2.io };
-        const rng = rng_impl.interface();
-        const ri = rng.int(u6);
+        const frame = self2.vulkan.totalFrame.load(.monotonic);
 
-        var pathBuffer = [_]u8{0} ** 25;
+        var pathBuffer = [_]u8{0} ** 30;
         const path = std.fmt.bufPrint(&pathBuffer, "{d}-{s}-{d}-{d}_{d}_{d}-{d}", .{
             year,
             @tagName(month),
@@ -905,7 +903,7 @@ pub fn nodeDagPrint(self: *QueueNodes, self2: *commands) void {
             hour,
             minute,
             second,
-            ri,
+            frame,
         }) catch |err| {
             std.log.err("write err: {s} 6", .{@errorName(err)});
             return;
@@ -942,8 +940,10 @@ pub fn nodeDagPrint(self: *QueueNodes, self2: *commands) void {
             std.log.err("write err: {s} 3", .{@errorName(err)});
             return;
         };
+        // @breakpoint();
         for (0..self.innerID) |i| {
             if (self.map.get(@intCast(i))) |n| {
+                // std.log.debug("ID {d}", .{n.ID});
                 if (self2.queue.getPtr(@intCast(i))) |c| {
                     fileWriter.interface.print("{d} [label=\"{s} {d} {d}\", color=\"{s}\"];\n", .{
                         i,
@@ -1009,6 +1009,7 @@ pub fn nodeDagPrint(self: *QueueNodes, self2: *commands) void {
 }
 
 fn queueTypeToColor(queueType: VkStruct.CommandPoolType) *const [7:0]u8 {
+    // std.log.debug("queue type {s}", .{@tagName(queueType)});
     switch (queueType) {
         .init => {
             return "#7fc975";
@@ -1312,6 +1313,7 @@ pub const commands = struct {
         }
 
         const node = try self.nodeDag.create();
+        node.data.commandPoolType = .graphic;
 
         // node.listID = try self.u32Mem.create(self.allocator);
         // node.listID.?.* = self.nodeDag.newListID();
@@ -1486,125 +1488,6 @@ pub const commands = struct {
         }
     }
 
-    fn inferAcquirePipelinBarrierInfoByCommandTypeAndBufferUsage(
-        commandType: drawC.CommandType,
-        bufferUsage: drawC.BufferUsage,
-        srcQueue: VkStruct.CommandPoolType,
-        dstQueue: VkStruct.CommandPoolType,
-    ) struct {
-        srcAccessMask: vk.VkAccessFlags2,
-        dstAccessMask: vk.VkAccessFlags2,
-        sourceStage: vk.VkPipelineStageFlags2,
-        destinationStage: vk.VkPipelineStageFlags2,
-    } {
-        const zone = tracy.initZone(@src(), .{ .name = "infer acquire pipelin barrier info" });
-        defer zone.deinit();
-
-        const srcAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_2_NONE;
-        var dstAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_2_NONE;
-        const sourceStage: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
-        var destinationStage: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_NONE;
-
-        if (srcQueue == .transfer) {
-            if (dstQueue == .graphic) {
-                switch (bufferUsage) {
-                    .vertex => {
-                        destinationStage = vk.VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
-                        dstAccessMask = vk.VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
-                    },
-                    .index => {
-                        destinationStage = vk.VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
-                        dstAccessMask = vk.VK_ACCESS_INDEX_READ_BIT;
-                    },
-                    .indirect => {
-                        destinationStage = vk.VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
-                        dstAccessMask = vk.VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
-                    },
-                    .storage => {
-                        if (commandType == .drawMesh) {
-                            destinationStage = vk.VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT;
-                        } else if (commandType == .drawIndirect) {
-                            destinationStage = vk.VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT;
-                        } else {
-                            std.debug.panic("unsupported command type {s}", .{@tagName(commandType)});
-                        }
-                        dstAccessMask = vk.VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
-                    },
-                    else => std.debug.panic("unsupported buffer usage {s}", .{@tagName(bufferUsage)}),
-                }
-            } else if (dstQueue == .compute) {
-                destinationStage = vk.VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
-                switch (bufferUsage) {
-                    .vertex => {
-                        dstAccessMask = vk.VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
-                    },
-                    .storage => {
-                        dstAccessMask = vk.VK_ACCESS_2_SHADER_STORAGE_READ_BIT | vk.VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
-                    },
-                    .indirect => {
-                        dstAccessMask = vk.VK_ACCESS_2_SHADER_STORAGE_READ_BIT | vk.VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
-                    },
-                    else => std.debug.panic("unsupported buffer usage {s}", .{@tagName(bufferUsage)}),
-                }
-            } else {
-                std.debug.panic("unsupported dst queue {s}", .{@tagName(dstQueue)});
-            }
-        } else if (srcQueue == .compute) {
-            if (dstQueue == .graphic) {
-                switch (bufferUsage) {
-                    .vertex => {
-                        destinationStage = vk.VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
-                        dstAccessMask = vk.VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
-                    },
-                    .index => {
-                        destinationStage = vk.VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
-                        dstAccessMask = vk.VK_ACCESS_INDEX_READ_BIT;
-                    },
-                    .indirect => {
-                        destinationStage = vk.VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
-                        dstAccessMask = vk.VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
-                    },
-                    .storage => {
-                        if (commandType == .drawMesh) {
-                            destinationStage = vk.VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT;
-                        } else if (commandType == .drawIndirect) {
-                            destinationStage = vk.VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT;
-                        } else {
-                            std.debug.panic("unsupported command type {s}", .{@tagName(commandType)});
-                        }
-
-                        dstAccessMask = vk.VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
-                    },
-                    else => std.debug.panic("unsupported buffer usage {s}", .{@tagName(bufferUsage)}),
-                }
-            } else {
-                std.debug.panic("unsupported dst queue {s}", .{@tagName(dstQueue)});
-            }
-        } else if (srcQueue == .graphic) {
-            if (dstQueue == .compute) {
-                destinationStage = vk.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
-                switch (bufferUsage) {
-                    .vertex, .index => {
-                        dstAccessMask = vk.VK_ACCESS_2_SHADER_READ_BIT;
-                    },
-                    .indirect, .storage => {
-                        dstAccessMask = vk.VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
-                    },
-                    else => std.debug.panic("unsupported buffer usage {s}", .{@tagName(bufferUsage)}),
-                }
-            }
-        } else {
-            std.debug.panic("unsupported src queue {s}", .{@tagName(srcQueue)});
-        }
-
-        return .{
-            .srcAccessMask = srcAccessMask,
-            .dstAccessMask = dstAccessMask,
-            .sourceStage = sourceStage,
-            .destinationStage = destinationStage,
-        };
-    }
-
     fn inferTransLayoutFlagsByOldLayoutAndNewLayout(command: *drawC.comm2) struct {
         srcAccessMask: vk.VkAccessFlags2,
         dstAccessMask: vk.VkAccessFlags2,
@@ -1622,13 +1505,20 @@ pub const commands = struct {
         var destinationStage: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_NONE;
 
         switch (command.transLayout.oldLayout) {
-            vk.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, vk.VK_IMAGE_LAYOUT_UNDEFINED => {
+            vk.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR => {
+                srcAccessMask = vk.VK_ACCESS_2_NONE;
+
+                sourceStage =
+                    // vk.VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT |
+                    //     vk.VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT |
+                    vk.VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+                aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
+            },
+
+            vk.VK_IMAGE_LAYOUT_UNDEFINED => {
                 srcAccessMask = vk.VK_ACCESS_2_NONE;
                 sourceStage = vk.VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
-
-                if (command.transLayout.newLayout == vk.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
-                    sourceStage = vk.VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT | vk.VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
-                }
 
                 aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
             },
@@ -1696,7 +1586,7 @@ pub const commands = struct {
 
             vk.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR => {
                 dstAccessMask = vk.VK_ACCESS_2_NONE;
-                destinationStage = vk.VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+                destinationStage = vk.VK_PIPELINE_STAGE_2_NONE;
                 aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT;
             },
 
@@ -1832,112 +1722,169 @@ pub const commands = struct {
     fn inferBufferPipelineBarrierFlag(
         commandType: drawC.CommandType,
         bufferUsage: drawC.BufferUsage,
-        queueType: VkStruct.CommandPoolType,
-    ) struct {
+        srcQueue: VkStruct.CommandPoolType,
+        dstQueue: VkStruct.CommandPoolType,
+        writed: VkStruct.WritedType,
+        release: bool,
+        acquire: bool,
+        copySrc: bool,
+    ) !struct {
         srcAccessMask: vk.VkAccessFlags2,
         dstAccessMask: vk.VkAccessFlags2,
         sourceStage: vk.VkPipelineStageFlags2,
         destinationStage: vk.VkPipelineStageFlags2,
     } {
-        // _ = commandType;
-        // _ = queueType;
+        const zone = tracy.initZone(@src(), .{ .name = "infer acquire pipelin barrier info" });
+        defer zone.deinit();
 
-        const srcAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_2_TRANSFER_WRITE_BIT;
+        var srcAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_2_NONE;
         var dstAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_2_NONE;
-        const sourceStage: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_TRANSFER_BIT | vk.VK_PIPELINE_STAGE_2_CLEAR_BIT;
+        var sourceStage: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
         var destinationStage: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
 
-        if (queueType == .transfer) {
-            switch (commandType) {
-                .copyBuffer => {
-                    dstAccessMask = vk.VK_ACCESS_2_TRANSFER_WRITE_BIT;
-                    destinationStage = vk.VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+        if (!acquire) {
+            if (writed != .none and writed != .write) {
+                switch (writed) {
+                    .copy => {
+                        sourceStage = vk.VK_PIPELINE_STAGE_2_COPY_BIT;
+                        srcAccessMask = vk.VK_ACCESS_2_TRANSFER_WRITE_BIT;
+                    },
+                    .bilt => {
+                        sourceStage = vk.VK_PIPELINE_STAGE_2_BLIT_BIT;
+                        srcAccessMask = vk.VK_ACCESS_2_TRANSFER_WRITE_BIT;
+                    },
+                    .resolve => {
+                        sourceStage = vk.VK_PIPELINE_STAGE_2_RESOLVE_BIT;
+                        srcAccessMask = vk.VK_ACCESS_2_TRANSFER_WRITE_BIT;
+                    },
+                    .clear => {
+                        sourceStage = vk.VK_PIPELINE_STAGE_2_CLEAR_BIT;
+                        srcAccessMask = vk.VK_ACCESS_2_TRANSFER_WRITE_BIT;
+                    },
+                    .none, .write => unreachable,
+                }
+            } else {
+                if (srcQueue == .compute) {
+                    sourceStage = vk.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+                    switch (bufferUsage) {
+                        .storage => {
+                            srcAccessMask = vk.VK_ACCESS_2_SHADER_READ_BIT;
+                        },
+                        .vertex => {
+                            srcAccessMask = vk.VK_ACCESS_2_SHADER_READ_BIT;
+                        },
+                        .indirect => {
+                            srcAccessMask = vk.VK_ACCESS_2_SHADER_READ_BIT;
+                        },
+                        else => {
+                            std.log.err("unsupported buffer usage {s}", .{@tagName(bufferUsage)});
+                            return error.Unsupported;
+                        },
+                    }
+                } else if (srcQueue == .graphic) {
+                    switch (bufferUsage) {
+                        .storage => {
+                            sourceStage = vk.VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
+                            srcAccessMask = vk.VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
+                        },
+                        .vertex => {
+                            sourceStage = vk.VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
+                            srcAccessMask = vk.VK_ACCESS_2_SHADER_READ_BIT;
+                        },
+                        .indirect => {
+                            sourceStage = vk.VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
+                            srcAccessMask = vk.VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
+                        },
+                        else => {
+                            std.log.err("unsupported buffer usage {s}", .{@tagName(bufferUsage)});
+                            return error.Unsupported;
+                        },
+                    }
+                } else {
+                    std.log.err("unsupported src queue {s}", .{@tagName(srcQueue)});
                     // @breakpoint();
-                },
-                else => {},
-            }
-        } else {
-            switch (bufferUsage) {
-                .indirect => {
-                    dstAccessMask = vk.VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
-                    destinationStage = vk.VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
-                    // @breakpoint();
-                },
-                .storage => {
-                    dstAccessMask = vk.VK_ACCESS_2_SHADER_STORAGE_READ_BIT | vk.VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
-                    destinationStage = vk.VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | vk.VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT;
-                },
-                else => std.debug.panic("unsupported buffer usage {s}\ncommand type {s}", .{
-                    @tagName(bufferUsage),
-                    @tagName(commandType),
-                }),
+                    return error.Unsupported;
+                }
+
+                if (writed == .write) {
+                    srcAccessMask |= vk.VK_ACCESS_2_SHADER_WRITE_BIT;
+                }
             }
         }
 
-        return .{
-            .srcAccessMask = srcAccessMask,
-            .dstAccessMask = dstAccessMask,
-            .sourceStage = sourceStage,
-            .destinationStage = destinationStage,
-        };
-    }
+        if (!release) {
+            if (dstQueue == .graphic) {
+                switch (commandType) {
+                    .fillBuffer => {
+                        destinationStage = vk.VK_PIPELINE_STAGE_2_CLEAR_BIT;
+                        dstAccessMask = vk.VK_ACCESS_2_TRANSFER_WRITE_BIT;
+                    },
+                    else => switch (bufferUsage) {
+                        .vertex => {
+                            destinationStage = vk.VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+                            dstAccessMask = vk.VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+                        },
+                        .index => {
+                            destinationStage = vk.VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+                            dstAccessMask = vk.VK_ACCESS_INDEX_READ_BIT;
+                        },
+                        .indirect => {
+                            destinationStage = vk.VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
+                            dstAccessMask = vk.VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
+                        },
+                        .storage => {
+                            if (commandType == .drawMesh) {
+                                destinationStage = vk.VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT;
+                            } else if (commandType == .drawIndirect) {
+                                destinationStage = vk.VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT;
+                            } else {
+                                std.log.err("unsupported command type {s}", .{@tagName(commandType)});
+                                return error.Unsupported;
+                            }
+                            dstAccessMask = vk.VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
+                        },
+                        else => {
+                            std.log.err("unsupported buffer usage {s}", .{@tagName(bufferUsage)});
 
-    fn inferReleasePipelinBarrierInfoByCommandTypeAndBufferUsage(
-        commandType: drawC.CommandType,
-        bufferUsage: drawC.BufferUsage,
-        srcQueue: VkStruct.CommandPoolType,
-        dstQueue: VkStruct.CommandPoolType,
-    ) struct {
-        srcAccessMask: vk.VkAccessFlags2,
-        dstAccessMask: vk.VkAccessFlags2,
-        sourceStage: vk.VkPipelineStageFlags2,
-        destinationStage: vk.VkPipelineStageFlags2,
-    } {
-        const zone = tracy.initZone(@src(), .{ .name = "infer release pipelin barrier info" });
-        defer zone.deinit();
+                            return error.Unsupported;
+                        },
+                    },
+                }
+            } else if (dstQueue == .compute) {
+                destinationStage = vk.VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+                switch (bufferUsage) {
+                    .vertex => {
+                        dstAccessMask = vk.VK_ACCESS_2_SHADER_READ_BIT;
+                    },
+                    .storage => {
+                        dstAccessMask = vk.VK_ACCESS_2_SHADER_STORAGE_READ_BIT | vk.VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
+                    },
+                    .indirect => {
+                        dstAccessMask = vk.VK_ACCESS_2_SHADER_READ_BIT;
+                    },
+                    else => {
+                        std.log.err("unsupported buffer usage {s}", .{@tagName(bufferUsage)});
 
-        _ = commandType;
-        _ = dstQueue;
-        var srcAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_2_NONE;
-        const dstAccessMask: vk.VkAccessFlags2 = vk.VK_ACCESS_2_NONE;
-        var sourceStage: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_2_NONE;
-        const destinationStage: vk.VkPipelineStageFlags2 = vk.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+                        return error.Unsupported;
+                    },
+                }
+            } else if (dstQueue == .transfer) {
+                switch (commandType) {
+                    .copyBuffer => {
+                        destinationStage = vk.VK_PIPELINE_STAGE_2_COPY_BIT;
+                        dstAccessMask = if (copySrc) vk.VK_ACCESS_2_TRANSFER_READ_BIT else vk.VK_ACCESS_2_TRANSFER_WRITE_BIT;
+                    },
+                    else => {
+                        std.log.err("unsupported command type {s}", .{@tagName(commandType)});
 
-        if (srcQueue == .transfer) {
-            sourceStage = vk.VK_PIPELINE_STAGE_TRANSFER_BIT;
-            srcAccessMask = vk.VK_ACCESS_TRANSFER_WRITE_BIT;
-        } else if (srcQueue == .compute) {
-            sourceStage = vk.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
-            switch (bufferUsage) {
-                .storage => {
-                    srcAccessMask = vk.VK_ACCESS_2_SHADER_WRITE_BIT | vk.VK_ACCESS_2_SHADER_READ_BIT;
-                },
-                .vertex => {
-                    srcAccessMask = vk.VK_ACCESS_2_SHADER_READ_BIT;
-                },
-                .indirect => {
-                    srcAccessMask = vk.VK_ACCESS_2_SHADER_WRITE_BIT | vk.VK_ACCESS_2_SHADER_READ_BIT;
-                },
-                else => std.debug.panic("unsupported buffer usage {s}", .{@tagName(bufferUsage)}),
+                        return error.Unsupported;
+                    },
+                }
+            } else {
+                std.log.err("unsupported dst queue {s}", .{@tagName(dstQueue)});
+
+                return error.Unsupported;
             }
-        } else if (srcQueue == .graphic) {
-            switch (bufferUsage) {
-                .storage => {
-                    sourceStage = vk.VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
-                    srcAccessMask = vk.VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
-                },
-                .vertex => {
-                    sourceStage = vk.VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
-                    srcAccessMask = vk.VK_ACCESS_2_SHADER_READ_BIT;
-                },
-                .indirect => {
-                    sourceStage = vk.VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
-                    srcAccessMask = vk.VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
-                },
-                else => std.debug.panic("unsupported buffer usage {s}", .{@tagName(bufferUsage)}),
-            }
-        } else {
-            std.debug.panic("unsupported src queue {s}", .{@tagName(srcQueue)});
         }
 
         return .{
@@ -1978,23 +1925,26 @@ pub const commands = struct {
                     .command = .{ .pushconstant = command.pushconstant },
                 };
                 // rootNode.listID = self.nodeDag.currentListID;
-
-                if (enterCommandType == .draw2D) {
-                    rootNode.data.commandPoolType = .graphic;
-                } else if (enterCommandType == .drawMesh) {
-                    rootNode.data.commandPoolType = .graphic;
-                } else if (enterCommandType == .drawIndirect) {
-                    rootNode.data.commandPoolType = .graphic;
-                } else if (enterCommandType == .computeIndirect) {
-                    rootNode.data.commandPoolType = .compute;
-                } else if (enterCommandType == .compute) {
-                    rootNode.data.commandPoolType = .compute;
-                } else if (enterCommandType == .present) {
-                    rootNode.data.commandPoolType = .graphic;
-                } else if (enterCommandType == .drawMeshIndirect) {
-                    rootNode.data.commandPoolType = .graphic;
+                if (self.vulkan.queueTypeCount != 1) {
+                    if (enterCommandType == .draw2D) {
+                        rootNode.data.commandPoolType = .graphic;
+                    } else if (enterCommandType == .drawMesh) {
+                        rootNode.data.commandPoolType = .graphic;
+                    } else if (enterCommandType == .drawIndirect) {
+                        rootNode.data.commandPoolType = .graphic;
+                    } else if (enterCommandType == .computeIndirect) {
+                        rootNode.data.commandPoolType = .compute;
+                    } else if (enterCommandType == .compute) {
+                        rootNode.data.commandPoolType = .compute;
+                    } else if (enterCommandType == .present) {
+                        rootNode.data.commandPoolType = .graphic;
+                    } else if (enterCommandType == .drawMeshIndirect) {
+                        rootNode.data.commandPoolType = .graphic;
+                    } else {
+                        std.debug.panic("pushconstant unprocessed enterCommandType {s}", .{@tagName(enterCommandType)});
+                    }
                 } else {
-                    std.debug.panic("pushconstant unprocessed enterCommandType {s}", .{@tagName(enterCommandType)});
+                    rootNode.data.commandPoolType = .graphic;
                 }
 
                 resNode = rootNode;
@@ -2195,9 +2145,10 @@ pub const commands = struct {
                     // if (commandCopy.transLayout.newLayout == vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
                     //     flags.destinationStage = vk.VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT;
                     // }
-                    const oldLayout = if (transLayout.oldLayout == vk.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
-                        @as(c_uint, @intCast(vk.VK_IMAGE_LAYOUT_UNDEFINED))
-                    else
+                    const oldLayout =
+                        // if (transLayout.oldLayout == vk.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+                        //     @as(c_uint, @intCast(vk.VK_IMAGE_LAYOUT_UNDEFINED))
+                        // else
                         transLayout.oldLayout;
 
                     const hash: u64 = flags.sourceStage + flags.destinationStage;
@@ -2232,7 +2183,7 @@ pub const commands = struct {
                                     if (cmd.command != .pipelineBarrier) std.debug.panic("not supported commandType {s}", .{@tagName(cmd.command)});
 
                                     switch (enterCommandType) {
-                                        .draw2D, .drawMesh, .drawIndirect, .present, .compute => {
+                                        .draw2D, .drawMesh, .drawIndirect, .present, .compute, .computeIndirect => {
                                             break :blk node.node;
                                         },
                                         else => break,
@@ -2291,11 +2242,15 @@ pub const commands = struct {
                 const bufferUsage = self.vulkan.buffers.getBufferUsage(changeBufferQueue.buffer);
 
                 if (changeBufferQueue.srcQueueFamily != .init and changeBufferQueue.srcQueueFamily != changeBufferQueue.dstQueueFamily and self.vulkan.queueTypeCount > 1) {
-                    const releaseFlags = inferReleasePipelinBarrierInfoByCommandTypeAndBufferUsage(
+                    const releaseFlags = try inferBufferPipelineBarrierFlag(
                         enterCommandType,
                         bufferUsage,
                         changeBufferQueue.srcQueueFamily,
                         changeBufferQueue.dstQueueFamily,
+                        self.vulkan.buffers.bufferWritedType(changeBufferQueue.buffer),
+                        true,
+                        false,
+                        changeBufferQueue.isCopySrc,
                     );
 
                     const releaseHash =
@@ -2390,11 +2345,15 @@ pub const commands = struct {
                     releasePipelineBarrier.lastSrcStageMask = @min(releasePipelineBarrier.lastSrcStageMask, releaseFlags.sourceStage);
                     zone5.deinit();
 
-                    const acquireFlags = inferAcquirePipelinBarrierInfoByCommandTypeAndBufferUsage(
+                    const acquireFlags = try inferBufferPipelineBarrierFlag(
                         enterCommandType,
                         bufferUsage,
                         changeBufferQueue.srcQueueFamily,
                         changeBufferQueue.dstQueueFamily,
+                        self.vulkan.buffers.bufferWritedType(changeBufferQueue.buffer),
+                        false,
+                        true,
+                        changeBufferQueue.isCopySrc,
                     );
 
                     const acquireHash =
@@ -2478,11 +2437,24 @@ pub const commands = struct {
                     resNode = releaseNode;
                     resNode2 = acquireNode;
                 } else {
-                    const flags = inferBufferPipelineBarrierFlag(
+                    const flags = try inferBufferPipelineBarrierFlag(
                         enterCommandType,
                         bufferUsage,
+                        command.changeBufferQueue.srcQueueFamily,
                         command.changeBufferQueue.dstQueueFamily,
-                    );
+                        self.vulkan.buffers.bufferWritedType(changeBufferQueue.buffer),
+                        false,
+                        false,
+                        changeBufferQueue.isCopySrc,
+                    )
+                    // catch |err| {
+                    //     std.log.debug("type {s} {}", .{
+                    //         @tagName(self.vulkan.buffers.getBufferContent(changeBufferQueue.buffer).allocation),
+                    //         self.vulkan.buffers.bufferHaveRef(changeBufferQueue.buffer),
+                    //     });
+                    //     return err;
+                    // }
+                    ;
 
                     const hash =
                         flags.sourceStage + flags.destinationStage;
@@ -2547,7 +2519,10 @@ pub const commands = struct {
                         };
                         break :blk node;
                     };
-                    node.data.commandPoolType = changeBufferQueue.srcQueueFamily;
+                    node.data.commandPoolType = .graphic;
+                    // if (node.data.commandPoolType == .transfer) {
+                    //     @breakpoint();
+                    // }
 
                     var pipelineBarrier = &self.queue.getPtr(node.ID).?.command.pipelineBarrier;
                     const new_len = pipelineBarrier.barriers.len + changeBufferQueue.regions.len;
@@ -2620,11 +2595,15 @@ pub const commands = struct {
                     .command = .{ .bindPipeline = bindPipeline },
                 };
                 // rootNode.listID = self.nodeDag.currentListID;
-                rootNode.data.commandPoolType = switch (bindPipeline.bindPoint) {
-                    vk.VK_PIPELINE_BIND_POINT_COMPUTE => .compute,
-                    vk.VK_PIPELINE_BIND_POINT_GRAPHICS => .graphic,
-                    else => unreachable,
-                };
+                if (self.vulkan.queueTypeCount != 1) {
+                    rootNode.data.commandPoolType = switch (bindPipeline.bindPoint) {
+                        vk.VK_PIPELINE_BIND_POINT_COMPUTE => .compute,
+                        vk.VK_PIPELINE_BIND_POINT_GRAPHICS => .graphic,
+                        else => unreachable,
+                    };
+                } else {
+                    rootNode.data.commandPoolType = .graphic;
+                }
 
                 // self.pipelineChange = true;
 
@@ -2682,10 +2661,14 @@ pub const commands = struct {
 
                 // std.log.debug("{}", .{ptr.value_ptr.command.bindDescriptorSets.bindDescriptorSetsInfo});
                 // rootNode.listID = self.nodeDag.currentListID;
-                rootNode.data.commandPoolType = switch (enterCommandType) {
-                    .compute => .compute,
-                    else => .graphic,
-                };
+                if (self.vulkan.queueTypeCount != 1) {
+                    rootNode.data.commandPoolType = switch (enterCommandType) {
+                        .compute => .compute,
+                        else => .graphic,
+                    };
+                } else {
+                    rootNode.data.commandPoolType = .graphic;
+                }
 
                 resNode = rootNode;
             },
@@ -2755,17 +2738,31 @@ pub const commands = struct {
         regions: []drawC.SizeOffset,
         commandType: drawC.CommandType,
         commandID: u32,
+        isCopySrc: bool,
     ) !twoQueueNode {
         var resNode = twoQueueNode{};
 
+        if (self.vulkan.buffers.bufferHaveRef(pBuffer)) {
+            return resNode;
+        }
+
         const oldSrcQueueType = self.vulkan.buffers.getBufferQueueType(pBuffer);
 
-        if (oldSrcQueueType != .init and self.vulkan.buffers.bufferIsWrited(pBuffer)) {
+        var in = false;
+
+        if (oldSrcQueueType != newQueue and oldSrcQueueType != .init) {
+            in = true;
+        } else if (self.vulkan.buffers.bufferWritedType(pBuffer) != .none) {
+            in = true;
+        }
+
+        if (in) {
             resNode = try self.addCommand2(.{ .changeBufferQueue = .{
                 .buffer = pBuffer,
                 .srcQueueFamily = oldSrcQueueType,
                 .dstQueueFamily = newQueue,
                 .regions = regions,
+                .isCopySrc = isCopySrc,
             } }, commandType, commandID);
 
             self.vulkan.buffers.unWriteBuffer(pBuffer);
@@ -3118,6 +3115,7 @@ pub const commands = struct {
                     &bufferOffset,
                     commandType,
                     commandID,
+                    false,
                 );
             }
         }
@@ -3927,6 +3925,7 @@ pub const commands = struct {
                     &region,
                     .fillBuffer,
                     ID,
+                    false,
                 );
                 const dependencyPtr = try dependenciesArray.addOne();
                 self.addBuffer_tDependency(dependencyPtr, fillBuffer.buffer);
@@ -3948,10 +3947,14 @@ pub const commands = struct {
                     currentNode = bufferNode.a.?;
                 }
 
-                self.vulkan.buffers.writeBuffer(fillBuffer.buffer);
+                self.vulkan.buffers.setWritedType(fillBuffer.buffer, .clear);
             },
             .compute, .computeIndirect => {
-                node.data.commandPoolType = .compute;
+                if (self.vulkan.queueTypeCount != 1) {
+                    node.data.commandPoolType = .compute;
+                } else {
+                    node.data.commandPoolType = .graphic;
+                }
 
                 var pTextures: []texture.Texture_t = undefined;
                 var pipeline: VkStruct.Pipeline_t = undefined;
@@ -4064,6 +4067,7 @@ pub const commands = struct {
                         &region,
                         commandType,
                         ID,
+                        false,
                     );
                     twoNodeIndex += 1;
                 }
@@ -4451,6 +4455,7 @@ pub const commands = struct {
                 try self.lastNodeLinkNodeRenderingNodeConnect(lastNode, linkNode, node, renderingNode);
 
                 if (command == .present) {
+                    // @breakpoint();
                     const transNode = try self.transLayoutHelper(
                         self.pTextureSet,
                         pRendering.colorTextures[0],
@@ -4461,6 +4466,8 @@ pub const commands = struct {
                         std.meta.activeTag(command),
                         ID,
                     );
+                    // renderDebug.printToDot();
+                    // std.log.debug("", .{});
 
                     try self.nodeDag.childrenAppend(node, transNode.a.?);
                     try transNode.a.?.parentsAppend(&node.ID);
@@ -4481,11 +4488,11 @@ pub const commands = struct {
                     if (reAdd) break :re;
                 }
 
-                // if (self.vulkan.queueTypeCount != 1) {
-                node.data.commandPoolType = .transfer;
-                // } else {
-                // node.data.commandPoolType = .graphic;
-                // }
+                if (self.vulkan.queueTypeCount != 1) {
+                    node.data.commandPoolType = .transfer;
+                } else {
+                    node.data.commandPoolType = .graphic;
+                }
 
                 ptr.value_ptr.command = .{ .copyBuffer = copyBuffer };
 
@@ -4506,6 +4513,7 @@ pub const commands = struct {
                     srcOffsets,
                     std.meta.activeTag(command),
                     ID,
+                    true,
                 );
 
                 // inputs may have dependency
@@ -4530,6 +4538,7 @@ pub const commands = struct {
                     dstOffsets,
                     std.meta.activeTag(command),
                     ID,
+                    false,
                 );
 
                 var nodes = [_]twoQueueNode{ srcBufferNode, dstBufferNode };
@@ -4556,7 +4565,7 @@ pub const commands = struct {
                     .index = ID,
                 };
 
-                self.vulkan.buffers.writeBuffer(copyBuffer.dstBuffer);
+                self.vulkan.buffers.setWritedType(copyBuffer.dstBuffer, .copy);
             },
             .copyBufferToImage => {
                 const copyBufferToImage = command.copyBufferToImage;
@@ -4597,6 +4606,7 @@ pub const commands = struct {
                     &region,
                     std.meta.activeTag(command),
                     ID,
+                    true,
                 );
 
                 // inputs may have dependency
@@ -5860,7 +5870,7 @@ pub const oneTimeCommand = struct {
                         global.printDagToDot = true;
                         nodeDagPrint(&pCommands.nodeDag, pCommands);
                         renderDebug.printAllInfoToTxt();
-                        std.log.debug("id {d}", .{nn.ID});
+                        std.log.debug("id {d}, frame {d}", .{ nn.ID, self.vulkan.totalFrame.load(.monotonic) });
 
                         unreachable;
                     }
@@ -5909,7 +5919,7 @@ pub const oneTimeCommand = struct {
                     temp3.pNext = null;
                     temp3.deviceIndex = 0;
                     temp3.semaphore = self.vulkan.renderFinishSemaphores[imageIndex];
-                    temp3.stageMask = vk.VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+                    temp3.stageMask = vk.VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
                     temp3.value = 0;
 
                     // std.debug.assert(!Capability.swapchain_maintenance1);

@@ -9,6 +9,8 @@ const Commands = processRender.commands;
 const VkStruct = @import("video");
 const vk = VkStruct.vk;
 
+const Pass = @import("pass").Pass;
+
 const mvzr = @import("mvzr");
 
 const regex: mvzr.Regex = mvzr.compile("0[xX][0-9a-fA-F]+").?;
@@ -50,11 +52,9 @@ pub fn printAllInfoToTxt() void {
     const minute = daySeconds.getMinutesIntoHour();
     const second = daySeconds.getSecondsIntoMinute();
 
-    const rng_impl: std.Random.IoSource = .{ .io = io };
-    const rng = rng_impl.interface();
-    const ri = rng.int(u6);
+    const frame = commands.vulkan.totalFrame.load(.monotonic);
 
-    var pathBuffer = [_]u8{0} ** 29;
+    var pathBuffer = [_]u8{0} ** 40;
     const path = std.fmt.bufPrint(&pathBuffer, "{d}-{s}-{d}-{d}_{d}_{d}-{d}.txt", .{
         year,
         @tagName(month),
@@ -62,7 +62,7 @@ pub fn printAllInfoToTxt() void {
         hour,
         minute,
         second,
-        ri,
+        frame,
     }) catch |err| {
         std.log.err("write err: {s} 6", .{@errorName(err)});
         return;
@@ -174,6 +174,22 @@ pub fn printAllInfoToTxt() void {
         std.log.err("write err: {s} 8", .{@errorName(err)});
         return;
     };
+}
+
+pub fn printPassInfo(vulkan: *VkStruct, pass: *Pass) void {
+    std.log.debug("Pass: {s}", .{pass.name});
+
+    for (pass.buffer) |value| {
+        const bufferContent = vulkan.buffers.getBufferContent(value);
+        std.log.debug("buffer: {*}, type: {s}, size: {d}, usage {s}, writedType: {s}, queue: {s}", .{
+            bufferContent.vkBuffer,
+            @tagName(bufferContent.allocation),
+            bufferContent.size,
+            @tagName(bufferContent.usage),
+            @tagName(bufferContent.writedType),
+            @tagName(vulkan.buffers.getBufferQueueType(value)),
+        });
+    }
 }
 
 pub fn debugCallback(

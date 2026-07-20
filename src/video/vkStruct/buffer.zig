@@ -31,6 +31,15 @@ pub const Allocation = union(AllocationType) {
     block: void,
 };
 
+pub const WritedType = enum(u8) {
+    none = 0,
+    copy,
+    bilt,
+    resolve,
+    clear,
+    write,
+};
+
 pub const Buffer = struct {
     const haveOrRef = enum { have, ref };
 
@@ -49,8 +58,9 @@ pub const Buffer = struct {
     size: vk.VkDeviceSize,
     stride: vk.VkDeviceSize = 0,
     offset: vk.VkDeviceSize = 0,
-    usage: Usage = .none,
-    writed: bool = false,
+    usage: Usage,
+    writedType: WritedType = .none,
+    haveRef: bool = false,
 };
 
 pub const Buffer_t = *opaque {};
@@ -182,6 +192,7 @@ pub fn _createBuffer(
         .pMappedData = allocationInfo.pMappedData,
         .usage = inferUsage(usage),
         .stride = stride,
+        // .writedType = .none,
     };
 
     const handle = handles.createHandle(@intCast(pack.index), .buffer);
@@ -301,15 +312,6 @@ pub fn changeQueueType(self: *Self, buffer: Buffer_t, queueType: QueueType) void
     const index = getIndex(@ptrCast(buffer)).?;
     const ptr = self.buffers.get(index);
 
-    // std.log.debug("{*} {s} -> {s}", .{
-    //     ptr.vkBuffer,
-    //     @tagName(switch (ptr.queue) {
-    //         .ref => |ref| self.getBufferQueueType(ref),
-    //         .have => |have| have,
-    //     }),
-    //     @tagName(queueType),
-    // });
-
     switch (ptr.queue) {
         .have => ptr.queue.have = queueType,
         .ref => self.changeQueueType(ptr.queue.ref, queueType),
@@ -320,21 +322,74 @@ pub fn writeBuffer(self: *Self, buffer: Buffer_t) void {
     const index = getIndex(@ptrCast(buffer)).?;
     const ptr = self.buffers.get(index);
 
-    ptr.writed = true;
+    switch (ptr.allocation) {
+        .virtual => {
+            const index2 = getIndex(@ptrCast(ptr.queue.ref)).?;
+            const ptr2 = self.buffers.get(index2);
+
+            ptr2.writedType = .write;
+        },
+        else => {},
+    }
+
+    ptr.writedType = .write;
+}
+
+pub fn setWritedType(self: *Self, buffer: Buffer_t, writedType: WritedType) void {
+    const index = getIndex(@ptrCast(buffer)).?;
+    const ptr = self.buffers.get(index);
+
+    ptr.writedType = writedType;
+
+    switch (ptr.allocation) {
+        .virtual => {
+            const index2 = getIndex(@ptrCast(ptr.queue.ref)).?;
+            const ptr2 = self.buffers.get(index2);
+
+            ptr2.writedType = writedType;
+        },
+        else => {},
+    }
 }
 
 pub fn unWriteBuffer(self: *Self, buffer: Buffer_t) void {
     const index = getIndex(@ptrCast(buffer)).?;
     const ptr = self.buffers.get(index);
 
-    ptr.writed = false;
+    switch (ptr.allocation) {
+        .virtual => {
+            const index2 = getIndex(@ptrCast(ptr.queue.ref)).?;
+            const ptr2 = self.buffers.get(index2);
+
+            ptr2.writedType = .none;
+        },
+        else => {},
+    }
+
+    ptr.writedType = .none;
 }
 
-pub fn bufferIsWrited(self: *Self, buffer: Buffer_t) bool {
+pub fn bufferWritedType(self: *Self, buffer: Buffer_t) WritedType {
     const index = getIndex(@ptrCast(buffer)).?;
     const ptr = self.buffers.get(index);
 
-    return ptr.writed;
+    // if (@as(u64, @intFromPtr(ptr.vkBuffer)) == 0xf800000000f8) {
+    //     std.log.debug("buffer: {s} {s}", .{ @tagName(ptr.writedType), @tagName(ptr.allocation) });
+
+    // @breakpoint();
+    // }
+
+    switch (ptr.allocation) {
+        .virtual => {
+            const index2 = getIndex(@ptrCast(ptr.queue.ref)).?;
+            const ptr2 = self.buffers.get(index2);
+
+            return ptr2.writedType;
+        },
+        else => {},
+    }
+
+    return ptr.writedType;
 }
 
 // pub fn changeUsage(self: *Self, buffer: Buffer_t, usage: Usage) void {
@@ -417,6 +472,7 @@ pub fn createVirtualBlockBuffer(
     const index = getIndex(@ptrCast(buffer)) orelse return error.VirtualBlockWithoutParent;
     const ptr = self.buffers.get(index);
     // std.log.debug("queue have ptr {*}", .{&ptr.queue.have});
+    ptr.haveRef = true;
 
     pack.ptr.* = Buffer{
         .queue = .{ .ref = buffer },
@@ -428,6 +484,7 @@ pub fn createVirtualBlockBuffer(
         .stride = stride,
         .offset = offset + ptr.offset,
         .virtualBlock = block,
+        // .writedType = .none,
     };
     // std.log.debug("block offset {d}", .{offset});
 
@@ -489,6 +546,7 @@ pub fn createVirtualBuffer(
         .stride = ptr.stride,
         .offset = ptr.offset + offset,
         .virtualBlock = ptr.virtualBlock,
+        .writedType = ptr.writedType,
     };
     // std.log.debug("2 offset {d}", .{ptr.offset});
 
@@ -519,4 +577,11 @@ pub fn destroyVirtualBuffer(self: *Self, buffer: Buffer_t) void {
     assert(ptr.allocation == .virtual);
 
     vma.vmaVirtualFree(ptr.virtualBlock, ptr.allocation.virtual);
+}
+
+pub fn bufferHaveRef(self: *Self, buffer: Buffer_t) bool {
+    const index = getIndex(@ptrCast(buffer)).?;
+    const ptr = self.buffers.get(index);
+
+    return ptr.haveRef;
 }

@@ -364,6 +364,7 @@ pub fn build(b: *std.Build) void {
     renderDebug_mod.addImport("global", global_mod);
     renderDebug_mod.addImport("mvzr", mvzr_mod);
     renderDebug_mod.addImport("video", video_mod);
+    renderDebug_mod.addImport("pass", pass_mod);
 
     renderFlow_mod.addImport("processRender", processRender_mod);
     renderFlow_mod.addImport("video", video_mod);

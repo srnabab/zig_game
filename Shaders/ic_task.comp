@@ -71,7 +71,7 @@ layout(buffer_reference) readonly buffer IndirectCommand {
     CustomIndirectDrawCommand commands;
 };
 
-layout(push_constant) uniform PushConstants {
+layout(push_constant, scalar) uniform PushConstants {
     CommandBuffer commands;
     MappingBuffer mappings;
     InstanceBuffer instances;

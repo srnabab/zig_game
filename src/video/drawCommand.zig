@@ -264,6 +264,7 @@ pub const ChangeBufferQueue = struct {
     srcQueueFamily: VkStruct.CommandPoolType,
     dstQueueFamily: VkStruct.CommandPoolType,
     regions: []SizeOffset,
+    isCopySrc: bool,
 };
 
 pub const BindPipeline = struct {
@@ -390,7 +391,7 @@ pub const FillBuffer = struct {
 //     empty: void,
 // };
 
-pub const BufferUsage = enum {
+pub const BufferUsage = enum(u8) {
     none,
     vertex,
     index,

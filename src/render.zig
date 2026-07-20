@@ -258,7 +258,12 @@ pub fn render_thread_func(args: Args) !void {
     passes.enablePass("indirect2D");
     passes.enablePass("present");
 
+    // var testTime: u32 = 0;
+    var testx = false;
+    // var tests = false;
+
     while (true) {
+        // if (tests) @breakpoint();
         {
             const frame = vulkan.totalFrame.load(.seq_cst);
             // @breakpoint();
@@ -276,6 +281,7 @@ pub fn render_thread_func(args: Args) !void {
                 //     // testDraw = true;
             }
             if (frame == 1) {
+                // global.game_end.store(1, .seq_cst);
                 // global.stopNodeDagPrint = true;
                 // global.storExecuteSequencePrint = true;
                 //     passes.disablePass("indirect2D");
@@ -331,6 +337,7 @@ pub fn render_thread_func(args: Args) !void {
                             // std.log.debug("set", .{});
                         },
                         .mesh => |m| {
+                            testx = true;
                             // getMeshBuffer();
                             const usePass = passes.passMap.get("iv_feather").?;
 
@@ -374,6 +381,7 @@ pub fn render_thread_func(args: Args) !void {
                                 });
                                 buffers[i] = bufferAndOffset.buffer;
                             }
+                            // global.game_end.store(1, .seq_cst);
 
                             _ = try meshes.addMesh(
                                 m.fileID,
@@ -423,9 +431,9 @@ pub fn render_thread_func(args: Args) !void {
                             passes.enablePass("c_command_prefix_sum");
                             passes.enablePass("ic_task");
                             passes.enablePass("iv_feather");
-                            global.storExecuteSequencePrint = false;
-                            global.stopNodeDagPrint = false;
-                            global.printDagToDot = true;
+                            // global.storExecuteSequencePrint = false;
+                            // global.stopNodeDagPrint = false;
+                            // global.printDagToDot = true;
                             // std.log.debug("name {s}", .{mi.passName});
                         },
                         .others => {},
@@ -474,13 +482,20 @@ pub fn render_thread_func(args: Args) !void {
             const zone2 = tracy.initZone(@src(), .{ .name = "pass add" });
             for (args.passes.passes) |*value| {
                 if (value.enabled) {
-                    try value.addCommand(
+                    // renderDebug.printPassInfo(vulkan, value);
+                    value.addCommand(
                         value.userdata,
                         vulkan,
                         pTextureSet,
                         &commands,
                         gpa,
-                    );
+                    ) catch |err| {
+                        std.log.err("pass {s} {s}", .{ value.name, @errorName(err) });
+                        renderDebug.printToDot();
+                        renderDebug.printPassInfo(vulkan, value);
+
+                        return err;
+                    };
 
                     // std.log.debug("pass {s}", .{value.name});
                 }
@@ -494,6 +509,22 @@ pub fn render_thread_func(args: Args) !void {
             try graphic.executeCommands(&commands);
 
             vulkan.nextFrame();
+
+            // if (testx) {
+            //     for (vulkan.buffers.buffers.items.items) |value| {
+            //         if (value == .data) {
+            //             if (value.data.vkBuffer == @as(vk.VkBuffer, @ptrFromInt(0xf800000000f8))) {
+            //                 if (value.data.writedType == .none and tests) {
+            //                     std.log.debug("none", .{});
+            //                     @breakpoint();
+            //                 } else if (value.data.writedType == .copy) {
+            //                     std.log.debug("copy", .{});
+            //                     tests = true;
+            //                 }
+            //             }
+            //         }
+            //     }
+            // }
 
             if (global.game_end.load(.seq_cst) == 1) {
                 _ = renderStart;

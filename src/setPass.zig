@@ -10,6 +10,7 @@ const VkStruct = @import("video");
 const Commands = @import("processRender").commands;
 const TextureSet = @import("textureSet");
 const cglm = @import("cglm");
+const renderDebug = @import("renderDebug");
 
 const vec4 = cglm.vec4;
 
@@ -241,6 +242,8 @@ fn addPresentCommand(
             },
         },
     }, undefined, true);
+
+    // renderDebug.printToDot();
 
     try commands.addCommand(.present, .{
         .present = .{
