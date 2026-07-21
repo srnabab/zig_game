@@ -169,7 +169,7 @@ pub fn render_thread_func(args: Args) !void {
 
     var eye2 = cglm.vec3{ 1.0, 1.0, 1.0 };
     var center2 = cglm.vec3{ 0.0, 0.0, 0.0 };
-    var up2 = cglm.vec3{ 0.0, 1.0, 0.0 };
+    var up2 = cglm.vec3{ 0.0, 0.0, 1.0 };
     cglm.glmc_lookat(
         &eye2,
         &center2,
@@ -472,7 +472,9 @@ pub fn render_thread_func(args: Args) !void {
             for (infos.items) |value| {
                 var f_v: f32 = @floatFromInt(value);
                 f_v *= 0.1;
-                eye2 = cglm.vec3{ f_v, f_v, f_v };
+                eye2 = cglm.vec3{ 0.0, -f_v, 0.0 };
+                pUIUbo2.cameraPos = eye2;
+
                 cglm.glmc_lookat(
                     &eye2,
                     &center2,

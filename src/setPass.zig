@@ -908,6 +908,9 @@ const Iv_feather_PushConstant = extern struct {
     instances: u64,
     meshes: u64,
     payloads: u64,
+    params: u64,
+
+    paramTextureIndex: u32,
 };
 
 fn initIv_Feather(userdata: ?*anyopaque, pass: *Pass, vulkan: *VkStruct, commands: *Commands, gpa: std.mem.Allocator) !void {
@@ -938,6 +941,8 @@ fn initIv_Feather(userdata: ?*anyopaque, pass: *Pass, vulkan: *VkStruct, command
         .instances = instances,
         .meshes = meshes,
         .payloads = payloads,
+        .params = 0,
+        .paramTextureIndex = 0,
     };
     pass.setPushConstants(&push);
 
@@ -1110,7 +1115,7 @@ fn addIv_FeatherPass() !void {
     try renderFlow.setPushConstant(
         passName,
         vk.VK_SHADER_STAGE_VERTEX_BIT,
-        56,
+        68,
     );
 
     try renderFlow.addVTableToPass(passName, &vtableIv_Feather);

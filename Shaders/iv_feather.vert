@@ -82,6 +82,8 @@ layout(set = 1, binding = 0) uniform UniformBufferObject {
     mat4 view;
     mat4 proj;
     vec3 cameraPos;
+
+    vec3 lightDirection;
 } ubo;
 
 layout(push_constant) uniform PushConstants {
@@ -92,12 +94,17 @@ layout(push_constant) uniform PushConstants {
     InstanceBuffer instances;
     MeshBuffer meshes;
     TaskPayloads payloads;
+    uint64_t params;
+
+    uint paramTextureIndex;
 } pc;
 
 layout(location = 0) out vec2 uv;
 layout(location = 1) flat out uint texIndex;
 layout(location = 2) flat out uint samplerIndex;
 layout(location = 3) out vec3 view;
+layout(location = 4) out vec3 normal;
+layout(location = 5) out vec4 tangent;
 
 void main() {
     uint visible_meshlet_idx = gl_VertexIndex / (124 * 3);  
@@ -147,4 +154,6 @@ void main() {
     uv = pc.vertexBuffer.vertices[vertexIdx].uv;
     texIndex = pc.instances.instances[instanceID].texIndex;
     samplerIndex = pc.instances.instances[instanceID].samplerIndex;
+    normal = pc.vertexBuffer.vertices[vertexIdx].normal;
+    tangent = pc.vertexBuffer.vertices[vertexIdx].tangent;
 }

@@ -65,7 +65,7 @@ const vertexSet1SetLayoutCreateInfos = descriptorSetLayoutCreateInfo{
     .bindings = [5]vk.VkDescriptorSetLayoutBinding{
         .{
             .binding = 0,
-            .stageFlags = vk.VK_SHADER_STAGE_VERTEX_BIT,
+            .stageFlags = vk.VK_SHADER_STAGE_VERTEX_BIT | vk.VK_SHADER_STAGE_FRAGMENT_BIT,
             .descriptorType = vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
             .descriptorCount = 1,
         },
