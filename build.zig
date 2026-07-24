@@ -387,6 +387,10 @@ pub fn build(b: *std.Build) void {
     resource_mod.addImport("mesh", mesh_mod);
     resource_mod.addImport("instance", instance_mod);
     resource_mod.addImport("vertexStruct", vertexStruct_mod);
+    resource_mod.addImport("global", global_mod);
+    resource_mod.addImport("stb_image", stb_image_mod);
+    resource_mod.addImport("ringBuffer", ringBuffer_mod);
+    resource_mod.addImport("fileSystem", fileSystem_mod);
 
     twoChannel_mod.addImport("ringBuffer", ringBuffer_mod);
 
