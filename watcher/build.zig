@@ -271,6 +271,7 @@ pub fn build(b: *std.Build) void {
         "--d",
         "C:\\D\\code\\zig\\game\\zig-out\\bin\\Content.db",
         "C:\\D\\code\\zig\\game\\zig-out\\bin\\Content",
+        "-force",
     });
 
     const run_step = b.step("run", "Run the app");

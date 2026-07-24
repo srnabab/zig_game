@@ -183,20 +183,28 @@ pub fn main(init: std.process.Init) !void {
         _ = argsIt.next();
         while (argsIt.next()) |arg| {
             // std.log.debug("{s}", .{arg});
-            if (std.mem.eql(u8, arg[0..3], "--f")) {
-                path = argsIt.next() orelse return error.NoFolder;
+            if (arg.len >= 6) {
+                if (std.mem.eql(u8, arg[0..6], "-force")) {
+                    db.iterateFolder.forceUpdata = true;
 
-                folder = try std.unicode.wtf8ToWtf16LeAllocZ(gpa, path.?);
-                errdefer gpa.free(folder.?);
-                continue;
-            } else if (std.mem.eql(u8, arg[0..3], "--w")) {
-                watchingFilePath = argsIt.next() orelse configFile;
-                continue;
-            } else if (std.mem.eql(u8, arg[0..3], "--d")) {
-                databaseFilePath = argsIt.next() orelse databaseFile;
-                contentDatabaseRelativePathStart = argsIt.next() orelse return error.NoDatabaseRelativePathStart;
+                    continue;
+                }
+            } else if (arg.len >= 3) {
+                if (std.mem.eql(u8, arg[0..3], "--f")) {
+                    path = argsIt.next() orelse return error.NoFolder;
 
-                continue;
+                    folder = try std.unicode.wtf8ToWtf16LeAllocZ(gpa, path.?);
+                    errdefer gpa.free(folder.?);
+                    continue;
+                } else if (std.mem.eql(u8, arg[0..3], "--w")) {
+                    watchingFilePath = argsIt.next() orelse configFile;
+                    continue;
+                } else if (std.mem.eql(u8, arg[0..3], "--d")) {
+                    databaseFilePath = argsIt.next() orelse databaseFile;
+                    contentDatabaseRelativePathStart = argsIt.next() orelse return error.NoDatabaseRelativePathStart;
+
+                    continue;
+                }
             }
 
             std.log.err("unknow command {s}", .{arg});

@@ -78,11 +78,14 @@ const FileTypeHashTable = map: {
         .{ ".samp", FileType.Sampler },
         .{ ".pipeb", FileType.PipeB },
         .{ ".sampler", FileType.SamplerB },
+        .{ ".ktx2", FileType.KTX2 },
     };
 
     const maps = maptype.initComptime(list);
     break :map maps;
 };
+
+pub var forceUpdata = false;
 
 fn executeSQL(SQL: []const u8, db_: *sqlite.sqlite3) void {
     const res = sqlite.sqlite3_exec(db_, @ptrCast(SQL.ptr), null, null, null);
@@ -628,6 +631,8 @@ pub fn processFile(
             else => {},
         }
 
+        if (forceUpdata) isModified = true;
+
         if (pathModifiedTime == -1) {
             if (isModified) {
                 // std.log.debug("2", .{});
@@ -635,10 +640,13 @@ pub fn processFile(
                 const content = try fileReader.interface.readAlloc(gpa, metadata.size);
                 defer gpa.free(content);
 
+                const index = std.mem.lastIndexOf(u8, name, ".") orelse name.len;
+                fType = judgeFileType(name[index..], content);
+
                 var contentHash = hash.blake3HashContent(content);
                 // const contentHash = try hashFileContent(&tempFile, metadata.size());
                 try ContentPathT.update(
-                    "RelativePath,ParentID,ModifiedTime,LastSeenTime,ContentHash,FileSize",
+                    "RelativePath,ParentID,ModifiedTime,LastSeenTime,ContentHash,FileSize,FileType",
                     "FileName = ?",
                     .{
                         rPZ,
@@ -647,12 +655,10 @@ pub fn processFile(
                         time,
                         sqlDB.BLOB{ .data = &contentHash, .len = contentHash.len },
                         metadata.size,
+                        @intFromEnum(fType),
                         name,
                     },
                 );
-
-                const index = std.mem.lastIndexOf(u8, name, ".") orelse name.len;
-                fType = judgeFileType(name[index..], content);
 
                 try updateLoadParameter(
                     io,
@@ -696,20 +702,21 @@ pub fn processFile(
 
                 var contentHash = hash.blake3HashContent(content);
 
+                const index = std.mem.lastIndexOf(u8, name, ".") orelse name.len;
+                fType = judgeFileType(name[index..], content);
+
                 try ContentPathT.update(
-                    "ModifiedTime,LastSeenTime,ContentHash,FileSize",
+                    "ModifiedTime,LastSeenTime,ContentHash,FileSize,FileType",
                     "FileName = ?",
                     .{
                         currentModifiedTime,
                         time,
                         sqlDB.BLOB{ .data = &contentHash, .len = contentHash.len },
                         metadata.size,
+                        @intFromEnum(fType),
                         name,
                     },
                 );
-
-                const index = std.mem.lastIndexOf(u8, name, ".") orelse name.len;
-                fType = judgeFileType(name[index..], content);
                 // std.log.debug("{s}", .{@tagName(fType)});
 
                 try updateLoadParameter(
@@ -793,7 +800,7 @@ pub fn processDirectory(
             .FileType = @intFromEnum(FileType.DIR),
         });
     } else {
-        const isModified = (currentModifiedTime != fileModifiedTime);
+        const isModified = (currentModifiedTime != fileModifiedTime) | forceUpdata;
         if (pathModifiedTime == -1) {
             if (isModified) {
                 try ContentPathT.update(

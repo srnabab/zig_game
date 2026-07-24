@@ -352,7 +352,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                 // std.log.info("cast c_int {d}", .{ii});
 
                 switch (fields_info[i].type) {
-                    i32, u32, c_uint => {
+                    i32, u32, u5, c_uint => {
                         _ = sqlite.sqlite3_bind_int(stmt, ii, @intCast(@field(values, fields_info[i].name)));
                     },
                     i64, u64, usize => {

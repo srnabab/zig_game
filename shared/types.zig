@@ -17,6 +17,7 @@ pub const FileType = enum {
     PipeB,
     Sampler,
     SamplerB,
+    KTX2,
     UNKNOWN,
 };
 
