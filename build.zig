@@ -624,6 +624,7 @@ pub fn build(b: *std.Build) void {
     exe_mod.addLibraryPath(sdl3Module.path("install/lib"));
     exe_mod.addLibraryPath(cglm_dep.path("install/lib"));
     exe_mod.linkSystemLibrary("cglm", .{ .preferred_link_mode = .static });
+    exe_mod.linkSystemLibrary("ktx", .{ .preferred_link_mode = .dynamic });
     exe_mod.linkSystemLibrary("sdl3", .{ .preferred_link_mode = .static });
     exe_mod.linkSystemLibrary("steam_api64", .{});
     exe_mod.linkSystemLibrary("setupapi", .{ .preferred_link_mode = .static });

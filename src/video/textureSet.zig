@@ -1,4 +1,5 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 const Mutex = std.Io.Mutex;
 const Atomic = std.atomic;
 const file = @import("fileSystem");
@@ -29,15 +30,16 @@ pub const Texture = struct {
     ID: u32 = std.math.maxInt(u32),
     source_width: u32,
     source_height: u32,
+    source_depth: u32,
     format: vk.VkFormat,
-    imageView: vk.VkImageView, // 24
+    mipLevels: u32,
+    imageView: vk.VkImageView,
 
     layouts: [*]vk.VkImageLayout,
-    extra_imageViews: [*]vk.VkImageView, // 40
-
-    image: VkStruct.Image, // 56 + 2
-    layoutCount: u16, // 56 + 4
-    extra_imageViewCount: u16, // 56 + 6 == 64
+    extra_imageViews: [*]vk.VkImageView,
+    image: VkStruct.Image,
+    layoutCount: u16,
+    extra_imageViewCount: u16,
 
     pub fn changeTextureLayout(self: *Texture, baseLayer: u32, layerCount: u32, dstLayout: vk.VkImageLayout) void {
         const zone = tracy.initZone(@src(), .{ .name = "change texture layout" });
@@ -224,12 +226,14 @@ pub fn createImageTexture(
             .ID = ID,
             .source_width = imgWidth,
             .source_height = imgHeight,
+            .source_depth = 1,
             .layouts = layouts.ptr,
             .layoutCount = @intCast(layouts.len),
             .imageView = null,
             .format = img.image.format,
             .extra_imageViewCount = 0,
             .extra_imageViews = undefined,
+            .mipLevels = 0,
             // .usage = .shader,
         };
         for (0..layouts.len) |i| {
@@ -242,12 +246,31 @@ pub fn createImageTexture(
     }
     // errdefer self.array.giveBack(texture);
 
+    var region = [_]vk.VkBufferImageCopy{.{
+        .bufferOffset = 0,
+        .bufferRowLength = 0,
+        .bufferImageHeight = 0,
+        .imageSubresource = vk.VkImageSubresourceLayers{
+            .aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT,
+            .mipLevel = 0,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+        .imageOffset = vk.VkOffset3D{ .x = 0, .y = 0, .z = 0 },
+        .imageExtent = vk.VkExtent3D{
+            .width = imgWidth,
+            .height = imgHeight,
+            .depth = 1,
+        },
+    }};
+
     try graphic.cacheCommand(
         .{ .copyBufferToImage = .{
             .pTexture = texture_t,
-            .width = texture.source_width,
-            .height = texture.source_height,
             .buffer = stagingBuffer,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+            .regions = &region,
         } },
     );
 
@@ -305,6 +328,8 @@ pub fn create2DTexture(
             .ID = ID,
             .source_width = width,
             .source_height = height,
+            .source_depth = 1,
+            .mipLevels = 0,
             .layouts = layouts.ptr,
             .layoutCount = @intCast(layouts.len),
             .imageView = null,
@@ -347,7 +372,7 @@ pub fn create2DTexture(
     return texture_t;
 }
 
-pub fn createTexturePackVkImage(
+pub fn createTexturePackVkImage2D(
     self: *Self,
     io: std.Io,
     width: u32,
@@ -374,12 +399,14 @@ pub fn createTexturePackVkImage(
         .ID = ID,
         .source_width = width,
         .source_height = height,
+        .source_depth = 0,
         .layouts = layouts.ptr,
         .layoutCount = @intCast(layouts.len),
         .imageView = vkImageView,
         .format = format,
         .extra_imageViewCount = 0,
         .extra_imageViews = undefined,
+        .mipLevels = 0,
         // .usage = .shader,
     };
     for (0..layouts.len) |i| {
@@ -398,23 +425,26 @@ pub fn createTexturePackVkImage(
 pub fn createTextureFromResource(
     self: *Self,
     io: std.Io,
+    gpa: Allocator,
     textureResource: resource.Texture,
     vulkan: *VkStruct,
     graphic: *Commands,
 ) !Texture_t {
     var texture: *Texture = undefined;
     var texture_t: Texture_t = undefined;
+    defer gpa.free(textureResource.regions);
+
     {
         try self.mutex.lock(io);
         defer self.mutex.unlock(io);
 
-        if (!Handles.typeCompare(textureResource.handle, .texture)) return error.InvalidHandle;
-
-        texture_t = @ptrCast(textureResource.handle);
-
         if (self.map.get(textureResource.fileID)) |value| {
             return value;
         }
+
+        if (!Handles.typeCompare(textureResource.handle, .texture)) return error.InvalidHandle;
+
+        texture_t = @ptrCast(textureResource.handle);
 
         texture = try self.array.addOne();
         const index: u32 = @intCast(self.array.items.len - 1);
@@ -431,8 +461,10 @@ pub fn createTextureFromResource(
             .imageView = textureResource.vkImageView,
             .layouts = layouts.ptr,
             .layoutCount = @intCast(layouts.len),
+            .mipLevels = textureResource.mipLevels,
             .source_width = textureResource.width,
             .source_height = textureResource.height,
+            .source_depth = textureResource.depth,
             .extra_imageViewCount = 0,
             .extra_imageViews = undefined,
         };
@@ -469,9 +501,10 @@ pub fn createTextureFromResource(
     try graphic.cacheCommand(
         .{ .copyBufferToImage = .{
             .pTexture = texture_t,
-            .width = texture.source_width,
-            .height = texture.source_height,
+            .baseArrayLayer = textureResource.baseLayer,
+            .layerCount = textureResource.layerCount,
             .buffer = textureResource.staginfBuffer,
+            .regions = textureResource.regions,
         } },
     );
 
@@ -499,12 +532,12 @@ pub fn getDescriptorSetIndex(self: *Self, texture: Texture_t) u32 {
     return index;
 }
 
-pub fn createImageTextureEnsureWithErrorImage(self: *Self, fileID: u32, samplerType: VkStruct.Samplers.SamplerType, vulkan: *VkStruct, graphic: *Commands) Texture_t {
-    return self.createImageTexture(fileID, samplerType, vulkan, graphic) catch |err| {
-        std.log.err("create image {d} texture error {s} {d}", .{ fileID, @errorName(err), @sizeOf(Texture) });
-        return self.createImageTexture(comptime file.comptimeGetID("non_exist.png"), .pixel2d, vulkan, graphic) catch unreachable;
-    };
-}
+// pub fn createImageTextureEnsureWithErrorImage(self: *Self, fileID: u32, samplerType: VkStruct.Samplers.SamplerType, vulkan: *VkStruct, graphic: *Commands) Texture_t {
+//     return self.createImageTexture(fileID, samplerType, vulkan, graphic) catch |err| {
+//         std.log.err("create image {d} texture error {s} {d}", .{ fileID, @errorName(err), @sizeOf(Texture) });
+//         return self.createImageTexture(comptime file.comptimeGetID("non_exist.png"), .pixel2d, vulkan, graphic) catch unreachable;
+//     };
+// }
 
 pub fn getTexture(self: *Self, textureID: u32) ?Texture_t {
     self.mutex.lock(self.io) catch unreachable;

@@ -318,6 +318,7 @@ pub fn render_thread_func(args: Args) !void {
                         .texture => |texture| {
                             _ = try pTextureSet.createTextureFromResource(
                                 io,
+                                gpa,
                                 texture,
                                 vulkan,
                                 &commands,

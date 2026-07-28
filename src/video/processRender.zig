@@ -4621,7 +4621,32 @@ pub const commands = struct {
                     node.data.commandPoolType = .graphic;
                 }
 
-                ptr.value_ptr.command = .{ .copyBufferToImage = copyBufferToImage };
+                const regions2 = try allocator.alloc(vk.VkBufferImageCopy2, copyBufferToImage.regions.len);
+                for (copyBufferToImage.regions, regions2) |src, *dst| {
+                    dst.* = .{
+                        .sType = vk.VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2,
+                        .pNext = null,
+                        .bufferOffset = src.bufferOffset,
+                        .bufferRowLength = src.bufferRowLength,
+                        .bufferImageHeight = src.bufferImageHeight,
+                        .imageSubresource = src.imageSubresource,
+                        .imageOffset = src.imageOffset,
+                        .imageExtent = src.imageExtent,
+                    };
+                }
+                ptr.value_ptr.command = .{ .copyBufferToImageRecord = .{
+                    .buffer = copyBufferToImage.buffer,
+                    .texture = copyBufferToImage.pTexture,
+                    .regions = regions2,
+                    .dstImageLayout = copyBufferToImage.dstImageLayout,
+                    .clean = copyBufferToImage.clean,
+                } };
+                // for (copyBufferToImage.regions) |value| {
+                //     std.log.debug("\n{}\n", .{value});
+                // }
+                // for (regions2) |value| {
+                //     std.log.debug("\n{}\n", .{value});
+                // }
 
                 const imageQueueNode = try self.transLayoutHelper(
                     self.pTextureSet,
@@ -4949,7 +4974,13 @@ pub const commands = struct {
             .copyBuffer => {
                 ptr.copyBuffer.regions = try allocator.dupe(vk.VkBufferCopy2, command.copyBuffer.regions);
             },
-            else => {},
+            .copyBufferToImage => {
+                ptr.copyBufferToImage.regions = try allocator.dupe(vk.VkBufferImageCopy, command.copyBufferToImage.regions);
+            },
+            .fillBuffer => {},
+            else => {
+                std.debug.panic("unsupported command type {s}", .{@tagName(command)});
+            },
         }
     }
 
@@ -4967,7 +4998,13 @@ pub const commands = struct {
                 .copyBuffer => {
                     self.allocator.free(comm.copyBuffer.regions);
                 },
-                else => {},
+                .copyBufferToImage => {
+                    self.allocator.free(comm.copyBufferToImage.regions);
+                },
+                .fillBuffer => {},
+                else => {
+                    std.debug.panic("unsupported command type {s}", .{@tagName(comm)});
+                },
             }
         }
     }
@@ -5115,43 +5152,24 @@ pub const oneTimeCommand = struct {
                 };
                 vk.vkCmdBeginRendering(commandBuffer, &renderingInfo);
             },
-            .copyBufferToImage => {
+            .copyBufferToImageRecord => {
                 const innerZone = tracy.initZone(@src(), .{ .name = "copy buffer to image" });
                 defer innerZone.deinit();
-                const copyBufferToImage = command.command.copyBufferToImage;
-                // std.log.debug("offset {d}", .{copyBufferToImage.buffer.info.offset});
-                var region = vk.VkBufferImageCopy2{
-                    .sType = vk.VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2,
-                    .pNext = null,
-                    .bufferImageHeight = copyBufferToImage.bufferImageHegiht,
-                    .bufferOffset = 0,
-                    .bufferRowLength = copyBufferToImage.bufferRowLength,
-                    .imageExtent = .{
-                        .width = copyBufferToImage.width,
-                        .height = copyBufferToImage.height,
-                        .depth = copyBufferToImage.depth,
-                    },
-                    .imageOffset = copyBufferToImage.imageOffset,
-                    .imageSubresource = .{
-                        .aspectMask = copyBufferToImage.aspectMask,
-                        .mipLevel = copyBufferToImage.mipLevel,
-                        .layerCount = copyBufferToImage.layerCount,
-                        .baseArrayLayer = copyBufferToImage.baseArrayLayer,
-                    },
-                };
+                const copyBufferToImage = command.command.copyBufferToImageRecord;
 
-                // std.log.debug("buffer usage {s}", .{
-                //     @tagName(vulkan.buffers.getBufferUsage(copyBufferToImage.buffer)),
-                // });
                 var copyBufferToImageInfo2 = vk.VkCopyBufferToImageInfo2{
                     .sType = vk.VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2,
                     .pNext = null,
                     .srcBuffer = vulkan.buffers.getVkBuffer(copyBufferToImage.buffer),
-                    .dstImage = pTextureSet.getVkImage(copyBufferToImage.pTexture),
+                    .dstImage = pTextureSet.getVkImage(copyBufferToImage.texture),
                     .dstImageLayout = copyBufferToImage.dstImageLayout,
-                    .regionCount = 1,
-                    .pRegions = &region,
+                    .regionCount = @intCast(copyBufferToImage.regions.len),
+                    .pRegions = copyBufferToImage.regions.ptr,
                 };
+
+                // for (copyBufferToImage.regions) |value| {
+                //     std.log.debug("{}", .{value});
+                // }
 
                 vk.vkCmdCopyBufferToImage2(
                     commandBuffer,
@@ -5538,9 +5556,9 @@ pub const oneTimeCommand = struct {
         defer zone.deinit();
 
         return rs: switch (command.command) {
-            .copyBufferToImage => {
-                if (command.command.copyBufferToImage.clean) {
-                    break :rs garbageData{ .buffer = command.command.copyBufferToImage.buffer };
+            .copyBufferToImageRecord => {
+                if (command.command.copyBufferToImageRecord.clean) {
+                    break :rs garbageData{ .buffer = command.command.copyBufferToImageRecord.buffer };
                 } else {
                     break :rs null;
                 }

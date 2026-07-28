@@ -42,7 +42,7 @@ pub const CommandType2 = enum {
     computeRecord,
     computeIndirectRecord,
     copyBuffer,
-    copyBufferToImage,
+    copyBufferToImageRecord,
     draw2DRecord,
     drawIndirectRecord,
     drawMeshRecord,
@@ -73,7 +73,7 @@ pub const comm2 = union(CommandType2) {
     computeRecord: ComputeRecord,
     computeIndirectRecord: ComputeIndirectRecord,
     copyBuffer: CopyBuffer,
-    copyBufferToImage: CopyBufferToImage,
+    copyBufferToImageRecord: CopyBufferToImageRecord,
     draw2DRecord: Draw2DRecord,
     drawIndirectRecord: DrawIndirectRecord,
     drawMeshRecord: DrawMeshRecord,
@@ -118,28 +118,21 @@ pub const TransLayout = struct {
 };
 
 pub const CopyBufferToImage = struct {
-    pTexture: texture.Texture_t,
-
-    width: u32,
-    height: u32,
-    depth: u32 = 1,
-
-    dstImageLayout: vk.VkImageLayout = vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-    aspectMask: vk.VkImageAspectFlags = vk.VK_IMAGE_ASPECT_COLOR_BIT,
-    mipLevel: u32 = 0,
-    baseArrayLayer: u32 = 0,
-    layerCount: u32 = 1,
-
     buffer: VkStruct.Buffer_t,
-    bufferRowLength: u32 = 0,
-    bufferImageHegiht: u32 = 0,
+    pTexture: texture.Texture_t,
+    baseArrayLayer: u32,
+    layerCount: u32,
+    dstImageLayout: vk.VkImageLayout = vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+    regions: []vk.VkBufferImageCopy,
 
-    imageOffset: vk.VkOffset3D = .{
-        .x = 0,
-        .y = 0,
-        .z = 0,
-    },
+    clean: bool = true,
+};
 
+pub const CopyBufferToImageRecord = struct {
+    buffer: VkStruct.Buffer_t,
+    texture: texture.Texture_t,
+    regions: []vk.VkBufferImageCopy2,
+    dstImageLayout: vk.VkImageLayout = vk.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
     clean: bool = true,
 };
 

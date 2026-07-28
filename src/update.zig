@@ -284,6 +284,14 @@ pub fn update_thread_func(args: Args) !void {
                     mainRoSqlite,
                     "Plane.001_0.vtx",
                 );
+                _ = try resource.readResource(
+                    io,
+                    gpa,
+                    handles,
+                    &nameArray,
+                    mainRoSqlite,
+                    "feather_lut.ktx2",
+                );
             }
 
             if (sceneChanged) {

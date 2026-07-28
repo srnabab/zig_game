@@ -104,7 +104,8 @@ layout(location = 1) flat out uint texIndex;
 layout(location = 2) flat out uint samplerIndex;
 layout(location = 3) out vec3 view;
 layout(location = 4) out vec3 normal;
-layout(location = 5) out vec4 tangent;
+layout(location = 5) out vec3 tangentOut;
+layout(location = 6) out vec3 bitangent;
 
 void main() {
     uint visible_meshlet_idx = gl_VertexIndex / (124 * 3);  
@@ -154,6 +155,7 @@ void main() {
     uv = pc.vertexBuffer.vertices[vertexIdx].uv;
     texIndex = pc.instances.instances[instanceID].texIndex;
     samplerIndex = pc.instances.instances[instanceID].samplerIndex;
-    normal = pc.vertexBuffer.vertices[vertexIdx].normal;
-    tangent = pc.vertexBuffer.vertices[vertexIdx].tangent;
+    normal = n;
+    tangentOut = t;
+    bitangent = b;
 }

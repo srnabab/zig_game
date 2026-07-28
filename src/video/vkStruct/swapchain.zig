@@ -171,7 +171,9 @@ pub fn createSwapchain(
         .pQueueFamilyIndices = null,
     };
 
-    try checkVkResult(vk.vkCreateSwapchainKHR(device, @ptrCast(&createInfo), pAllocCallBacks, @ptrCast(&swapchain)));
+    std.log.debug("value {d}", .{createInfo.flags});
+
+    try checkVkResult(vk.vkCreateSwapchainKHR(device, &createInfo, pAllocCallBacks, @ptrCast(&swapchain)));
 
     return swapchain;
 }

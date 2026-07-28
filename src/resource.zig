@@ -1,6 +1,7 @@
 const std = @import("std");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
+const assert = std.debug.assert;
 
 const vk = @import("vk");
 const vma = @import("vma");
@@ -19,6 +20,8 @@ const file = @import("fileSystem");
 const sqlite3 = ?*file.sqlite.sqlite3;
 
 const stb_image = @import("stb_image");
+const ktx = @import("ktx");
+// const ktx_vulkan = @import("ktx_vulkan");
 
 const vec3 = vertexStruct.vec3;
 
@@ -70,10 +73,15 @@ pub const Mesh = struct {
 };
 
 pub const Texture = struct {
+    regions: []vk.VkBufferImageCopy,
     width: u32,
     height: u32,
+    depth: u32,
     fileID: u32,
-    format: vk.VkFormat, // 16
+    format: vk.VkFormat,
+    baseLayer: u32,
+    layerCount: u32,
+    mipLevels: u32,
     vkImage: vk.VkImage,
     vkImageView: vk.VkImageView,
     allocation: vma.VmaAllocation,
@@ -146,7 +154,7 @@ pub fn readResource(io: Io, gpa: std.mem.Allocator, handles: *global.HandlesType
 
     var handleType: Handles.ResourceType = .others;
     switch (fileType) {
-        .PNG => {
+        .PNG, .KTX2 => {
             handleType = .texture;
         },
         .VTX => {
@@ -217,11 +225,28 @@ pub fn processResource(args: ResourceThreadArgs) Io.Cancelable!void {
                         pack.name,
                         pack.handle,
                         resourceArray,
-                    ) catch continue;
+                    ) catch {
+                        const ptr = resourceArray.array.addOne() catch |err| {
+                            std.debug.panic("{s}", .{@errorName(err)});
+                        };
+                        ptr.texture.fileID = comptime file.comptimeGetID("non_exist.png");
+                        ptr.texture.regions = &.{};
+                    };
                 },
                 .VTX => {
                     // std.log.debug("d", .{});
                     processResource_VTX(
+                        io,
+                        gpa,
+                        sqlite.?,
+                        vulkan,
+                        pack.name,
+                        pack.handle,
+                        resourceArray,
+                    ) catch continue;
+                },
+                .KTX2 => {
+                    processResource_KTX2(
                         io,
                         gpa,
                         sqlite.?,
@@ -307,6 +332,7 @@ fn processResource_PNG(
 ) !void {
     const fileID = file.getID(name);
     std.log.debug("ID {d}", .{fileID});
+
     const img = file.getImageLoadParam(io, fileID, sqlite.?) catch |err| {
         std.log.err("{s}", .{@errorName(err)});
         return err;
@@ -371,6 +397,25 @@ fn processResource_PNG(
         return err;
     };
 
+    var region = try gpa.alloc(vk.VkBufferImageCopy, 1);
+    region[0] = .{
+        .bufferOffset = 0,
+        .bufferRowLength = 0,
+        .bufferImageHeight = 0,
+        .imageSubresource = vk.VkImageSubresourceLayers{
+            .aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT,
+            .mipLevel = 0,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+        .imageOffset = vk.VkOffset3D{ .x = 0, .y = 0, .z = 0 },
+        .imageExtent = vk.VkExtent3D{
+            .width = @intCast(imgWidth),
+            .height = @intCast(imgHeight),
+            .depth = 1,
+        },
+    };
+
     {
         try resourceArray.mutex.lock(io);
         defer resourceArray.mutex.unlock(io);
@@ -388,6 +433,11 @@ fn processResource_PNG(
             .staginfBuffer = stagingBuffer,
             .format = img.image.format,
             .handle = handle,
+            .baseLayer = 0,
+            .layerCount = 1,
+            .mipLevels = 0,
+            .depth = 1,
+            .regions = region,
         } };
     }
 }
@@ -515,6 +565,183 @@ fn processResource_VTX(
             .verticesSize = @intCast(res.mesh.verticesSize),
             .meshletVerticesSize = @intCast(res.mesh.meshletVerticesSize),
             .meshletTrianglesSize = @intCast(res.mesh.meshletTrianglesSize),
+        } };
+    }
+}
+
+fn processResource_KTX2(
+    io: Io,
+    gpa: Allocator,
+    sqlite: sqlite3,
+    vulkan: *VkStruct,
+    name: []const u8,
+    handle: Handle,
+    resourceArray: *MutexArray(Resource),
+) !void {
+    const fileID = file.getID(name);
+    std.log.debug("ID {d}", .{fileID});
+    const img = file.getFile(io, fileID, sqlite.?) catch |err| {
+        std.log.err("{s}", .{@errorName(err)});
+        return err;
+    };
+    defer img.close(io);
+
+    const imgStat = img.stat(io) catch |err| {
+        std.log.err("{s}", .{@errorName(err)});
+        return err;
+    };
+
+    var buffer = [_]u8{0} ** 8;
+    var reader = img.reader(io, &buffer);
+    try reader.seekTo(0);
+
+    const fileMem = reader.interface.readAlloc(gpa, imgStat.size) catch |err| {
+        std.log.err("{s}", .{@errorName(err)});
+        return err;
+    };
+    defer gpa.free(fileMem);
+
+    var texture: [*c]ktx.ktxTexture2 = null;
+    const res = ktx.ktxTexture2_CreateFromMemory(
+        fileMem.ptr,
+        fileMem.len,
+        ktx.KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT,
+        &texture,
+    );
+    assert(res == ktx.KTX_SUCCESS);
+
+    const imgWidth = texture.*.baseWidth;
+    const imgHeight = texture.*.baseHeight;
+    const imgDepth = texture.*.baseDepth;
+
+    const pixelSize: u64 = texture.*.dataSize;
+
+    const stagingBuffer = vulkan.createBufferByUsage(pixelSize, 0, .staging, false) catch |err| {
+        std.log.err("{s}", .{@errorName(err)});
+        return err;
+    };
+    errdefer vulkan.destroyBuffer(stagingBuffer);
+
+    vulkan.buffers.copyDataToMapped(stagingBuffer, 0, u8, texture.*.pData[0..pixelSize]);
+
+    const imageType, const imageViewType = blk: switch (texture.*.numDimensions) {
+        1 => {
+            if (texture.*.isArray) break :blk .{ vk.VK_IMAGE_TYPE_1D, vk.VK_IMAGE_VIEW_TYPE_1D_ARRAY };
+            break :blk .{ vk.VK_IMAGE_TYPE_1D, vk.VK_IMAGE_VIEW_TYPE_1D };
+        },
+        2 => {
+            if (texture.*.isCubemap) {
+                if (texture.*.isArray) break :blk .{ vk.VK_IMAGE_TYPE_2D, vk.VK_IMAGE_VIEW_TYPE_CUBE_ARRAY };
+                break :blk .{ vk.VK_IMAGE_TYPE_2D, vk.VK_IMAGE_VIEW_TYPE_CUBE };
+            }
+            if (texture.*.isArray) break :blk .{ vk.VK_IMAGE_TYPE_2D, vk.VK_IMAGE_VIEW_TYPE_2D_ARRAY };
+            break :blk .{ vk.VK_IMAGE_TYPE_2D, vk.VK_IMAGE_VIEW_TYPE_2D };
+        },
+        3 => .{ vk.VK_IMAGE_TYPE_3D, vk.VK_IMAGE_VIEW_TYPE_3D },
+        else => unreachable,
+    };
+
+    const image = vulkan._createVkImage(
+        null,
+        0,
+        @intCast(imageType),
+        texture.*.vkFormat,
+        .{ .width = imgWidth, .height = imgHeight, .depth = imgDepth },
+        texture.*.numLevels,
+        texture.*.numLayers,
+        vk.VK_SAMPLE_COUNT_1_BIT,
+        vk.VK_IMAGE_TILING_OPTIMAL,
+        vk.VK_IMAGE_USAGE_TRANSFER_DST_BIT | vk.VK_IMAGE_USAGE_SAMPLED_BIT,
+        vk.VK_SHARING_MODE_EXCLUSIVE,
+        0,
+        null,
+        .VK_IMAGE_LAYOUT_UNDEFINED,
+    ) catch |err| {
+        std.log.err("{s}", .{@errorName(err)});
+        return err;
+    };
+    errdefer vulkan.destroyImage(image);
+
+    const imageView = vulkan._createImageView(
+        null,
+        0,
+        @ptrFromInt(image.vkImage),
+        @intCast(imageViewType),
+        texture.*.vkFormat,
+
+        vk.VkComponentMapping{
+            .r = vk.VK_COMPONENT_SWIZZLE_IDENTITY,
+            .g = vk.VK_COMPONENT_SWIZZLE_IDENTITY,
+            .b = vk.VK_COMPONENT_SWIZZLE_IDENTITY,
+            .a = vk.VK_COMPONENT_SWIZZLE_IDENTITY,
+        },
+        vk.VK_IMAGE_ASPECT_COLOR_BIT,
+        0,
+        texture.*.numLevels,
+        0,
+        texture.*.numLayers,
+    ) catch |err| {
+        std.log.err("{s}", .{@errorName(err)});
+        return err;
+    };
+
+    const regions = try gpa.alloc(vk.VkBufferImageCopy, texture.*.numLayers * texture.*.numFaces * texture.*.numLevels);
+    errdefer gpa.free(regions);
+
+    // std.log.debug("layers {d}, dimension {d}", .{ texture.*.numLayers, texture.*.numDimensions });
+
+    for (0..texture.*.numLayers) |l| {
+        for (0..texture.*.numFaces) |f| {
+            for (0..texture.*.numLevels) |level| {
+                const index = l * texture.*.numFaces * texture.*.numLevels + f * texture.*.numLevels + level;
+                var offset: u64 = 0;
+                const err = ktx.ktxTexture2_GetImageOffset(texture, @intCast(level), @intCast(l), @intCast(f), &offset);
+                assert(err == ktx.KTX_SUCCESS);
+
+                regions[index] = vk.VkBufferImageCopy{
+                    .bufferOffset = offset,
+                    .bufferRowLength = 0,
+                    .bufferImageHeight = 0,
+                    .imageSubresource = vk.VkImageSubresourceLayers{
+                        .aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT,
+                        .mipLevel = @intCast(level),
+                        .baseArrayLayer = @intCast(f),
+                        .layerCount = 1,
+                    },
+                    .imageOffset = vk.VkOffset3D{ .x = 0, .y = 0, .z = 0 },
+                    .imageExtent = vk.VkExtent3D{
+                        .width = imgWidth >> @intCast(level),
+                        .height = imgHeight >> @intCast(level),
+                        .depth = imgDepth >> @intCast(level),
+                    },
+                };
+                // std.log.debug("{d} {d} {d}", .{ l, f, level });
+            }
+        }
+    }
+
+    {
+        try resourceArray.mutex.lock(io);
+        defer resourceArray.mutex.unlock(io);
+        const ptr = resourceArray.array.addOne() catch |err| {
+            std.log.err("{s}", .{@errorName(err)});
+            return err;
+        };
+        ptr.* = .{ .texture = .{
+            .regions = regions,
+            .width = @intCast(imgWidth),
+            .height = @intCast(imgHeight),
+            .depth = @intCast(imgDepth),
+            .baseLayer = 0,
+            .layerCount = texture.*.numLayers,
+            .mipLevels = texture.*.numLevels,
+            .fileID = @intCast(fileID),
+            .vkImage = @ptrFromInt(image.vkImage),
+            .vkImageView = imageView,
+            .allocation = @ptrFromInt(image.allocation),
+            .staginfBuffer = stagingBuffer,
+            .format = texture.*.vkFormat,
+            .handle = handle,
         } };
     }
 }

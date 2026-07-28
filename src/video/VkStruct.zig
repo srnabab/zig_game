@@ -472,7 +472,7 @@ pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet, db: file.sq
             1,
         );
 
-        texture.* = try textureSets.createTexturePackVkImage(
+        texture.* = try textureSets.createTexturePackVkImage2D(
             io,
             0,
             0,
@@ -1164,7 +1164,8 @@ fn findMemoryType(self: *Self, typeFilter: u32, properties: vk.VkMemoryPropertyF
 
     return -1;
 }
-fn _createVkImage(
+
+pub fn _createVkImage(
     self: *Self,
     pNext: ?*anyopaque,
     flags: vk.VkImageCreateFlags,
@@ -1241,6 +1242,33 @@ pub fn createImage2D(
         vk.VK_IMAGE_TYPE_2D,
         format,
         vk.VkExtent3D{ .width = width, .height = height, .depth = 1 },
+        1,
+        1,
+        vk.VK_SAMPLE_COUNT_1_BIT,
+        tiling,
+        usage,
+        vk.VK_SHARING_MODE_EXCLUSIVE,
+        0,
+        null,
+        .VK_IMAGE_LAYOUT_UNDEFINED,
+    );
+}
+
+pub fn createImage3D(
+    self: *Self,
+    width: u32,
+    height: u32,
+    depth: u32,
+    format: vk.VkFormat,
+    tiling: vk.VkImageTiling,
+    usage: vk.VkImageUsageFlags,
+) VkError!Image {
+    return self._createVkImage(
+        null,
+        0,
+        vk.VK_IMAGE_TYPE_3D,
+        format,
+        vk.VkExtent3D{ .width = width, .height = height, .depth = depth },
         1,
         1,
         vk.VK_SAMPLE_COUNT_1_BIT,
