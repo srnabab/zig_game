@@ -1,0 +1,62 @@
+{
+    "$schema": "https://opencode.ai/config.json",
+    // 1. 文件监听忽略配置 (物理级屏蔽)
+    // 被忽略的目录和文件，AI 将完全无法通过任何自动索引工具触及，极大节省 Token
+    "watcher": {
+        "ignore": [
+            "**/node_modules/**",
+            "**/dist/**",
+            "**/build/**",
+            "**/out/**",
+            "**/.next/**",
+            "**/zig-out/**",
+            "**/zig-pkg/**",
+            "**/.zig-cache/**",
+            "**/.vscode/**",
+            "**/.VSCodeCounter/**",
+            "**/testFeature/**",
+            "**/windbg/**",
+            "**/trace/**",
+            "package-lock.json",
+            "pnpm-lock.yaml",
+            "yarn.lock",
+            "cache.json"
+        ]
+    },
+    // 2. 权限规则配置
+    "permission": {
+        // 读权限细化控制
+        // 注意：OpenCode 在匹配时会自上而下求值，所以请将具体的禁用规则（deny）放在最上方，
+        // 将全局允许的通配符（"*" : "allow"）放在最下方，以防被全局覆盖。
+        "read": {
+            "*.png": "deny",
+            "*.jpg": "deny",
+            "*.jpeg": "deny",
+            "*.gif": "deny",
+            "*.svg": "deny",
+            "*.webp": "deny",
+            "*.ico": "deny",
+            "*.mp4": "deny",
+            "*.pdf": "deny",
+            "*.log": "deny",
+            "*.env*": "deny",
+            "*.pem": "deny",
+            "*.key": "deny",
+            "*.rdc": "deny",
+            // 全局允许：除了上面被禁用的静态文件，其他代码文件可以正常读取以理解项目架构
+            "*": "allow"
+        },
+        // 修改权限控制：所有文件编辑操作（edit）均必须在终端中弹窗（Y/N）并向你展示 Diff 寻求同意
+        "edit": "ask",
+        // 命令执行控制：AI 运行任何 bash 命令行必须经过你的同意
+        "bash": "ask",
+        // 3. 搜索工具权限
+        "glob": "allow",
+        "grep": "allow",
+        "list": "allow",
+        // 4. 子代理权限
+        "task": "ask",
+        // 5. 网络访问限制
+        "webfetch": "deny",
+    }
+}

@@ -346,8 +346,28 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const ktx2_c = b.addTranslateC(.{
+        .root_source_file = b.path("include/KTX/ktx.h"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    const ktx_mod = ktx2_c.createModule();
+    // const ktx2_vulkan_c = b.addTranslateC(.{
+    //     .root_source_file = b.path("include/KTX/ktxvulkan.h"),
+    //     .target = target,
+    //     .optimize = optimize,
+    //     .link_libc = true,
+    // });
+    // const ktx_vulkan_mod = ktx2_vulkan_c.createModule();
 
     // dependency
+    // ktx2_vulkan_c.addIncludePath(b.path("include"));
+    // ktx2_vulkan_c.addIncludePath(b.path("include/KTX"));
+
+    ktx2_c.addIncludePath(b.path("include"));
+    ktx2_c.addIncludePath(b.path("include/KTX"));
+
     passGroupMapping_mod.addImport("vertexStruct", vertexStruct_mod);
     passGroupMapping_mod.addImport("video", video_mod);
     passGroupMapping_mod.addImport("processRender", processRender_mod);
@@ -391,6 +411,8 @@ pub fn build(b: *std.Build) void {
     resource_mod.addImport("stb_image", stb_image_mod);
     resource_mod.addImport("ringBuffer", ringBuffer_mod);
     resource_mod.addImport("fileSystem", fileSystem_mod);
+    resource_mod.addImport("ktx", ktx_mod);
+    // resource_mod.addImport("ktx_vulkan", ktx_vulkan_mod);
 
     twoChannel_mod.addImport("ringBuffer", ringBuffer_mod);
 
