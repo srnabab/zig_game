@@ -21,3 +21,48 @@ zig build
 ```bash
 zig build run
 ```
+
+### file struct
+
+```
+.
+├── LICENSE
+├── README.md
+├── Sampler # sampler config json
+├── Shaders # shader source file
+├── TODO.md
+├── build.zig 
+├── build.zig.zon
+├── build_script 
+    ├── feather_lut.py # generate feather BRDF omega_h lut
+    ├── pipelineConfig.py # generate example for pipeline json config
+    ├── pipelineParse.bat # pack pipeline config json and shader spv to binary (deprecate)
+    ├── samplerJson.py # generate example for sampler json config
+    ├── samplerParse.bat # pack sampler json
+    ├── shaderCompile.bat # compile shader to spv (deprecate)
+    └── showDag.py # draw a graph from render graph dot file debug info
+├── dependencies
+├── include
+├── lib # dll and lib
+├── pipeline # pipeline config json
+├── shared # zig file across watcher and game
+├── src # game src
+├── watcher
+    ├── build.zig
+    ├── build.zig.zon
+    └── src # watcher src
+├── zig-out
+    └── bin
+        ├── Content
+            ├── Audio
+            ├── Fonts
+            ├── Model
+            ├── Pipeline # pipeline binary with spv shader
+            ├── Sampler # sampler pack
+            ├── Scenes.json # model transform based on scene
+            ├── Shaders # spv shader file
+            ├── Texts
+            ├── Textures
+            └── Tilemap (deprecate)
+        └── Content.db
+```
