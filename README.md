@@ -13,8 +13,8 @@ sometimes build may failed at first time, retry a few times will success
 
 ```bash
 git clone https://github.com/srnabab/zig_game.git
-git lfs pull
 cd zig_game
+git lfs pull
 cd watcher
 zig build run 
 # until success run then terminate it
@@ -68,4 +68,4 @@ zig build run
 ```
 
 ### to see the example
-press D -> press B -> press C -> press Q ->press E
+press D -> press B -> press C -> press E -> press E ->press Q
