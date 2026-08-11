@@ -9,20 +9,18 @@
 
 ### build
 
+sometimes build may failed at first time, retry a few times will success
+
 ```bash
 git clone https://github.com/srnabab/zig_game.git
+git lfs pull
 cd zig_game
-```
-
-```bash
-zig build
-```
-
-```bash
+cd watcher
+zig build run 
+# until success run then terminate it
+cd ..
 zig build run
 ```
-
-sometimes build may failed at first time, retry a few times will success
 
 ### file struct
 
@@ -68,3 +66,6 @@ sometimes build may failed at first time, retry a few times will success
             └── Tilemap (deprecate)
         └── Content.db
 ```
+
+### to see the example
+press D -> press B -> press C -> press Q ->press E

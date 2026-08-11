@@ -29,4 +29,5 @@ shaders.txt
 sampler.txt
 config/
 zig-pkg/
-.watching
+# .watching
+!steam_api64.dll
