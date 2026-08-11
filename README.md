@@ -22,6 +22,8 @@ zig build
 zig build run
 ```
 
+sometimes build may failed at first time, retry a few times will success
+
 ### file struct
 
 ```
