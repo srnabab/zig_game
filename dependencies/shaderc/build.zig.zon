@@ -1,0 +1,15 @@
+.{
+    .name = .shaderc_lib,
+    .fingerprint = 0x5518c503b9050408,
+    .version = "2026.1.0",
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+    },
+    .dependencies = .{
+        .shaderc = .{
+            .url = "https://github.com/google/shaderc/archive/refs/tags/v2026.1.tar.gz",
+            .hash = "N-V-__8AAAh4EgD_1vyfeRQed3y6urhGewfbgX0yP6g04hGv",
+        },
+    },
+}

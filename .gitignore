@@ -14,7 +14,8 @@ dependencies/cglm/build
 dependencies/cglm/install
 dependencies/meshoptimizer/build
 dependencies/meshoptimizer/install
-dependencies/shaderc/
+dependencies/shaderc/build
+dependencies/shaderc/install
 pkgconfig/
 trace/
 windbg/
