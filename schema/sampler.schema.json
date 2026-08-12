@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sampler.schema.json",
+  "title": "Vulkan Sampler (.samp) Config",
+  "type": "object",
+  "properties": {
+    "flags": {
+      "type": "integer"
+    },
+    "magFilter": {
+      "type": "integer"
+    },
+    "minFilter": {
+      "type": "integer"
+    },
+    "mipmapMode": {
+      "type": "integer"
+    },
+    "addressModeU": {
+      "type": "integer"
+    },
+    "addressModeV": {
+      "type": "integer"
+    },
+    "addressModeW": {
+      "type": "integer"
+    },
+    "mipLodBias": {
+      "type": "number"
+    },
+    "anisotropyEnable": {
+      "type": "boolean"
+    },
+    "maxAnisotropy": {
+      "type": "number"
+    },
+    "compareEnable": {
+      "type": "boolean"
+    },
+    "compareOp": {
+      "type": "integer"
+    },
+    "minLod": {
+      "type": "number"
+    },
+    "maxLod": {
+      "type": "number"
+    },
+    "borderColor": {
+      "type": "integer"
+    },
+    "unnormalizedCoordinates": {
+      "type": "boolean"
+    }
+  }
+}
