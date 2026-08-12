@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "loadmap.schema.json",
+  "title": "LoadMap Config",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "depth": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "gridLength": {
+      "type": "number"
+    },
+    "grids": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/grid"
+      }
+    }
+  },
+  "required": ["gridLength"],
+  "$defs": {
+    "grid": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "leftUp": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "x": {
+              "type": "integer"
+            },
+            "y": {
+              "type": "integer"
+            }
+          }
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "gridLength": {
+          "type": "number"
+        },
+        "grids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/grid"
+          }
+        }
+      },
+      "required": ["leftUp", "gridLength"]
+    }
+  }
+}
