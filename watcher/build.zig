@@ -261,16 +261,19 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(exe);
 
+    const root_path = b.pathFromRoot("..");
+    const contentDbPath = b.pathResolve(&[_][]const u8{ root_path, "zig-out\\bin\\Content.db" });
+    const contentPath = b.pathResolve(&[_][]const u8{ root_path, "zig-out\\bin\\Content" });
     const run_cmd = b.addRunArtifact(exe);
     if (b.args) |args| {
         run_cmd.addArgs(args);
     }
     run_cmd.addArgs(&[_][]const u8{
         "--f",
-        "C:\\D\\code\\zig\\game",
+        root_path,
         "--d",
-        "C:\\D\\code\\zig\\game\\zig-out\\bin\\Content.db",
-        "C:\\D\\code\\zig\\game\\zig-out\\bin\\Content",
+        contentDbPath,
+        contentPath,
         "-force",
     });
 

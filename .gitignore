@@ -4,7 +4,7 @@ zig-out/bin/Content/Fonts/
 .VSCodeCounter/
 test*.zig
 testFeature/
-dependencies/tracy/
+# dependencies/tracy/
 dependencies/SDL3/build
 dependencies/SDL3/install
 dependencies/blake3/c/
@@ -14,7 +14,8 @@ dependencies/cglm/build
 dependencies/cglm/install
 dependencies/meshoptimizer/build
 dependencies/meshoptimizer/install
-dependencies/shaderc/
+dependencies/shaderc/build
+dependencies/shaderc/install
 pkgconfig/
 trace/
 windbg/
@@ -28,4 +29,5 @@ shaders.txt
 sampler.txt
 config/
 zig-pkg/
-.watching
+# .watching
+!steam_api64.dll
