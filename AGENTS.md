@@ -45,6 +45,7 @@ The batch scripts in `build_script/` (`shaderCompile.bat`, `pipelineParse.bat`, 
 - **ECS**: `src/ecs.zig` (thin wrapper over `src/ecs/`)
 - **Content DB**: SQLite database (`Content.db`) tracking all assets — managed by the watcher at dev time, read by the engine at runtime
 - **Handle system**: `src/handle/handle.zig` — 10240 handles with `Once` reuse
+- **Pipeline schema**: `schema/pipeline.schema.json` (JSON Schema draft-2020-12) documents the `.pipe` format; enums unconstrained (plain strings), unknown fields allowed
 
 ## Ignored / special directories
 

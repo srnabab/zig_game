@@ -1,4 +1,5 @@
 {
+  "$schema": "../schema/pipeline.schema.json",
   "Name": "directOut",
   "PipelineType": "Graphics",
   "Shaders": [

@@ -1,0 +1,441 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pipeline.schema.json",
+  "title": "Vulkan Pipeline (.pipe) Config",
+  "type": "object",
+  "required": ["Name", "PipelineType", "Shaders", "VersionCount"],
+  "properties": {
+    "Name": {
+      "type": "string"
+    },
+    "PipelineType": {
+      "type": "string"
+    },
+    "Shaders": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "VersionCount": {
+      "type": "integer"
+    },
+    "VertexInput": {
+      "type": "object",
+      "properties": {
+        "bindings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "binding": {
+                "type": "integer"
+              },
+              "stride": {
+                "type": "integer"
+              },
+              "inputRate": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "attributes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "location": {
+                "type": "integer"
+              },
+              "binding": {
+                "type": "integer"
+              },
+              "format": {
+                "type": "string"
+              },
+              "offset": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      }
+    },
+    "InputState": {
+      "type": "object",
+      "properties": {
+        "InputStatepNext": {
+          "type": ["null", "object"]
+        },
+        "flag": {
+          "type": "integer"
+        },
+        "vertexBindingDescriptionCount": {
+          "type": "integer"
+        },
+        "vertexAttributeDescriptionCount": {
+          "type": "integer"
+        }
+      }
+    },
+    "InputAssembly": {
+      "type": "object",
+      "properties": {
+        "InputAssemblypNext": {
+          "type": ["null", "object"]
+        },
+        "flag": {
+          "type": "integer"
+        },
+        "topology": {
+          "type": "string"
+        },
+        "primitiveRestartEnable": {
+          "type": "boolean"
+        }
+      }
+    },
+    "TessellationState": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "TessellationStatepNext": {
+              "type": ["null", "object"]
+            },
+            "flag": {
+              "type": "integer"
+            },
+            "patchControlPoints": {
+              "type": "integer"
+            }
+          }
+        }
+      ]
+    },
+    "ViewportState": {
+      "type": "object",
+      "properties": {
+        "ViewportStatepNext": {
+          "type": ["null", "object"]
+        },
+        "flag": {
+          "type": "integer"
+        },
+        "viewports": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "width": {
+                "type": "number"
+              },
+              "height": {
+                "type": "number"
+              },
+              "minDepth": {
+                "type": "number"
+              },
+              "maxDepth": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        "scissors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "offset": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "integer"
+                  },
+                  "y": {
+                    "type": "integer"
+                  }
+                }
+              },
+              "extent": {
+                "type": "object",
+                "properties": {
+                  "width": {
+                    "type": "integer"
+                  },
+                  "height": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "RasterizationState": {
+      "type": "object",
+      "properties": {
+        "RasterizationStatepNext": {
+          "type": ["null", "object"]
+        },
+        "flag": {
+          "type": "integer"
+        },
+        "depthClampEnable": {
+          "type": "boolean"
+        },
+        "rasterizerDiscardEnable": {
+          "type": "boolean"
+        },
+        "polygonMode": {
+          "type": "string"
+        },
+        "cullMode": {
+          "type": "string"
+        },
+        "frontFace": {
+          "type": "string"
+        },
+        "depthBiasEnable": {
+          "type": "boolean"
+        },
+        "depthBiasConstantFactor": {
+          "type": "number"
+        },
+        "depthBiasClamp": {
+          "type": "number"
+        },
+        "depthBiasSlopeFactor": {
+          "type": "number"
+        },
+        "lineWidth": {
+          "type": "number"
+        }
+      }
+    },
+    "MultisampleState": {
+      "type": "object",
+      "properties": {
+        "MultisampleStatepNext": {
+          "type": ["null", "object"]
+        },
+        "flag": {
+          "type": "integer"
+        },
+        "rasterizationSamples": {
+          "type": "string"
+        },
+        "sampleShadingEnable": {
+          "type": "boolean"
+        },
+        "minSampleShading": {
+          "type": "number"
+        },
+        "alphaToCoverageEnable": {
+          "type": "boolean"
+        },
+        "alphaToOneEnable": {
+          "type": "boolean"
+        }
+      }
+    },
+    "DepthStencilState": {
+      "type": "object",
+      "properties": {
+        "DepthStencilStatepNext": {
+          "type": ["null", "object"]
+        },
+        "flag": {
+          "type": "integer"
+        },
+        "depthTestEnable": {
+          "type": "boolean"
+        },
+        "depthWriteEnable": {
+          "type": "boolean"
+        },
+        "depthCompareOp": {
+          "type": "string"
+        },
+        "depthBoundsTestEnable": {
+          "type": "boolean"
+        },
+        "stencilTestEnable": {
+          "type": "boolean"
+        },
+        "front": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "failOp": {
+                  "type": "string"
+                },
+                "passOp": {
+                  "type": "string"
+                },
+                "depthFailOp": {
+                  "type": "string"
+                },
+                "compareOp": {
+                  "type": "string"
+                },
+                "compareMask": {
+                  "type": "integer"
+                },
+                "writeMask": {
+                  "type": "integer"
+                },
+                "reference": {
+                  "type": "integer"
+                }
+              }
+            }
+          ]
+        },
+        "back": {
+          "type": ["null", "object"]
+        },
+        "minDepthBounds": {
+          "type": "number"
+        },
+        "maxDepthBounds": {
+          "type": "number"
+        }
+      }
+    },
+    "ColorBlendState": {
+      "type": "object",
+      "properties": {
+        "ColorBlendStatepNext": {
+          "type": ["null", "object"]
+        },
+        "flag": {
+          "type": "integer"
+        },
+        "logicOpEnable": {
+          "type": "boolean"
+        },
+        "logicOp": {
+          "type": "string"
+        },
+        "attachments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "blendEnable": {
+                "type": "boolean"
+              },
+              "srcColorBlendFactor": {
+                "type": "string"
+              },
+              "dstColorBlendFactor": {
+                "type": "string"
+              },
+              "colorBlendOp": {
+                "type": "string"
+              },
+              "srcAlphaBlendFactor": {
+                "type": "string"
+              },
+              "dstAlphaBlendFactor": {
+                "type": "string"
+              },
+              "alphaBlendOp": {
+                "type": "string"
+              },
+              "colorWriteMask": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "blendConstants": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "DynamicStates": {
+      "type": "object",
+      "properties": {
+        "DynamicStatespNext": {
+          "type": ["null", "object"]
+        },
+        "flag": {
+          "type": "integer"
+        },
+        "States": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "PipelineRendering": {
+      "type": "object",
+      "properties": {
+        "color": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "depth": {
+          "type": "string"
+        },
+        "stencil": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "PipelineType": {
+            "const": "Graphics"
+          }
+        },
+        "required": ["PipelineType"]
+      },
+      "then": {
+        "required": [
+          "VertexInput",
+          "InputState",
+          "InputAssembly",
+          "ViewportState",
+          "RasterizationState",
+          "MultisampleState",
+          "DepthStencilState",
+          "ColorBlendState",
+          "DynamicStates",
+          "PipelineRendering"
+        ]
+      }
+    }
+  ]
+}

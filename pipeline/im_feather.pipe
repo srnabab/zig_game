@@ -1,4 +1,5 @@
 {
+  "$schema": "../schema/pipeline.schema.json",
   "Name": "pipeline/im_feather",
   "PipelineType": "Graphics",
   "Shaders": [

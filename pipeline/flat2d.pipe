@@ -1,4 +1,5 @@
 {
+  "$schema": "../schema/pipeline.schema.json",
   "Name": "flat2d",
   "PipelineType": "Graphics",
   "Shaders": [
