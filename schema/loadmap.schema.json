@@ -8,6 +8,25 @@
     "items": {
       "type": "array",
       "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "isGpu": {
+            "type": "boolean"
+          },
+          "bufferName": {
+            "type": "string"
+          }
+        },
+        "required": ["name", "isGpu"]
+      }
+    },
+    "passes": {
+      "type": "array",
+      "items": {
         "type": "string"
       }
     },
@@ -44,6 +63,25 @@
           }
         },
         "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "isGpu": {
+                "type": "boolean"
+              },
+              "bufferName": {
+                "type": "string"
+              }
+            },
+            "required": ["name", "isGpu"]
+          }
+        },
+        "passes": {
           "type": "array",
           "items": {
             "type": "string"

@@ -1,4 +1,5 @@
 {
+  "$schema": "../schema/sampler.schema.json",
   "flags": 0,
   "magFilter": 0,
   "minFilter": 0,
