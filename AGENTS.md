@@ -3,6 +3,10 @@
 - **核心要求**：作为 AI Agent，每当你根据用户要求完成了新功能的开发、重构了代码逻辑、调整了目录结构、引入了新的库，或者更改了项目构建/测试命令后，**你必须主动且自动地编辑并更新本 `AGENTS.md` 文件**。
 - 请将最新的项目认知（如新增的文件模块、新的常用命令、新确立的代码规范）就地更新（Improve in place）到此文件中，以确保下一个会话能够准确继承这些最新成果。
 - 如果某次改动不涉及架构或规范层面的变化，则无需更新。
+- 调用一个未记录的函数后记录一次这个函数的调用方法
+
+## Important
+请将所有逻辑写在同一个函数内，除非逻辑极其复杂，否则不要拆分出子函数，也不要进行额外包装。
 
 ## Build
 
@@ -48,6 +52,28 @@ The batch scripts in `build_script/` (`shaderCompile.bat`, `pipelineParse.bat`, 
 - **Pipeline schema**: `schema/pipeline.schema.json` (JSON Schema draft-2020-12) documents the `.pipe` format; enums unconstrained (plain strings), unknown fields allowed
 - **Sampler schema**: `schema/sampler.schema.json` (JSON Schema draft-2020-12) documents the `.samp` format (flat VkSamplerCreateInfo, integer enums); same permissive policy as the pipeline schema
 - **LoadMap schema**: `schema/loadmap.schema.json` (JSON Schema draft-2020-12) documents recursive grid loadmap format; `gridLength` required everywhere, `leftUp` required in grids, `items` entries are `{name, isGpu, bufferName(optinal)}` objects (both required), `passes` string array in root and grids, `depth` is a non-negative parsing-limit-only int, unknown fields rejected (`additionalProperties: false`)
+
+## lMap binary format
+
+```
+| magic | depth | offsets[] | layer0 | layer1 | ... |
+```
+
+- `magic` 4B: ASCII `"lMap"`
+- `depth` 4B: grid layer count
+- `offsets`: `depth * 4B` — file offset where each grid layer starts
+- **Grid layer** (all grids of the same depth stored together):
+  - `gridLength` 4B — grid size of this layer
+  - `gridCount` 4B u32 — number of grids in this layer
+  - Grid × `gridCount`:
+    - `leftUp` 8B — (x, y) coordinates
+    - `itemCount` 4B
+    - Item × `itemCount`:
+      - `nameLen` 4B, then `name` bytes
+      - `isGpu` 1B
+      - `bufferNameLen` 4B, then `bufferName` bytes (`bufferNameLen == 0` → skip, next item directly)
+    - `passCount` 4B
+    - Pass × `passCount`: `passLen` 4B, then `pass` bytes
 
 ## Ignored / special directories
 

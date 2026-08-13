@@ -8,3 +8,4 @@
 *.db filter=lfs diff=lfs merge=lfs -text
 *.spv filter=lfs diff=lfs merge=lfs -text
 .sampler filter=lfs diff=lfs merge=lfs -text
+*.lMap filter=lfs diff=lfs merge=lfs -txt

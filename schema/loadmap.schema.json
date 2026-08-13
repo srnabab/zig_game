@@ -5,6 +5,18 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
+    "leftUp": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "type": "integer"
+        },
+        "y": {
+          "type": "integer"
+        }
+      }
+    },
     "items": {
       "type": "array",
       "items": {
@@ -44,7 +56,7 @@
       }
     }
   },
-  "required": ["gridLength"],
+  "required": ["gridLength", "leftUp", "depth"],
   "$defs": {
     "grid": {
       "type": "object",

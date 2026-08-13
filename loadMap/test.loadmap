@@ -1,5 +1,6 @@
 {
     "$schema": "../schema/loadmap.schema.json",
+    "leftUp": {"x": 0, "y": 0},
     "depth": 0,
     "gridLength": 800,
     "items": [
