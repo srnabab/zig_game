@@ -38,8 +38,14 @@ pub const Pass = struct {
         try self.vtable.init(userdata, self, vulkan, commands, gpa);
     }
 
-    pub fn setPushConstants(self: *Pass, userdata: ?*anyopaque) void {
-        self.vtable.setPushConstants(userdata, self.pushConstant.pValues);
+    pub fn setPushConstants(self: *Pass, mem: []u8, offset: u16) void {
+        if (offset > self.pushConstant.size)
+            std.debug.panic("offset {d} > pushconstant size {d}", .{ offset, self.pushConstant.size });
+
+        const dst: []u8 = @as([*]u8, @ptrCast(@alignCast(self.pushConstant.pValues)))[0..self.pushConstant.size];
+        const end = offset + @as(u16, @intCast(mem.len));
+
+        @memcpy(dst[offset..end], mem);
     }
 
     pub fn addCommand(

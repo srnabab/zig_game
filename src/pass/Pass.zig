@@ -9,7 +9,6 @@ const TextureSet = @import("textureSet");
 
 const emptyVTable = VTable{
     .init = initEmpty,
-    .setPushConstants = setPushConstantsEmpty,
     .addCommand = addCommandEmpty,
 };
 fn initEmpty(
@@ -76,11 +75,6 @@ pub const VTable = struct {
         commands: *Commands,
         gpa: std.mem.Allocator,
     ) anyerror!void,
-
-    setPushConstants: *const fn (
-        userdata: ?*anyopaque,
-        pushConstantMem: *anyopaque,
-    ) void,
 
     addCommand: *const fn (
         userdata: ?*anyopaque,

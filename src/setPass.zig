@@ -34,7 +34,7 @@ fn initIndirectDraw(
         .instanceIDs = vulkan.getBufferAddress(pass.buffer[2]),
     };
 
-    pass.setPushConstants(&values);
+    pass.setPushConstants(@ptrCast(@alignCast(&values)), 0);
 
     var descriptorSets = [_]vk.VkDescriptorSet{
         vulkan.globalTextureDescriptorSet,
@@ -42,13 +42,6 @@ fn initIndirectDraw(
     };
 
     try pass.setDescriptorSets(&descriptorSets, gpa);
-}
-
-fn setIndirectDrawPushConstant(userdata: ?*anyopaque, pValues: *anyopaque) void {
-    const src: *indirectPushConstant = @ptrCast(@alignCast(userdata.?));
-    const dst: *indirectPushConstant = @ptrCast(@alignCast(pValues));
-
-    dst.* = src.*;
 }
 
 fn addCommand(
@@ -133,7 +126,6 @@ fn addCommand(
 const vtableIndirectDraw = VTable{
     .init = initIndirectDraw,
     .addCommand = addCommand,
-    .setPushConstants = setIndirectDrawPushConstant,
 };
 
 fn addIndirectDrawPass() !void {
@@ -194,13 +186,6 @@ fn initPresent(
     try pass.setDescriptorSets(&descriptorSets, gpa);
 }
 
-fn setPresentConstant(userdata: ?*anyopaque, pValues: *anyopaque) void {
-    const src: *u32 = @ptrCast(@alignCast(userdata));
-    const dst: *u32 = @ptrCast(@alignCast(pValues));
-
-    dst.* = src.*;
-}
-
 fn addPresentCommand(
     userdata: ?*anyopaque,
     pass: *Pass,
@@ -231,7 +216,7 @@ fn addPresentCommand(
     try pass.useTexture(texture, gpa);
 
     var index = textureSet.getDescriptorSetIndex(texture);
-    pass.setPushConstants(&index);
+    pass.setPushConstants(@ptrCast(@alignCast(&index)), 0);
 
     try commands.setRenderingColorAttachment(0, .{
         .sType = vk.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
@@ -264,7 +249,6 @@ fn addPresentCommand(
 const vtablePresent = VTable{
     .init = initPresent,
     .addCommand = addPresentCommand,
-    .setPushConstants = setPresentConstant,
 };
 
 fn addPresentPass() !void {
@@ -320,14 +304,6 @@ fn initIndirectCompute(
     try pass.setDescriptorSets(&descriptorSets, gpa);
 }
 
-fn setIndirectComputePushConstant(userdata: ?*anyopaque, pValues: *anyopaque) void {
-    const src: *ViewBoundsAndTotalSpriteCount = @ptrCast(@alignCast(userdata.?));
-    const dst: *IndirectComputePushConstant = @ptrCast(@alignCast(pValues));
-
-    dst.viewBounds = src.viewBounds;
-    dst.totalSpriteCount = src.totalSpriteCount;
-}
-
 fn addIndirectComputeCommand(
     userdata: ?*anyopaque,
     pass: *Pass,
@@ -339,9 +315,8 @@ fn addIndirectComputeCommand(
     _ = textureSet;
     _ = gpa;
 
-    pass.setPushConstants(userdata);
-
     const src: *ViewBoundsAndTotalSpriteCount = @ptrCast(@alignCast(userdata.?));
+    pass.setPushConstants(@ptrCast(@alignCast(src)), 24);
 
     const groupCount = (src.totalSpriteCount + 31) / 32;
 
@@ -368,7 +343,6 @@ fn addIndirectComputeCommand(
 const vtableIndirectCompute = VTable{
     .init = initIndirectCompute,
     .addCommand = addIndirectComputeCommand,
-    .setPushConstants = setIndirectComputePushConstant,
 };
 
 fn addIndirectComputePass() !void {
@@ -466,13 +440,6 @@ fn initIm_Feather(userdata: ?*anyopaque, pass: *Pass, vulkan: *VkStruct, gpa: st
     try pass.setDescriptorSets(&descriptorSets, gpa);
 }
 
-fn setIm_FeatherPushConstant(userdata: ?*anyopaque, pValues: *anyopaque) void {
-    const src: *Im_FeatherPushConstant = @ptrCast(@alignCast(userdata.?));
-    const dst: *Im_FeatherPushConstant = @ptrCast(@alignCast(pValues));
-
-    dst.* = src.*;
-}
-
 fn addIm_FeatherCommand(
     userdata: ?*anyopaque,
     pass: *Pass,
@@ -503,7 +470,6 @@ fn addIm_FeatherCommand(
 const vtableIm_Feather = VTable{
     .init = initIm_Feather,
     .addCommand = addIm_FeatherCommand,
-    .setPushConstants = setIm_FeatherPushConstant,
 };
 
 fn addIm_FeatherPass() !void {
@@ -638,7 +604,7 @@ fn initC_CommandPrefixSum(userdata: ?*anyopaque, pass: *Pass, vulkan: *VkStruct,
         .a = BufferAddress0,
         .b = BufferAddress1,
     };
-    pass.setPushConstants(&push);
+    pass.setPushConstants(@ptrCast(@alignCast(&push)), 0);
 
     try commands.cacheCommand(.{ .fillBuffer = .{
         .buffer = pass.buffer[1],
@@ -683,17 +649,9 @@ fn addC_CommandPrefixSumCommand(
     pass.clearTexture(gpa);
 }
 
-fn setC_CommandPrefixSumPushConstant(userdata: ?*anyopaque, pValues: *anyopaque) void {
-    const src: *twoU64 = @ptrCast(@alignCast(userdata.?));
-    const dst: *twoU64 = @ptrCast(@alignCast(pValues));
-
-    dst.* = src.*;
-}
-
 const vtableC_CommandPrefixSum = VTable{
     .init = initC_CommandPrefixSum,
     .addCommand = addC_CommandPrefixSumCommand,
-    .setPushConstants = setC_CommandPrefixSumPushConstant,
 };
 
 fn addC_CommandPrefixSumPass() !void {
@@ -782,7 +740,7 @@ fn addIc_TaskCommand(
     _ = gpa;
 
     // @breakpoint();
-    pass.setPushConstants(userdata);
+    pass.setPushConstants(@as([*]u8, @ptrCast(@alignCast(userdata)))[0..@sizeOf(u32)], 48);
 
     try commands.addCommand(.computeIndirect, .{ .computeIndirect = .{
         .pipeline = pass.pipeline,
@@ -797,17 +755,9 @@ fn addIc_TaskCommand(
     vulkan.buffers.writeBuffer(pass.buffer[6]);
 }
 
-fn setIc_TaskPushConstant(userdata: ?*anyopaque, pValues: *anyopaque) void {
-    const src: *u32 = @ptrCast(@alignCast(userdata.?));
-    const dst: *ic_Task_PushConstant = @ptrCast(@alignCast(pValues));
-
-    dst.drawCount = src.*;
-}
-
 const vtableIc_Task = VTable{
     .init = initIc_Task,
     .addCommand = addIc_TaskCommand,
-    .setPushConstants = setIc_TaskPushConstant,
 };
 
 fn addIc_TaskPass() !void {
@@ -944,7 +894,7 @@ fn initIv_Feather(userdata: ?*anyopaque, pass: *Pass, vulkan: *VkStruct, command
         .params = 0,
         .paramTextureIndex = 0,
     };
-    pass.setPushConstants(&push);
+    pass.setPushConstants(@ptrCast(@alignCast(&push)), 0);
 
     var descriptorSets = [_]vk.VkDescriptorSet{
         vulkan.globalTextureDescriptorSet,
@@ -959,13 +909,6 @@ fn initIv_Feather(userdata: ?*anyopaque, pass: *Pass, vulkan: *VkStruct, command
         .size = 4,
         .value = 1,
     } });
-}
-
-fn setIv_FeatherPushConstant(userdata: ?*anyopaque, pValues: *anyopaque) void {
-    const src: *Iv_feather_PushConstant = @ptrCast(@alignCast(userdata.?));
-    const dst: *Iv_feather_PushConstant = @ptrCast(@alignCast(pValues));
-
-    dst.* = src.*;
 }
 
 fn addIv_FeatherCommand(
@@ -1003,7 +946,6 @@ fn addIv_FeatherCommand(
 const vtableIv_Feather = VTable{
     .init = initIv_Feather,
     .addCommand = addIv_FeatherCommand,
-    .setPushConstants = setIv_FeatherPushConstant,
 };
 
 fn addIv_FeatherPass() !void {
@@ -1098,6 +1040,15 @@ fn addIv_FeatherPass() !void {
         null,
     );
 
+    const buffer9 = try renderFlow.createBuffer(
+        "featherParameters",
+        20000 * 192 * @sizeOf(f32),
+        @sizeOf(f32),
+        .storageRead,
+        false,
+        null,
+    );
+
     const pipe = try renderFlow.addPipeline("iv_feather.pipeb", false);
 
     try renderFlow.createPass(passName);
@@ -1111,11 +1062,12 @@ fn addIv_FeatherPass() !void {
     try renderFlow.addBufferToPass(passName, buffer6);
     try renderFlow.addBufferToPass(passName, buffer7);
     try renderFlow.addBufferToPass(passName, buffer8);
+    try renderFlow.addBufferToPass(passName, buffer9);
 
     try renderFlow.setPushConstant(
         passName,
         vk.VK_SHADER_STAGE_VERTEX_BIT,
-        68,
+        @sizeOf(Iv_feather_PushConstant),
     );
 
     try renderFlow.addVTableToPass(passName, &vtableIv_Feather);
