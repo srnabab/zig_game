@@ -69,6 +69,7 @@ The batch scripts in `build_script/` (`shaderCompile.bat`, `pipelineParse.bat`, 
 - **Grid layer** (all grids of the same depth stored together):
   - `gridRow` 4B — grid row of this layer
   - `gridCol` 4B — grid col of this layer
+  - `leftUp` 8B — layer min (x, y) across its grids (written after the loop, like row/col)
   - `gridLength` 4B — grid size of this layer
   - `gridCount` 4B u32 — number of grids in this layer
   - Grid × `gridCount`:
