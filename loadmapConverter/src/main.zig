@@ -101,6 +101,11 @@ pub fn main(init: std.process.Init) !void {
     };
     defer resFile.close(io);
 
+    var totalGridCount: u32 = 0;
+    var totalItemCount: u32 = 0;
+    var totalPassCount: u32 = 0;
+    var totalU8Count: u32 = 0;
+
     var offsets = try gpa.alloc(u32, depth + 1);
     defer gpa.free(offsets);
 
@@ -161,6 +166,10 @@ pub fn main(init: std.process.Init) !void {
 
     _ = try writer.interface.write(magic);
     _ = try writer.interface.writeInt(u32, depth, .native);
+    _ = try writer.interface.writeInt(u32, 0, .native);
+    _ = try writer.interface.writeInt(u32, 0, .native);
+    _ = try writer.interface.writeInt(u32, 0, .native);
+    _ = try writer.interface.writeInt(u32, 0, .native);
 
     for (0..depth + 1) |_| {
         _ = try writer.interface.writeInt(u32, 0, .native);
@@ -184,26 +193,33 @@ pub fn main(init: std.process.Init) !void {
         var maxX: i32 = std.math.minInt(i32);
         var maxY: i32 = std.math.minInt(i32);
 
-        std.log.debug("depth {d}", .{d});
+        // std.log.debug("depth {d}", .{d});
 
         while (gridsByLayer[d].pop()) |g| {
+            totalGridCount += 1;
+
             minX = @min(g.leftUp.x, minX);
             minY = @min(g.leftUp.y, minY);
             maxX = @max(g.leftUp.x, maxX);
             maxY = @max(g.leftUp.y, maxY);
 
-            std.log.debug("{d}, {d}", .{ g.leftUp.x, g.leftUp.y });
+            // std.log.debug("{d}, {d}", .{ g.leftUp.x, g.leftUp.y });
 
             _ = try writer.interface.writeInt(i32, g.leftUp.x, .native);
             _ = try writer.interface.writeInt(i32, g.leftUp.y, .native);
 
             _ = try writer.interface.writeInt(u32, @intCast(g.items.len), .native);
             for (g.items) |i| {
+                totalItemCount += 1;
+
+                totalU8Count += @intCast(i.name.len);
                 _ = try writer.interface.writeInt(u32, @intCast(i.name.len), .native);
                 _ = try writer.interface.write(i.name);
                 _ = try writer.interface.writeByte(@intFromBool(i.isGpu));
 
                 if (i.bufferName) |n| {
+                    totalU8Count += @intCast(n.len);
+
                     _ = try writer.interface.writeInt(u32, @intCast(n.len), .native);
                     _ = try writer.interface.write(n);
                 } else {
@@ -213,6 +229,9 @@ pub fn main(init: std.process.Init) !void {
 
             _ = try writer.interface.writeInt(u32, @intCast(g.passes.len), .native);
             for (g.passes) |p| {
+                totalPassCount += 1;
+
+                totalU8Count += @intCast(p.len);
                 _ = try writer.interface.writeInt(u32, @intCast(p.len), .native);
                 _ = try writer.interface.write(p);
             }
@@ -246,6 +265,11 @@ pub fn main(init: std.process.Init) !void {
     }
 
     try writer.seekTo(8);
+    _ = try writer.interface.writeInt(u32, totalGridCount, .native);
+    _ = try writer.interface.writeInt(u32, totalItemCount, .native);
+    _ = try writer.interface.writeInt(u32, totalPassCount, .native);
+    _ = try writer.interface.writeInt(u32, totalU8Count, .native);
+
     for (offsets) |o| {
         _ = try writer.interface.writeInt(u32, o, .native);
     }

@@ -61,6 +61,10 @@ The batch scripts in `build_script/` (`shaderCompile.bat`, `pipelineParse.bat`, 
 
 - `magic` 4B: ASCII `"lMap"`
 - `depth` 4B: grid layer count
+- `totalGridCount` 4B u32 — number of grids
+- `totalItemCount` 4B u32 — number of items
+- `totalPassCount` 4B u32 — number of passes
+- `totalU8Count` 4B u32 — number of u8
 - `offsets`: `depth * 4B` — file offset where each grid layer starts
 - **Grid layer** (all grids of the same depth stored together):
   - `gridRow` 4B — grid row of this layer
