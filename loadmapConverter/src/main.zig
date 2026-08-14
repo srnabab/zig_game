@@ -175,15 +175,20 @@ pub fn main(init: std.process.Init) !void {
         _ = try writer.interface.writeInt(u32, 0, .native);
     }
 
+    var gridCount: u32 = 1;
     for (gridLayers, 0..) |l, d| {
         // _ = l;
         offsets[d] = @intCast(writer.logicalPos());
 
         _ = try writer.interface.writeInt(u32, 0, .native);
         _ = try writer.interface.writeInt(u32, 0, .native);
+        _ = try writer.interface.writeInt(i32, 0, .native);
+        _ = try writer.interface.writeInt(i32, 0, .native);
 
         _ = try writer.interface.writeInt(u32, l.gridLength, .native);
-        _ = try writer.interface.writeInt(u32, l.gridCount, .native);
+        _ = try writer.interface.writeInt(u32, gridCount, .native);
+
+        gridCount = l.gridCount;
         // std.log.debug("pos {d}", .{writer.logicalPos()});
 
         std.sort.insertion(*Grid, gridsByLayer[d].items, void{}, leftUpLessThan);
@@ -196,8 +201,6 @@ pub fn main(init: std.process.Init) !void {
         // std.log.debug("depth {d}", .{d});
 
         while (gridsByLayer[d].pop()) |g| {
-            totalGridCount += 1;
-
             minX = @min(g.leftUp.x, minX);
             minY = @min(g.leftUp.y, minY);
             maxX = @max(g.leftUp.x, maxX);
@@ -254,12 +257,16 @@ pub fn main(init: std.process.Init) !void {
         if (col == 0) col = 1;
         if (row == 0) row = 1;
 
+        totalGridCount += row * col;
+
         const endPos = writer.logicalPos();
 
         try writer.seekTo(offsets[d]);
 
         _ = try writer.interface.writeInt(u32, row, .native);
         _ = try writer.interface.writeInt(u32, col, .native);
+        _ = try writer.interface.writeInt(i32, minX, .native);
+        _ = try writer.interface.writeInt(i32, minY, .native);
 
         try writer.seekTo(endPos);
     }

@@ -353,6 +353,12 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
     const ktx_mod = ktx2_c.createModule();
+
+    const loadmap_mod = b.createModule(.{
+        .root_source_file = b.path("src/loadmap/loadmap.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
     // const ktx2_vulkan_c = b.addTranslateC(.{
     //     .root_source_file = b.path("include/KTX/ktxvulkan.h"),
     //     .target = target,
@@ -585,6 +591,7 @@ pub fn build(b: *std.Build) void {
     fileSystem_mod.addImport("vertexStruct", vertexStruct_mod);
     fileSystem_mod.addIncludePath(b.path("include"));
 
+    exe_mod.addImport("loadmap", loadmap_mod);
     exe_mod.addImport("passGroupMapping", passGroupMapping_mod);
     exe_mod.addImport("instance", instance_mod);
     exe_mod.addImport("renderDebug", renderDebug_mod);

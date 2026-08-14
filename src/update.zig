@@ -1,6 +1,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
+const loadmap = @import("loadmap");
+
 const ECS = @import("ECS");
 const process = @import("processRender");
 const global = @import("global");
@@ -139,6 +141,9 @@ pub fn update_thread_func(args: Args) !void {
         null,
         false,
     );
+
+    const lmap = try loadmap.loadLoadmap(gpa, &.{});
+    _ = lmap;
 
     var resourceGroup: Io.Group = .init;
 

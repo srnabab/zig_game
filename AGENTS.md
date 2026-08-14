@@ -7,6 +7,7 @@
 
 ## Important
 请将所有逻辑写在同一个函数内，除非逻辑极其复杂，否则不要拆分出子函数，也不要进行额外包装。
+- **验证职责**：Zig 相关的编译/运行/测试验证（`zig build`、`zig build run`、`zig build test` 等）一律由用户自行进行，AI Agent 不要执行 zig 命令做验证——LLM 训练语料缺少 Zig 0.16 相关内容，执行验证既不可靠又耗时耗 token。
 
 ## Build
 
@@ -16,6 +17,22 @@
 - `zig build -Dtracy_enable=true` — enable Tracy; `-Dtracy_callstack=N` (default 10)
 - Default target ABI is forced to `.gnu` (`build.zig:7`)
 - `genFileNameIdHashMap` auto-runs as a build dep → regenerates `src/fileSystem/fileNameID.zig`. Do not edit by hand.
+
+## Zig 0.16.0 使用笔记 (参考 src/loadmap/loadmap.zig)
+
+- `@ptrCast(slice)`：`std.mem.readInt` 参数是 `*const [4]u8`，把 `[]u8` 切片用 `@ptrCast` 转换：`std.mem.readInt(u32, @ptrCast(mem[offset .. offset + 4]), .native)`
+- `@alignCast` + `bytesAsSlice`：`gpa.alignedAlloc(u8, .of(T), n)` 返回 `[]align(N) u8`（0.16 新 `Alignment` 类型，`null` 表示 T 的自然对齐）；`std.mem.bytesAsSlice` 保留指针对齐属性，需 `@alignCast` 降为自然对齐的类型化切片：
+  ```zig
+  const memory = try gpa.alignedAlloc(u8, .of(GridLayer), totalLen);
+  const layers: []GridLayer = @alignCast(std.mem.bytesAsSlice(GridLayer, layersBytes));
+  ```
+- `std.mem.readInt` 直接返回 `T`（非 error union），不需要 `try`；`alignedAlloc` 才需要 `try`
+- grid 在层数组中的定位：差值先 `@intCast` 到 `u32` 再除 `gridLength`（层 `leftUp` 是层内最小坐标，差值必非负），商直接作切片索引（`u32` 索引合法）：
+  ```zig
+  const gx = @as(u32, @intCast(x - layer.leftUp[0])) / layer.gridLength;
+  const gy = @as(u32, @intCast(y - layer.leftUp[1])) / layer.gridLength;
+  const grid = &layer.grids[gy * layer.col + gx];
+  ```
 
 ## Content pipeline (watcher)
 
@@ -60,20 +77,20 @@ The batch scripts in `build_script/` (`shaderCompile.bat`, `pipelineParse.bat`, 
 ```
 
 - `magic` 4B: ASCII `"lMap"`
-- `depth` 4B: grid layer count
-- `totalGridCount` 4B u32 — number of grids
+- `depth` 4B: grid layer count — file contains `depth + 1` layers (root layer included)
+- `totalGridCount` 4B u32 — Σ per-layer `row × col` (spatial grid slots, NOT written grids); reader uses it to size the grids memory region without traversal
 - `totalItemCount` 4B u32 — number of items
 - `totalPassCount` 4B u32 — number of passes
 - `totalU8Count` 4B u32 — number of u8
-- `offsets`: `depth * 4B` — file offset where each grid layer starts
+- `offsets`: `(depth + 1) * 4B` — file offset where each grid layer starts
 - **Grid layer** (all grids of the same depth stored together):
   - `gridRow` 4B — grid row of this layer
   - `gridCol` 4B — grid col of this layer
   - `leftUp` 8B — layer min (x, y) across its grids (written after the loop, like row/col)
   - `gridLength` 4B — grid size of this layer
-  - `gridCount` 4B u32 — number of grids in this layer
+  - `gridCount` 4B u32 — number of **non-blank** grids written for this layer; the layer's in-memory spatial array is `row × col`, blank slots keep struct defaults
   - Grid × `gridCount`:
-    - `leftUp` 8B — (x, y) coordinates
+    - `leftUp` 8B — (x, y) coordinates; locates the grid's slot in the layer array: `idx = (y - layerLeftUp.y) / gridLength * col + (x - layerLeftUp.x) / gridLength`
     - `itemCount` 4B
     - Item × `itemCount`:
       - `nameLen` 4B, then `name` bytes

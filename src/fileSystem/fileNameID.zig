@@ -18,14 +18,15 @@ const list = [_]KV{
 .{ "bottom.obj", 10 },
 .{ "bottom.png", 11 },
 .{ "cube.glb", 12 },
-.{ "dragon_0.vtx", 13 },
+.{ "Suzanne_0.vtx", 13 },
 .{ "1_3_bird_feather.glb", 14 },
-.{ "Cube_0.vtx", 15 },
+.{ "dragon_0.vtx", 15 },
 .{ "box.obj", 16 },
 .{ "box.png", 17 },
 .{ "dragon.glb", 18 },
-.{ "Suzanne_0.vtx", 19 },
+.{ "LoadMap", 19 },
 .{ "monkey.glb", 20 },
+.{ "Plane.001_0.vtx", 21 },
 .{ "voxel.mtl", 22 },
 .{ "voxel.obj", 23 },
 .{ "voxel.png", 24 },
@@ -101,7 +102,8 @@ const list = [_]KV{
 .{ "iv_feather.pipeb", 94 },
 .{ "large_bilied_crow1Blue-violet.binary", 95 },
 .{ "feather_lut.ktx2", 96 },
-.{ "Plane.001_0.vtx", 97 },
+.{ "Cube_0.vtx", 97 },
+.{ "test.lMap", 99 },
 };
 
 break: map std.StaticStringMap(i32).initComptime(list);
@@ -116,4 +118,4 @@ return FileNameIdHashMap.get(fileName) orelse @compileError("not found");
 }
 
 pub fn getID(fileName: []const u8) i32 {    return FileNameIdHashMap.get(fileName) orelse std.debug.panic("ilegal name", .{}); }
-pub const MaxID = 97;
+pub const MaxID = 99;
