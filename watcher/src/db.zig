@@ -4,6 +4,7 @@ const sqlite = sqlDB.sqlite;
 
 const tables = @import("tables");
 const Types = @import("types");
+const resourceProcess = @import("resourceProcess");
 
 pub const iterateFolder = @import("iterateFolder.zig");
 pub const judgeFileType = iterateFolder.judgeFileType;
@@ -18,7 +19,7 @@ const ModelLoadParameter = tables.ModelLoadParameter;
 const ShaderPipelineGraphNode = tables.ShaderPipelineGraphNode;
 const ShaderPipelineGraphEdge = tables.ShaderPipelineGraphEdge;
 
-pub const FileType = Types.FileType;
+pub const FileType = resourceProcess.ProcessType;
 pub const NodeType = Types.NodeType;
 
 const tableNames = [_][]const u8{ "ImageLoadParameter", "ModelLoadParameter" };

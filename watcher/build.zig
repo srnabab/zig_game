@@ -180,6 +180,11 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const resourceProcess_mod = b.createModule(.{
+        .root_source_file = b.path("../src/resourceProcess.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     //
     pipelinParse_mod.addImport("enumFromC", enum_c_mod);
@@ -233,6 +238,7 @@ pub fn build(b: *std.Build) void {
     db_mod.addImport("blake_hash", blake3_hash_mod);
     db_mod.addImport("vertexStruct", vertexStruct_mod);
     db_mod.addImport("meshopt", meshopt_mod);
+    db_mod.addImport("resourceProcess", resourceProcess_mod);
     db_mod.addImport("cgltf", cgltf_mod);
 
     exe_mod.addImport("db", db_mod);

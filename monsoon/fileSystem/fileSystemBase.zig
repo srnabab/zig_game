@@ -5,7 +5,7 @@ const assert = std.debug.assert;
 const tables = @import("tables");
 const vertexStruct = @import("vertexStruct");
 const fileNameID = @import("fileNameID.zig");
-const Types = @import("types");
+const resourceProcess = @import("resourceProcess");
 
 pub const comptimeGetID = fileNameID.comptimeGetID;
 pub const getID = fileNameID.getID;
@@ -152,7 +152,7 @@ pub fn getFile(io: std.Io, id: i64, cwd: std.Io.Dir, db: ?*sqlite.sqlite3) !std.
     return cwd.openFile(io, buffer[0..len], .{});
 }
 
-pub const FileType = Types.FileType;
+pub const FileType = resourceProcess.ProcessType;
 
 pub fn getFileType(id: i32, db: ?*sqlite.sqlite3) sqlDB.sqliteError!FileType {
     var ContentPathT = ContentPath.init(db);

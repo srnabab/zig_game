@@ -11,6 +11,7 @@ const cgltf = @import("cgltf");
 const vertexStruct = @import("vertexStruct");
 const meshopt = @import("meshopt");
 const Types = @import("types");
+const resourceProcess = @import("resourceProcess");
 
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
@@ -19,13 +20,7 @@ const assert = std.debug.assert;
 
 const SceneFileName = "Scenes.json";
 
-const ShaderLoad = struct { subPath: []const u8, len: usize };
-
-const FileData = union {
-    shader: ShaderLoad,
-};
-
-const FileType = Types.FileType;
+const FileType = resourceProcess.ProcessType;
 
 const slash = sl: {
     switch (builtin.os.tag) {
@@ -51,35 +46,7 @@ const GLTF = "glTF";
 
 const FileTypeHashTable = map: {
     const maptype = std.StaticStringMap(FileType);
-    const KV = struct {
-        []const u8,
-        FileType,
-    };
-    const list = [_]KV{
-        .{ "", FileType.DIR },
-        .{ ".obj", FileType.OBJ },
-        .{ ".mtl", FileType.MTL },
-        .{ ".png", FileType.PNG },
-        .{ ".tsdI", FileType.TSDI },
-        .{ ".tsd", FileType.TSD },
-        .{ ".ttf", FileType.TTF },
-        .{ ".wav", FileType.WAV },
-        .{ ".spv", FileType.SPV },
-        .{ ".txt", FileType.TXT },
-        .{ ".gltf", FileType.GLTF },
-        .{ ".glb", FileType.GLTF },
-        .{ ".vtx", FileType.VTX },
-        .{ ".frag", FileType.Shader },
-        .{ ".vert", FileType.Shader },
-        .{ ".comp", FileType.Shader },
-        .{ ".mesh", FileType.Shader },
-        .{ ".task", FileType.Shader },
-        .{ ".pipe", FileType.Pipeline },
-        .{ ".samp", FileType.Sampler },
-        .{ ".pipeb", FileType.PipeB },
-        .{ ".sampler", FileType.SamplerB },
-        .{ ".ktx2", FileType.KTX2 },
-    };
+    const list = resourceProcess.list;
 
     const maps = maptype.initComptime(list);
     break :map maps;

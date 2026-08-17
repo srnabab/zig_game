@@ -519,6 +519,7 @@ pub fn build(b: *std.Build) void {
     global_mod.addImport("vertexStruct", vertexStruct_mod);
     global_mod.addImport("ms_std", ms_mod);
 
+    fileSystem_mod.addImport("resourceProcess", resourceProcess_mod);
     fileSystem_mod.addImport("sqlDb", sqliteModule);
     fileSystem_mod.addImport("global", global_mod);
     fileSystem_mod.addImport("tables", tables_mod);
