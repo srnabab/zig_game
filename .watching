@@ -1,4 +1,4 @@
-Shaders
-Sampler
-pipeline
+Assets\Shaders
+Assets\Sampler
+Assets\pipeline
 zig-out\bin\Content
