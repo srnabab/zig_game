@@ -14,7 +14,7 @@ const steamInner = steam.steamInner;
 const Window = @import("window.zig");
 const update = @import("update.zig");
 const render = @import("render.zig");
-const math = @import("math");
+
 const mesh = @import("mesh");
 const instance = @import("instance");
 
@@ -32,7 +32,7 @@ const resource = @import("resource");
 const file = @import("fileSystem");
 const pass = @import("pass");
 const renderFlow = @import("renderFlow");
-const setPass = @import("setPass.zig");
+const setPass = @import("setPass");
 
 // const cgltf = @import("cgltf");
 

@@ -27,6 +27,8 @@ const ktx = @import("ktx");
 
 const vec3 = vertexStruct.vec3;
 
+const resourceProcess = @import("resourcePricess");
+
 pub const ResourceType = enum {
     texture,
     position2D,

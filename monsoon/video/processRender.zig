@@ -21,7 +21,7 @@ const Handle = Handles.Handle;
 const renderDebug = @import("renderDebug");
 const Capability = @import("capability");
 
-const logStructSize = @import("logStructSize").logStructSize;
+const logStructSize = mstd.meta.logStructSize;
 
 var mutex: std.Io.Mutex = .init;
 

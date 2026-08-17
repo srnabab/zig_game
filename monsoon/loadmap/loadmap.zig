@@ -1,5 +1,8 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const atomic = std.atomic;
+
+const cglm = @import("cglm");
 
 const Self = @This();
 
@@ -11,6 +14,17 @@ const GridLayer = struct {
     leftUp: [2]i32,
 
     grids: []Grid,
+
+    pub fn getGridIndex(self: *const GridLayer, x: i32, y: i32) ?u32 {
+        const X: u32 = cglm.abs(x - self.leftUp[0]) / self.gridLength;
+        const Y: u32 = cglm.abs(y - self.leftUp[1]) / self.gridLength;
+
+        if (X >= 0 and X < self.col and Y >= 0 and Y < self.row) {
+            return Y * self.col + X;
+        }
+
+        return null;
+    }
 };
 
 const Pass = struct {
@@ -18,11 +32,19 @@ const Pass = struct {
     len: u32,
 };
 
+const GridState = enum(u8) {
+    unloaded,
+    loading,
+    loaded,
+    unloading,
+};
+
 const Grid = struct {
     // leftUp: [2]i32,
     items: []Item = &.{},
     passes: []Pass = &.{},
 
+    state: GridState = .unloaded,
     haveSub: bool = false,
 };
 
@@ -32,6 +54,12 @@ const Item = struct {
     bufferName: ?[]u8 = null,
 };
 
+const Loading = struct {
+    grid: *Grid,
+    progress: atomic.Value(u32) = .init(0),
+    done: bool = false,
+};
+
 layers: []GridLayer,
 
 grids: []Grid,
@@ -39,7 +67,22 @@ items: []Item,
 passes: []Pass,
 strs: []u8,
 
+allocator: Allocator,
+loadingQueue: std.ArrayList(Loading),
+
+pub const empty = Self{
+    .layers = &.{},
+    .grids = &.{},
+    .items = &.{},
+    .passes = &.{},
+    .strs = &.{},
+    .allocator = undefined,
+    .loadingQueue = .empty,
+};
+
 pub fn loadLoadmap(gpa: Allocator, mem: []u8) !Self {
+    if (mem.len < 64) return .empty;
+
     const depth = std.mem.readInt(u32, mem[4..8], .native);
     const totalGridCount = std.mem.readInt(u32, mem[8..12], .native);
     const totalItemCount = std.mem.readInt(u32, mem[12..16], .native);
@@ -155,9 +198,11 @@ pub fn loadLoadmap(gpa: Allocator, mem: []u8) !Self {
             const gy = @as(u32, @intCast(y - layer.leftUp[1])) / layer.gridLength;
 
             const grid = &layer.grids[gy * layer.col + gx];
-            grid.items = gridItems;
-            grid.passes = gridPasses;
-            grid.haveSub = false;
+            grid.* = .{
+                .items = gridItems,
+                .passes = gridPasses,
+                .haveSub = false,
+            };
         }
     }
 
@@ -167,5 +212,29 @@ pub fn loadLoadmap(gpa: Allocator, mem: []u8) !Self {
         .items = items,
         .passes = passes,
         .strs = strs,
+        .loadingQueue = try .initCapacity(gpa, 4),
+        .allocator = gpa,
     };
+}
+
+pub fn loadResource(self: *Self, pos: cglm.vec2) !void {
+    const x: i32 = @intCast(pos[0]);
+    const y: i32 = @intCast(pos[1]);
+
+    for (self.layers) |layer| {
+        const center = layer.getGridIndex(x, y) orelse return;
+
+        switch (layer.grids[center].state) {
+            .unloaded => {
+                try self.loadingQueue.append(self.allocator, .{ .grid = &layer.grids[center] });
+                layer.grids[center].state = .loading;
+            },
+            .loading, .loaded => {
+                continue;
+            },
+            .unloading => {
+                // cancel
+            },
+        }
+    }
 }

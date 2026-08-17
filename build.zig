@@ -40,7 +40,7 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
     const vma_mod = vma_c.createModule();
-    vma_mod.addCSourceFile(.{ .file = b.path("src/vma/vma_impl.cpp"), .language = .cpp });
+    vma_mod.addCSourceFile(.{ .file = b.path("monsoon/vma/vma_impl.cpp"), .language = .cpp });
     const enum_c_mod = b.createModule(.{
         .root_source_file = b.path("shared/enumFromC.zig"),
         .target = target,
@@ -92,17 +92,17 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     const gen_fileName_ID_mod = b.createModule(.{
-        .root_source_file = b.path("src/fileSystem/fileName_ID/main.zig"),
+        .root_source_file = b.path("monsoon/fileSystem/fileName_ID/main.zig"),
         .target = target,
         .optimize = optimize,
     });
     const vulkanType_mod = b.createModule(.{
-        .root_source_file = b.path("src/video/vulkanType.zig"),
+        .root_source_file = b.path("monsoon/video/vulkanType.zig"),
         .target = target,
         .optimize = optimize,
     });
     // const gen_mod = b.createModule(.{
-    //     .root_source_file = b.path("src/video/gen.zig"),
+    //     .root_source_file = b.path("monsoon/video/gen.zig"),
     //     .target = target,
     //     .optimize = .ReleaseFast,
     //     .link_libc = true,
@@ -115,7 +115,7 @@ pub fn build(b: *std.Build) void {
     });
     const sdl_c_mod = sdl_c.createModule();
     const sdl_mod = b.createModule(.{
-        .root_source_file = b.path("src/sdl.zig"),
+        .root_source_file = b.path("monsoon/sdl.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -134,27 +134,27 @@ pub fn build(b: *std.Build) void {
     stb_image_mod.addCSourceFile(.{ .file = b.path("include/stb/stb_image_impl.h"), .language = .c });
 
     const textureSet_mod = b.createModule(.{
-        .root_source_file = b.path("src/video/textureSet.zig"),
+        .root_source_file = b.path("monsoon/video/textureSet.zig"),
         .target = target,
         .optimize = optimize,
     });
     const video_mod = b.createModule(.{
-        .root_source_file = b.path("src/video/VkStruct.zig"),
+        .root_source_file = b.path("monsoon/video/VkStruct.zig"),
         .target = target,
         .optimize = optimize,
     });
     const global_mod = b.createModule(.{
-        .root_source_file = b.path("src/global.zig"),
+        .root_source_file = b.path("monsoon/global.zig"),
         .target = target,
         .optimize = optimize,
     });
     const fileSystem_mod = b.createModule(.{
-        .root_source_file = b.path("src/fileSystem/fileSystem.zig"),
+        .root_source_file = b.path("monsoon/fileSystem/fileSystem.zig"),
         .target = target,
         .optimize = optimize,
     });
     const exe_mod = b.createModule(.{
-        .root_source_file = b.path("src/main.zig"),
+        .root_source_file = b.path("monsoon/main.zig"),
         .target = target,
         .optimize = optimize,
         .link_libcpp = true,
@@ -166,27 +166,27 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
     const steam_c_mod = steam_c.createModule();
-    steam_c_mod.addCSourceFile(.{ .file = b.path("src/steam_C/steamC.cpp"), .language = .cpp, .flags = &cpp_compileFlag });
-    steam_c_mod.addCSourceFile(.{ .file = b.path("src/steam_C/ISteamUserStats.cpp"), .language = .cpp, .flags = &cpp_compileFlag });
+    steam_c_mod.addCSourceFile(.{ .file = b.path("monsoon/steam_C/steamC.cpp"), .language = .cpp, .flags = &cpp_compileFlag });
+    steam_c_mod.addCSourceFile(.{ .file = b.path("monsoon/steam_C/ISteamUserStats.cpp"), .language = .cpp, .flags = &cpp_compileFlag });
     const steam_mod = b.createModule(.{
-        .root_source_file = b.path("src/steam_C/SteamC.zig"),
+        .root_source_file = b.path("monsoon/steam_C/SteamC.zig"),
         .target = target,
         .optimize = optimize,
         .link_libcpp = true,
     });
     const processRender_mod = b.createModule(.{
-        .root_source_file = b.path("src/video/processRender.zig"),
+        .root_source_file = b.path("monsoon/video/processRender.zig"),
         .target = target,
         .optimize = optimize,
     });
     const sampler_read_mod = b.createModule(.{
-        .root_source_file = b.path("src/sampler/read.zig"),
+        .root_source_file = b.path("monsoon/sampler/read.zig"),
         .target = target,
         .optimize = optimize,
     });
 
     const vertices_mod = b.createModule(.{
-        .root_source_file = b.path("src/video/vertices.zig"),
+        .root_source_file = b.path("monsoon/video/vertices.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -198,42 +198,37 @@ pub fn build(b: *std.Build) void {
     });
     const cglm_mod = cglm_c.createModule();
     const handle_mod = b.createModule(.{
-        .root_source_file = b.path("src/handle/handle.zig"),
+        .root_source_file = b.path("monsoon/handle/handle.zig"),
         .target = target,
         .optimize = optimize,
     });
     const resultToError_mod = b.createModule(.{
-        .root_source_file = b.path("src/video/resultToError.zig"),
+        .root_source_file = b.path("monsoon/video/resultToError.zig"),
         .target = target,
         .optimize = optimize,
     });
     const error_mod = b.createModule(.{
-        .root_source_file = b.path("src/error/messageBox.zig"),
+        .root_source_file = b.path("monsoon/error/messageBox.zig"),
         .target = target,
         .optimize = optimize,
     });
     const vk_types_mod = b.createModule(.{
-        .root_source_file = b.path("src/video/vkStruct/types.zig"),
+        .root_source_file = b.path("monsoon/video/vkStruct/types.zig"),
         .target = target,
         .optimize = optimize,
     });
     const debug_mod = b.createModule(.{
-        .root_source_file = b.path("src/debug/debug.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    const logStructSize_mod = b.createModule(.{
-        .root_source_file = b.path("src/logStructSize.zig"),
+        .root_source_file = b.path("monsoon/debug/debug.zig"),
         .target = target,
         .optimize = optimize,
     });
     const input_mod = b.createModule(.{
-        .root_source_file = b.path("src/input/input.zig"),
+        .root_source_file = b.path("monsoon/input/input.zig"),
         .target = target,
         .optimize = optimize,
     });
     // const meshopt_mod = b.createModule(.{
-    //     .root_source_file = b.path("src/meshopt/meshopt.zig"),
+    //     .root_source_file = b.path("monsoon/meshopt/meshopt.zig"),
     //     .target = target,
     //     .optimize = optimize,
     // });
@@ -248,42 +243,42 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     const resource_mod = b.createModule(.{
-        .root_source_file = b.path("src/resource.zig"),
+        .root_source_file = b.path("monsoon/resource.zig"),
         .target = target,
         .optimize = optimize,
     });
     const pass_mod = b.createModule(.{
-        .root_source_file = b.path("src/pass/PassImp.zig"),
+        .root_source_file = b.path("monsoon/pass/PassImp.zig"),
         .target = target,
         .optimize = optimize,
     });
     const renderFlow_mod = b.createModule(.{
-        .root_source_file = b.path("src/pass/renderFlow.zig"),
+        .root_source_file = b.path("monsoon/pass/renderFlow.zig"),
         .target = target,
         .optimize = optimize,
     });
     const renderDebug_mod = b.createModule(.{
-        .root_source_file = b.path("src/video/debug/print.zig"),
+        .root_source_file = b.path("monsoon/video/debug/print.zig"),
         .target = target,
         .optimize = optimize,
     });
     const mesh_mod = b.createModule(.{
-        .root_source_file = b.path("src/video/mesh/mesh.zig"),
+        .root_source_file = b.path("monsoon/video/mesh/mesh.zig"),
         .target = target,
         .optimize = optimize,
     });
     const instance_mod = b.createModule(.{
-        .root_source_file = b.path("src/video/instance/instance.zig"),
+        .root_source_file = b.path("monsoon/video/instance/instance.zig"),
         .target = target,
         .optimize = optimize,
     });
     const passGroupMapping_mod = b.createModule(.{
-        .root_source_file = b.path("src/video/pass/pass.zig"),
+        .root_source_file = b.path("monsoon/video/pass/pass.zig"),
         .target = target,
         .optimize = optimize,
     });
     const vulkanCapability_mod = b.createModule(.{
-        .root_source_file = b.path("src/video/capability.zig"),
+        .root_source_file = b.path("monsoon/video/capability.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -296,26 +291,39 @@ pub fn build(b: *std.Build) void {
     const ktx_mod = ktx2_c.createModule();
 
     const loadmap_mod = b.createModule(.{
-        .root_source_file = b.path("src/loadmap/loadmap.zig"),
+        .root_source_file = b.path("monsoon/loadmap/loadmap.zig"),
         .target = target,
         .optimize = optimize,
     });
     const ms_mod = b.createModule(.{
-        .root_source_file = b.path("src/ms_std/std.zig"),
+        .root_source_file = b.path("monsoon/ms_std/std.zig"),
         .target = target,
         .optimize = optimize,
     });
-    // const ktx2_vulkan_c = b.addTranslateC(.{
-    //     .root_source_file = b.path("include/KTX/ktxvulkan.h"),
-    //     .target = target,
-    //     .optimize = optimize,
-    //     .link_libc = true,
-    // });
-    // const ktx_vulkan_mod = ktx2_vulkan_c.createModule();
+    const setPass_mod = b.createModule(.{
+        .root_source_file = b.path("src/setPass.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const resourceProcess_mod = b.createModule(.{
+        .root_source_file = b.path("src/resourceProcess.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
-    // dependency
-    // ktx2_vulkan_c.addIncludePath(b.path("include"));
-    // ktx2_vulkan_c.addIncludePath(b.path("include/KTX"));
+    // aaa
+    resourceProcess_mod.addImport("handle", handle_mod);
+
+    setPass_mod.addImport("vertexStruct", vertexStruct_mod);
+    setPass_mod.addImport("cglm", cglm_mod);
+    setPass_mod.addImport("vulkan", vk_c_mod);
+    setPass_mod.addImport("renderFlow", renderFlow_mod);
+    setPass_mod.addImport("video", video_mod);
+    setPass_mod.addImport("processRender", processRender_mod);
+    setPass_mod.addImport("textureSet", textureSet_mod);
+    setPass_mod.addImport("pass", pass_mod);
+    setPass_mod.addImport("renderDebug", renderDebug_mod);
+    setPass_mod.addImport("ms_std", ms_mod);
 
     ms_mod.addImport("tracy", tracy.module("tracy"));
     ms_mod.addImport("cglm", cglm_mod);
@@ -369,6 +377,7 @@ pub fn build(b: *std.Build) void {
     resource_mod.addImport("fileSystem", fileSystem_mod);
     resource_mod.addImport("ktx", ktx_mod);
     resource_mod.addImport("ms_std", ms_mod);
+    resource_mod.addImport("resourceProcess", resourceProcess_mod);
     // resource_mod.addImport("ktx_vulkan", ktx_vulkan_mod);
 
     mesh_mod.addImport("processRender", processRender_mod);
@@ -499,7 +508,6 @@ pub fn build(b: *std.Build) void {
     processRender_mod.addImport("tracy", tracy.module("tracy"));
     processRender_mod.addImport("ms_std", ms_mod);
     processRender_mod.addImport("handle", handle_mod);
-    processRender_mod.addImport("logStructSize", logStructSize_mod);
     processRender_mod.addImport("renderDebug", renderDebug_mod);
     processRender_mod.addImport("capability", vulkanCapability_mod);
 
@@ -520,6 +528,7 @@ pub fn build(b: *std.Build) void {
     fileSystem_mod.addImport("vertexStruct", vertexStruct_mod);
     fileSystem_mod.addIncludePath(b.path("include"));
 
+    exe_mod.addImport("setPass", setPass_mod);
     exe_mod.addImport("ms_std", ms_mod);
     exe_mod.addImport("loadmap", loadmap_mod);
     exe_mod.addImport("passGroupMapping", passGroupMapping_mod);
@@ -602,7 +611,7 @@ pub fn build(b: *std.Build) void {
 
     const runGenFileNameIdExe = b.step("create hash map", "create filename id static string hash map");
     const runGenFileNameIdExe_cmd = b.addRunArtifact(genFileNameIDexe);
-    runGenFileNameIdExe_cmd.addArg(b.fmt("{s}/{s}", .{ root_path, "src/fileSystem/fileNameID.zig" }));
+    runGenFileNameIdExe_cmd.addArg(b.fmt("{s}/{s}", .{ root_path, "monsoon/fileSystem/fileNameID.zig" }));
 
     const waf = b.addWriteFiles();
     _ = waf.addCopyFile(exe.getEmittedAsm(), "main.asm");

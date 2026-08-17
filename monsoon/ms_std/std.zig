@@ -10,3 +10,5 @@ pub const MemoryPoolSlice = @import("memoryPool.zig").MemoryPoolSlice;
 pub const ObjectPool = @import("objectPool.zig").ObjectPool;
 pub const Queue = @import("queue.zig").Queue;
 pub const Math = @import("math.zig");
+
+pub const meta = @import("meta/meta.zig");

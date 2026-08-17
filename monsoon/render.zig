@@ -36,7 +36,7 @@ const pass = @import("pass");
 
 const instance = @import("instance");
 
-const ViewBoundsAndTotalSpriteCount = @import("setPass.zig").ViewBoundsAndTotalSpriteCount;
+const ViewBoundsAndTotalSpriteCount = @import("setPass").ViewBoundsAndTotalSpriteCount;
 
 pub const Args = struct {
     io: std.Io,
