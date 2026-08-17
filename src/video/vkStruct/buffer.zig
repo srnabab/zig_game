@@ -1,5 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const mstd = @import("ms_std");
 const vk = @import("vulkan");
 const vmaStruct = @import("vma.zig");
 const vma = vmaStruct.vma;
@@ -8,13 +9,13 @@ const VkResultToError = @import("resultToError");
 const vulkanType = VkResultToError.vulkanType;
 const VkError = vulkanType.VkError;
 pub const Usage = @import("processRender").drawC.BufferUsage;
-const FixedIndexArray = @import("fixedIndexArray").FixedIndexArray;
+const FixedIndexArray = mstd.FixedIndexArray;
 const Handles = @import("handle");
 const Handle = Handles.Handle;
 const getIndex = @import("handle").getIndex;
 const global = @import("global");
 const tracy = @import("tracy");
-const math = @import("math");
+const math = mstd.Math;
 const VulkanCapability = @import("capability");
 
 const assert = std.debug.assert;

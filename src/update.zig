@@ -182,6 +182,8 @@ pub fn update_thread_func(args: Args) !void {
     }
     defer resourceGroup.cancel(io);
 
+    defer resource.deinit(gpa);
+
     // var resourceValue: u32 = 0;
 
     var stateBufferValue: u32 = 0;

@@ -82,8 +82,8 @@ pub const getID = base.getID;
 
 pub const FileType = base.FileType;
 
-pub fn getFileType(name: []const u8, db: ?*sqlite.sqlite3) sqlDB.sqliteError!FileType {
-    return base.getFileType(getID(name), db);
+pub fn getFileType(id: i32, db: ?*sqlite.sqlite3) sqlDB.sqliteError!FileType {
+    return base.getFileType(id, db);
 }
 
 pub fn deinit(db: ?*sqlite.sqlite3) void {

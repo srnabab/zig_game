@@ -1,17 +1,21 @@
 const std = @import("std");
 const Thread = std.Thread;
 const Atomic = std.atomic;
+
+const mstd = @import("ms_std");
 pub const drawC = @import("drawCommand.zig");
 // const drawCProcess = @import("drawCommandProcess.zig");
 const texture = @import("textureSet");
 const vk = @import("vulkan");
 const VkStruct = @import("video");
 const vulkanType = VkStruct.vulkanType;
-const Queue = @import("queue").Queue;
+const Queue = mstd.Queue;
 const global = @import("global");
 const tracy = @import("tracy");
 const math = @import("math");
-const uniqueArrayList = @import("uniqueArrayList").UniqueArrayList;
+
+const uniqueArrayList = mstd.UniqueArrayList;
+
 const Handles = @import("handle");
 const Handle = Handles.Handle;
 const renderDebug = @import("renderDebug");

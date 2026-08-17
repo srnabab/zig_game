@@ -3,6 +3,8 @@ const Io = std.Io;
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 
+const mstd = @import("ms_std");
+
 const vk = @import("vk");
 const vma = @import("vma");
 const VkStruct = @import("video");
@@ -14,7 +16,7 @@ const vertexStruct = @import("vertexStruct");
 const Mesh_t = @import("mesh").Mesh_t;
 const Instance_t = @import("instance").Instance_t;
 const global = @import("global");
-const ringBuffer = @import("ringBuffer");
+const ringBuffer = mstd.RingBuffer;
 
 const file = @import("fileSystem");
 const sqlite3 = ?*file.sqlite.sqlite3;
@@ -108,6 +110,8 @@ fn MutexArray(T: type) type {
     return struct {
         const Self = @This();
 
+        const Error = std.Io.Cancelable || Allocator.Error;
+
         mutex: std.Io.Mutex,
         array: std.array_list.Managed(T),
 
@@ -121,18 +125,26 @@ fn MutexArray(T: type) type {
         pub fn deinit(self: *Self) void {
             self.array.deinit();
         }
+
+        pub fn append(self: *Self, io: Io, item: T) Error!void {
+            try self.mutex.lock(io);
+            defer self.mutex.unlock(io);
+
+            const new_item_ptr = try self.array.addOne();
+            new_item_ptr.* = item;
+        }
     };
 }
 
-const Name_FileType_Handle = struct {
-    name: []u8,
+const ID_FileType_Handle = struct {
+    id: i32,
     fileType: file.FileType,
     handle: Handle,
 };
 
 pub const ResourcesQueue = MutexArray(Resource);
-pub const NameQueue = MutexArray(Name_FileType_Handle);
-pub const DataBaseHandleArrayType = ringBuffer.RingBuffer(sqlite3, 8);
+pub const NameQueue = MutexArray(ID_FileType_Handle);
+pub const DataBaseHandleArrayType = ringBuffer(sqlite3, 8);
 
 pub const ResourceThreadArgs = struct {
     io: std.Io,
@@ -146,8 +158,20 @@ pub const ResourceThreadArgs = struct {
     vulkan: *VkStruct,
 };
 
+var idHandleCache: std.AutoHashMapUnmanaged(i32, Handle) = .empty;
+
+pub fn deinit(gpa: Allocator) void {
+    idHandleCache.deinit(gpa);
+}
+
 pub fn readResource(io: Io, gpa: std.mem.Allocator, handles: *global.HandlesType, nameArray: *NameQueue, mainSqlite: sqlite3, fileName: []const u8) !?Handle {
-    const fileType = file.getFileType(fileName, mainSqlite) catch |err| {
+    const fileID = file.getID(fileName);
+
+    if (idHandleCache.contains(fileID)) {
+        return idHandleCache.get(fileID).?;
+    }
+
+    const fileType = file.getFileType(fileID, mainSqlite) catch |err| {
         std.log.err("{s}", .{@errorName(err)});
         return null;
     };
@@ -166,15 +190,13 @@ pub fn readResource(io: Io, gpa: std.mem.Allocator, handles: *global.HandlesType
 
     const handle_ = handles.createHandle(Handles.WaitFill, handleType);
 
-    try nameArray.mutex.lock(io);
-    defer nameArray.mutex.unlock(io);
-
-    const name = try gpa.dupe(u8, fileName);
-    try nameArray.array.append(.{
+    try nameArray.append(io, .{
         .fileType = fileType,
         .handle = handle_,
-        .name = name,
+        .id = fileID,
     });
+
+    try idHandleCache.put(gpa, fileID, handle_);
 
     return handle_;
 }
@@ -195,7 +217,6 @@ pub fn processResource(args: ResourceThreadArgs) Io.Cancelable!void {
 
         if (pack_) |pack| {
             errdefer args.handles.destroyHandle(pack.handle);
-            defer gpa.free(pack.name);
 
             var sqlite: ?sqlite3 = null;
             while (sqlite == null) {
@@ -211,7 +232,7 @@ pub fn processResource(args: ResourceThreadArgs) Io.Cancelable!void {
                         io,
                         gpa,
                         sqlite.?,
-                        pack.name,
+                        pack.id,
                         pack.handle,
                         resourceArray,
                     ) catch continue;
@@ -222,7 +243,7 @@ pub fn processResource(args: ResourceThreadArgs) Io.Cancelable!void {
                         gpa,
                         sqlite.?,
                         vulkan,
-                        pack.name,
+                        pack.id,
                         pack.handle,
                         resourceArray,
                     ) catch {
@@ -240,7 +261,7 @@ pub fn processResource(args: ResourceThreadArgs) Io.Cancelable!void {
                         gpa,
                         sqlite.?,
                         vulkan,
-                        pack.name,
+                        pack.id,
                         pack.handle,
                         resourceArray,
                     ) catch continue;
@@ -251,7 +272,7 @@ pub fn processResource(args: ResourceThreadArgs) Io.Cancelable!void {
                         gpa,
                         sqlite.?,
                         vulkan,
-                        pack.name,
+                        pack.id,
                         pack.handle,
                         resourceArray,
                     ) catch continue;
@@ -281,11 +302,10 @@ fn processResource_Unknown(
     io: Io,
     gpa: Allocator,
     sqlite: sqlite3,
-    name: []const u8,
+    fileID: i32,
     handle: Handle,
     resourceArray: *MutexArray(Resource),
 ) !void {
-    const fileID = file.getID(name);
     const f = file.getFile(io, fileID, sqlite) catch |err| {
         std.log.err("{s}", .{@errorName(err)});
         return err;
@@ -326,13 +346,10 @@ fn processResource_PNG(
     gpa: Allocator,
     sqlite: sqlite3,
     vulkan: *VkStruct,
-    name: []const u8,
+    fileID: i32,
     handle: Handle,
     resourceArray: *MutexArray(Resource),
 ) !void {
-    const fileID = file.getID(name);
-    std.log.debug("ID {d}", .{fileID});
-
     const img = file.getImageLoadParam(io, fileID, sqlite.?) catch |err| {
         std.log.err("{s}", .{@errorName(err)});
         return err;
@@ -447,13 +464,10 @@ fn processResource_VTX(
     gpa: Allocator,
     sqlite: sqlite3,
     vulkan: *VkStruct,
-    name: []const u8,
+    fileID: i32,
     handle: Handle,
     resourceArray: *MutexArray(Resource),
 ) !void {
-    const fileID = file.getID(name);
-    std.log.debug("ID {d}", .{fileID});
-
     const res = file.getMeshLoadParam(io, fileID, sqlite) catch |err| {
         std.log.err("{s}", .{@errorName(err)});
         return err;
@@ -574,12 +588,10 @@ fn processResource_KTX2(
     gpa: Allocator,
     sqlite: sqlite3,
     vulkan: *VkStruct,
-    name: []const u8,
+    fileID: i32,
     handle: Handle,
     resourceArray: *MutexArray(Resource),
 ) !void {
-    const fileID = file.getID(name);
-    std.log.debug("ID {d}", .{fileID});
     const img = file.getFile(io, fileID, sqlite.?) catch |err| {
         std.log.err("{s}", .{@errorName(err)});
         return err;

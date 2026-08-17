@@ -1,5 +1,6 @@
 const std = @import("std");
-const ringBuffer = @import("ringBuffer");
+
+const ringBuffer = @import("ringBuffer.zig");
 
 /// one thread use getEmpty and pushReady
 /// another thread use getReady and pushEmpty

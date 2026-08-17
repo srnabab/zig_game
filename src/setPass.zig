@@ -1,5 +1,7 @@
 const std = @import("std");
-const math = @import("math");
+const mstd = @import("ms_std");
+
+const math = mstd.Math;
 
 const renderFlow = @import("renderFlow");
 const vk = @import("vulkan");

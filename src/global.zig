@@ -1,13 +1,16 @@
 pub const VkStruct = @import("video");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+
+const mstd = @import("ms_std");
+
 const OneTimeCommand = @import("processRender").oneTimeCommand;
 const TextureSet = @import("textureSet");
 pub const Handles = @import("handle");
 const vertexStruct = @import("vertexStruct");
 const math = @import("math");
-const twoChannel = @import("twoChannel");
-const stateBuffering = @import("stateBuffering");
+const twoChannel = mstd.TwoChannel;
+const stateBuffering = mstd.StateBuffering;
 const resource = @import("resource");
 
 pub const databaseName = "Content.db";
@@ -20,8 +23,8 @@ pub const LOGICAL_HEIGHT = 600;
 pub const LOGICAL_WEIGHT = 800;
 
 pub const HandlesType = Handles.Handles(10240, .Once);
-pub const ResourceArrayType = twoChannel.twoChannel(*std.array_list.Managed(resource.Resource), 4);
-pub const StateBufferingType = stateBuffering.stateBuffering(3, u32);
+pub const ResourceArrayType = twoChannel(*std.array_list.Managed(resource.Resource), 4);
+pub const StateBufferingType = stateBuffering(3, u32);
 
 pub const Name = "Game";
 pub const AppVersionMajor = 0;

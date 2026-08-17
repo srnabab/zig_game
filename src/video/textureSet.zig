@@ -2,14 +2,17 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Mutex = std.Io.Mutex;
 const Atomic = std.atomic;
+
+const mstd = @import("ms_std");
+
 const file = @import("fileSystem");
 const stb_image = @import("stb_image");
 const VkStruct = @import("video");
 const vk = VkStruct.vk;
 const global = @import("global");
-const MemoryPool = @import("memoryPool").MemoryPoolSlice;
+const MemoryPool = mstd.MemoryPoolSlice;
 const tracy = @import("tracy");
-const objectPool = @import("objectPool").ObjectPool;
+const objectPool = mstd.ObjectPool;
 const Handles = @import("handle");
 const Handle = Handles.Handle;
 const processRender = @import("processRender");

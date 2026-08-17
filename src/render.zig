@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const sdl = @import("sdl").sdl;
+const mstd = @import("ms_std");
 
 const global = @import("global");
 const tracy = @import("tracy");
@@ -16,7 +17,7 @@ const textureSet = @import("textureSet");
 const shaderStruct = @import("video/shaderStruct.zig");
 const vertexStruct = @import("vertexStruct");
 const resource = @import("resource");
-const Queue = @import("queue").Queue;
+const Queue = mstd.Queue;
 const Handles = @import("handle");
 const vertices2D = @import("video/indirect2D/vertices.zig");
 
@@ -24,7 +25,7 @@ const PassGroupMapping = @import("passGroupMapping");
 
 const cglm = @import("cglm");
 
-const math = @import("math");
+const math = mstd.Math;
 
 const Semaphore = std.Io.Semaphore;
 

@@ -46,11 +46,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    const queue_mod = b.createModule(.{
-        .root_source_file = b.path("src/queue/queue.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
     const spriv_reflect_c = b.addTranslateC(.{
         .root_source_file = b.path("include/spirv_reflect/spirv_reflect.h"),
         .target = target,
@@ -100,16 +95,6 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/fileSystem/fileName_ID/main.zig"),
         .target = target,
         .optimize = optimize,
-    });
-    const ecs_mod = b.createModule(.{
-        .root_source_file = b.path("src/ecs/ecs.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    const output_mod = b.createModule(.{
-        .root_source_file = b.path("src/stdOutPut.zig"),
-        .target = target,
-        .optimize = .ReleaseFast,
     });
     const vulkanType_mod = b.createModule(.{
         .root_source_file = b.path("src/video/vulkanType.zig"),
@@ -194,36 +179,12 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    const memoryPool_mod = b.createModule(.{
-        .root_source_file = b.path("src/memoryPool/memoryPool.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    const math_mod = b.createModule(.{
-        .root_source_file = b.path("src/math.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    const uniqueArrayList_mod = b.createModule(.{
-        .root_source_file = b.path("src/uniqueArrayList.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
     const sampler_read_mod = b.createModule(.{
         .root_source_file = b.path("src/sampler/read.zig"),
         .target = target,
         .optimize = optimize,
     });
-    const stableArray_mod = b.createModule(.{
-        .root_source_file = b.path("src/stableArray/array.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    const objectPool_mod = b.createModule(.{
-        .root_source_file = b.path("src/objectPool/pool.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
+
     const vertices_mod = b.createModule(.{
         .root_source_file = b.path("src/video/vertices.zig"),
         .target = target,
@@ -243,11 +204,6 @@ pub fn build(b: *std.Build) void {
     });
     const resultToError_mod = b.createModule(.{
         .root_source_file = b.path("src/video/resultToError.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    const fixedIndexArray_mod = b.createModule(.{
-        .root_source_file = b.path("src/fixedIndexArray/array.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -288,21 +244,6 @@ pub fn build(b: *std.Build) void {
     });
     const fileTypes_mod = b.createModule(.{
         .root_source_file = b.path("shared/types.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    const ringBuffer_mod = b.createModule(.{
-        .root_source_file = b.path("src/ringBuffer/ringBuffer.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    const twoChannel_mod = b.createModule(.{
-        .root_source_file = b.path("src/twoChannel/twoChannel.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    const stateBuffering_mod = b.createModule(.{
-        .root_source_file = b.path("src/stateBuffering/stateBuffering.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -359,6 +300,11 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const ms_mod = b.createModule(.{
+        .root_source_file = b.path("src/ms_std/std.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
     // const ktx2_vulkan_c = b.addTranslateC(.{
     //     .root_source_file = b.path("include/KTX/ktxvulkan.h"),
     //     .target = target,
@@ -370,6 +316,11 @@ pub fn build(b: *std.Build) void {
     // dependency
     // ktx2_vulkan_c.addIncludePath(b.path("include"));
     // ktx2_vulkan_c.addIncludePath(b.path("include/KTX"));
+
+    ms_mod.addImport("tracy", tracy.module("tracy"));
+    ms_mod.addImport("cglm", cglm_mod);
+
+    loadmap_mod.addImport("cglm", cglm_mod);
 
     ktx2_c.addIncludePath(b.path("include"));
     ktx2_c.addIncludePath(b.path("include/KTX"));
@@ -415,12 +366,10 @@ pub fn build(b: *std.Build) void {
     resource_mod.addImport("vertexStruct", vertexStruct_mod);
     resource_mod.addImport("global", global_mod);
     resource_mod.addImport("stb_image", stb_image_mod);
-    resource_mod.addImport("ringBuffer", ringBuffer_mod);
     resource_mod.addImport("fileSystem", fileSystem_mod);
     resource_mod.addImport("ktx", ktx_mod);
+    resource_mod.addImport("ms_std", ms_mod);
     // resource_mod.addImport("ktx_vulkan", ktx_vulkan_mod);
-
-    twoChannel_mod.addImport("ringBuffer", ringBuffer_mod);
 
     mesh_mod.addImport("processRender", processRender_mod);
     mesh_mod.addImport("vertexStruct", vertexStruct_mod);
@@ -453,16 +402,11 @@ pub fn build(b: *std.Build) void {
     vertices_mod.addImport("textureSet", textureSet_mod);
     vertices_mod.addImport("processRender", processRender_mod);
 
-    objectPool_mod.addImport("tracy", tracy.module("tracy"));
-
     sampler_read_mod.addImport("vulkan", vk_c_mod);
     sampler_read_mod.addImport("fileSystem", fileSystem_mod);
     sampler_read_mod.addImport("tracy", tracy.module("tracy"));
 
     vk_c.addIncludePath(b.path("include"));
-
-    math_mod.addImport("tracy", tracy.module("tracy"));
-    math_mod.addImport("cglm", cglm_mod);
 
     steam_mod.addImport("tracy", tracy.module("tracy"));
     steam_mod.addImport("steamC", steam_c_mod);
@@ -506,13 +450,12 @@ pub fn build(b: *std.Build) void {
     translate_mod.addImport("tracy", tracy.module("tracy"));
 
     textureSet_mod.addImport("stb_image", stb_image_mod);
+    textureSet_mod.addImport("ms_std", ms_mod);
     textureSet_mod.addImport("vulkan", vk_c_mod);
-    textureSet_mod.addImport("memoryPool", memoryPool_mod);
     textureSet_mod.addImport("video", video_mod);
     textureSet_mod.addImport("global", global_mod);
     textureSet_mod.addImport("fileSystem", fileSystem_mod);
     textureSet_mod.addImport("tracy", tracy.module("tracy"));
-    textureSet_mod.addImport("objectPool", objectPool_mod);
     textureSet_mod.addImport("handle", handle_mod);
     textureSet_mod.addImport("processRender", processRender_mod);
     textureSet_mod.addImport("resource", resource_mod);
@@ -521,8 +464,6 @@ pub fn build(b: *std.Build) void {
     debug_mod.addImport("vulkan", vk_c_mod);
     debug_mod.addImport("resultToError", resultToError_mod);
 
-    stableArray_mod.addImport("tracy", tracy.module("tracy"));
-
     stb_image_mod.addIncludePath(b.path("include"));
 
     vma_c.addIncludePath(b.path("include"));
@@ -530,6 +471,7 @@ pub fn build(b: *std.Build) void {
 
     vk_types_mod.addImport("vulkan", vk_c_mod);
 
+    video_mod.addImport("ms_std", ms_mod);
     video_mod.addImport("sdl", sdl_mod);
     video_mod.addImport("vma", vma_mod);
     video_mod.addImport("vulkan", vk_c_mod);
@@ -539,9 +481,7 @@ pub fn build(b: *std.Build) void {
     video_mod.addImport("tracy", tracy.module("tracy"));
     video_mod.addImport("fileSystem", fileSystem_mod);
     video_mod.addImport("sampler", sampler_read_mod);
-    video_mod.addImport("math", math_mod);
     video_mod.addImport("resultToError", resultToError_mod);
-    video_mod.addImport("fixedIndexArray", fixedIndexArray_mod);
     video_mod.addImport("handle", handle_mod);
     video_mod.addImport("processRender", processRender_mod);
     video_mod.addImport("global", global_mod);
@@ -551,36 +491,25 @@ pub fn build(b: *std.Build) void {
     video_mod.addImport("renderDebug", renderDebug_mod);
     video_mod.addImport("capability", vulkanCapability_mod);
 
-    queue_mod.addImport("tracy", tracy.module("tracy"));
-
-    memoryPool_mod.addImport("tracy", tracy.module("tracy"));
-
     processRender_mod.addImport("video", video_mod);
     processRender_mod.addImport("mesh", mesh_mod);
     processRender_mod.addImport("vulkan", vk_c_mod);
     processRender_mod.addImport("textureSet", textureSet_mod);
-    processRender_mod.addImport("queue", queue_mod);
     processRender_mod.addImport("global", global_mod);
     processRender_mod.addImport("tracy", tracy.module("tracy"));
-    processRender_mod.addImport("math", math_mod);
-    processRender_mod.addImport("uniqueArrayList", uniqueArrayList_mod);
+    processRender_mod.addImport("ms_std", ms_mod);
     processRender_mod.addImport("handle", handle_mod);
     processRender_mod.addImport("logStructSize", logStructSize_mod);
     processRender_mod.addImport("renderDebug", renderDebug_mod);
     processRender_mod.addImport("capability", vulkanCapability_mod);
-
-    uniqueArrayList_mod.addImport("tracy", tracy.module("tracy"));
 
     global_mod.addImport("video", video_mod);
     global_mod.addImport("resource", resource_mod);
     global_mod.addImport("processRender", processRender_mod);
     global_mod.addImport("textureSet", textureSet_mod);
     global_mod.addImport("handle", handle_mod);
-    global_mod.addImport("math", math_mod);
     global_mod.addImport("vertexStruct", vertexStruct_mod);
-    global_mod.addImport("ringBuffer", ringBuffer_mod);
-    global_mod.addImport("twoChannel", twoChannel_mod);
-    global_mod.addImport("stateBuffering", stateBuffering_mod);
+    global_mod.addImport("ms_std", ms_mod);
 
     fileSystem_mod.addImport("sqlDb", sqliteModule);
     fileSystem_mod.addImport("global", global_mod);
@@ -591,6 +520,7 @@ pub fn build(b: *std.Build) void {
     fileSystem_mod.addImport("vertexStruct", vertexStruct_mod);
     fileSystem_mod.addIncludePath(b.path("include"));
 
+    exe_mod.addImport("ms_std", ms_mod);
     exe_mod.addImport("loadmap", loadmap_mod);
     exe_mod.addImport("passGroupMapping", passGroupMapping_mod);
     exe_mod.addImport("instance", instance_mod);
@@ -601,17 +531,14 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("video", video_mod);
     exe_mod.addImport("stb_image", stb_image_mod);
     exe_mod.addImport("vertexStruct", vertexStruct_mod);
-    exe_mod.addImport("ECS", ecs_mod);
     exe_mod.addImport("input", input_mod);
     exe_mod.addImport("cglm", cglm_mod);
     exe_mod.addImport("video", video_mod);
     exe_mod.addImport("enumFromC", enum_c_mod);
-    exe_mod.addImport("output", output_mod);
     exe_mod.addImport("fileSystem", fileSystem_mod);
     exe_mod.addImport("global", global_mod);
     exe_mod.addImport("translate", translate_mod);
     exe_mod.addImport("textureSet", textureSet_mod);
-    exe_mod.addImport("queue", queue_mod);
     exe_mod.addImport("steam", steam_mod);
     exe_mod.addImport("processRender", processRender_mod);
     exe_mod.addImport("tracy", tracy.module("tracy"));
@@ -619,10 +546,8 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("handle", handle_mod);
     exe_mod.addImport("sdl", sdl_mod);
     exe_mod.addImport("vulkan", vk_c_mod);
-    exe_mod.addImport("math", math_mod);
     exe_mod.addImport("resource", resource_mod);
     exe_mod.addImport("mesh", mesh_mod);
-    exe_mod.addImport("ringBuffer", ringBuffer_mod);
     exe_mod.addIncludePath(b.path("include/"));
 
     exe_mod.addLibraryPath(b.path("lib/"));

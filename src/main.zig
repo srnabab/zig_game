@@ -6,9 +6,8 @@ const SDL_CheckResult = @import("sdl").SDL_CheckResult;
 
 const Thread = std.Thread;
 const builtin = @import("builtin");
-const output = @import("output");
 const log = std.log;
-const ECS = @import("ECS");
+// const ECS = @import("ECS");
 const steam = @import("steam");
 const steamInner = steam.steamInner;
 
@@ -61,8 +60,6 @@ pub fn main(init: std.process.Init) !void {
 
     const mainZone = tracy.initZone(@src(), .{ .name = "main" });
     defer mainZone.deinit();
-
-    output.init();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(gpa);
     defer arenaAllocator.deinit();
