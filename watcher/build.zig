@@ -181,12 +181,24 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     const resourceProcess_mod = b.createModule(.{
-        .root_source_file = b.path("../src/resourceProcess.zig"),
+        .root_source_file = b.path("shared_b/resourceProcess.zig"),
         .target = target,
         .optimize = optimize,
     });
 
     //
+    resourceProcess_mod.addImport("vulkan", vk_c_mod);
+    resourceProcess_mod.addImport("tables", tables_mod);
+    resourceProcess_mod.addImport("vertexStruct", vertexStruct_mod);
+    resourceProcess_mod.addImport("cgltf", cgltf_mod);
+    resourceProcess_mod.addImport("meshopt", meshopt_mod);
+    resourceProcess_mod.addImport("blake_hash", blake3_hash_mod);
+    resourceProcess_mod.addImport("sqlDb", sqliteModule);
+    resourceProcess_mod.addImport("UUID", UUID_mod);
+    resourceProcess_mod.addImport("sampler", sampler_mod);
+    resourceProcess_mod.addImport("pipelinrParse", pipelinParse_mod);
+    resourceProcess_mod.addImport("db", db_mod);
+
     pipelinParse_mod.addImport("enumFromC", enum_c_mod);
     pipelinParse_mod.addImport("reflect", spReflectModule);
     pipelinParse_mod.addImport("vulkan", vk_c_mod);

@@ -4,7 +4,7 @@ const sqlite = sqlDB.sqlite;
 
 const tables = @import("tables");
 const Types = @import("types");
-const resourceProcess = @import("resourceProcess");
+pub const resourceProcess = @import("resourceProcess");
 
 pub const iterateFolder = @import("iterateFolder.zig");
 pub const judgeFileType = iterateFolder.judgeFileType;
@@ -308,9 +308,9 @@ pub fn processFolder(self: *Self, content: std.Io.Dir, io: std.Io, allocator: st
         io,
         .{
             .db = self.db,
-            .ContentPath = self.ContentPathT,
-            .ImageLoadParameter = self.ImageLoadParameterT,
-            .ModelLoadParameter = self.ModelLoadParameterT,
+            .ContentPathT = self.ContentPathT,
+            .ImageLoadParameterT = self.ImageLoadParameterT,
+            .ModelLoadParameterT = self.ModelLoadParameterT,
             .ShaderPipelineGraphEdgeT = self.ShaderPipelineGraphEdgeT,
             .ShaderPipelineGraphNodeT = self.ShaderPipelineGraphNodeT,
             .contentPathExist = self.contentPathExist,

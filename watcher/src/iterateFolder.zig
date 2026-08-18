@@ -160,262 +160,17 @@ fn updateLoadParameter(
     rpZ: []const u8,
 ) !void {
     _ = cc;
+    _ = parentID;
+    _ = rpZ;
     switch (tp) {
-        .PNG => {
-            const format: vk.VkFormat, const tiling: vk.VkImageTiling, const usage: vk.VkImageUsageFlags, const properties: vk.VkMemoryPropertyFlags = try judgeImageLoadParameter(fileName);
+        inline else => |t| {
+            const cookerName = std.fmt.comptimePrint("{s}{s}", .{ @tagName(t), "_Cooker" });
 
-            try ImageLoadParameterT.update("Format,Tiling,Usage,Properties", "FileName = ?", .{ format, tiling, usage, properties, fileName });
+            const field = @field(resourceProcess, cookerName);
+
+            if (field.Enable)
+                try field.preProcess(io, gpa, dir, &ContentPathT, fileName, content, &@field(allTable, field.TableName));
         },
-        .GLTF => {
-            std.log.debug("file name {s}", .{fileName});
-            var res = try cgltf.loadGltfFile(content, gpa);
-            defer res.arenaAllocator.deinit();
-
-            const arena = SceneJson.arena.allocator();
-
-            for (res.primitives) |value| {
-                // for (value.index) |i| {
-                //     std.log.debug("{d}", .{i});
-                // }
-
-                const vertex_opted = try optimizeVertex(value.vertex, value.index, gpa);
-
-                // const vertex = @as([*]vertexStruct.Vertex_f3pf3nf3tf2u, @ptrCast(@alignCast(vertex_opted.remap.vertices)))[0..vertex_opted.remap.newVertexCount];
-                // for (vertex) |i| {
-                //     std.log.debug("{d} {d} {d}", .{ i.position[0], i.position[1], i.position[2] });
-                // }
-
-                // for (vertex_opted.remap.indices) |i| {
-                //     std.log.debug("{d}", .{i});
-                // }
-
-                defer {
-                    gpa.free(vertex_opted.remap.indices);
-                    const vertices = @as([*]u8, @ptrCast(@alignCast(vertex_opted.remap.vertices)))[0..vertex_opted.remap.totalVerticesSize];
-                    gpa.free(vertices);
-                }
-                const meshlets = try meshopt.clusterization(
-                    @ptrCast(@alignCast(vertex_opted.remap.vertices)),
-                    vertex_opted.remap.newVertexCount,
-                    vertex_opted.remap.vertexSize,
-                    vertex_opted.remap.indices,
-                    gpa,
-                );
-                defer {
-                    gpa.free(meshlets.meshlets);
-                    gpa.free(meshlets.meshlet_vertices);
-                    gpa.free(meshlets.meshlet_triangles);
-                }
-
-                const indicesBytes: []u8 = std.mem.sliceAsBytes(vertex_opted.remap.indices);
-                const verticeBytes: []u8 =
-                    std.mem.sliceAsBytes(@as([*]u8, @ptrCast(@alignCast(vertex_opted.remap.vertices)))[0 .. vertex_opted.remap.newVertexCount * vertex_opted.remap.vertexSize]);
-                const meshletsBytes: []u8 = std.mem.sliceAsBytes(meshlets.meshlets);
-                const meshletVerticesBytes: []u8 = std.mem.sliceAsBytes(meshlets.meshlet_vertices);
-                const meshletTrianglesBytes: []u8 = std.mem.sliceAsBytes(meshlets.meshlet_triangles);
-                var meshMem = try arena.alloc(
-                    u8,
-                    indicesBytes.len + meshletsBytes.len + meshletVerticesBytes.len + meshletTrianglesBytes.len + verticeBytes.len,
-                );
-                {
-                    const meshletsStart = verticeBytes.len;
-                    const meshletVerticesStart = meshletsStart + meshletsBytes.len;
-                    const meshletTrianglesStart = meshletVerticesStart + meshletVerticesBytes.len;
-                    const indicesStart = meshletTrianglesStart + meshletTrianglesBytes.len;
-
-                    @memcpy(meshMem[0..meshletsStart], verticeBytes);
-                    @memcpy(meshMem[meshletsStart..meshletVerticesStart], meshletsBytes);
-                    @memcpy(meshMem[meshletVerticesStart..meshletTrianglesStart], meshletVerticesBytes);
-                    @memcpy(meshMem[meshletTrianglesStart..indicesStart], meshletTrianglesBytes);
-                    @memcpy(meshMem[indicesStart..], indicesBytes);
-                }
-
-                const hashh = hash.blake3HashContent(meshMem);
-
-                var buffer = [_:0]u8{0} ** 256;
-                const primFileName = try std.fmt.bufPrintZ(&buffer, "{s}.vtx", .{value.name});
-                checkGltfPrimitiveName(value.name) catch {
-                    var blob: sqlDB.BLOBForGet = undefined;
-                    var anys = [_]*anyopaque{&blob};
-                    var types = [_]sqlDB.innerType{.BLOB};
-
-                    ContentPathT.get(
-                        "ContentHash",
-                        null,
-                        "FileName = ?",
-                        .{primFileName},
-                        &anys,
-                        &types,
-                    ) catch continue;
-
-                    const same = std.mem.eql(u8, &hashh, blob.data[0..blob.len]);
-                    if (same) continue;
-                };
-
-                var primFile = try dir.createFile(io, primFileName, .{
-                    .read = true,
-                    .truncate = true,
-                });
-                defer primFile.close(io);
-
-                var primFileWriter = primFile.writer(io, &buffer);
-                try primFileWriter.interface.writeAll(meshMem);
-
-                {
-                    const time: i64 = @truncate(std.Io.Timestamp.now(io, .real).toNanoseconds());
-                    const metadata = primFile.stat(io) catch |err| blk: switch (err) {
-                        error.AccessDenied => {
-                            try std.Io.sleep(
-                                io,
-                                std.Io.Duration{ .nanoseconds = std.time.ns_per_ms },
-                                .real,
-                            );
-                            break :blk try primFile.stat(io);
-                        },
-                        else => return err,
-                    };
-
-                    var relativePathBuffer = [_]u8{0} ** 256;
-                    const relativePathZ = try std.fmt.bufPrintZ(&relativePathBuffer, "{s}{s}{s}", .{ rpZ, slash, primFileName });
-
-                    var uuidBuffer = [_:0]u8{0} ** UUID.len;
-                    try UUID.createNewUUID(&uuidBuffer);
-                    const sufffix_index = std.mem.lastIndexOf(u8, primFileName, ".") orelse primFileName.len;
-                    const fType = judgeFileType(primFileName[sufffix_index..], meshMem);
-
-                    try ContentPathT.insert(.{
-                        .ID = @intCast(getInsertID()),
-                        .UUID = @constCast(&uuidBuffer),
-                        .ParentUUID = @constCast(parentID.ptr),
-                        .RelativePath = @constCast(relativePathZ.ptr),
-                        .FileName = @constCast(primFileName.ptr),
-                        .TYPE = @intFromEnum(metadata.kind),
-                        .FileSize = @intCast(metadata.size),
-                        .ContentHash = sqlDB.BLOB{ .data = &hashh, .len = hash.blake3.BLAKE3_OUT_LEN },
-                        .ModifiedTime = @as(i64, @truncate(metadata.mtime.toNanoseconds())),
-                        .LastSeenTime = time,
-                        .FileType = @intFromEnum(fType),
-                    });
-
-                    const relativePathZ2 = try std.fmt.bufPrintZ(&relativePathBuffer, "{s}{s}{s}", .{ rpZ, slash, fileName });
-
-                    var anys = [_]*anyopaque{&uuidBuffer};
-                    var types = [_]sqlDB.innerType{.TEXT};
-
-                    try ContentPathT.get(
-                        "UUID",
-                        null,
-                        "RelativePath = ?",
-                        .{relativePathZ2},
-                        &anys,
-                        &types,
-                    );
-
-                    try ModelLoadParameterT.update(
-                        "VertexType,VerticesSize,MeshletsSize,MeshletVerticesSize,MeshletTrianglesSize,ParentModelFile",
-                        "ContentHash = ?",
-                        .{
-                            @as(u32, @intFromEnum(vertex_opted.vType)),
-                            verticeBytes.len,
-                            meshletsBytes.len,
-                            meshletVerticesBytes.len,
-                            meshletTrianglesBytes.len,
-                            uuidBuffer,
-                            sqlDB.BLOB{ .data = &hashh, .len = hash.blake3.BLAKE3_OUT_LEN },
-                        },
-                    );
-                }
-                // try processFile(dir, primFileName, rPZ, parentID, -1, -1);
-            }
-
-            const initSceneCount = SceneJson.value.?.len;
-            var sceneAdd: usize = 0;
-            var currentIndex: usize = initSceneCount + sceneAdd;
-            for (res.scenes) |scene| {
-                const scene_name = try arena.dupe(u8, scene.name);
-                const getRes = try SceneNameStringMap.getOrPut(scene_name);
-
-                var scenePtr: *cgltf.Scene = undefined;
-
-                if (getRes.found_existing) {
-                    currentIndex = getRes.value_ptr.*;
-
-                    scenePtr = &SceneJson.value.?[currentIndex];
-                } else {
-                    currentIndex = initSceneCount + sceneAdd;
-
-                    SceneJson.value = try arena.realloc(SceneJson.value.?, initSceneCount + sceneAdd + 1);
-                    scenePtr = &SceneJson.value.?[currentIndex];
-
-                    getRes.value_ptr.* = @intCast(currentIndex);
-
-                    SceneNodeNames = try arena.realloc(SceneNodeNames, initSceneCount + sceneAdd + 1);
-                    SceneNodeNames[currentIndex] = .init(arena);
-
-                    scenePtr.nodes = &.{};
-                    scenePtr.name = scene_name;
-
-                    sceneAdd += 1;
-                }
-
-                const initNodeCount = scenePtr.nodes.len;
-                var nodeAdd: usize = 0;
-
-                for (scene.nodes, 0..) |node, j| {
-                    _ = j;
-                    const node_name = try arena.dupe(u8, node.name);
-                    const node_getRes = try SceneNodeNames[currentIndex].getOrPut(node_name);
-
-                    var nodePtr: *cgltf.Node = undefined;
-
-                    if (node_getRes.found_existing) {
-                        nodePtr = &scenePtr.nodes[node_getRes.value_ptr.*];
-                    } else {
-                        scenePtr.nodes = try arena.realloc(scenePtr.nodes, initNodeCount + nodeAdd + 1);
-                        nodePtr = &scenePtr.nodes[initNodeCount + nodeAdd];
-
-                        node_getRes.value_ptr.* = @intCast(initNodeCount + nodeAdd);
-
-                        nodePtr.primitiveNames = &.{};
-                        nodePtr.name = node_name;
-                        nodePtr.transform = node.transform;
-
-                        nodeAdd += 1;
-                    }
-
-                    const initPrimitiveCount = nodePtr.primitiveNames.len;
-
-                    var primNameMap = std.StringHashMap(void).init(arena);
-                    defer primNameMap.deinit();
-
-                    for (nodePtr.primitiveNames, 0..) |primName, k| {
-                        _ = k;
-                        try primNameMap.put(primName, {});
-                    }
-
-                    var primAdd: usize = 0;
-
-                    for (node.primitiveNames, 0..) |primName, k| {
-                        _ = k;
-                        const primNameGetRes = try primNameMap.getOrPut(primName);
-
-                        if (primNameGetRes.found_existing) {
-                            continue;
-                        } else {
-                            nodePtr.primitiveNames = try arena.realloc(
-                                nodePtr.primitiveNames,
-                                initPrimitiveCount + primAdd + 1,
-                            );
-
-                            nodePtr.primitiveNames[primAdd + initPrimitiveCount] = try arena.dupe(u8, primName);
-
-                            primAdd += 1;
-                        }
-                    }
-                }
-            }
-        },
-        else => {},
     }
 }
 
@@ -848,9 +603,9 @@ fn getInsertID() u32 {
 
 const AllTable = struct {
     db: ?*sqlite.sqlite3,
-    ContentPath: tables.ContentPath,
-    ImageLoadParameter: tables.ImageLoadParameter,
-    ModelLoadParameter: tables.ModelLoadParameter,
+    ContentPathT: tables.ContentPath,
+    ImageLoadParameterT: tables.ImageLoadParameter,
+    ModelLoadParameterT: tables.ModelLoadParameter,
     ShaderPipelineGraphNodeT: tables.ShaderPipelineGraphNode,
     ShaderPipelineGraphEdgeT: tables.ShaderPipelineGraphEdge,
 
@@ -859,8 +614,9 @@ const AllTable = struct {
 
 var db: ?*sqlite.sqlite3 = undefined;
 var ContentPathT: tables.ContentPath = undefined;
-var ImageLoadParameterT: tables.ImageLoadParameter = undefined;
-var ModelLoadParameterT: tables.ModelLoadParameter = undefined;
+
+var allTable: AllTable = undefined;
+
 var ShaderPipelineGraphNodeT: tables.ShaderPipelineGraphNode = undefined;
 var ShaderPipelineGraphEdgeT: tables.ShaderPipelineGraphEdge = undefined;
 
@@ -872,9 +628,10 @@ var gpa: std.mem.Allocator = undefined;
 pub fn processContentFolder(content: std.Io.Dir, io: std.Io, tablePack: AllTable, allocator: std.mem.Allocator) !void {
     gpa = allocator;
     db = tablePack.db;
-    ContentPathT = tablePack.ContentPath;
-    ImageLoadParameterT = tablePack.ImageLoadParameter;
-    ModelLoadParameterT = tablePack.ModelLoadParameter;
+    ContentPathT = tablePack.ContentPathT;
+
+    allTable = tablePack;
+
     ShaderPipelineGraphNodeT = tablePack.ShaderPipelineGraphNodeT;
     ShaderPipelineGraphEdgeT = tablePack.ShaderPipelineGraphEdgeT;
 

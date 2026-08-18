@@ -313,6 +313,8 @@ pub fn build(b: *std.Build) void {
 
     // aaa
     resourceProcess_mod.addImport("handle", handle_mod);
+    resourceProcess_mod.addImport("vulkan", vk_c_mod);
+    resourceProcess_mod.addImport("tables", tables_mod);
 
     setPass_mod.addImport("vertexStruct", vertexStruct_mod);
     setPass_mod.addImport("cglm", cglm_mod);
