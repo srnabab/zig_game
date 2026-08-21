@@ -18,8 +18,6 @@ const Io = std.Io;
 
 const assert = std.debug.assert;
 
-const SceneFileName = "Scenes.json";
-
 const FileType = resourceProcess.ProcessType;
 
 const slash = sl: {
@@ -35,14 +33,6 @@ const slash = sl: {
         },
     }
 };
-
-const PNG = [_]u8{
-    0x89,
-    std.mem.bytesToValue(u8, "P"),
-    std.mem.bytesToValue(u8, "N"),
-    std.mem.bytesToValue(u8, "G"),
-};
-const GLTF = "glTF";
 
 const FileTypeHashTable = map: {
     const maptype = std.StaticStringMap(FileType);
@@ -62,93 +52,6 @@ fn executeSQL(SQL: []const u8, db_: *sqlite.sqlite3) void {
     }
 }
 
-fn judgeImageLoadParameter(fileName: []const u8) !struct {
-    vk.VkFormat,
-    vk.VkImageTiling,
-    vk.VkImageUsageFlags,
-    vk.VkMemoryPropertyFlags,
-} {
-    _ = fileName;
-    // var format: vk.VkFormat = 0;
-    // var tiling: vk.VkImageTiling = 0;
-    // var usage: vk.VkImageUsageFlags = 0;
-    // var properties: vk.VkMemoryPropertyFlags = 0;
-
-    // return .{ format, tiling, usage, properties };
-    return .{ vk.VK_FORMAT_R8G8B8A8_SRGB, vk.VK_IMAGE_TILING_OPTIMAL, vk.VK_IMAGE_USAGE_TRANSFER_DST_BIT | vk.VK_IMAGE_USAGE_SAMPLED_BIT, vk.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT };
-}
-
-fn optimizeVertex(vertex: vertexStruct.Vertex, index: []u32, allocator: std.mem.Allocator) !struct {
-    remap: meshopt.remapReturn,
-    vType: vertexStruct.VertexType,
-} {
-    const vertexInfo = cgltf.unpackVertex(vertex);
-    std.log.debug("count {d}, size {d}", .{ vertexInfo.vertexCount, vertexInfo.vertexSize });
-
-    const analyze1 = meshopt.analyzeVertex(
-        index,
-        @ptrCast(@alignCast(vertexInfo.vertices)),
-        vertexInfo.vertexCount,
-        vertexInfo.vertexSize,
-    );
-    std.log.debug("acmr {d}, atvr {d}, overfetch {d}, overdraw {d}", .{
-        analyze1.vertexCache.acmr,
-        analyze1.vertexCache.atvr,
-        analyze1.vertexFetch.overfetch,
-        analyze1.overdraw.overdraw,
-    });
-
-    const res2 = try meshopt.generateVertexRemap(
-        index,
-        vertexInfo.vertices,
-        vertexInfo.vertexCount,
-        vertexInfo.vertexSize,
-        allocator,
-    );
-    defer {
-        allocator.free(res2.indices);
-        const vertices = @as([*]u8, @ptrCast(@alignCast(res2.vertices)))[0 .. res2.newVertexCount * vertexInfo.vertexSize];
-        allocator.free(vertices);
-    }
-
-    const res3 = try meshopt.vertexOptimization(
-        res2.indices,
-        @ptrCast(@alignCast(res2.vertices)),
-        res2.newVertexCount,
-        vertexInfo.vertexSize,
-        allocator,
-    );
-    // defer {
-    //     allocator.free(res3.indices);
-    //     const vertices = @as([*]u8, @ptrCast(@alignCast(res3.vertices)))[0 .. res2.vertexCount * vertexInfo.vertexSize];
-    //     allocator.free(vertices);
-    // }
-
-    const analyze2 = meshopt.analyzeVertex(
-        res3.indices,
-        @ptrCast(@alignCast(res3.vertices)),
-        res3.newVertexCount,
-        vertexInfo.vertexSize,
-    );
-    std.log.debug("acmr {d}, atvr {d}, overfetch {d}, overdraw {d}", .{
-        analyze2.vertexCache.acmr,
-        analyze2.vertexCache.atvr,
-        analyze2.vertexFetch.overfetch,
-        analyze2.overdraw.overdraw,
-    });
-
-    // const vertex = cgltf.packVertex(.{
-    //     .vertices = res3.vertices.?,
-    //     .vertexCount = @intCast(res3.vertexCount),
-    //     .vertexSize = vertexInfo.vertexSize,
-    // }, std.meta.activeTag(value.vertex));
-
-    std.log.debug("count {d}, size {d}", .{ res3.newVertexCount, vertexInfo.vertexSize });
-    // cgltf.printVertex(vertex, res3.indices);
-
-    return .{ .remap = res3, .vType = std.meta.activeTag(vertex) };
-}
-
 fn updateLoadParameter(
     io: std.Io,
     dir: std.Io.Dir,
@@ -162,14 +65,21 @@ fn updateLoadParameter(
     _ = cc;
     _ = parentID;
     _ = rpZ;
+
     switch (tp) {
         inline else => |t| {
             const cookerName = std.fmt.comptimePrint("{s}{s}", .{ @tagName(t), "_Cooker" });
 
             const field = @field(resourceProcess, cookerName);
 
-            if (field.Enable)
-                try field.preProcess(io, gpa, dir, &ContentPathT, fileName, content, &@field(allTable, field.TableName));
+            if (field.Enable) {
+                var pack = resourceProcess.PreProcessParm{
+                    .content = content,
+                    .ContentPathT = &ContentPathT,
+                    .fileName = fileName,
+                };
+                try field.preProcess(io, gpa, dir, &pack, &@field(allTable, field.TableName));
+            }
         },
     }
 }
@@ -220,37 +130,19 @@ fn checkGltfMeshProcess(allocator: Allocator, content: []const u8) !bool {
     return true;
 }
 
-fn judgeFileTypeByContent(content: []u8) FileType {
-    if (std.mem.eql(u8, content, @constCast(&PNG))) {
-        return .PNG;
-    } else if (std.mem.eql(u8, content, @constCast(GLTF))) {
-        return .GLTF;
-    } else {
-        return .UNKNOWN;
-    }
-}
-
 pub fn judgeFileType(suffix: []const u8, content: []u8) FileType {
     const fType = FileTypeHashTable.get(suffix) orelse FileType.UNKNOWN;
 
     switch (fType) {
-        .PNG => {
-            if (std.mem.eql(u8, content[0..PNG.len], @constCast(&PNG))) {
-                return .PNG;
-            }
-            return judgeFileTypeByContent(content);
-        },
-        .GLTF => {
-            if (std.mem.eql(u8, content[0..GLTF.len], @constCast(GLTF))) {
-                return .GLTF;
-            }
-            return judgeFileTypeByContent(content);
-        },
         .UNKNOWN => {
-            return judgeFileTypeByContent(content);
+            return resourceProcess.judgeFileTypeByContent(content);
         },
-        else => {
-            return fType;
+        inline else => |t| {
+            const cookerName = std.fmt.comptimePrint("{s}{s}", .{ @tagName(t), "_Cooker" });
+
+            const field = @field(resourceProcess, cookerName);
+
+            return field.judgeFileType2(content, fType);
         },
     }
 }
@@ -268,39 +160,33 @@ fn getDbModifiedTime(comptime where_clause: []const u8, params: anytype) !i64 {
     return modifiedTime;
 }
 
-fn checkGltfPrimitiveName(
-    name: []const u8,
-) !void {
-    const have = try ContentPathT.have("FileName", "FileName = ?", .{name});
-    if (have) {
-        return error.Duplicated;
-    }
-}
-
 pub fn processFile(
     io: std.Io,
     dir: std.Io.Dir,
-    name: []const u8,
-    rPZ: []const u8,
+    name: [:0]const u8,
+    rPZ: [:0]const u8,
     parentID: []const u8,
 ) !FileType {
     const time: i64 = @truncate(std.Io.Timestamp.now(io, .real).toNanoseconds());
-    // std.log.debug("time {d} {s}", .{ time, name });
     var tempFile = try dir.openFile(io, name, .{});
     defer tempFile.close(io);
 
     const metadata = try tempFile.stat(io);
     const currentModifiedTime: i64 = @truncate(metadata.mtime.toNanoseconds());
 
+    // std.log.debug("name: {s}, rPZ: {s}", .{ name, rPZ });
+
     const fileModifiedTime = try getDbModifiedTime("FileName = ?", .{name});
     const pathModifiedTime = try getDbModifiedTime("RelativePath = ?", .{rPZ});
+
+    // std.log.debug("time {d} {s}", .{ time, name });
 
     var fileBuffer = [_]u8{0} ** 256;
 
     var fType: FileType = .UNKNOWN;
 
     if (fileModifiedTime == -1) {
-        // std.log.debug("1", .{});
+        std.log.debug("1", .{});
         var uuidBuffer = [_]u8{0} ** UUID.len;
         try UUID.createNewUUID(&uuidBuffer);
         const index = std.mem.lastIndexOf(u8, name, ".") orelse name.len;
@@ -357,7 +243,7 @@ pub fn processFile(
 
         if (pathModifiedTime == -1) {
             if (isModified) {
-                // std.log.debug("2", .{});
+                // std.log.debug("3", .{});
                 var fileReader = tempFile.reader(io, &fileBuffer);
                 const content = try fileReader.interface.readAlloc(gpa, metadata.size);
                 defer gpa.free(content);
@@ -417,7 +303,7 @@ pub fn processFile(
         } else {
             // 已存在的文件：只更新时间和内容哈希（如果需要）
             if (isModified) {
-                // std.log.debug("3", .{});
+                // std.log.debug("4", .{});
                 var fileReader = tempFile.reader(io, &fileBuffer);
                 const content = try fileReader.interface.readAlloc(gpa, metadata.size);
                 defer gpa.free(content);
@@ -620,11 +506,20 @@ var allTable: AllTable = undefined;
 var ShaderPipelineGraphNodeT: tables.ShaderPipelineGraphNode = undefined;
 var ShaderPipelineGraphEdgeT: tables.ShaderPipelineGraphEdge = undefined;
 
-var SceneJson: std.json.Parsed(?[]cgltf.Scene) = undefined;
-var SceneNameStringMap: std.StringHashMap(u32) = undefined;
-var SceneNodeNames: []std.StringHashMap(u32) = undefined;
-
 var gpa: std.mem.Allocator = undefined;
+pub fn init(tablePack: AllTable, io: Io, allocator: std.mem.Allocator, content: Io.Dir) !void {
+    gpa = allocator;
+    db = tablePack.db;
+    ContentPathT = tablePack.ContentPathT;
+
+    allTable = tablePack;
+
+    ShaderPipelineGraphNodeT = tablePack.ShaderPipelineGraphNodeT;
+    ShaderPipelineGraphEdgeT = tablePack.ShaderPipelineGraphEdgeT;
+
+    try resourceProcess.preProcessInit(io, allocator, content);
+}
+
 pub fn processContentFolder(content: std.Io.Dir, io: std.Io, tablePack: AllTable, allocator: std.mem.Allocator) !void {
     gpa = allocator;
     db = tablePack.db;
@@ -639,54 +534,6 @@ pub fn processContentFolder(content: std.Io.Dir, io: std.Io, tablePack: AllTable
 
     var buffer = [_]u8{0} ** UUID.len;
     const time: i64 = @truncate(std.Io.Timestamp.now(io, .real).toNanoseconds());
-    // std.log.debug("time {d}", .{time});
-
-    var sceneFile = content.openFile(io, SceneFileName, .{ .mode = .read_write }) catch |err| blk: switch (err) {
-        error.FileNotFound => break :blk try content.createFile(io, SceneFileName, .{ .read = true }),
-        else => return err,
-    };
-    {
-        defer sceneFile.close(io);
-
-        const sceneFileStat = try sceneFile.stat(io);
-        var cacheBuffer = [_]u8{0} ** 256;
-        var sceneFileReader = sceneFile.reader(io, &cacheBuffer);
-        const sceneContent = try sceneFileReader.interface.readAlloc(gpa, sceneFileStat.size);
-        defer gpa.free(sceneContent);
-
-        SceneNameStringMap = .init(gpa);
-
-        if (sceneFileStat.size != 0) {
-            try sceneFile.setLength(io, 0);
-            try sceneFileReader.seekTo(0);
-
-            SceneJson = try std.json.parseFromSlice(?[]cgltf.Scene, gpa, sceneContent, .{});
-
-            const arena = SceneJson.arena.allocator();
-
-            if (SceneJson.value) |v| {
-                SceneNodeNames = try arena.alloc(std.StringHashMap(u32), v.len);
-                for (v, 0..) |value, i| {
-                    const name_dupe = try arena.dupe(u8, value.name);
-                    try SceneNameStringMap.put(name_dupe, @intCast(i));
-
-                    SceneNodeNames[i] = .init(arena);
-
-                    for (value.nodes, 0..) |node, j| {
-                        const node_name = try arena.dupe(u8, node.name);
-
-                        try SceneNodeNames[i].put(node_name, @intCast(j));
-                    }
-                }
-            }
-        } else {
-            SceneJson = .{
-                .arena = try gpa.create(std.heap.ArenaAllocator),
-                .value = &.{},
-            };
-            SceneJson.arena.* = std.heap.ArenaAllocator.init(gpa);
-        }
-    }
 
     if (exist) {
         const cc = try content.stat(io);
@@ -727,41 +574,5 @@ pub fn processContentFolder(content: std.Io.Dir, io: std.Io, tablePack: AllTable
 
     try iterateFolderUpdate(io, content, "Content", &buffer);
 
-    try saveSceneJson(io, content);
-
     try ContentPathT.delete("LastSeenTime < ?", .{time});
-}
-
-pub fn saveSceneJson(io: std.Io, content: std.Io.Dir) !void {
-    var sceneFile = content.openFile(io, SceneFileName, .{ .mode = .read_write }) catch |err| blk: switch (err) {
-        error.FileNotFound => break :blk try content.createFile(io, SceneFileName, .{ .read = true }),
-        else => return err,
-    };
-    defer sceneFile.close(io);
-
-    if (SceneJson.value.?.len > 0) {
-        try sceneFile.setLength(io, 0);
-
-        var cacheBuffer = [_]u8{0} ** 1024;
-        var sceneFileWriter = sceneFile.writer(io, &cacheBuffer);
-        var sceneJsonWrite = std.json.Stringify{
-            .writer = &sceneFileWriter.interface,
-            .options = .{ .whitespace = .indent_tab },
-        };
-        try sceneJsonWrite.write(SceneJson.value);
-        try sceneFileWriter.interface.flush();
-
-        // _ = try processFile(
-        //     io,
-        //     content,
-        //     SceneFileName,
-        //     "Content" ++ slash ++ SceneFileName,
-        //     &buffer,
-        // );
-    }
-}
-
-pub fn cleanSceneJson() void {
-    SceneJson.deinit();
-    SceneNameStringMap.deinit();
 }

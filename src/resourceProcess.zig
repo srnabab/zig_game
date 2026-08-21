@@ -3,6 +3,8 @@ const Io = std.Io;
 
 const Allocator = std.mem.Allocator;
 
+const assert = std.debug.assert;
+
 const tables = @import("tables");
 const vk = @import("vulkan");
 const cgltf = @import("cgltf");
@@ -15,11 +17,31 @@ const sampler = @import("sampler");
 const pipelineParse = @import("pipelinrParse");
 const db = @import("db");
 
+pub const preProcessInitFn = fn (gpa: Allocator) anyerror!void;
+
+pub const fileDbParamMapType = std.StringHashMap([]u8);
+pub const PreProcessParm = struct {
+    ContentPathT: *tables.ContentPath,
+    fileName: []const u8,
+    content: []const u8,
+    // mem: []const u8,
+    // fileUUID: []const u8,
+    // fileDbParamMap: *fileDbParamMapType,
+};
+
 const HandleType = @import("handle").ResourceType;
 pub const ProcessType_HandleType = struct {
     type1: ProcessType,
     type2: HandleType,
 };
+
+const PNG = [_]u8{
+    0x89,
+    std.mem.bytesToValue(u8, "P"),
+    std.mem.bytesToValue(u8, "N"),
+    std.mem.bytesToValue(u8, "G"),
+};
+const GLTF = "glTF";
 
 pub const ProcessType = enum {
     DIR,
@@ -79,6 +101,99 @@ pub const Mappings = [_]ProcessType_HandleType{
     // add here
 };
 
+const SceneFileName = "Scenes.json";
+
+var fileDbParamMap: fileDbParamMapType = undefined;
+
+var SceneJson: std.json.Parsed(?[]cgltf.Scene) = undefined;
+var SceneNameStringMap: std.StringHashMap(u32) = undefined;
+var SceneNodeNames: []std.StringHashMap(u32) = undefined;
+
+var contentFolder: Io.Dir = undefined;
+
+fn initFileParameterMap(gpa: Allocator) void {
+    fileDbParamMap = .init(gpa);
+}
+
+fn sceneJsonInit(io: Io, gpa: Allocator, content: std.Io.Dir) !void {
+    var sceneFile = content.openFile(io, SceneFileName, .{ .mode = .read_write }) catch |err| blk: switch (err) {
+        error.FileNotFound => break :blk try content.createFile(io, SceneFileName, .{ .read = true }),
+        else => return err,
+    };
+    {
+        defer sceneFile.close(io);
+
+        const sceneFileStat = try sceneFile.stat(io);
+        var cacheBuffer = [_]u8{0} ** 256;
+        var sceneFileReader = sceneFile.reader(io, &cacheBuffer);
+        const sceneContent = try sceneFileReader.interface.readAlloc(gpa, sceneFileStat.size);
+        defer gpa.free(sceneContent);
+
+        SceneNameStringMap = .init(gpa);
+
+        if (sceneFileStat.size != 0) {
+            try sceneFile.setLength(io, 0);
+            try sceneFileReader.seekTo(0);
+
+            SceneJson = try std.json.parseFromSlice(?[]cgltf.Scene, gpa, sceneContent, .{});
+
+            const arena = SceneJson.arena.allocator();
+
+            if (SceneJson.value) |v| {
+                SceneNodeNames = try arena.alloc(std.StringHashMap(u32), v.len);
+                for (v, 0..) |value, i| {
+                    const name_dupe = try arena.dupe(u8, value.name);
+                    try SceneNameStringMap.put(name_dupe, @intCast(i));
+
+                    SceneNodeNames[i] = .init(arena);
+
+                    for (value.nodes, 0..) |node, j| {
+                        const node_name = try arena.dupe(u8, node.name);
+
+                        try SceneNodeNames[i].put(node_name, @intCast(j));
+                    }
+                }
+            }
+        } else {
+            SceneJson = .{
+                .arena = try gpa.create(std.heap.ArenaAllocator),
+                .value = &.{},
+            };
+            SceneJson.arena.* = std.heap.ArenaAllocator.init(gpa);
+        }
+    }
+}
+
+fn saveSceneJson(io: std.Io, content: std.Io.Dir) !void {
+    var sceneFile = content.openFile(io, SceneFileName, .{ .mode = .read_write }) catch |err| blk: switch (err) {
+        error.FileNotFound => break :blk try content.createFile(io, SceneFileName, .{ .read = true }),
+        else => return err,
+    };
+    defer sceneFile.close(io);
+
+    if (SceneJson.value.?.len > 0) {
+        try sceneFile.setLength(io, 0);
+
+        var cacheBuffer = [_]u8{0} ** 1024;
+        var sceneFileWriter = sceneFile.writer(io, &cacheBuffer);
+        var sceneJsonWrite = std.json.Stringify{
+            .writer = &sceneFileWriter.interface,
+            .options = .{ .whitespace = .indent_tab },
+        };
+        try sceneJsonWrite.write(SceneJson.value);
+        try sceneFileWriter.interface.flush();
+    }
+}
+
+pub fn preProcessInit(io: Io, gpa: Allocator, content: Io.Dir) !void {
+    try sceneJsonInit(io, gpa, content);
+
+    try saveSceneJson(io, content);
+    initFileParameterMap(gpa);
+
+    contentFolder = content;
+}
+
 pub const Example_Cooker = struct {
     pub const TableName = "ContentPathT";
     pub const Enable = false;
@@ -88,18 +203,14 @@ pub const Example_Cooker = struct {
         io: Io,
         gpa: Allocator,
         dir: Io.Dir,
-        ContentPathT: *tables.ContentPath,
-        fileName: []const u8,
-        content: []const u8,
+        parmas: *PreProcessParm,
         Table: *TableType,
     ) !void {
         _ = io;
         _ = gpa;
         _ = dir;
-        _ = ContentPathT;
-        _ = fileName;
-        _ = content;
         _ = Table;
+        _ = parmas;
     }
 
     pub fn preProcess2(
@@ -118,6 +229,12 @@ pub const Example_Cooker = struct {
         _ = content;
         _ = fullPath;
         _ = database;
+    }
+
+    pub fn judgeFileType2(content: []u8, fType: ProcessType) ProcessType {
+        _ = content;
+
+        return fType;
     }
 };
 
@@ -131,20 +248,16 @@ pub const PNG_Cooker = struct {
         io: Io,
         gpa: Allocator,
         dir: Io.Dir,
-        ContentPathT: *tables.ContentPath,
-        fileName: []const u8,
-        content: []const u8,
+        parmas: *PreProcessParm,
         ImageLoadParameterT: *TbaleType,
     ) !void {
         _ = io;
         _ = gpa;
         _ = dir;
-        _ = ContentPathT;
-        _ = content;
 
-        const format: vk.VkFormat, const tiling: vk.VkImageTiling, const usage: vk.VkImageUsageFlags, const properties: vk.VkMemoryPropertyFlags = try judgeImageLoadParameter(fileName);
+        const format: vk.VkFormat, const tiling: vk.VkImageTiling, const usage: vk.VkImageUsageFlags, const properties: vk.VkMemoryPropertyFlags = try judgeImageLoadParameter(parmas.fileName);
 
-        try ImageLoadParameterT.update("Format,Tiling,Usage,Properties", "FileName = ?", .{ format, tiling, usage, properties, fileName });
+        try ImageLoadParameterT.update("Format,Tiling,Usage,Properties", "FileName = ?", .{ format, tiling, usage, properties, parmas.fileName });
     }
 
     pub fn preProcess2(
@@ -163,6 +276,14 @@ pub const PNG_Cooker = struct {
         _ = content;
         _ = fullPath;
         _ = database;
+    }
+
+    pub fn judgeFileType2(content: []u8, fType: ProcessType) ProcessType {
+        _ = fType;
+        if (std.mem.eql(u8, content[0..PNG.len], @constCast(&PNG))) {
+            return .PNG;
+        }
+        return judgeFileTypeByContent(content);
     }
 
     fn judgeImageLoadParameter(fileName: []const u8) !struct {
@@ -185,6 +306,16 @@ pub const PNG_Cooker = struct {
 fn judgeFileType() !void {}
 fn getInsertID() !void {}
 
+const VTX_Mem = struct {
+    vType: u32,
+    verticeBytesLen: u64,
+    meshletsBytesLen: u64,
+    meshletVerticesBytesLen: u64,
+    meshletTrianglesBytesLen: u64,
+    fileUUID: []const u8,
+    hash: hash.ReturnType,
+};
+
 pub const GLTF_Cooker = struct {
     pub const TableName = "ModelLoadParameterT";
     pub const Enable = true;
@@ -195,10 +326,7 @@ pub const GLTF_Cooker = struct {
         io: Io,
         gpa: Allocator,
         dir: Io.Dir,
-        ContentPathT: *tables.ContentPath,
-        fileName: []const u8,
-        content: []const u8,
-        // fileUUID: []const u8,
+        parmas: *PreProcessParm,
         // rpZ: []const u8,
         // slash: []const u8,
         // parentID: []const u8,
@@ -208,8 +336,8 @@ pub const GLTF_Cooker = struct {
         ModelLoadParameterT: *TableType,
     ) !void {
         _ = ModelLoadParameterT;
-        std.log.debug("file name {s}", .{fileName});
-        var res = try cgltf.loadGltfFile(content, gpa);
+        std.log.debug("file name {s}", .{parmas.fileName});
+        var res = try cgltf.loadGltfFile(parmas.content, gpa);
         defer res.arenaAllocator.deinit();
 
         // const arena = SceneJson.arena.allocator();
@@ -273,12 +401,12 @@ pub const GLTF_Cooker = struct {
 
             var buffer = [_:0]u8{0} ** 256;
             const primFileName = try std.fmt.bufPrintZ(&buffer, "{s}.vtx", .{value.name});
-            checkGltfPrimitiveName(ContentPathT, value.name) catch {
+            checkGltfPrimitiveName(parmas.ContentPathT, value.name) catch {
                 var blob: sqlDB.BLOBForGet = undefined;
                 var anys = [_]*anyopaque{&blob};
                 var types = [_]sqlDB.innerType{.BLOB};
 
-                ContentPathT.get(
+                parmas.ContentPathT.get(
                     "ContentHash",
                     null,
                     "FileName = ?",
@@ -300,158 +428,126 @@ pub const GLTF_Cooker = struct {
             var primFileWriter = primFile.writer(io, &buffer);
             try primFileWriter.interface.writeAll(meshMem);
 
-            {
-                // const time: i64 = @truncate(std.Io.Timestamp.now(io, .real).toNanoseconds());
-                // const metadata = primFile.stat(io) catch |err| blk: switch (err) {
-                //     error.AccessDenied => {
-                //         try std.Io.sleep(
-                //             io,
-                //             std.Io.Duration{ .nanoseconds = std.time.ns_per_ms },
-                //             .real,
-                //         );
-                //         break :blk try primFile.stat(io);
-                //     },
-                //     else => return err,
-                // };
+            const uuidBuffer = try gpa.alloc(u8, UUID.len);
 
-                // var relativePathBuffer = [_]u8{0} ** 256;
-                // const relativePathZ = try std.fmt.bufPrintZ(&relativePathBuffer, "{s}{s}{s}", .{ rpZ, slash, primFileName });
+            var anys = [_]*anyopaque{@ptrCast(uuidBuffer.ptr)};
+            var types = [_]sqlDB.innerType{.TEXT};
 
-                // var uuidBuffer = [_:0]u8{0} ** UUID.len;
-                // try UUID.createNewUUID(&uuidBuffer);
-                // const sufffix_index = std.mem.lastIndexOf(u8, primFileName, ".") orelse primFileName.len;
-                // const fType = judgeFileType(primFileName[sufffix_index..], meshMem);
+            parmas.ContentPathT.get(
+                "UUID",
+                null,
+                "FileName = ?",
+                .{parmas.fileName},
+                &anys,
+                &types,
+            ) catch return;
 
-                // try ContentPathT.insert(.{
-                //     .ID = @intCast(getInsertID()),
-                //     .UUID = @constCast(&uuidBuffer),
-                //     .ParentUUID = @constCast(parentID.ptr),
-                //     .RelativePath = @constCast(relativePathZ.ptr),
-                //     .FileName = @constCast(primFileName.ptr),
-                //     .TYPE = @intFromEnum(metadata.kind),
-                //     .FileSize = @intCast(metadata.size),
-                //     .ContentHash = sqlDB.BLOB{ .data = &hashh, .len = hash.blake3.BLAKE3_OUT_LEN },
-                //     .ModifiedTime = @as(i64, @truncate(metadata.mtime.toNanoseconds())),
-                //     .LastSeenTime = time,
-                //     .FileType = @intFromEnum(fType),
-                // });
+            const primFileParm = try gpa.alloc(u8, @sizeOf(VTX_Mem));
 
-                // const relativePathZ2 = try std.fmt.bufPrintZ(&relativePathBuffer, "{s}{s}{s}", .{ rpZ, slash, fileName });
+            var ptr = VTX_Mem{
+                .vType = @as(u32, @intFromEnum(vertex_opted.vType)),
+                .verticeBytesLen = verticeBytes.len,
+                .meshletsBytesLen = meshletsBytes.len,
+                .meshletVerticesBytesLen = meshletVerticesBytes.len,
+                .meshletTrianglesBytesLen = meshletTrianglesBytes.len,
+                .fileUUID = uuidBuffer,
+                .hash = hashh,
+            };
+            @memcpy(primFileParm, std.mem.asBytes(&ptr));
 
-                // var anys = [_]*anyopaque{&uuidBuffer};
-                // var types = [_]sqlDB.innerType{.TEXT};
+            const dupePrimFileName = try gpa.dupeZ(u8, primFileName);
 
-                // try ContentPathT.get(
-                //     "UUID",
-                //     null,
-                //     "RelativePath = ?",
-                //     .{relativePathZ2},
-                //     &anys,
-                //     &types,
-                // );
-
-                // try Table.update(
-                //     "VertexType,VerticesSize,MeshletsSize,MeshletVerticesSize,MeshletTrianglesSize,ParentModelFile",
-                //     "ContentHash = ?",
-                //     .{
-                //         @as(u32, @intFromEnum(vertex_opted.vType)),
-                //         verticeBytes.len,
-                //         meshletsBytes.len,
-                //         meshletVerticesBytes.len,
-                //         meshletTrianglesBytes.len,
-                //         fileUUID,
-                //         sqlDB.BLOB{ .data = &hashh, .len = hash.blake3.BLAKE3_OUT_LEN },
-                //     },
-                // );
-            }
+            try fileDbParamMap.put(dupePrimFileName, primFileParm);
         }
 
-        // const initSceneCount = SceneJson.value.?.len;
-        // var sceneAdd: usize = 0;
-        // var currentIndex: usize = initSceneCount + sceneAdd;
-        // for (res.scenes) |scene| {
-        //     const scene_name = try arena.dupe(u8, scene.name);
-        //     const getRes = try SceneNameStringMap.getOrPut(scene_name);
+        const arena = SceneJson.arena.allocator();
+        const initSceneCount = SceneJson.value.?.len;
+        var sceneAdd: usize = 0;
+        var currentIndex: usize = initSceneCount + sceneAdd;
+        for (res.scenes) |scene| {
+            const scene_name = try arena.dupe(u8, scene.name);
+            const getRes = try SceneNameStringMap.getOrPut(scene_name);
 
-        //     var scenePtr: *cgltf.Scene = undefined;
+            var scenePtr: *cgltf.Scene = undefined;
 
-        //     if (getRes.found_existing) {
-        //         currentIndex = getRes.value_ptr.*;
+            if (getRes.found_existing) {
+                currentIndex = getRes.value_ptr.*;
 
-        //         scenePtr = &SceneJson.value.?[currentIndex];
-        //     } else {
-        //         currentIndex = initSceneCount + sceneAdd;
+                scenePtr = &SceneJson.value.?[currentIndex];
+            } else {
+                currentIndex = initSceneCount + sceneAdd;
 
-        //         SceneJson.value = try arena.realloc(SceneJson.value.?, initSceneCount + sceneAdd + 1);
-        //         scenePtr = &SceneJson.value.?[currentIndex];
+                SceneJson.value = try arena.realloc(SceneJson.value.?, initSceneCount + sceneAdd + 1);
+                scenePtr = &SceneJson.value.?[currentIndex];
 
-        //         getRes.value_ptr.* = @intCast(currentIndex);
+                getRes.value_ptr.* = @intCast(currentIndex);
 
-        //         SceneNodeNames = try arena.realloc(SceneNodeNames, initSceneCount + sceneAdd + 1);
-        //         SceneNodeNames[currentIndex] = .init(arena);
+                SceneNodeNames = try arena.realloc(SceneNodeNames, initSceneCount + sceneAdd + 1);
+                SceneNodeNames[currentIndex] = .init(arena);
 
-        //         scenePtr.nodes = &.{};
-        //         scenePtr.name = scene_name;
+                scenePtr.nodes = &.{};
+                scenePtr.name = scene_name;
 
-        //         sceneAdd += 1;
-        //     }
+                sceneAdd += 1;
+            }
 
-        //     const initNodeCount = scenePtr.nodes.len;
-        //     var nodeAdd: usize = 0;
+            const initNodeCount = scenePtr.nodes.len;
+            var nodeAdd: usize = 0;
 
-        //     for (scene.nodes, 0..) |node, j| {
-        //         _ = j;
-        //         const node_name = try arena.dupe(u8, node.name);
-        //         const node_getRes = try SceneNodeNames[currentIndex].getOrPut(node_name);
+            for (scene.nodes, 0..) |node, j| {
+                _ = j;
+                const node_name = try arena.dupe(u8, node.name);
+                const node_getRes = try SceneNodeNames[currentIndex].getOrPut(node_name);
 
-        //         var nodePtr: *cgltf.Node = undefined;
+                var nodePtr: *cgltf.Node = undefined;
 
-        //         if (node_getRes.found_existing) {
-        //             nodePtr = &scenePtr.nodes[node_getRes.value_ptr.*];
-        //         } else {
-        //             scenePtr.nodes = try arena.realloc(scenePtr.nodes, initNodeCount + nodeAdd + 1);
-        //             nodePtr = &scenePtr.nodes[initNodeCount + nodeAdd];
+                if (node_getRes.found_existing) {
+                    nodePtr = &scenePtr.nodes[node_getRes.value_ptr.*];
+                } else {
+                    scenePtr.nodes = try arena.realloc(scenePtr.nodes, initNodeCount + nodeAdd + 1);
+                    nodePtr = &scenePtr.nodes[initNodeCount + nodeAdd];
 
-        //             node_getRes.value_ptr.* = @intCast(initNodeCount + nodeAdd);
+                    node_getRes.value_ptr.* = @intCast(initNodeCount + nodeAdd);
 
-        //             nodePtr.primitiveNames = &.{};
-        //             nodePtr.name = node_name;
-        //             nodePtr.transform = node.transform;
+                    nodePtr.primitiveNames = &.{};
+                    nodePtr.name = node_name;
+                    nodePtr.transform = node.transform;
 
-        //             nodeAdd += 1;
-        //         }
+                    nodeAdd += 1;
+                }
 
-        //         const initPrimitiveCount = nodePtr.primitiveNames.len;
+                const initPrimitiveCount = nodePtr.primitiveNames.len;
 
-        //         var primNameMap = std.StringHashMap(void).init(arena);
-        //         defer primNameMap.deinit();
+                var primNameMap = std.StringHashMap(void).init(arena);
+                defer primNameMap.deinit();
 
-        //         for (nodePtr.primitiveNames, 0..) |primName, k| {
-        //             _ = k;
-        //             try primNameMap.put(primName, {});
-        //         }
+                for (nodePtr.primitiveNames, 0..) |primName, k| {
+                    _ = k;
+                    try primNameMap.put(primName, {});
+                }
 
-        //         var primAdd: usize = 0;
+                var primAdd: usize = 0;
 
-        //         for (node.primitiveNames, 0..) |primName, k| {
-        //             _ = k;
-        //             const primNameGetRes = try primNameMap.getOrPut(primName);
+                for (node.primitiveNames, 0..) |primName, k| {
+                    _ = k;
+                    const primNameGetRes = try primNameMap.getOrPut(primName);
 
-        //             if (primNameGetRes.found_existing) {
-        //                 return;
-        //             } else {
-        //                 nodePtr.primitiveNames = try arena.realloc(
-        //                     nodePtr.primitiveNames,
-        //                     initPrimitiveCount + primAdd + 1,
-        //                 );
+                    if (primNameGetRes.found_existing) {
+                        return;
+                    } else {
+                        nodePtr.primitiveNames = try arena.realloc(
+                            nodePtr.primitiveNames,
+                            initPrimitiveCount + primAdd + 1,
+                        );
 
-        //                 nodePtr.primitiveNames[primAdd + initPrimitiveCount] = try arena.dupe(u8, primName);
+                        nodePtr.primitiveNames[primAdd + initPrimitiveCount] = try arena.dupe(u8, primName);
 
-        //                 primAdd += 1;
-        //             }
-        //         }
-        //     }
-        // }
+                        primAdd += 1;
+                    }
+                }
+            }
+        }
+        try saveSceneJson(io, contentFolder);
     }
 
     pub fn preProcess2(
@@ -470,6 +566,14 @@ pub const GLTF_Cooker = struct {
         _ = content;
         _ = fullPath;
         _ = database;
+    }
+
+    pub fn judgeFileType2(content: []u8, fType: ProcessType) ProcessType {
+        _ = fType;
+        if (std.mem.eql(u8, content[0..GLTF.len], @constCast(GLTF))) {
+            return .GLTF;
+        }
+        return judgeFileTypeByContent(content);
     }
 
     fn optimizeVertex(vertex: vertexStruct.Vertex, index: []u32, allocator: std.mem.Allocator) !struct {
@@ -563,18 +667,14 @@ pub const Sampler_Cooker = struct {
         io: Io,
         gpa: Allocator,
         dir: Io.Dir,
-        ContentPathT: *tables.ContentPath,
-        fileName: []const u8,
-        content: []const u8,
+        parmas: *PreProcessParm,
         Table: *TableType,
     ) !void {
         _ = io;
         _ = gpa;
         _ = dir;
-        _ = ContentPathT;
-        _ = fileName;
-        _ = content;
         _ = Table;
+        _ = parmas;
     }
 
     pub fn preProcess2(
@@ -606,6 +706,11 @@ pub const Sampler_Cooker = struct {
             return;
         };
     }
+
+    pub fn judgeFileType2(content: []u8, fType: ProcessType) ProcessType {
+        _ = content;
+        return fType;
+    }
 };
 
 pub const Pipeline_Cooker = struct {
@@ -617,18 +722,14 @@ pub const Pipeline_Cooker = struct {
         io: Io,
         gpa: Allocator,
         dir: Io.Dir,
-        ContentPathT: *tables.ContentPath,
-        fileName: []const u8,
-        content: []const u8,
+        parmas: *PreProcessParm,
         Table: *TableType,
     ) !void {
         _ = io;
         _ = gpa;
         _ = dir;
-        _ = ContentPathT;
-        _ = fileName;
-        _ = content;
         _ = Table;
+        _ = parmas;
     }
 
     pub fn preProcess2(
@@ -750,6 +851,11 @@ pub const Pipeline_Cooker = struct {
             std.log.debug("{s}", .{shaderName});
         }
     }
+
+    pub fn judgeFileType2(content: []u8, fType: ProcessType) ProcessType {
+        _ = content;
+        return fType;
+    }
 };
 
 pub const Shader_Cooker = struct {
@@ -761,18 +867,14 @@ pub const Shader_Cooker = struct {
         io: Io,
         gpa: Allocator,
         dir: Io.Dir,
-        ContentPathT: *tables.ContentPath,
-        fileName: []const u8,
-        content: []const u8,
+        parmas: *PreProcessParm,
         Table: *TableType,
     ) !void {
         _ = io;
         _ = gpa;
         _ = dir;
-        _ = ContentPathT;
-        _ = fileName;
-        _ = content;
         _ = Table;
+        _ = parmas;
     }
 
     pub fn preProcess2(
@@ -998,6 +1100,78 @@ pub const Shader_Cooker = struct {
             }
         }
     }
+
+    pub fn judgeFileType2(content: []u8, fType: ProcessType) ProcessType {
+        _ = content;
+        return fType;
+    }
+};
+
+pub const VTX_Cooker = struct {
+    pub const TableName = "ModelLoadParameterT";
+    pub const Enable = true;
+    const TableType = tables.ModelLoadParameter;
+
+    pub fn preProcess(
+        io: Io,
+        gpa: Allocator,
+        dir: Io.Dir,
+        parmas: *PreProcessParm,
+        Table: *TableType,
+    ) !void {
+        _ = io;
+        _ = dir;
+
+        const mem = fileDbParamMap.get(parmas.fileName) orelse return;
+        assert(@sizeOf(VTX_Mem) == mem.len);
+
+        defer {
+            if (fileDbParamMap.getEntry(parmas.fileName)) |e| {
+                gpa.free(e.value_ptr.*);
+                gpa.free(e.key_ptr.*);
+            }
+        }
+
+        const p = std.mem.bytesToValue(VTX_Mem, mem.ptr);
+
+        try Table.update(
+            "VertexType,VerticesSize,MeshletsSize,MeshletVerticesSize,MeshletTrianglesSize,ParentModelFile",
+            "ContentHash = ?",
+            .{
+                p.vType,
+                p.verticeBytesLen,
+                p.meshletsBytesLen,
+                p.meshletVerticesBytesLen,
+                p.meshletTrianglesBytesLen,
+                p.fileUUID,
+                sqlDB.BLOB{ .data = &p.hash, .len = hash.blake3.BLAKE3_OUT_LEN },
+            },
+        );
+    }
+
+    pub fn preProcess2(
+        io: Io,
+        gpa: Allocator,
+        contentFolderPath: []const u8,
+        fileName: [:0]u8,
+        content: []const u8,
+        fullPath: [:0]u8,
+        database: *db,
+    ) !void {
+        _ = io;
+        _ = gpa;
+        _ = contentFolderPath;
+        _ = fileName;
+        _ = content;
+        _ = fullPath;
+        _ = database;
+    }
+
+    pub fn judgeFileType2(content: []u8, fType: ProcessType) ProcessType {
+        _ = content;
+
+        return fType;
+    }
 };
 
 pub const DIR_Cooker = Example_Cooker;
@@ -1009,10 +1183,19 @@ pub const TTF_Cooker = Example_Cooker;
 pub const WAV_Cooker = Example_Cooker;
 pub const SPV_Cooker = Example_Cooker;
 pub const TXT_Cooker = Example_Cooker;
-pub const VTX_Cooker = Example_Cooker;
 
 pub const HASHTABLE_Cooker = Example_Cooker;
 pub const PipeB_Cooker = Example_Cooker;
 pub const SamplerB_Cooker = Example_Cooker;
 pub const KTX2_Cooker = Example_Cooker;
 pub const UNKNOWN_Cooker = Example_Cooker;
+
+pub fn judgeFileTypeByContent(content: []u8) ProcessType {
+    if (std.mem.eql(u8, content, @constCast(&PNG))) {
+        return .PNG;
+    } else if (std.mem.eql(u8, content, @constCast(GLTF))) {
+        return .GLTF;
+    } else {
+        return .UNKNOWN;
+    }
+}
