@@ -78,7 +78,7 @@ fn updateLoadParameter(
                     .ContentPathT = &ContentPathT,
                     .fileName = fileName,
                 };
-                try field.preProcess(io, gpa, dir, &pack, &@field(allTable, field.TableName));
+                try field.preProcess(io, gpa, dir, &pack, &@field(customTablePack, field.TableName));
             }
         },
     }
@@ -490,8 +490,7 @@ fn getInsertID() u32 {
 const AllTable = struct {
     db: ?*sqlite.sqlite3,
     ContentPathT: tables.ContentPath,
-    ImageLoadParameterT: tables.ImageLoadParameter,
-    ModelLoadParameterT: tables.ModelLoadParameter,
+    customTablePack: resourceProcess.CustomTablePack,
     ShaderPipelineGraphNodeT: tables.ShaderPipelineGraphNode,
     ShaderPipelineGraphEdgeT: tables.ShaderPipelineGraphEdge,
 
@@ -501,7 +500,7 @@ const AllTable = struct {
 var db: ?*sqlite.sqlite3 = undefined;
 var ContentPathT: tables.ContentPath = undefined;
 
-var allTable: AllTable = undefined;
+var customTablePack: resourceProcess.CustomTablePack = undefined;
 
 var ShaderPipelineGraphNodeT: tables.ShaderPipelineGraphNode = undefined;
 var ShaderPipelineGraphEdgeT: tables.ShaderPipelineGraphEdge = undefined;
@@ -512,7 +511,7 @@ pub fn init(tablePack: AllTable, io: Io, allocator: std.mem.Allocator, content: 
     db = tablePack.db;
     ContentPathT = tablePack.ContentPathT;
 
-    allTable = tablePack;
+    customTablePack = tablePack.customTablePack;
 
     ShaderPipelineGraphNodeT = tablePack.ShaderPipelineGraphNodeT;
     ShaderPipelineGraphEdgeT = tablePack.ShaderPipelineGraphEdgeT;
@@ -520,17 +519,9 @@ pub fn init(tablePack: AllTable, io: Io, allocator: std.mem.Allocator, content: 
     try resourceProcess.preProcessInit(io, allocator, content);
 }
 
-pub fn processContentFolder(content: std.Io.Dir, io: std.Io, tablePack: AllTable, allocator: std.mem.Allocator) !void {
-    gpa = allocator;
-    db = tablePack.db;
-    ContentPathT = tablePack.ContentPathT;
-
-    allTable = tablePack;
-
-    ShaderPipelineGraphNodeT = tablePack.ShaderPipelineGraphNodeT;
-    ShaderPipelineGraphEdgeT = tablePack.ShaderPipelineGraphEdgeT;
-
-    const exist = tablePack.contentPathExist;
+pub fn processContentFolder(content: std.Io.Dir, io: std.Io, allocator: std.mem.Allocator) !void {
+    _ = allocator;
+    const exist = true;
 
     var buffer = [_]u8{0} ** UUID.len;
     const time: i64 = @truncate(std.Io.Timestamp.now(io, .real).toNanoseconds());

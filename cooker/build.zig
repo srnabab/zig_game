@@ -30,7 +30,7 @@ pub fn build(b: *std.Build) void {
         .flags = &c_flags,
     });
     const tables_mod = b.createModule(.{
-        .root_source_file = b.path("../shared/tables.zig"),
+        .root_source_file = b.path("shared_b/tables.zig"),
         .target = target,
         .optimize = optimize,
     });

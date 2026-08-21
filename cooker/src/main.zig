@@ -445,11 +445,11 @@ fn renameNew(
 
             switch (fType) {
                 .Shader => {
-                    // try database.ShaderPipelineGraphNodeT.update(
-                    //     "Path, Name",
-                    //     "Name = ?",
-                    //     .{ fullPath, name_utf8, old },
-                    // );
+                    try database.ShaderPipelineGraphNodeT.update(
+                        "Path, Name",
+                        "Name = ?",
+                        .{ fullPath, name_utf8, old },
+                    );
                 },
                 else => {},
             }

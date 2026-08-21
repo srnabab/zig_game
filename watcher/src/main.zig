@@ -4,12 +4,6 @@ const Allocator = std.mem.Allocator;
 
 const assert = std.debug.assert;
 
-const shaderc = @import("shaderc");
-const sampler = @import("sampler");
-const pipelineParse = @import("pipelinrParse");
-
-// const db = @import("db");
-
 const configFile = ".watching";
 const databaseFile = "Content.db";
 
