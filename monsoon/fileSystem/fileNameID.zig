@@ -18,14 +18,15 @@ const list = [_]KV{
 .{ "bottom.obj", 10 },
 .{ "bottom.png", 11 },
 .{ "cube.glb", 12 },
-.{ "Plane.001_0.vtx", 13 },
+.{ "Cube_0.vtx", 13 },
 .{ "1_3_bird_feather.glb", 14 },
+.{ "Plane.001_0.vtx", 15 },
 .{ "box.obj", 16 },
 .{ "box.png", 17 },
 .{ "dragon.glb", 18 },
 .{ "LoadMap", 19 },
 .{ "monkey.glb", 20 },
-.{ "dragon_0.vtx", 21 },
+.{ "Suzanne_0.vtx", 21 },
 .{ "voxel.mtl", 22 },
 .{ "voxel.obj", 23 },
 .{ "voxel.png", 24 },
@@ -101,9 +102,8 @@ const list = [_]KV{
 .{ "iv_feather.pipeb", 94 },
 .{ "large_bilied_crow1Blue-violet.binary", 95 },
 .{ "feather_lut.ktx2", 96 },
-.{ "Suzanne_0.vtx", 97 },
 .{ "test.lMap", 98 },
-.{ "Cube_0.vtx", 99 },
+.{ "dragon_0.vtx", 99 },
 };
 
 break: map std.StaticStringMap(i32).initComptime(list);
