@@ -70,15 +70,30 @@ fn updateLoadParameter(
         inline else => |t| {
             const cookerName = std.fmt.comptimePrint("{s}{s}", .{ @tagName(t), "_Cooker" });
 
-            const field = @field(resourceProcess, cookerName);
+            if (@hasDecl(resourceProcess, cookerName)) {
+                const field = @field(resourceProcess, cookerName);
 
-            if (field.Enable) {
+                if (field.Enable) {
+                    var pack = resourceProcess.PreProcessParm{
+                        .content = content,
+                        .ContentPathT = &ContentPathT,
+                        .fileName = fileName,
+                    };
+                    try field.preProcess(io, gpa, dir, &pack, &@field(customTablePack, field.TableName));
+                }
+            } else {
                 var pack = resourceProcess.PreProcessParm{
                     .content = content,
                     .ContentPathT = &ContentPathT,
                     .fileName = fileName,
                 };
-                try field.preProcess(io, gpa, dir, &pack, &@field(customTablePack, field.TableName));
+                try resourceProcess.Example_Cooker.preProcess(
+                    io,
+                    gpa,
+                    dir,
+                    &pack,
+                    &ContentPathT,
+                );
             }
         },
     }
@@ -140,9 +155,13 @@ pub fn judgeFileType(suffix: []const u8, content: []u8) FileType {
         inline else => |t| {
             const cookerName = std.fmt.comptimePrint("{s}{s}", .{ @tagName(t), "_Cooker" });
 
-            const field = @field(resourceProcess, cookerName);
+            if (@hasDecl(resourceProcess, cookerName)) {
+                const field = @field(resourceProcess, cookerName);
 
-            return field.judgeFileType2(content, fType);
+                return field.judgeFileType2(content, fType);
+            } else {
+                return resourceProcess.Example_Cooker.judgeFileType2(content, fType);
+            }
         },
     }
 }

@@ -315,6 +315,14 @@ pub fn build(b: *std.Build) void {
     resourceProcess_mod.addImport("handle", handle_mod);
     resourceProcess_mod.addImport("vulkan", vk_c_mod);
     resourceProcess_mod.addImport("tables", tables_mod);
+    resourceProcess_mod.addImport("fileSystem", fileSystem_mod);
+    resourceProcess_mod.addImport("ms_std", ms_mod);
+    resourceProcess_mod.addImport("resource", resource_mod);
+    resourceProcess_mod.addImport("video", video_mod);
+    resourceProcess_mod.addImport("ktx", ktx_mod);
+    resourceProcess_mod.addImport("vk", vk_c_mod);
+    resourceProcess_mod.addImport("vertexStruct", vertexStruct_mod);
+    resourceProcess_mod.addImport("stb_image", stb_image_mod);
 
     setPass_mod.addImport("vertexStruct", vertexStruct_mod);
     setPass_mod.addImport("cglm", cglm_mod);

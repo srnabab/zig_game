@@ -493,8 +493,9 @@ pub fn main(init: std.process.Init) !void {
                         // try cookerInit(io, &cookerArgv, dbPath, dbPathStart);
                     };
 
-                    const wRes = try cooker.wait(io);
-                    switchOnTerm(wRes);
+                    Io.sleep(io, .fromSeconds(1), .real) catch {};
+                    cooker.kill(io);
+                    // switchOnTerm(wRes);
 
                     const cookerBuildZig =
                         try std.fmt.allocPrint(allocator, "{s}{s}build.zig", .{ cookerRootPath.?, "/" });

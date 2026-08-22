@@ -3,6 +3,7 @@ const Io = std.Io;
 
 const Allocator = std.mem.Allocator;
 
+// shared
 const png = @import("resourceProcess/png.zig");
 const vtx = @import("resourceProcess/vtx.zig");
 const gltf = @import("resourceProcess/gltf.zig");
@@ -15,6 +16,21 @@ const triggers = @import("triggers.zig");
 
 const cgltf = @import("cgltf");
 const db = @import("db");
+
+// runtime
+const file = @import("fileSystem");
+const sqlite3 = ?*file.sqlite.sqlite3;
+const VkStruct = @import("video");
+const Handles = @import("handle");
+const Handle = Handles.Handle;
+const mstd = @import("ms_std");
+const resource = @import("resource");
+
+const Resource = resource.Resource;
+
+const MutexArray = mstd.MutexArray;
+
+const ktx2 = @import("resourceProcess/ktx2.zig");
 
 pub const CustomTables = [_]type{
     tables.ModelLoadParameter,
@@ -78,12 +94,6 @@ pub const PreProcessParm = struct {
     // fileDbParamMap: *fileDbParamMapType,
 };
 
-const HandleType = @import("handle").ResourceType;
-pub const ProcessType_HandleType = struct {
-    type1: ProcessType,
-    type2: HandleType,
-};
-
 pub const ProcessType = enum {
     DIR,
     OBJ,
@@ -138,31 +148,27 @@ pub const list = [_]KV{
     .{ ".ktx2", ProcessType.KTX2 },
 };
 
+const HandleType = @import("handle").ResourceType;
+pub const ProcessType_HandleType = struct {
+    ProcessType,
+    HandleType,
+};
 pub const Mappings = [_]ProcessType_HandleType{
-    // add here
+    .{ ProcessType.PNG, HandleType.texture },
+    .{ ProcessType.KTX2, HandleType.texture },
+    .{ ProcessType.VTX, HandleType.mesh },
 };
 
-pub const DIR_Cooker = Example_Cooker;
-pub const OBJ_Cooker = Example_Cooker;
-pub const MTL_Cooker = Example_Cooker;
-pub const TSDI_Cooker = Example_Cooker;
-pub const TSD_Cooker = Example_Cooker;
-pub const TTF_Cooker = Example_Cooker;
-pub const WAV_Cooker = Example_Cooker;
-pub const SPV_Cooker = Example_Cooker;
-pub const TXT_Cooker = Example_Cooker;
-
-pub const HASHTABLE_Cooker = Example_Cooker;
-pub const PipeB_Cooker = Example_Cooker;
-pub const SamplerB_Cooker = Example_Cooker;
-pub const KTX2_Cooker = Example_Cooker;
-pub const UNKNOWN_Cooker = Example_Cooker;
 pub const PNG_Cooker = png.PNG_Cooker;
 pub const GLTF_Cooker = gltf.GLTF_Cooker;
 pub const VTX_Cooker = vtx.VTX_Cooker;
 pub const Sampler_Cooker = sampler.Sampler_Cooker;
 pub const Shader_Cooker = shader.Shader_Cooker;
 pub const Pipeline_Cooker = pipeline.Pipeline_Cooker;
+
+pub const KTX2_Reader = ktx2.KTX2_Reader;
+pub const VTX_Reader = vtx.VTX_Reader;
+pub const PNG_Reader = png.PNG_Reader;
 
 const PNG = png.PNG;
 const GLTF = gltf.GLTF;
@@ -264,7 +270,7 @@ pub const Example_Cooker = struct {
         _ = gpa;
         _ = dir;
         _ = Table;
-        _ = parmas;
+        std.log.debug("skip {s}", .{parmas.fileName});
     }
 
     pub fn preProcess2(
@@ -289,5 +295,28 @@ pub const Example_Cooker = struct {
         _ = content;
 
         return fType;
+    }
+};
+
+pub const Example_Reader = struct {
+    pub fn processResource(
+        comptime fType: ProcessType,
+        io: Io,
+        gpa: Allocator,
+        sqlite: sqlite3,
+        vulkan: *VkStruct,
+        fileID: i32,
+        handle: Handle,
+        resourceArray: *MutexArray(Resource),
+    ) Io.Cancelable!void {
+        _ = io;
+        _ = gpa;
+        _ = sqlite;
+        _ = vulkan;
+        _ = fileID;
+        _ = handle;
+        _ = resourceArray;
+        std.log.debug("unsupported type {s}", .{@tagName(fType)});
+        unreachable;
     }
 };

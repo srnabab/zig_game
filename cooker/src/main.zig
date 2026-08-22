@@ -74,6 +74,7 @@ pub fn main(init: std.process.Init) !void {
 
     while (true) {
         const buffer = try stdin.interface.takeDelimiter('\n');
+        // const now = Io.Timestamp.now(io, .real).toMicroseconds();
 
         if (buffer == null) continue;
         const b = buffer.?;
@@ -89,6 +90,18 @@ pub fn main(init: std.process.Init) !void {
             inContent = true;
         }
 
+        // std.log.debug("time used: {d}", .{Io.Timestamp.now(io, .real).toMicroseconds() - now});
+
+        const action_str = switch (action_num) {
+            1 => "create",
+            2 => "delete",
+            3 => "modify",
+            4 => "rename (old)",
+            5 => "rename (new)",
+            404 => return,
+            else => "unknown",
+        };
+
         var nameEnd = std.mem.find(u8, b[numEnd + 1 ..], "?") orelse {
             std.debug.panic("missing \"?\"", .{});
         };
@@ -100,16 +113,6 @@ pub fn main(init: std.process.Init) !void {
 
         const fullPath = try std.fmt.allocPrintSentinel(allocator, "{s}", .{b[nameEnd + 1 ..]}, 0);
         defer allocator.free(fullPath);
-
-        const action_str = switch (action_num) {
-            1 => "create",
-            2 => "delete",
-            3 => "modify",
-            4 => "rename (old)",
-            5 => "rename (new)",
-            404 => return,
-            else => "unknown",
-        };
 
         std.log.debug("from child: [{s}] {s} {s}", .{ action_str, name_utf8, fullPath });
 
@@ -218,10 +221,22 @@ pub fn main(init: std.process.Init) !void {
                                 inline else => |t| {
                                     const cookerName = std.fmt.comptimePrint("{s}{s}", .{ @tagName(t), "_Cooker" });
 
-                                    const field = @field(db.resourceProcess, cookerName);
+                                    if (@hasDecl(db.resourceProcess, cookerName)) {
+                                        const field = @field(db.resourceProcess, cookerName);
 
-                                    if (field.Enable)
-                                        try field.preProcess2(io, allocator, contentDatabaseRelativePathStart, fileName, content, fullPath, database);
+                                        if (field.Enable)
+                                            try field.preProcess2(io, allocator, contentDatabaseRelativePathStart, fileName, content, fullPath, database);
+                                    } else {
+                                        try db.resourceProcess.Example_Cooker.preProcess2(
+                                            io,
+                                            allocator,
+                                            contentDatabaseRelativePathStart,
+                                            fileName,
+                                            content,
+                                            fullPath,
+                                            database,
+                                        );
+                                    }
                                 },
                             }
                         }
