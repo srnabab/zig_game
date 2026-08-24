@@ -120,6 +120,7 @@ pub fn upload(self: *Self, vulkan: *VkStruct, commands: *Commands, passName: []c
         0,
         .staging,
         false,
+        null,
     );
 
     const stagingBuffer2 = try vulkan.createBufferByUsage(
@@ -127,6 +128,7 @@ pub fn upload(self: *Self, vulkan: *VkStruct, commands: *Commands, passName: []c
         0,
         .staging,
         false,
+        null,
     );
 
     vulkan.buffers.copyDataToMapped(stagingBuffer1, 0, Command, records.commands);

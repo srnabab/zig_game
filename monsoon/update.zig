@@ -46,6 +46,7 @@ pub const Args = struct {
     stateBuffering: *global.StateBufferingType,
     handles: *global.HandlesType,
     vulkan: *VkStruct,
+    commands: *process.externalCommands,
     meshes: *mesh,
 };
 
@@ -175,6 +176,8 @@ pub fn update_thread_func(args: Args) !void {
         .handleMutex = &handleMutex,
         .handles = handles,
         .vulkan = args.vulkan,
+        .externalCommands = args.commands,
+        .meshes = meshes,
     };
 
     for (0..7) |_| {

@@ -18,6 +18,8 @@ const Instance_t = @import("instance").Instance_t;
 const global = @import("global");
 const ringBuffer = mstd.RingBuffer;
 const MutexArray = mstd.MutexArray;
+const ExternalCommands = @import("processRender").externalCommands;
+const mesh = @import("mesh");
 
 const file = @import("fileSystem");
 const sqlite3 = ?*file.sqlite.sqlite3;
@@ -32,7 +34,7 @@ const resourceProcess = @import("resourceProcess");
 pub const ResourceType = enum {
     texture,
     position2D,
-    mesh,
+    // mesh,
     instance,
     meshInstance,
     others,
@@ -41,7 +43,7 @@ pub const ResourceType = enum {
 pub const Resource = union(ResourceType) {
     texture: Texture,
     position2D: Position2D,
-    mesh: Mesh,
+    // mesh: Mesh,
     instance: Instance,
     meshInstance: MeshInstance,
     others: Others,
@@ -128,6 +130,8 @@ pub const ResourceThreadArgs = struct {
     handleMutex: *Io.Mutex,
     handles: *global.HandlesType,
     vulkan: *VkStruct,
+    externalCommands: *ExternalCommands,
+    meshes: *mesh,
 };
 
 var idHandleCache: std.AutoHashMapUnmanaged(i32, Handle) = .empty;
@@ -203,8 +207,31 @@ pub fn processResource(args: ResourceThreadArgs) Io.Cancelable!void {
                     const readerName = std.fmt.comptimePrint("{s}{s}", .{ @tagName(t), "_Reader" });
 
                     if (@hasDecl(resourceProcess, readerName)) {
+                        const testBuffers = gpa.alloc(VkStruct.Buffer_t, 4) catch {
+                            return Io.Cancelable.Canceled;
+                        };
+                        defer gpa.free(testBuffers);
+
+                        testBuffers[0] = vulkan.buffers.getBuffer("featherMeshlet").?;
+                        testBuffers[1] = vulkan.buffers.getBuffer("featherVertices").?;
+                        testBuffers[2] = vulkan.buffers.getBuffer("featherMeshletVertices").?;
+                        testBuffers[3] = vulkan.buffers.getBuffer("featherMeshletTriangles").?;
+
                         const field = @field(resourceProcess, readerName);
-                        field.processResource(t, io, gpa, sqlite.?, vulkan, pack.id, pack.handle, resourceArray) catch continue;
+                        field.processResource(
+                            t,
+                            io,
+                            gpa,
+                            sqlite.?,
+                            vulkan,
+                            pack.id,
+                            pack.handle,
+                            testBuffers,
+                            args.handles,
+                            args.externalCommands,
+                            args.meshes,
+                            resourceArray,
+                        ) catch continue;
                     } else {
                         try resourceProcess.Example_Reader.processResource(
                             t,

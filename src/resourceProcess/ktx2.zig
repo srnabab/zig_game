@@ -3,6 +3,8 @@ const Io = std.Io;
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 
+const global = @import("global");
+
 const resourceProcess = @import("../resourceProcess.zig");
 const PreProcessParm = resourceProcess.PreProcessParm;
 const ProcessType = resourceProcess.ProcessType;
@@ -21,6 +23,10 @@ const Resource = resource.Resource;
 
 const ktx = @import("ktx");
 
+const Buffer_t = VkStruct.Buffer_t;
+const ExternalCommands = @import("processRender").externalCommands;
+const mesh = @import("mesh");
+
 pub const KTX2_Reader = struct {
     pub fn processResource(
         comptime fType: ProcessType,
@@ -30,9 +36,17 @@ pub const KTX2_Reader = struct {
         vulkan: *VkStruct,
         fileID: i32,
         handle: Handle,
+        buffers: ?[]Buffer_t,
+        handles: *global.HandlesType,
+        commands: *ExternalCommands,
+        meshes: *mesh,
         resourceArray: *MutexArray(Resource),
     ) !void {
         _ = fType;
+        _ = buffers;
+        _ = handles;
+        _ = commands;
+        _ = meshes;
         const img = file.getFile(io, fileID, sqlite.?) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
             return err;
@@ -69,7 +83,7 @@ pub const KTX2_Reader = struct {
 
         const pixelSize: u64 = texture.*.dataSize;
 
-        const stagingBuffer = vulkan.createBufferByUsage(pixelSize, 0, .staging, false) catch |err| {
+        const stagingBuffer = vulkan.createBufferByUsage(pixelSize, 0, .staging, false, null) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
             return err;
         };

@@ -2,6 +2,8 @@ const std = @import("std");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 
+const global = @import("global");
+
 const vk = @import("vulkan");
 const tables = @import("tables");
 const resourceProcess = @import("../resourceProcess.zig");
@@ -22,6 +24,9 @@ const resource = @import("resource");
 const Resource = resource.Resource;
 
 const stb_image = @import("stb_image");
+const Buffer_t = VkStruct.Buffer_t;
+const ExternalCommands = @import("processRender").externalCommands;
+const mesh = @import("mesh");
 
 pub const PNG = [_]u8{
     0x89,
@@ -106,9 +111,17 @@ pub const PNG_Reader = struct {
         vulkan: *VkStruct,
         fileID: i32,
         handle: Handle,
+        buffers: ?[]Buffer_t,
+        handles: *global.HandlesType,
+        commands: *ExternalCommands,
+        meshes: *mesh,
         resourceArray: *MutexArray(Resource),
     ) !void {
         _ = fType;
+        _ = buffers;
+        _ = handles;
+        _ = commands;
+        _ = meshes;
 
         const img = file.getImageLoadParam(io, fileID, sqlite.?) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
@@ -145,7 +158,7 @@ pub const PNG_Reader = struct {
         );
         const pixelSize: u64 = @intCast(@sizeOf(u8) * imgWidth * imgHeight * channel);
 
-        const stagingBuffer = vulkan.createBufferByUsage(pixelSize, 0, .staging, false) catch |err| {
+        const stagingBuffer = vulkan.createBufferByUsage(pixelSize, 0, .staging, false, null) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
             return err;
         };

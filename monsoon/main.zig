@@ -33,6 +33,7 @@ const file = @import("fileSystem");
 const pass = @import("pass");
 const renderFlow = @import("renderFlow");
 const setPass = @import("setPass");
+const ExternalCommands = @import("processRender").externalCommands;
 
 // const cgltf = @import("cgltf");
 
@@ -45,6 +46,7 @@ var render_thread: usize = 0;
 var debug_allocator: std.heap.DebugAllocator(.{ .stack_trace_frames = 10 }) = .init;
 pub fn main(init: std.process.Init) !void {
     const gpa = init.gpa;
+    const io = init.io;
 
     var tracyAllocator = tracy.TracingAllocator.initNamed("pool", gpa);
     defer tracyAllocator.deinit();
@@ -196,6 +198,9 @@ pub fn main(init: std.process.Init) !void {
     }
     defer passes.deinit(allocator_t.*);
 
+    var externalCommands = ExternalCommands.init(io, allocator_t.*);
+    defer externalCommands.deinit();
+
     var render_t = try Thread.spawn(
         .{},
         render.render_thread_func,
@@ -215,6 +220,7 @@ pub fn main(init: std.process.Init) !void {
             .passes = passes,
             .meshes = &meshes,
             .instances = &instances,
+            .externalCommands = &externalCommands,
         }},
     );
     defer render_t.join();
@@ -234,6 +240,7 @@ pub fn main(init: std.process.Init) !void {
             .handles = &handles,
             .vulkan = &vulkan,
             .meshes = &meshes,
+            .commands = &externalCommands,
         }},
     );
     defer update_t.join();

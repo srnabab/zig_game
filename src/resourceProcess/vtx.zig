@@ -2,6 +2,8 @@ const std = @import("std");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 
+const global = @import("global");
+
 const assert = std.debug.assert;
 
 const vk = @import("vulkan");
@@ -25,6 +27,9 @@ const MutexArray = mstd.MutexArray;
 const resource = @import("resource");
 const Resource = resource.Resource;
 const vertexStruct = @import("vertexStruct");
+const Buffer_t = VkStruct.Buffer_t;
+const ExternalCommands = @import("processRender").externalCommands;
+const mesh = @import("mesh");
 
 pub const VTX_Mem = struct {
     vType: u32,
@@ -114,9 +119,14 @@ pub const VTX_Reader = struct {
         vulkan: *VkStruct,
         fileID: i32,
         handle: Handle,
+        buffer_ts: ?[]Buffer_t,
+        handles: *global.HandlesType,
+        commands: *ExternalCommands,
+        meshes: *mesh,
         resourceArray: *MutexArray(Resource),
     ) !void {
         _ = fType;
+        _ = resourceArray;
         const res = file.getMeshLoadParam(io, fileID, sqlite) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
             return err;
@@ -161,74 +171,134 @@ pub const VTX_Reader = struct {
         //     std.log.debug("value {d}", .{value});
         // }
 
-        const stagingBuffer0 = vulkan.createBufferByUsage(
+        const verticesStagingBuffer = vulkan.createBufferByUsage(
             vertices.len,
             0,
             .staging,
             false,
+            null,
         ) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
             return err;
         };
-        errdefer vulkan.destroyBuffer(stagingBuffer0);
-        vulkan.buffers.copyDataToMapped(stagingBuffer0, 0, u8, vertices);
+        errdefer vulkan.destroyBuffer(verticesStagingBuffer);
+        vulkan.buffers.copyDataToMapped(verticesStagingBuffer, 0, u8, vertices);
 
-        const stagingBuffer1 = vulkan.createBufferByUsage(
+        const meshletStagingBuffer = vulkan.createBufferByUsage(
             meshlets.len,
             0,
             .staging,
             false,
+            null,
         ) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
             return err;
         };
-        errdefer vulkan.destroyBuffer(stagingBuffer1);
-        vulkan.buffers.copyDataToMapped(stagingBuffer1, 0, u8, meshlets);
+        errdefer vulkan.destroyBuffer(meshletStagingBuffer);
+        vulkan.buffers.copyDataToMapped(meshletStagingBuffer, 0, u8, meshlets);
 
-        const stagingBuffer2 = vulkan.createBufferByUsage(
+        const meshletVerticesStagingBuffer = vulkan.createBufferByUsage(
             meshletVertices.len,
             0,
             .staging,
             false,
+            null,
         ) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
             return err;
         };
-        errdefer vulkan.destroyBuffer(stagingBuffer2);
-        vulkan.buffers.copyDataToMapped(stagingBuffer2, 0, u8, meshletVertices);
+        errdefer vulkan.destroyBuffer(meshletVerticesStagingBuffer);
+        vulkan.buffers.copyDataToMapped(meshletVerticesStagingBuffer, 0, u8, meshletVertices);
 
-        const stagingBuffer3 = vulkan.createBufferByUsage(
+        const meshletTrianglesStagingBuffer = vulkan.createBufferByUsage(
             meshletTriangles.len,
             0,
             .staging,
             false,
+            null,
         ) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
             return err;
         };
-        errdefer vulkan.destroyBuffer(stagingBuffer3);
-        vulkan.buffers.copyDataToMapped(stagingBuffer3, 0, u8, meshletTriangles);
+        errdefer vulkan.destroyBuffer(meshletTrianglesStagingBuffer);
+        vulkan.buffers.copyDataToMapped(meshletTrianglesStagingBuffer, 0, u8, meshletTriangles);
 
-        {
-            try resourceArray.mutex.lock(io);
-            defer resourceArray.mutex.unlock(io);
-            const ptr = resourceArray.array.addOne() catch |err| {
-                std.log.err("{s}", .{@errorName(err)});
-                return err;
-            };
-            ptr.* = .{ .mesh = .{
-                .fileID = @intCast(fileID),
-                .vertexStride = @intCast(stride),
-                .handle = handle,
-                .meshletStagingBuffer = stagingBuffer1,
-                .verticesStagingBuffer = stagingBuffer0,
-                .meshletVerticesStagingBuffer = stagingBuffer2,
-                .meshletTrianglesStagingBuffer = stagingBuffer3,
-                .meshletSize = @intCast(res.mesh.meshletsSize),
-                .verticesSize = @intCast(res.mesh.verticesSize),
-                .meshletVerticesSize = @intCast(res.mesh.meshletVerticesSize),
-                .meshletTrianglesSize = @intCast(res.mesh.meshletTrianglesSize),
-            } };
+        const sizes = [_]u64{
+            res.mesh.meshletsSize,
+            res.mesh.verticesSize,
+            res.mesh.meshletVerticesSize,
+            res.mesh.meshletTrianglesSize,
+        };
+
+        var buffers = [_]VkStruct.Buffer_t{
+            meshletStagingBuffer,
+            verticesStagingBuffer,
+            meshletVerticesStagingBuffer,
+            meshletTrianglesStagingBuffer,
+        };
+
+        for (0..4) |i| {
+            const bufferAndOffset = try vulkan.buffers.createVirtualBuffer(
+                buffer_ts.?[i],
+                0,
+                sizes[i],
+                16,
+                handles,
+            );
+
+            var copyRegion = [1]vk.VkBufferCopy2{.{
+                .sType = vk.VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+                .pNext = null,
+                .srcOffset = 0,
+                .dstOffset = bufferAndOffset.offset,
+                .size = sizes[i],
+            }};
+
+            try commands.externalCommand(.{
+                .copyBuffer = .{
+                    .srcBuffer = buffers[i],
+                    .dstBuffer = bufferAndOffset.buffer,
+                    .regions = &copyRegion,
+                },
+            });
+            buffers[i] = bufferAndOffset.buffer;
         }
+        // global.game_end.store(1, .seq_cst);
+
+        _ = try meshes.addMesh(
+            @intCast(fileID),
+            buffers[0],
+            sizes[0],
+            buffers[1],
+            sizes[1],
+            buffers[2],
+            sizes[2],
+            buffers[3],
+            sizes[3],
+            @intCast(stride),
+            handle,
+        );
+
+        // {
+        //     try resourceArray.mutex.lock(io);
+        //     defer resourceArray.mutex.unlock(io);
+        //     const ptr = resourceArray.array.addOne() catch |err| {
+        //         std.log.err("{s}", .{@errorName(err)});
+        //         return err;
+        //     };
+        //     ptr.* = .{ .mesh = .{
+        //         .fileID = @intCast(fileID),
+        //         .vertexStride = @intCast(stride),
+        //         .handle = handle,
+        //         .meshletStagingBuffer = stagingBuffer1,
+        //         .verticesStagingBuffer = stagingBuffer0,
+        //         .meshletVerticesStagingBuffer = stagingBuffer2,
+        //         .meshletTrianglesStagingBuffer = stagingBuffer3,
+        //         .meshletSize = @intCast(res.mesh.meshletsSize),
+        //         .verticesSize = @intCast(res.mesh.verticesSize),
+        //         .meshletVerticesSize = @intCast(res.mesh.meshletVerticesSize),
+        //         .meshletTrianglesSize = @intCast(res.mesh.meshletTrianglesSize),
+        //     } };
+        // }
     }
 };

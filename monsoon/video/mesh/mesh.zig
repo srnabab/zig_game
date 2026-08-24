@@ -173,6 +173,7 @@ pub fn upload(self: *Self, commands: *Commands, buffer: VkStruct.Buffer_t) !void
         0,
         .staging,
         false,
+        null,
     );
     self.vulkan.buffers.copyDataToMapped(stagingBuffer, 0, vertexStruct.Mesh, meshs);
 

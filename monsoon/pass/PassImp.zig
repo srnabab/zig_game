@@ -157,6 +157,7 @@ pub fn initFromRenderFlow(io: std.Io, gpa: std.mem.Allocator, vulkan: *VkStruct,
                                 parent,
                                 buffer.offset,
                                 buffer.stride,
+                                buffer.name,
                             );
                         } else {
                             return error.VirtualBlockWithoutParent;
@@ -167,6 +168,7 @@ pub fn initFromRenderFlow(io: std.Io, gpa: std.mem.Allocator, vulkan: *VkStruct,
                             buffer.stride,
                             buffer.usage,
                             true,
+                            buffer.name,
                         );
                     }
 

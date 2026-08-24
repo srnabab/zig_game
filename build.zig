@@ -323,6 +323,9 @@ pub fn build(b: *std.Build) void {
     resourceProcess_mod.addImport("vk", vk_c_mod);
     resourceProcess_mod.addImport("vertexStruct", vertexStruct_mod);
     resourceProcess_mod.addImport("stb_image", stb_image_mod);
+    resourceProcess_mod.addImport("processRender", processRender_mod);
+    resourceProcess_mod.addImport("global", global_mod);
+    resourceProcess_mod.addImport("mesh", mesh_mod);
 
     setPass_mod.addImport("vertexStruct", vertexStruct_mod);
     setPass_mod.addImport("cglm", cglm_mod);
@@ -374,6 +377,7 @@ pub fn build(b: *std.Build) void {
     pass_mod.addImport("fileSystem", fileSystem_mod);
     pass_mod.addImport("vulkan", vk_c_mod);
 
+    resource_mod.addImport("processRender", processRender_mod);
     resource_mod.addImport("video", video_mod);
     resource_mod.addImport("vk", vk_c_mod);
     resource_mod.addImport("vma", vma_mod);

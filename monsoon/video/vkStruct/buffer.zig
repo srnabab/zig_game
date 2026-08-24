@@ -73,7 +73,8 @@ const UniformBufferAlign = 64;
 const bufferRatio: f32 = 0.5 / 11;
 
 buffers: FixedIndexArray(Buffer),
-bufferMap: std.StringHashMap(u32),
+bufferMap: std.StringHashMap(Buffer_t),
+names: std.array_list.Managed([]u8),
 mutex: std.Io.Mutex = .init,
 io: std.Io,
 
@@ -82,6 +83,7 @@ pub fn init(io: std.Io, allocator: std.mem.Allocator) Self {
         .io = io,
         .buffers = .init(allocator),
         .bufferMap = .init(allocator),
+        .names = .init(allocator),
     };
 }
 
@@ -117,6 +119,11 @@ pub fn deinit(self: *Self, vmaa: *vmaStruct) void {
         }
     }
     self.buffers.deinit();
+    for (self.names.items) |value| {
+        self.names.allocator.free(value);
+    }
+    self.names.deinit();
+    self.bufferMap.deinit();
 }
 
 fn inferUsage(usage: vk.VkBufferUsageFlags) Usage {
@@ -149,6 +156,7 @@ pub fn _createBuffer(
     vmaFlags: u32,
     vmaUsage: vma.VmaMemoryUsage,
     handles: *global.HandlesType,
+    name: ?[]const u8,
 ) !Buffer_t {
     const zone = tracy.initZone(@src(), .{ .name = "create buffer" });
     defer zone.deinit();
@@ -198,6 +206,13 @@ pub fn _createBuffer(
 
     const handle = handles.createHandle(@intCast(pack.index), .buffer);
 
+    if (name) |nn| {
+        const dName = try self.names.allocator.dupe(u8, nn);
+        try self.names.append(dName);
+
+        try self.bufferMap.put(dName, @ptrCast(handle));
+    }
+
     return @ptrCast(handle);
 }
 
@@ -228,6 +243,7 @@ pub fn createBufferByUsage(
     stride: vk.VkDeviceSize,
     usage: Usage,
     bda: bool,
+    name: ?[]const u8,
 ) !Buffer_t {
     var usageFlags: vk.VkBufferUsageFlags = 0;
     var vmaFlags: vma.VmaAllocationCreateFlags = 0;
@@ -287,6 +303,7 @@ pub fn createBufferByUsage(
         vmaFlags,
         vmaUsage,
         handles,
+        name,
     );
 }
 
@@ -455,6 +472,7 @@ pub fn createVirtualBlockBuffer(
     offset: vk.VkDeviceSize,
     stride: vk.VkDeviceSize,
     handles: *global.HandlesType,
+    name: ?[]const u8,
 ) !Buffer_t {
     var block: vma.VmaVirtualBlock = null;
 
@@ -495,6 +513,13 @@ pub fn createVirtualBlockBuffer(
     // std.log.debug("ptr {*}, {*}, index {d}", .{ pack.ptr.vkBuffer, ptr.vkBuffer, index });
 
     const handle = handles.createHandle(@intCast(pack.index), .buffer);
+
+    if (name) |nn| {
+        const dName = try self.names.allocator.dupe(u8, nn);
+        try self.names.append(dName);
+
+        try self.bufferMap.put(dName, @ptrCast(handle));
+    }
 
     return @ptrCast(handle);
 }
@@ -585,4 +610,8 @@ pub fn bufferHaveRef(self: *Self, buffer: Buffer_t) bool {
     const ptr = self.buffers.get(index);
 
     return ptr.haveRef;
+}
+
+pub fn getBuffer(self: *Self, name: []const u8) ?Buffer_t {
+    return self.bufferMap.get(name);
 }

@@ -76,6 +76,7 @@ pub fn uploadInstance(graphic: *Commands, vulkan: *VkStruct) !void {
             0,
             .staging,
             false,
+            null,
         );
 
         vulkan.buffers.copyDataToMapped(stagingBuffer, 0, vertexStruct.Instance, instances2D.items[updateStart..updateEnd]);

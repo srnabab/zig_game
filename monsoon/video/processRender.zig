@@ -4991,10 +4991,10 @@ pub const commands = struct {
     pub fn addCachedCommand(self: *Self) !void {
         if (self.cachedCommand.items.len == 0) return;
 
-        const coms = try self.cachedCommand.toOwnedSlice();
-        defer self.allocator.free(coms);
+        // const coms = try self.cachedCommand.toOwnedSlice();
+        // defer self.allocator.free(coms);
 
-        for (coms) |comm| {
+        for (self.cachedCommand.items) |comm| {
             // @breakpoint();
             try self.addCommand(std.meta.activeTag(comm), comm);
 
@@ -5011,6 +5011,83 @@ pub const commands = struct {
                 },
             }
         }
+        self.cachedCommand.clearRetainingCapacity();
+    }
+};
+
+pub const externalCommands = struct {
+    const Self = @This();
+
+    io: std.Io,
+    allocator: std.mem.Allocator,
+
+    externCommand: std.array_list.Managed(drawC.comm),
+    externMutex: std.Io.Mutex = .init,
+
+    pub fn init(io: std.Io, allocator: std.mem.Allocator) Self {
+        return .{
+            .io = io,
+            .allocator = allocator,
+            .externCommand = std.array_list.Managed(drawC.comm).init(allocator),
+        };
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.externCommand.deinit();
+    }
+
+    pub fn externalCommand(self: *Self, command: drawC.comm) !void {
+        try self.externMutex.lock(self.io);
+        defer self.externMutex.unlock(self.io);
+
+        const ptr = try self.externCommand.addOne();
+        ptr.* = command;
+
+        const allocator = self.allocator;
+
+        // @breakpoint();
+
+        switch (command) {
+            .copyBuffer => {
+                ptr.copyBuffer.regions = try allocator.dupe(vk.VkBufferCopy2, command.copyBuffer.regions);
+            },
+            .copyBufferToImage => {
+                ptr.copyBufferToImage.regions = try allocator.dupe(vk.VkBufferImageCopy, command.copyBufferToImage.regions);
+            },
+            .fillBuffer => {},
+            else => {
+                std.debug.panic("unsupported command type {s}", .{@tagName(command)});
+            },
+        }
+    }
+
+    pub fn addExternalCommand(self: *Self, pCommands: *commands) !void {
+        try self.externMutex.lock(self.io);
+        defer self.externMutex.unlock(self.io);
+
+        if (self.externCommand.items.len == 0) return;
+
+        // const coms = try self.cachedCommand.toOwnedSlice();
+        // defer self.allocator.free(coms);
+
+        for (self.externCommand.items) |comm| {
+            // @breakpoint();
+            try pCommands.addCommand(std.meta.activeTag(comm), comm);
+
+            switch (comm) {
+                .copyBuffer => {
+                    self.allocator.free(comm.copyBuffer.regions);
+                },
+                .copyBufferToImage => {
+                    self.allocator.free(comm.copyBufferToImage.regions);
+                },
+                .fillBuffer => {},
+                else => {
+                    std.debug.panic("unsupported command type {s}", .{@tagName(comm)});
+                },
+            }
+        }
+        self.externCommand.clearRetainingCapacity();
     }
 };
 

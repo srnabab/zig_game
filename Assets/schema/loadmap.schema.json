@@ -30,7 +30,10 @@
             "type": "boolean"
           },
           "bufferName": {
-            "type": "string"
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": ["name", "isGpu"]
@@ -87,7 +90,10 @@
                 "type": "boolean"
               },
               "bufferName": {
-                "type": "string"
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               }
             },
             "required": ["name", "isGpu"]

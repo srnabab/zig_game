@@ -190,7 +190,7 @@ pub fn createImageTexture(
 
         // std.log.debug("width {d}, height {d}", .{ imgWidth, imgHeight });
 
-        stagingBuffer = try vulkan.createBufferByUsage(pixelSize, 0, .staging, false);
+        stagingBuffer = try vulkan.createBufferByUsage(pixelSize, 0, .staging, false, null);
         errdefer vulkan.destroyBuffer(stagingBuffer);
 
         vulkan.buffers.copyDataToMapped(stagingBuffer, 0, u8, imageMem[0..pixelSize]);

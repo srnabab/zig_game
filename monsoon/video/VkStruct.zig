@@ -1693,8 +1693,17 @@ pub fn createBufferByUsage(
     stride: vk.VkDeviceSize,
     usage: bufferStruct.Usage,
     bda: bool,
+    name: ?[]const u8,
 ) !Buffer_t {
-    return self.buffers.createBufferByUsage(&self.vmaS, size, self.handles, stride, usage, bda);
+    return self.buffers.createBufferByUsage(
+        &self.vmaS,
+        size,
+        self.handles,
+        stride,
+        usage,
+        bda,
+        name,
+    );
 }
 
 pub fn createVirtualBlockBuffer(
@@ -1704,6 +1713,7 @@ pub fn createVirtualBlockBuffer(
     buffer: Buffer_t,
     offset: vk.VkDeviceSize,
     stride: vk.VkDeviceSize,
+    name: ?[]const u8,
 ) !Buffer_t {
     return self.buffers.createVirtualBlockBuffer(
         self.pAllocCallBacks,
@@ -1713,6 +1723,7 @@ pub fn createVirtualBlockBuffer(
         offset,
         stride,
         self.handles,
+        name,
     );
 }
 

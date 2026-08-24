@@ -54,6 +54,7 @@ pub const Args = struct {
     passes: pass,
     meshes: *mesh,
     instances: *instance,
+    externalCommands: *processRender.externalCommands,
 };
 
 pub fn render_thread_func(args: Args) !void {
@@ -72,10 +73,11 @@ pub fn render_thread_func(args: Args) !void {
     const stateBuffering = args.stateBuffering;
     const pTextureSet = args.pTextureSet;
     const vulkan = args.vulkan;
-    const handles = args.handles;
+    // const handles = args.handles;
     var passes = args.passes;
     const meshes = args.meshes;
     const instances = args.instances;
+    const externalCommands = args.externalCommands;
 
     const zone = tracy.initZone(@src(), .{ .name = "render" });
     defer zone.deinit();
@@ -130,6 +132,7 @@ pub fn render_thread_func(args: Args) !void {
         0,
         .uniform,
         false,
+        null,
     );
     var pUIUbo: shaderStruct.UniformBufferObject = undefined;
     const ubo = vulkan.buffers.getBufferContent(ubo_test);
@@ -139,6 +142,7 @@ pub fn render_thread_func(args: Args) !void {
         0,
         .uniform,
         false,
+        null,
     );
     var pUIUbo2: shaderStruct.UniformBufferObjectCamera = undefined;
     const ubo2 = vulkan.buffers.getBufferContent(ubo_test2);
@@ -266,7 +270,6 @@ pub fn render_thread_func(args: Args) !void {
     passes.enablePass("present");
 
     // var testTime: u32 = 0;
-    var testx = false;
     // var tests = false;
 
     while (true) {
@@ -344,67 +347,67 @@ pub fn render_thread_func(args: Args) !void {
                             );
                             // std.log.debug("set", .{});
                         },
-                        .mesh => |m| {
-                            testx = true;
-                            // getMeshBuffer();
-                            const usePass = passes.passMap.get("iv_feather").?;
+                        // .mesh => |m| {
 
-                            const sizes = [_]u64{
-                                m.meshletSize,
-                                m.verticesSize,
-                                m.meshletVerticesSize,
-                                m.meshletTrianglesSize,
-                            };
+                        //     // getMeshBuffer();
+                        //     const usePass = passes.passMap.get("iv_feather").?;
 
-                            var buffers = [_]VkStruct.Buffer_t{
-                                m.meshletStagingBuffer,
-                                m.verticesStagingBuffer,
-                                m.meshletVerticesStagingBuffer,
-                                m.meshletTrianglesStagingBuffer,
-                            };
+                        //     const sizes = [_]u64{
+                        //         m.meshletSize,
+                        //         m.verticesSize,
+                        //         m.meshletVerticesSize,
+                        //         m.meshletTrianglesSize,
+                        //     };
 
-                            for (0..4) |i| {
-                                const bufferAndOffset = try vulkan.buffers.createVirtualBuffer(
-                                    usePass.buffer[i + 2],
-                                    0,
-                                    sizes[i],
-                                    16,
-                                    handles,
-                                );
+                        //     var buffers = [_]VkStruct.Buffer_t{
+                        //         m.meshletStagingBuffer,
+                        //         m.verticesStagingBuffer,
+                        //         m.meshletVerticesStagingBuffer,
+                        //         m.meshletTrianglesStagingBuffer,
+                        //     };
 
-                                var copyRegion = [1]vk.VkBufferCopy2{.{
-                                    .sType = vk.VK_STRUCTURE_TYPE_BUFFER_COPY_2,
-                                    .pNext = null,
-                                    .srcOffset = 0,
-                                    .dstOffset = bufferAndOffset.offset,
-                                    .size = sizes[i],
-                                }};
+                        //     for (0..4) |i| {
+                        //         const bufferAndOffset = try vulkan.buffers.createVirtualBuffer(
+                        //             usePass.buffer[i + 2],
+                        //             0,
+                        //             sizes[i],
+                        //             16,
+                        //             handles,
+                        //         );
 
-                                try commands.cacheCommand(.{
-                                    .copyBuffer = .{
-                                        .srcBuffer = buffers[i],
-                                        .dstBuffer = bufferAndOffset.buffer,
-                                        .regions = &copyRegion,
-                                    },
-                                });
-                                buffers[i] = bufferAndOffset.buffer;
-                            }
-                            // global.game_end.store(1, .seq_cst);
+                        //         var copyRegion = [1]vk.VkBufferCopy2{.{
+                        //             .sType = vk.VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+                        //             .pNext = null,
+                        //             .srcOffset = 0,
+                        //             .dstOffset = bufferAndOffset.offset,
+                        //             .size = sizes[i],
+                        //         }};
 
-                            _ = try meshes.addMesh(
-                                m.fileID,
-                                buffers[0],
-                                sizes[0],
-                                buffers[1],
-                                sizes[1],
-                                buffers[2],
-                                sizes[2],
-                                buffers[3],
-                                sizes[3],
-                                m.vertexStride,
-                                m.handle,
-                            );
-                        },
+                        //         try commands.cacheCommand(.{
+                        //             .copyBuffer = .{
+                        //                 .srcBuffer = buffers[i],
+                        //                 .dstBuffer = bufferAndOffset.buffer,
+                        //                 .regions = &copyRegion,
+                        //             },
+                        //         });
+                        //         buffers[i] = bufferAndOffset.buffer;
+                        //     }
+                        //     // global.game_end.store(1, .seq_cst);
+
+                        //     _ = try meshes.addMesh(
+                        //         m.fileID,
+                        //         buffers[0],
+                        //         sizes[0],
+                        //         buffers[1],
+                        //         sizes[1],
+                        //         buffers[2],
+                        //         sizes[2],
+                        //         buffers[3],
+                        //         sizes[3],
+                        //         m.vertexStride,
+                        //         m.handle,
+                        //     );
+                        // },
                         .instance => |i| {
                             const texIdx = if (i.texture) |t|
                                 pTextureSet.getDescriptorSetIndex(t)
@@ -469,6 +472,7 @@ pub fn render_thread_func(args: Args) !void {
             try vulkan.waitEndFence();
 
             try commands.startCommand();
+            try externalCommands.addExternalCommand(&commands);
             try commands.addCachedCommand();
 
             for (infos.items) |value| {
@@ -519,22 +523,6 @@ pub fn render_thread_func(args: Args) !void {
             try graphic.executeCommands(&commands);
 
             vulkan.nextFrame();
-
-            // if (testx) {
-            //     for (vulkan.buffers.buffers.items.items) |value| {
-            //         if (value == .data) {
-            //             if (value.data.vkBuffer == @as(vk.VkBuffer, @ptrFromInt(0xf800000000f8))) {
-            //                 if (value.data.writedType == .none and tests) {
-            //                     std.log.debug("none", .{});
-            //                     @breakpoint();
-            //                 } else if (value.data.writedType == .copy) {
-            //                     std.log.debug("copy", .{});
-            //                     tests = true;
-            //                 }
-            //             }
-            //         }
-            //     }
-            // }
 
             if (global.game_end.load(.seq_cst) == 1) {
                 _ = renderStart;

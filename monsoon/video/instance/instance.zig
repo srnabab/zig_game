@@ -109,6 +109,7 @@ pub fn upload(self: *Self, commands: *Commands, vulkan: *VkStruct, buffer: VkStr
         0,
         .staging,
         false,
+        null,
     );
     vulkan.buffers.copyDataToMapped(stagingBuffer, 0, Instance, instances);
 
