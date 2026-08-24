@@ -17,7 +17,7 @@ const Root = struct {
 const item = struct {
     name: []u8,
     isGpu: bool,
-    bufferName: ?[]u8 = null,
+    bufferName: [][]u8 = &.{},
 };
 
 const Grid = struct {
@@ -105,6 +105,7 @@ pub fn main(init: std.process.Init) !void {
     var totalItemCount: u32 = 0;
     var totalPassCount: u32 = 0;
     var totalU8Count: u32 = 0;
+    var totalBufferNameCount: u32 = 0;
 
     var offsets = try gpa.alloc(u32, depth + 1);
     defer gpa.free(offsets);
@@ -170,6 +171,7 @@ pub fn main(init: std.process.Init) !void {
     _ = try writer.interface.writeInt(u32, 0, .native);
     _ = try writer.interface.writeInt(u32, 0, .native);
     _ = try writer.interface.writeInt(u32, 0, .native);
+    _ = try writer.interface.writeInt(u32, 0, .native);
 
     for (0..depth + 1) |_| {
         _ = try writer.interface.writeInt(u32, 0, .native);
@@ -220,11 +222,15 @@ pub fn main(init: std.process.Init) !void {
                 _ = try writer.interface.write(i.name);
                 _ = try writer.interface.writeByte(@intFromBool(i.isGpu));
 
-                if (i.bufferName) |n| {
-                    totalU8Count += @intCast(n.len);
+                if (i.bufferName.len > 0) {
+                    _ = try writer.interface.writeInt(u32, @intCast(i.bufferName.len), .native);
+                    for (i.bufferName) |n| {
+                        totalBufferNameCount += 1;
+                        totalU8Count += @intCast(n.len);
 
-                    _ = try writer.interface.writeInt(u32, @intCast(n.len), .native);
-                    _ = try writer.interface.write(n);
+                        _ = try writer.interface.writeInt(u32, @intCast(n.len), .native);
+                        _ = try writer.interface.write(n);
+                    }
                 } else {
                     _ = try writer.interface.writeInt(u32, 0, .native);
                 }
@@ -276,6 +282,7 @@ pub fn main(init: std.process.Init) !void {
     _ = try writer.interface.writeInt(u32, totalItemCount, .native);
     _ = try writer.interface.writeInt(u32, totalPassCount, .native);
     _ = try writer.interface.writeInt(u32, totalU8Count, .native);
+    _ = try writer.interface.writeInt(u32, totalBufferNameCount, .native);
 
     for (offsets) |o| {
         _ = try writer.interface.writeInt(u32, o, .native);

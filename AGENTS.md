@@ -68,12 +68,12 @@ The batch scripts in `build_script/` (`shaderCompile.bat`, `pipelineParse.bat`, 
 - **Handle system**: `src/handle/handle.zig` — 10240 handles with `Once` reuse
 - **Pipeline schema**: `schema/pipeline.schema.json` (JSON Schema draft-2020-12) documents the `.pipe` format; enums unconstrained (plain strings), unknown fields allowed
 - **Sampler schema**: `schema/sampler.schema.json` (JSON Schema draft-2020-12) documents the `.samp` format (flat VkSamplerCreateInfo, integer enums); same permissive policy as the pipeline schema
-- **LoadMap schema**: `schema/loadmap.schema.json` (JSON Schema draft-2020-12) documents recursive grid loadmap format; `gridLength` required everywhere, `leftUp` required in grids, `items` entries are `{name, isGpu, bufferName(optinal)}` objects (both required), `passes` string array in root and grids, `depth` is a non-negative parsing-limit-only int, unknown fields rejected (`additionalProperties: false`)
+- **LoadMap schema**: `Assets/schema/loadmap.schema.json` (JSON Schema draft-2020-12) documents recursive grid loadmap format; `gridLength` required everywhere, `leftUp` required in grids, `items` entries are `{name, isGpu, bufferName(optional string array)}` objects (`name`/`isGpu` required), `passes` string array in root and grids, `depth` is a non-negative parsing-limit-only int, unknown fields rejected (`additionalProperties: false`)
 
 ## lMap binary format
 
 ```
-| magic | depth | offsets[] | layer0 | layer1 | ... |
+| magic | depth | totals (5) | offsets[] | layer0 | layer1 | ... |
 ```
 
 - `magic` 4B: ASCII `"lMap"`
@@ -82,7 +82,8 @@ The batch scripts in `build_script/` (`shaderCompile.bat`, `pipelineParse.bat`, 
 - `totalItemCount` 4B u32 — number of items
 - `totalPassCount` 4B u32 — number of passes
 - `totalU8Count` 4B u32 — number of u8
-- `offsets`: `(depth + 1) * 4B` — file offset where each grid layer starts
+- `totalBufferNameCount` 4B u32 — total number of bufferName strings across all items
+- `offsets`: `(depth + 1) * 4B` — file offset where each grid layer starts (header is 28B + offsets)
 - **Grid layer** (all grids of the same depth stored together):
   - `gridRow` 4B — grid row of this layer
   - `gridCol` 4B — grid col of this layer
@@ -95,7 +96,7 @@ The batch scripts in `build_script/` (`shaderCompile.bat`, `pipelineParse.bat`, 
     - Item × `itemCount`:
       - `nameLen` 4B, then `name` bytes
       - `isGpu` 1B
-      - `bufferNameLen` 4B, then `bufferName` bytes (`bufferNameLen == 0` → skip, next item directly)
+      - `bufferNameCount` 4B, then per name: `bufferNameLen` 4B, then `bufferName` bytes
     - `passCount` 4B
     - Pass × `passCount`: `passLen` 4B, then `pass` bytes
 

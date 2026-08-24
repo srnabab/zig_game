@@ -51,7 +51,7 @@ const Grid = struct {
 const Item = struct {
     name: []u8,
     isGpu: bool,
-    bufferName: ?[]u8 = null,
+    bufferName: [][]u8 = &.{},
 };
 
 const Loading = struct {
@@ -64,6 +64,7 @@ layers: []GridLayer,
 
 grids: []Grid,
 items: []Item,
+bufferNames: [][]u8,
 passes: []Pass,
 strs: []u8,
 
@@ -74,6 +75,7 @@ pub const empty = Self{
     .layers = &.{},
     .grids = &.{},
     .items = &.{},
+    .bufferNames = &.{},
     .passes = &.{},
     .strs = &.{},
     .allocator = undefined,
@@ -88,18 +90,20 @@ pub fn loadLoadmap(gpa: Allocator, mem: []u8) !Self {
     const totalItemCount = std.mem.readInt(u32, mem[12..16], .native);
     const totalPassCount = std.mem.readInt(u32, mem[16..20], .native);
     const totalU8Count = std.mem.readInt(u32, mem[20..24], .native);
+    const totalBufferNameCount = std.mem.readInt(u32, mem[24..28], .native);
 
     var offsets = try gpa.alloc(u32, depth + 1);
     defer gpa.free(offsets);
 
     for (0..depth + 1) |i| {
-        const offset = 24 + i * 4;
+        const offset = 28 + i * 4;
         offsets[i] = std.mem.readInt(u32, @ptrCast(mem[offset .. offset + 4]), .native);
     }
 
     const totalLen = @as(usize, depth + 1) * @sizeOf(GridLayer) +
         @as(usize, totalGridCount) * @sizeOf(Grid) +
         @as(usize, totalItemCount) * @sizeOf(Item) +
+        @as(usize, totalBufferNameCount) * @sizeOf([]u8) +
         @as(usize, totalPassCount) * @sizeOf(Pass) +
         @as(usize, totalU8Count) * @sizeOf(u8);
 
@@ -108,16 +112,19 @@ pub fn loadLoadmap(gpa: Allocator, mem: []u8) !Self {
     const layersBytes = memory[0 .. @as(usize, depth + 1) * @sizeOf(GridLayer)];
     const gridsBytes = memory[layersBytes.len..][0 .. @as(usize, totalGridCount) * @sizeOf(Grid)];
     const itemsBytes = memory[gridsBytes.len + layersBytes.len ..][0 .. @as(usize, totalItemCount) * @sizeOf(Item)];
-    const passesBytes = memory[gridsBytes.len + layersBytes.len + itemsBytes.len ..][0 .. @as(usize, totalPassCount) * @sizeOf(Pass)];
+    const bufferNamesBytes = memory[gridsBytes.len + layersBytes.len + itemsBytes.len ..][0 .. @as(usize, totalBufferNameCount) * @sizeOf([]u8)];
+    const passesBytes = memory[gridsBytes.len + layersBytes.len + itemsBytes.len + bufferNamesBytes.len ..][0 .. @as(usize, totalPassCount) * @sizeOf(Pass)];
 
     const layers: []GridLayer = @alignCast(std.mem.bytesAsSlice(GridLayer, layersBytes));
     const grids: []Grid = @alignCast(std.mem.bytesAsSlice(Grid, gridsBytes));
     const items: []Item = @alignCast(std.mem.bytesAsSlice(Item, itemsBytes));
+    const bufferNames: [][]u8 = @alignCast(std.mem.bytesAsSlice([]u8, bufferNamesBytes));
     const passes: []Pass = @alignCast(std.mem.bytesAsSlice(Pass, passesBytes));
     const strs = memory[memory.len - @as(usize, totalU8Count) ..];
 
     var gridIdx: usize = 0;
     var itemIdx: usize = 0;
+    var bufferNameIdx: usize = 0;
     var passIdx: usize = 0;
     var strPos: usize = 0;
 
@@ -167,12 +174,18 @@ pub fn loadLoadmap(gpa: Allocator, mem: []u8) !Self {
                 gridItems[ii].isGpu = mem[pos] != 0;
                 pos += 1;
 
-                const bufferNameLen = std.mem.readInt(u32, mem[pos..][0..4], .native);
+                const bufferNameCount = std.mem.readInt(u32, mem[pos..][0..4], .native);
                 pos += 4;
 
-                if (bufferNameLen > 0) {
-                    gridItems[ii].bufferName = strs[strPos .. strPos + @as(usize, bufferNameLen)];
-                    @memcpy(gridItems[ii].bufferName.?, mem[pos..][0..@as(usize, bufferNameLen)]);
+                gridItems[ii].bufferName = bufferNames[bufferNameIdx .. bufferNameIdx + @as(usize, bufferNameCount)];
+                bufferNameIdx += @intCast(bufferNameCount);
+
+                for (0..bufferNameCount) |bi| {
+                    const bufferNameLen = std.mem.readInt(u32, mem[pos..][0..4], .native);
+                    pos += 4;
+
+                    gridItems[ii].bufferName[bi] = strs[strPos .. strPos + @as(usize, bufferNameLen)];
+                    @memcpy(gridItems[ii].bufferName[bi], mem[pos..][0..@as(usize, bufferNameLen)]);
                     pos += @intCast(bufferNameLen);
                     strPos += @intCast(bufferNameLen);
                 }
@@ -210,6 +223,7 @@ pub fn loadLoadmap(gpa: Allocator, mem: []u8) !Self {
         .layers = layers,
         .grids = grids,
         .items = items,
+        .bufferNames = bufferNames,
         .passes = passes,
         .strs = strs,
         .loadingQueue = try .initCapacity(gpa, 4),

@@ -1,0 +1,34 @@
+{
+    "$schema": "../schema/loadmap.schema.json",
+    "leftUp": {"x": 0, "y": 0},
+    "depth": 0,
+    "gridLength": 800,
+    "items": [
+        {
+            "name": "non_exist.png",
+            "isGpu": true
+        },
+        {
+            "name": "box.png",
+            "isGpu": true
+        },
+        {
+            "name": "Plane.001_0.vtx",
+            "isGpu": true,
+            "bufferName": ["featherStorageBuffer"]
+        },
+        {
+            "name": "feather_lut.ktx2",
+            "isGpu": true
+        },
+        {
+            "name": "large_bilied_crow1Blue-violet.binary",
+            "isGpu": true,
+            "bufferName": ["featherParameters"]
+        }
+    ],
+    "grids": [],
+    "passes": ["indirect2D", "indirectCompute", 
+                "c_command_prefix_sum", "ic_task",
+                "iv_feather", "present"]
+}
