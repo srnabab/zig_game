@@ -24,6 +24,7 @@ const db = @import("db");
 const file = @import("fileSystem");
 const sqlite3 = ?*file.sqlite.sqlite3;
 const VkStruct = @import("video");
+const ExternalCommands = @import("processRender").externalCommands;
 const Handles = @import("handle");
 const Handle = Handles.Handle;
 const mstd = @import("ms_std");
@@ -311,6 +312,8 @@ pub const Example_Cooker = struct {
 };
 
 pub const Example_Reader = struct {
+    pub const Ctx = struct {};
+
     pub fn processResource(
         comptime fType: ProcessType,
         io: Io,
@@ -319,7 +322,10 @@ pub const Example_Reader = struct {
         vulkan: *VkStruct,
         fileID: i32,
         handle: Handle,
-        resourceArray: *MutexArray(Resource),
+        buffers: ?[]VkStruct.Buffer_t,
+        handles: *global.HandlesType,
+        commands: *ExternalCommands,
+        uctx: *Ctx,
     ) Io.Cancelable!void {
         _ = io;
         _ = gpa;
@@ -327,7 +333,11 @@ pub const Example_Reader = struct {
         _ = vulkan;
         _ = fileID;
         _ = handle;
-        _ = resourceArray;
+        _ = buffers;
+        _ = handles;
+        _ = commands;
+        _ = uctx;
+
         std.log.debug("unsupported type {s}", .{@tagName(fType)});
         unreachable;
     }

@@ -126,10 +126,8 @@ pub const VTX_Reader = struct {
         handles: *global.HandlesType,
         commands: *ExternalCommands,
         uctx: *Ctx,
-        resourceArray: *MutexArray(Resource),
     ) !void {
         _ = fType;
-        _ = resourceArray;
         const meshes = uctx.meshes;
 
         const res = file.getMeshLoadParam(io, fileID, sqlite) catch |err| {

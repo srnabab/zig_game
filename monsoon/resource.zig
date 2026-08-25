@@ -125,7 +125,6 @@ pub const ResourceThreadArgs = struct {
     io: std.Io,
     group: *std.Io.Group,
     gpa: std.mem.Allocator,
-    resourceArray: *ResourcesQueue,
     nameArray: *NameQueue,
     handleArray: *DataBaseHandleArrayType,
     handleMutex: *Io.Mutex,
@@ -194,7 +193,6 @@ pub fn processResource(args: ResourceThreadArgs) Io.Cancelable!void {
     const nameArray = args.nameArray;
     const handleMutex = args.handleMutex;
     const handleArray = args.handleArray;
-    const resourceArray = args.resourceArray;
     const vulkan = args.vulkan;
 
     while (true) {
@@ -249,7 +247,6 @@ pub fn processResource(args: ResourceThreadArgs) Io.Cancelable!void {
                             args.handles,
                             args.externalCommands,
                             &ctx,
-                            resourceArray,
                         ) catch continue;
                     } else {
                         try resourceProcess.Example_Reader.processResource(
@@ -260,7 +257,10 @@ pub fn processResource(args: ResourceThreadArgs) Io.Cancelable!void {
                             vulkan,
                             pack.id,
                             pack.handle,
-                            resourceArray,
+                            &.{},
+                            args.handles,
+                            args.externalCommands,
+                            @constCast(&resourceProcess.Example_Reader.Ctx{}),
                         );
                     }
                 },

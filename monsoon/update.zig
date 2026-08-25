@@ -172,7 +172,6 @@ pub fn update_thread_func(args: Args) !void {
         .io = io,
         .group = &resourceGroup,
         .gpa = gpa,
-        .resourceArray = &resourceArray,
         .nameArray = &nameArray,
         .handleArray = &databaseHandleArray,
         .handleMutex = &handleMutex,

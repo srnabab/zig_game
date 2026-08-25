@@ -118,12 +118,10 @@ pub const PNG_Reader = struct {
         handles: *global.HandlesType,
         commands: *ExternalCommands,
         uctx: *Ctx,
-        resourceArray: *MutexArray(Resource),
     ) !void {
         _ = fType;
         _ = buffers;
         _ = handles;
-        _ = resourceArray;
         const pTextureSet = uctx.pTextureSet;
 
         const img = file.getImageLoadParam(io, fileID, sqlite.?) catch |err| {
