@@ -37,6 +37,8 @@ const DataBaseHandleArrayType = resource.DataBaseHandleArrayType;
 
 const ResourceThreadArgs = resource.ResourceThreadArgs;
 
+const resourceProcess = @import("resourceProcess");
+
 pub const Args = struct {
     io: std.Io,
     gpa: std.mem.Allocator,
@@ -47,7 +49,7 @@ pub const Args = struct {
     handles: *global.HandlesType,
     vulkan: *VkStruct,
     commands: *process.externalCommands,
-    meshes: *mesh,
+    uctx: *resourceProcess.UserContext,
 };
 
 const inputProcessInterval = std.time.ns_per_ms * 5;
@@ -61,7 +63,7 @@ pub fn update_thread_func(args: Args) !void {
     const stateBuffering = args.stateBuffering;
     const handles = args.handles;
     // const vulkan = args.vulkan;
-    const meshes = args.meshes;
+    const meshes = &args.uctx.meshes;
 
     var tracyAllocator = tracy.TracingAllocator.initNamed("pool", gpa);
     defer tracyAllocator.deinit();
@@ -177,7 +179,7 @@ pub fn update_thread_func(args: Args) !void {
         .handles = handles,
         .vulkan = args.vulkan,
         .externalCommands = args.commands,
-        .meshes = meshes,
+        .uctx = args.uctx,
     };
 
     for (0..7) |_| {
@@ -292,6 +294,7 @@ pub fn update_thread_func(args: Args) !void {
                     handles,
                     &nameArray,
                     mainRoSqlite,
+                    &.{},
                     "Plane.001_0.vtx",
                 );
                 _ = try resource.readResource(
@@ -300,6 +303,7 @@ pub fn update_thread_func(args: Args) !void {
                     handles,
                     &nameArray,
                     mainRoSqlite,
+                    &.{},
                     "feather_lut.ktx2",
                 );
             }
@@ -314,6 +318,7 @@ pub fn update_thread_func(args: Args) !void {
                     handles,
                     &nameArray,
                     mainRoSqlite,
+                    &.{},
                     "box.png",
                 );
                 std.log.debug("box {any}", .{testBoxPng});

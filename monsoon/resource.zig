@@ -32,7 +32,7 @@ const vec3 = vertexStruct.vec3;
 const resourceProcess = @import("resourceProcess");
 
 pub const ResourceType = enum {
-    texture,
+    // texture,
     position2D,
     // mesh,
     instance,
@@ -41,7 +41,7 @@ pub const ResourceType = enum {
 };
 
 pub const Resource = union(ResourceType) {
-    texture: Texture,
+    // texture: Texture,
     position2D: Position2D,
     // mesh: Mesh,
     instance: Instance,
@@ -112,6 +112,7 @@ pub const Position2D = struct {
 
 const ID_FileType_Handle = struct {
     id: i32,
+    buffers: []VkStruct.Buffer_t,
     fileType: file.FileType,
     handle: Handle,
 };
@@ -131,7 +132,7 @@ pub const ResourceThreadArgs = struct {
     handles: *global.HandlesType,
     vulkan: *VkStruct,
     externalCommands: *ExternalCommands,
-    meshes: *mesh,
+    uctx: *resourceProcess.UserContext,
 };
 
 var idHandleCache: std.AutoHashMapUnmanaged(i32, Handle) = .empty;
@@ -140,7 +141,15 @@ pub fn deinit(gpa: Allocator) void {
     idHandleCache.deinit(gpa);
 }
 
-pub fn readResource(io: Io, gpa: std.mem.Allocator, handles: *global.HandlesType, nameArray: *NameQueue, mainSqlite: sqlite3, fileName: []const u8) !?Handle {
+pub fn readResource(
+    io: Io,
+    gpa: std.mem.Allocator,
+    handles: *global.HandlesType,
+    nameArray: *NameQueue,
+    mainSqlite: sqlite3,
+    buffers: []VkStruct.Buffer_t,
+    fileName: []const u8,
+) !?Handle {
     const fileID = file.getID(fileName);
 
     if (idHandleCache.contains(fileID)) {
@@ -166,10 +175,12 @@ pub fn readResource(io: Io, gpa: std.mem.Allocator, handles: *global.HandlesType
 
     const handle_ = handles.createHandle(Handles.WaitFill, handleType);
 
+    const buffers_dupe = try gpa.dupe(VkStruct.Buffer_t, buffers);
     try nameArray.append(io, .{
         .fileType = fileType,
         .handle = handle_,
         .id = fileID,
+        .buffers = buffers_dupe,
     });
 
     try idHandleCache.put(gpa, fileID, handle_);
@@ -193,6 +204,7 @@ pub fn processResource(args: ResourceThreadArgs) Io.Cancelable!void {
 
         if (pack_) |pack| {
             errdefer args.handles.destroyHandle(pack.handle);
+            defer gpa.free(pack.buffers);
 
             var sqlite: ?sqlite3 = null;
             while (sqlite == null) {
@@ -218,6 +230,13 @@ pub fn processResource(args: ResourceThreadArgs) Io.Cancelable!void {
                         testBuffers[3] = vulkan.buffers.getBuffer("featherMeshletTriangles").?;
 
                         const field = @field(resourceProcess, readerName);
+
+                        var ctx: field.Ctx = undefined;
+                        const ctxInfo = @typeInfo(field.Ctx);
+                        inline for (ctxInfo.@"struct".fields) |f| {
+                            @field(ctx, f.name) = &@field(args.uctx, f.name);
+                        }
+
                         field.processResource(
                             t,
                             io,
@@ -229,7 +248,7 @@ pub fn processResource(args: ResourceThreadArgs) Io.Cancelable!void {
                             testBuffers,
                             args.handles,
                             args.externalCommands,
-                            args.meshes,
+                            &ctx,
                             resourceArray,
                         ) catch continue;
                     } else {

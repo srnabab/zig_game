@@ -27,6 +27,7 @@ const stb_image = @import("stb_image");
 const Buffer_t = VkStruct.Buffer_t;
 const ExternalCommands = @import("processRender").externalCommands;
 const mesh = @import("mesh");
+const textureSet = @import("textureSet");
 
 pub const PNG = [_]u8{
     0x89,
@@ -101,7 +102,9 @@ pub const PNG_Cooker = struct {
 };
 
 pub const PNG_Reader = struct {
-    pub const Enable = false;
+    pub const Ctx = struct {
+        pTextureSet: *textureSet,
+    };
 
     pub fn processResource(
         comptime fType: ProcessType,
@@ -114,14 +117,14 @@ pub const PNG_Reader = struct {
         buffers: ?[]Buffer_t,
         handles: *global.HandlesType,
         commands: *ExternalCommands,
-        meshes: *mesh,
+        uctx: *Ctx,
         resourceArray: *MutexArray(Resource),
     ) !void {
         _ = fType;
         _ = buffers;
         _ = handles;
-        _ = commands;
-        _ = meshes;
+        _ = resourceArray;
+        const pTextureSet = uctx.pTextureSet;
 
         const img = file.getImageLoadParam(io, fileID, sqlite.?) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
@@ -206,14 +209,11 @@ pub const PNG_Reader = struct {
             },
         };
 
-        {
-            try resourceArray.mutex.lock(io);
-            defer resourceArray.mutex.unlock(io);
-            const ptr = resourceArray.array.addOne() catch |err| {
-                std.log.err("{s}", .{@errorName(err)});
-                return err;
-            };
-            ptr.* = .{ .texture = .{
+        _ = try pTextureSet.createTextureFromResource(
+            io,
+            gpa,
+
+            .{
                 .width = @intCast(imgWidth),
                 .height = @intCast(imgHeight),
                 .fileID = @intCast(fileID),
@@ -228,7 +228,35 @@ pub const PNG_Reader = struct {
                 .mipLevels = 0,
                 .depth = 1,
                 .regions = region,
-            } };
-        }
+            },
+            vulkan,
+            commands,
+        );
+        // std.log.debug("r {s} {d}", .{ @tagName(fType), frame });
+
+        // {
+        //     try resourceArray.mutex.lock(io);
+        //     defer resourceArray.mutex.unlock(io);
+        //     const ptr = resourceArray.array.addOne() catch |err| {
+        //         std.log.err("{s}", .{@errorName(err)});
+        //         return err;
+        //     };
+        //     ptr.* = .{ .texture = .{
+        //         .width = @intCast(imgWidth),
+        //         .height = @intCast(imgHeight),
+        //         .fileID = @intCast(fileID),
+        //         .vkImage = @ptrFromInt(image.vkImage),
+        //         .vkImageView = imageView,
+        //         .allocation = @ptrFromInt(image.allocation),
+        //         .staginfBuffer = stagingBuffer,
+        //         .format = img.image.format,
+        //         .handle = handle,
+        //         .baseLayer = 0,
+        //         .layerCount = 1,
+        //         .mipLevels = 0,
+        //         .depth = 1,
+        //         .regions = region,
+        //     } };
+        // }
     }
 };

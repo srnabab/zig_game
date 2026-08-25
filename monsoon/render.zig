@@ -36,6 +36,8 @@ const pass = @import("pass");
 
 const instance = @import("instance");
 
+const resourceProcess = @import("resourceProcess");
+
 const ViewBoundsAndTotalSpriteCount = @import("setPass").ViewBoundsAndTotalSpriteCount;
 
 pub const Args = struct {
@@ -49,10 +51,9 @@ pub const Args = struct {
     height: u32,
     resourceArrays: *global.ResourceArrayType,
     stateBuffering: *global.StateBufferingType,
-    pTextureSet: *textureSet,
     vulkan: *VkStruct,
     passes: pass,
-    meshes: *mesh,
+    uctx: *resourceProcess.UserContext,
     instances: *instance,
     externalCommands: *processRender.externalCommands,
 };
@@ -71,11 +72,11 @@ pub fn render_thread_func(args: Args) !void {
     // const height = args.height;
     const resourceArrays = args.resourceArrays;
     const stateBuffering = args.stateBuffering;
-    const pTextureSet = args.pTextureSet;
+    const pTextureSet = &args.uctx.pTextureSet;
     const vulkan = args.vulkan;
     // const handles = args.handles;
     var passes = args.passes;
-    const meshes = args.meshes;
+    const meshes = &args.uctx.meshes;
     const instances = args.instances;
     const externalCommands = args.externalCommands;
 
@@ -115,9 +116,10 @@ pub fn render_thread_func(args: Args) !void {
         defer file.deinit(tempDb);
 
         _ = try pTextureSet.createImageTexture(
+            io,
             comptime file.comptimeGetID("non_exist.png"),
             vulkan,
-            &commands,
+            externalCommands,
             tempDb,
         );
     }
@@ -319,16 +321,6 @@ pub fn render_thread_func(args: Args) !void {
                 while (total > 0) : (total -= 1) {
                     const r = resources.popFirst() orelse break;
                     switch (r) {
-                        .texture => |texture| {
-                            _ = try pTextureSet.createTextureFromResource(
-                                io,
-                                gpa,
-                                texture,
-                                vulkan,
-                                &commands,
-                            );
-                            std.log.debug("r {s} {d}", .{ @tagName(r), frame });
-                        },
                         .position2D => |pos2D| {
                             if (!Handles.handleIsValid(@ptrCast(pos2D.texture))) {
                                 try resources.pushLast(r);
@@ -347,67 +339,6 @@ pub fn render_thread_func(args: Args) !void {
                             );
                             // std.log.debug("set", .{});
                         },
-                        // .mesh => |m| {
-
-                        //     // getMeshBuffer();
-                        //     const usePass = passes.passMap.get("iv_feather").?;
-
-                        //     const sizes = [_]u64{
-                        //         m.meshletSize,
-                        //         m.verticesSize,
-                        //         m.meshletVerticesSize,
-                        //         m.meshletTrianglesSize,
-                        //     };
-
-                        //     var buffers = [_]VkStruct.Buffer_t{
-                        //         m.meshletStagingBuffer,
-                        //         m.verticesStagingBuffer,
-                        //         m.meshletVerticesStagingBuffer,
-                        //         m.meshletTrianglesStagingBuffer,
-                        //     };
-
-                        //     for (0..4) |i| {
-                        //         const bufferAndOffset = try vulkan.buffers.createVirtualBuffer(
-                        //             usePass.buffer[i + 2],
-                        //             0,
-                        //             sizes[i],
-                        //             16,
-                        //             handles,
-                        //         );
-
-                        //         var copyRegion = [1]vk.VkBufferCopy2{.{
-                        //             .sType = vk.VK_STRUCTURE_TYPE_BUFFER_COPY_2,
-                        //             .pNext = null,
-                        //             .srcOffset = 0,
-                        //             .dstOffset = bufferAndOffset.offset,
-                        //             .size = sizes[i],
-                        //         }};
-
-                        //         try commands.cacheCommand(.{
-                        //             .copyBuffer = .{
-                        //                 .srcBuffer = buffers[i],
-                        //                 .dstBuffer = bufferAndOffset.buffer,
-                        //                 .regions = &copyRegion,
-                        //             },
-                        //         });
-                        //         buffers[i] = bufferAndOffset.buffer;
-                        //     }
-                        //     // global.game_end.store(1, .seq_cst);
-
-                        //     _ = try meshes.addMesh(
-                        //         m.fileID,
-                        //         buffers[0],
-                        //         sizes[0],
-                        //         buffers[1],
-                        //         sizes[1],
-                        //         buffers[2],
-                        //         sizes[2],
-                        //         buffers[3],
-                        //         sizes[3],
-                        //         m.vertexStride,
-                        //         m.handle,
-                        //     );
-                        // },
                         .instance => |i| {
                             const texIdx = if (i.texture) |t|
                                 pTextureSet.getDescriptorSetIndex(t)

@@ -26,8 +26,13 @@ const ktx = @import("ktx");
 const Buffer_t = VkStruct.Buffer_t;
 const ExternalCommands = @import("processRender").externalCommands;
 const mesh = @import("mesh");
+const textureSet = @import("textureSet");
 
 pub const KTX2_Reader = struct {
+    pub const Ctx = struct {
+        pTextureSet: *textureSet,
+    };
+
     pub fn processResource(
         comptime fType: ProcessType,
         io: Io,
@@ -39,14 +44,16 @@ pub const KTX2_Reader = struct {
         buffers: ?[]Buffer_t,
         handles: *global.HandlesType,
         commands: *ExternalCommands,
-        meshes: *mesh,
+        uctx: *Ctx,
         resourceArray: *MutexArray(Resource),
     ) !void {
         _ = fType;
         _ = buffers;
         _ = handles;
-        _ = commands;
-        _ = meshes;
+        _ = resourceArray;
+
+        const pTextureSet = uctx.pTextureSet;
+
         const img = file.getFile(io, fileID, sqlite.?) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
             return err;
@@ -187,14 +194,10 @@ pub const KTX2_Reader = struct {
             }
         }
 
-        {
-            try resourceArray.mutex.lock(io);
-            defer resourceArray.mutex.unlock(io);
-            const ptr = resourceArray.array.addOne() catch |err| {
-                std.log.err("{s}", .{@errorName(err)});
-                return err;
-            };
-            ptr.* = .{ .texture = .{
+        _ = try pTextureSet.createTextureFromResource(
+            io,
+            gpa,
+            .{
                 .regions = regions,
                 .width = @intCast(imgWidth),
                 .height = @intCast(imgHeight),
@@ -209,7 +212,34 @@ pub const KTX2_Reader = struct {
                 .staginfBuffer = stagingBuffer,
                 .format = texture.*.vkFormat,
                 .handle = handle,
-            } };
-        }
+            },
+            vulkan,
+            commands,
+        );
+
+        // {
+        //     try resourceArray.mutex.lock(io);
+        //     defer resourceArray.mutex.unlock(io);
+        //     const ptr = resourceArray.array.addOne() catch |err| {
+        //         std.log.err("{s}", .{@errorName(err)});
+        //         return err;
+        //     };
+        //     ptr.* = .{ .texture = .{
+        //         .regions = regions,
+        //         .width = @intCast(imgWidth),
+        //         .height = @intCast(imgHeight),
+        //         .depth = @intCast(imgDepth),
+        //         .baseLayer = 0,
+        //         .layerCount = texture.*.numLayers,
+        //         .mipLevels = texture.*.numLevels,
+        //         .fileID = @intCast(fileID),
+        //         .vkImage = @ptrFromInt(image.vkImage),
+        //         .vkImageView = imageView,
+        //         .allocation = @ptrFromInt(image.allocation),
+        //         .staginfBuffer = stagingBuffer,
+        //         .format = texture.*.vkFormat,
+        //         .handle = handle,
+        //     } };
+        // }
     }
 };

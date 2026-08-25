@@ -1,16 +1,19 @@
 const std = @import("std");
 const Io = std.Io;
 
+const global = @import("global");
+
 const Allocator = std.mem.Allocator;
 
-// shared
 const png = @import("resourceProcess/png.zig");
 const vtx = @import("resourceProcess/vtx.zig");
 const gltf = @import("resourceProcess/gltf.zig");
 const sampler = @import("resourceProcess/sampler.zig");
 const shader = @import("resourceProcess/shader.zig");
 const pipeline = @import("resourceProcess/pipeline.zig");
+const ktx2 = @import("resourceProcess/ktx2.zig");
 
+// shared
 const tables = @import("tables");
 const triggers = @import("triggers.zig");
 
@@ -30,7 +33,27 @@ const Resource = resource.Resource;
 
 const MutexArray = mstd.MutexArray;
 
-const ktx2 = @import("resourceProcess/ktx2.zig");
+const mesh = @import("mesh");
+const textureSet = @import("textureSet");
+
+pub const UserContext = struct {
+    /// engine will use this
+    pTextureSet: textureSet,
+
+    meshes: mesh,
+
+    pub fn initUserContext(gpa: Allocator, vulkan: *VkStruct, handles: *global.HandlesType) !UserContext {
+        return .{
+            .meshes = .init(gpa, vulkan, handles),
+            .pTextureSet = undefined,
+        };
+    }
+
+    pub fn deinitUserContext(self: *UserContext, gpa: Allocator) void {
+        _ = gpa;
+        self.meshes.deinit();
+    }
+};
 
 pub const CustomTables = [_]type{
     tables.ModelLoadParameter,
@@ -158,17 +181,6 @@ pub const Mappings = [_]ProcessType_HandleType{
     .{ ProcessType.KTX2, HandleType.texture },
     .{ ProcessType.VTX, HandleType.mesh },
 };
-
-pub const PNG_Cooker = png.PNG_Cooker;
-pub const GLTF_Cooker = gltf.GLTF_Cooker;
-pub const VTX_Cooker = vtx.VTX_Cooker;
-pub const Sampler_Cooker = sampler.Sampler_Cooker;
-pub const Shader_Cooker = shader.Shader_Cooker;
-pub const Pipeline_Cooker = pipeline.Pipeline_Cooker;
-
-pub const KTX2_Reader = ktx2.KTX2_Reader;
-pub const VTX_Reader = vtx.VTX_Reader;
-pub const PNG_Reader = png.PNG_Reader;
 
 const PNG = png.PNG;
 const GLTF = gltf.GLTF;
@@ -320,3 +332,14 @@ pub const Example_Reader = struct {
         unreachable;
     }
 };
+
+pub const PNG_Cooker = png.PNG_Cooker;
+pub const GLTF_Cooker = gltf.GLTF_Cooker;
+pub const VTX_Cooker = vtx.VTX_Cooker;
+pub const Sampler_Cooker = sampler.Sampler_Cooker;
+pub const Shader_Cooker = shader.Shader_Cooker;
+pub const Pipeline_Cooker = pipeline.Pipeline_Cooker;
+
+pub const KTX2_Reader = ktx2.KTX2_Reader;
+pub const VTX_Reader = vtx.VTX_Reader;
+pub const PNG_Reader = png.PNG_Reader;

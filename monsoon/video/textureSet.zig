@@ -16,7 +16,7 @@ const objectPool = mstd.ObjectPool;
 const Handles = @import("handle");
 const Handle = Handles.Handle;
 const processRender = @import("processRender");
-const Commands = processRender.commands;
+const ExternalCommands = processRender.externalCommands;
 const hash = std.hash;
 const resource = @import("resource");
 
@@ -139,9 +139,10 @@ pub fn deinit(self: *Self, vulkan: *VkStruct) void {
 
 pub fn createImageTexture(
     self: *Self,
+    io: std.Io,
     fileID: u32,
     vulkan: *VkStruct,
-    graphic: *Commands,
+    commands: *ExternalCommands,
     db: file.sqlite3,
 ) !Texture_t {
     const zone = tracy.initZone(@src(), .{ .name = "create image texutre from file" });
@@ -267,7 +268,7 @@ pub fn createImageTexture(
         },
     }};
 
-    try graphic.cacheCommand(
+    try commands.externalCommand(
         .{ .copyBufferToImage = .{
             .pTexture = texture_t,
             .buffer = stagingBuffer,
@@ -284,6 +285,9 @@ pub fn createImageTexture(
     );
 
     const dstArrayElement = try self.acquireDescriptorSetIndex(ID);
+
+    try self.mutex.lock(io);
+    defer self.mutex.unlock(io);
     try vulkan.addWriteDescriptorSetImage(
         dstArrayElement,
         texture.imageView,
@@ -431,7 +435,7 @@ pub fn createTextureFromResource(
     gpa: Allocator,
     textureResource: resource.Texture,
     vulkan: *VkStruct,
-    graphic: *Commands,
+    commands: *ExternalCommands,
 ) !Texture_t {
     var texture: *Texture = undefined;
     var texture_t: Texture_t = undefined;
@@ -488,6 +492,10 @@ pub fn createTextureFromResource(
     }
 
     const dstArrayElement = try self.acquireDescriptorSetIndex(textureResource.fileID);
+
+    try self.mutex.lock(io);
+    defer self.mutex.unlock(io);
+
     try vulkan.addWriteDescriptorSetImage(
         dstArrayElement,
         texture.imageView,
@@ -501,7 +509,7 @@ pub fn createTextureFromResource(
 
     try self.imageViewToTexture.put(texture.imageView, texture_t);
 
-    try graphic.cacheCommand(
+    try commands.externalCommand(
         .{ .copyBufferToImage = .{
             .pTexture = texture_t,
             .baseArrayLayer = textureResource.baseLayer,

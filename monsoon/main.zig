@@ -35,6 +35,8 @@ const renderFlow = @import("renderFlow");
 const setPass = @import("setPass");
 const ExternalCommands = @import("processRender").externalCommands;
 
+const resourceProcess = @import("resourceProcess");
+
 // const cgltf = @import("cgltf");
 
 var handles: global.HandlesType = undefined;
@@ -45,10 +47,10 @@ var render_thread: usize = 0;
 
 var debug_allocator: std.heap.DebugAllocator(.{ .stack_trace_frames = 10 }) = .init;
 pub fn main(init: std.process.Init) !void {
-    const gpa = init.gpa;
+    // const gpa = init.gpa;
     const io = init.io;
 
-    var tracyAllocator = tracy.TracingAllocator.initNamed("pool", gpa);
+    var tracyAllocator = tracy.TracingAllocator.initNamed("pool", init.gpa);
     defer tracyAllocator.deinit();
 
     var taa = tracyAllocator.allocator();
@@ -63,11 +65,7 @@ pub fn main(init: std.process.Init) !void {
     const mainZone = tracy.initZone(@src(), .{ .name = "main" });
     defer mainZone.deinit();
 
-    var arenaAllocator = std.heap.ArenaAllocator.init(gpa);
-    defer arenaAllocator.deinit();
-    const arena = arenaAllocator.allocator();
-
-    const args = try init.minimal.args.toSlice(arena);
+    const args = try init.minimal.args.toSlice(init.arena.allocator());
 
     for (args) |arg| {
         std.log.info("arg: {s}", .{arg});
@@ -95,8 +93,6 @@ pub fn main(init: std.process.Init) !void {
         sdl.SDL_MINOR_VERSION,
         sdl.SDL_MICRO_VERSION,
     });
-
-    // _ = try cgltf.loadGltfFile(comptime file.comptimeGetID("box.glb"), allocator_t.*);
 
     thread_count = try Thread.getCpuCount();
     const thread_used_count = cot: {
@@ -171,14 +167,7 @@ pub fn main(init: std.process.Init) !void {
         try vulkan.initVulkan(init.io, &pTextureSet, tempDb);
     }
     defer vulkan.deinit();
-    defer pTextureSet.deinit(&vulkan);
-
-    var meshes = mesh.init(
-        allocator_t.*,
-        &vulkan,
-        &handles,
-    );
-    defer meshes.deinit();
+    errdefer pTextureSet.deinit(&vulkan);
 
     var instances = instance.init(allocator_t.*, &handles);
     defer instances.deinit();
@@ -201,12 +190,19 @@ pub fn main(init: std.process.Init) !void {
     var externalCommands = ExternalCommands.init(io, allocator_t.*);
     defer externalCommands.deinit();
 
+    var uctx = try resourceProcess.UserContext.initUserContext(allocator_t.*, &vulkan, &handles);
+    defer uctx.deinitUserContext(allocator_t.*);
+    uctx.pTextureSet = pTextureSet;
+    defer uctx.pTextureSet.deinit(&vulkan);
+
+    pTextureSet = undefined;
+
     var render_t = try Thread.spawn(
         .{},
         render.render_thread_func,
         .{render.Args{
             .io = init.io,
-            .gpa = gpa,
+            .gpa = allocator_t.*,
             .thread_count = render_thread,
             .endSemaphore = &endSemaphore,
             .handles = &handles,
@@ -215,10 +211,9 @@ pub fn main(init: std.process.Init) !void {
             .height = height,
             .resourceArrays = &resourceArrays,
             .stateBuffering = &stateBuffering,
-            .pTextureSet = &pTextureSet,
             .vulkan = &vulkan,
             .passes = passes,
-            .meshes = &meshes,
+            .uctx = &uctx,
             .instances = &instances,
             .externalCommands = &externalCommands,
         }},
@@ -232,14 +227,14 @@ pub fn main(init: std.process.Init) !void {
         update.update_thread_func,
         .{update.Args{
             .io = init.io,
-            .gpa = gpa,
+            .gpa = allocator_t.*,
             .thread_count = update_thread,
             .pInput = input1,
             .resourceArrays = &resourceArrays,
             .stateBuffering = &stateBuffering,
             .handles = &handles,
             .vulkan = &vulkan,
-            .meshes = &meshes,
+            .uctx = &uctx,
             .commands = &externalCommands,
         }},
     );

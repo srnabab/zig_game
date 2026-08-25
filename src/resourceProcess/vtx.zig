@@ -111,6 +111,9 @@ pub const VTX_Cooker = struct {
 };
 
 pub const VTX_Reader = struct {
+    pub const Ctx = struct {
+        meshes: *mesh,
+    };
     pub fn processResource(
         comptime fType: ProcessType,
         io: Io,
@@ -122,11 +125,13 @@ pub const VTX_Reader = struct {
         buffer_ts: ?[]Buffer_t,
         handles: *global.HandlesType,
         commands: *ExternalCommands,
-        meshes: *mesh,
+        uctx: *Ctx,
         resourceArray: *MutexArray(Resource),
     ) !void {
         _ = fType;
         _ = resourceArray;
+        const meshes = uctx.meshes;
+
         const res = file.getMeshLoadParam(io, fileID, sqlite) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
             return err;
