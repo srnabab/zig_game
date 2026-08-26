@@ -18,14 +18,14 @@ pub fn build(b: *std.Build) void {
     const cglm_install_step = cglm_dep.builder.getInstallStep();
 
     const sqlite_c = b.addTranslateC(.{
-        .root_source_file = b.path("../include/sqlite3/sqlite3.h"),
+        .root_source_file = b.path("../../../include/sqlite3/sqlite3.h"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
     });
     const sqlite_c_mod = sqlite_c.createModule();
     sqlite_c_mod.addCSourceFile(.{
-        .file = b.path("../shared/sqlite3/sqlite3.c"),
+        .file = b.path("../../../shared/sqlite3/sqlite3.c"),
         .language = .c,
         .flags = &c_flags,
     });
@@ -35,7 +35,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     const sqliteModule = b.createModule(.{
-        .root_source_file = b.path("../shared/sqlite3/sqliteDB.zig"),
+        .root_source_file = b.path("../../../shared/sqlite3/sqliteDB.zig"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
@@ -46,7 +46,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     const UUID_c = b.addTranslateC(.{
-        .root_source_file = b.path("../include/UUID/UUID.h"),
+        .root_source_file = b.path("../../../include/UUID/UUID.h"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
@@ -63,45 +63,45 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     const blake3_hash_mod = b.createModule(.{
-        .root_source_file = b.path("../shared/blake3/blake_hash.zig"),
+        .root_source_file = b.path("../../../shared/blake3/blake_hash.zig"),
         .target = target,
         .optimize = optimize,
     });
     const blake3_c = b.addTranslateC(.{
-        .root_source_file = b.path("../include/blake3.h"),
+        .root_source_file = b.path("../../../include/blake3.h"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
     });
     const blake3_c_mod = blake3_c.createModule();
     const vk_c = b.addTranslateC(.{
-        .root_source_file = b.path("../include/vulkan/vulkan.h"),
+        .root_source_file = b.path("../../../include/vulkan/vulkan.h"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
     });
     const vk_c_mod = vk_c.createModule();
     const spriv_reflect_c = b.addTranslateC(.{
-        .root_source_file = b.path("../include/spirv_reflect/spirv_reflect.h"),
+        .root_source_file = b.path("../../../include/spirv_reflect/spirv_reflect.h"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
     });
     const srpiv_reflect_c_mod = spriv_reflect_c.createModule();
-    srpiv_reflect_c_mod.addCSourceFile(.{ .file = b.path("../shared/sprivReflect/spirv_reflect.c"), .language = .c });
+    srpiv_reflect_c_mod.addCSourceFile(.{ .file = b.path("../../../shared/sprivReflect/spirv_reflect.c"), .language = .c });
     const spReflectModule = b.createModule(.{
-        .root_source_file = b.path("../shared/sprivReflect/reflect.zig"),
+        .root_source_file = b.path("../../../shared/sprivReflect/reflect.zig"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
     });
     const vertexStruct_mod = b.createModule(.{
-        .root_source_file = b.path("../shared/vertexStruct.zig"),
+        .root_source_file = b.path("../../../shared/vertexStruct.zig"),
         .target = target,
         .optimize = optimize,
     });
     const meshopt_c = b.addTranslateC(.{
-        .root_source_file = b.path("../include/meshoptimizer.h"),
+        .root_source_file = b.path("../../../include/meshoptimizer.h"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
@@ -114,19 +114,19 @@ pub fn build(b: *std.Build) void {
         .link_libcpp = true,
     });
     const enum_c_mod = b.createModule(.{
-        .root_source_file = b.path("../shared/enumFromC.zig"),
+        .root_source_file = b.path("../../../shared/enumFromC.zig"),
         .target = target,
         .optimize = optimize,
     });
     const cgltf_c = b.addTranslateC(.{
-        .root_source_file = b.path("../include/cgltf/cgltf.h"),
+        .root_source_file = b.path("../../../include/cgltf/cgltf.h"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
     });
     const cgltf_c_mod = cgltf_c.createModule();
     cgltf_c_mod.addCSourceFile(.{
-        .file = b.path("../include/cgltf/cgltf_namespace.h"),
+        .file = b.path("../../../include/cgltf/cgltf_namespace.h"),
         .language = .c,
         .flags = &.{
             "-fno-sanitize=alignment",
@@ -139,7 +139,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     const cglm_c = b.addTranslateC(.{
-        .root_source_file = b.path("../include/cglm/call.h"),
+        .root_source_file = b.path("../../../include/cglm/call.h"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
@@ -151,12 +151,12 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     const pipelinParse_mod = b.createModule(.{
-        .root_source_file = b.path("../shared/pipeline/parse.zig"),
+        .root_source_file = b.path("../../../shared/pipeline/parse.zig"),
         .target = target,
         .optimize = optimize,
     });
     const types_mod = b.createModule(.{
-        .root_source_file = b.path("../shared/types.zig"),
+        .root_source_file = b.path("../../../shared/types.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -191,30 +191,30 @@ pub fn build(b: *std.Build) void {
 
     vertexStruct_mod.addImport("cglm", cglm_mod);
 
-    meshopt_mod.addIncludePath(b.path("../include"));
+    meshopt_mod.addIncludePath(b.path("../../../include"));
     meshopt_mod.addImport("meshopt", meshopt_c_mod);
-    meshopt_c.addIncludePath(b.path("../include"));
+    meshopt_c.addIncludePath(b.path("../../../include"));
 
     cgltf_mod.addImport("cgltf", cgltf_c_mod);
     cgltf_mod.addImport("vertexStruct", vertexStruct_mod);
     cgltf_mod.addImport("enumFromC", enum_c_mod);
     cgltf_mod.addImport("UUID", UUID_mod);
-    cgltf_mod.addIncludePath(b.path("../include"));
+    cgltf_mod.addIncludePath(b.path("../../../include"));
 
-    vk_c.addIncludePath(b.path("../include"));
+    vk_c.addIncludePath(b.path("../../../include"));
 
     spReflectModule.addImport("EnumC", enum_c_mod);
     spReflectModule.addImport("vulkan", vk_c_mod);
     spReflectModule.addImport("spriv_reflect", srpiv_reflect_c_mod);
-    spriv_reflect_c.addIncludePath(b.path("../include"));
-    srpiv_reflect_c_mod.addIncludePath(b.path("../include"));
+    spriv_reflect_c.addIncludePath(b.path("../../../include"));
+    srpiv_reflect_c_mod.addIncludePath(b.path("../../../include"));
 
     sampler_mod.addImport("vulkan", vk_c_mod);
 
     blake3_hash_mod.addImport("blake3", blake3_c_mod);
 
-    UUID_c.addIncludePath(b.path("../include"));
-    UUID_c_mod.addIncludePath(b.path("../include"));
+    UUID_c.addIncludePath(b.path("../../../include"));
+    UUID_c_mod.addIncludePath(b.path("../../../include"));
 
     UUID_mod.addImport("UUID_C", UUID_c_mod);
 
@@ -253,5 +253,11 @@ pub fn build(b: *std.Build) void {
     exe.step.dependOn(cglm_install_step);
     // exe.step.dependOn(shaderc_lib_install_step);
 
-    b.installArtifact(exe);
+    const install = b.addInstallArtifact(exe, .{ .dest_dir = .{
+        .override = .{
+            .custom = "../../../",
+        },
+    } });
+
+    b.getInstallStep().dependOn(&install.step);
 }

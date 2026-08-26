@@ -1,5 +1,6 @@
 Assets\Shaders
 Assets\Sampler
 Assets\pipeline
+Assets\loadMap
 zig-out\bin\Content
 cooker

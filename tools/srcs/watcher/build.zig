@@ -70,6 +70,14 @@ pub fn build(b: *std.Build) void {
 
     const run_step = b.step("run", "Run the app");
 
+    const install = b.addInstallArtifact(exe, .{ .dest_dir = .{
+        .override = .{
+            .custom = "../../../",
+        },
+    } });
+
+    b.getInstallStep().dependOn(&install.step);
+
     b.getInstallStep().dependOn(&preKillGameProcessCmd.step);
 
     run_cmd.step.dependOn(b.getInstallStep());

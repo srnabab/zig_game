@@ -19,5 +19,11 @@ pub fn build(b: *std.Build) void {
         .root_module = exe_mod,
     });
 
-    b.installArtifact(exe);
+    const install = b.addInstallArtifact(exe, .{ .dest_dir = .{
+        .override = .{
+            .custom = "../../../",
+        },
+    } });
+
+    b.getInstallStep().dependOn(&install.step);
 }

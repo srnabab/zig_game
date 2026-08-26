@@ -32,9 +32,9 @@
     // Once all dependencies are fetched, `zig build` no longer requires
     // internet connectivity.
     .dependencies = .{
-        .blake3 = .{ .path = "../dependencies/blake3" },
-        .meshoptimizer = .{ .path = "../dependencies/meshoptimizer" },
-        .cglm = .{ .path = "../dependencies/cglm" },
+        .blake3 = .{ .path = "../../../dependencies/blake3" },
+        .meshoptimizer = .{ .path = "../../../dependencies/meshoptimizer" },
+        .cglm = .{ .path = "../../../dependencies/cglm" },
     },
     // Specifies the set of files and directories that are included in this package.
     // Only files and directories listed here are included in the `hash` that
