@@ -12,7 +12,7 @@ const sampler = @import("resourceProcess/sampler.zig");
 const shader = @import("resourceProcess/shader.zig");
 const pipeline = @import("resourceProcess/pipeline.zig");
 const ktx2 = @import("resourceProcess/ktx2.zig");
-// const loadmap = @import("resourceProcess/loadmap.zig");
+const loadmap = @import("resourceProcess/loadmap.zig");
 
 // shared
 const tables = @import("tables");
@@ -352,7 +352,7 @@ pub const VTX_Cooker = vtx.VTX_Cooker;
 pub const Sampler_Cooker = sampler.Sampler_Cooker;
 pub const Shader_Cooker = shader.Shader_Cooker;
 pub const Pipeline_Cooker = pipeline.Pipeline_Cooker;
-// pub const LoadMap_Cooker = loadmap.LoadMap_Cooker;
+pub const LoadMap_Cooker = loadmap.LoadMap_Cooker;
 
 pub const KTX2_Reader = ktx2.KTX2_Reader;
 pub const VTX_Reader = vtx.VTX_Reader;

@@ -39,12 +39,12 @@ pub const LoadMap_Cooker = struct {
     ) !void {
         _ = content;
         _ = database;
-        var readBuffer = [_]u8{0} ** 64;
+        // var readBuffer = [_]u8{0} ** 64;
 
         const lMapName = try std.fmt.allocPrintSentinel(
             gpa,
             "{s}.lMap",
-            .{fileName},
+            .{fileName[0 .. std.mem.findLast(u8, fileName, ".") orelse fileName.len]},
             0,
         );
         defer gpa.free(lMapName);
@@ -60,7 +60,7 @@ pub const LoadMap_Cooker = struct {
         defer gpa.free(lmapFullPath);
 
         const runRes = try std.process.run(gpa, io, .{
-            .argv = &[_][]const u8{ "glslc", "--target-env=vulkan1.4", "-o", lmapFullPath, fullPath },
+            .argv = &[_][]const u8{ "loadmapConverter.exe", fullPath, lmapFullPath },
         });
         defer {
             gpa.free(runRes.stderr);

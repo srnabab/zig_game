@@ -3,4 +3,4 @@ Assets\Sampler
 Assets\pipeline
 Assets\loadMap
 zig-out\bin\Content
-cooker
+tools\srcs\cooker

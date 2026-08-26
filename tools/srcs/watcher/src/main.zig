@@ -181,6 +181,18 @@ pub fn main(init: std.process.Init) !void {
     var watchingFilePath: []const u8 = configFile;
     var databaseFilePath: []const u8 = databaseFile;
 
+    const exe_path = argsIt.next() orelse unreachable;
+    const exe_dir = try std.Io.Dir.openDirAbsolute(
+        io,
+        exe_path[0 .. std.mem.findLast(u8, exe_path, "\\") orelse exe_path.len],
+        .{},
+    );
+    defer exe_dir.close(io);
+    try std.process.setCurrentDir(io, exe_dir);
+
+    // std.log.debug("{s}", .{});
+    // std.log.debug("{s}", .{exe_path});
+
     {
         errdefer {
             std.log.debug(
@@ -188,7 +200,6 @@ pub fn main(init: std.process.Init) !void {
                 .{},
             );
         }
-        _ = argsIt.next();
         while (argsIt.next()) |arg| {
             // std.log.debug("{s}", .{arg});
             if (arg.len >= 6) {
