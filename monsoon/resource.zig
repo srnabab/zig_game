@@ -126,6 +126,7 @@ pub const ResourceCtx = struct {
     gpa: std.mem.Allocator,
     handles: *global.HandlesType,
     nameArray: *NameQueue,
+    vulkan: *VkStruct,
     mainSqlite: sqlite3,
 };
 
@@ -135,7 +136,6 @@ pub const ResourceThreadArgs = struct {
     group: *std.Io.Group,
     handleArray: *DataBaseHandleArrayType,
     handleMutex: *Io.Mutex,
-    vulkan: *VkStruct,
     externalCommands: *ExternalCommands,
     uctx: *resourceProcess.UserContext,
 };
@@ -195,7 +195,7 @@ pub fn processResource(args: *const ResourceThreadArgs) Io.Cancelable!void {
     const nameArray = args.ctx.nameArray;
     const handleMutex = args.handleMutex;
     const handleArray = args.handleArray;
-    const vulkan = args.vulkan;
+    const vulkan = args.ctx.vulkan;
     const handles = args.ctx.handles;
 
     while (true) {
@@ -220,15 +220,15 @@ pub fn processResource(args: *const ResourceThreadArgs) Io.Cancelable!void {
                     const readerName = std.fmt.comptimePrint("{s}{s}", .{ @tagName(t), "_Reader" });
 
                     if (@hasDecl(resourceProcess, readerName)) {
-                        const testBuffers = gpa.alloc(VkStruct.Buffer_t, 4) catch {
-                            return Io.Cancelable.Canceled;
-                        };
-                        defer gpa.free(testBuffers);
+                        // const testBuffers = gpa.alloc(VkStruct.Buffer_t, 4) catch {
+                        //     return Io.Cancelable.Canceled;
+                        // };
+                        // defer gpa.free(testBuffers);
 
-                        testBuffers[0] = vulkan.buffers.getBuffer("featherMeshlet").?;
-                        testBuffers[1] = vulkan.buffers.getBuffer("featherVertices").?;
-                        testBuffers[2] = vulkan.buffers.getBuffer("featherMeshletVertices").?;
-                        testBuffers[3] = vulkan.buffers.getBuffer("featherMeshletTriangles").?;
+                        // testBuffers[0] = vulkan.buffers.getBuffer("featherMeshlet").?;
+                        // testBuffers[1] = vulkan.buffers.getBuffer("featherVertices").?;
+                        // testBuffers[2] = vulkan.buffers.getBuffer("featherMeshletVertices").?;
+                        // testBuffers[3] = vulkan.buffers.getBuffer("featherMeshletTriangles").?;
 
                         const field = @field(resourceProcess, readerName);
 
@@ -246,7 +246,7 @@ pub fn processResource(args: *const ResourceThreadArgs) Io.Cancelable!void {
                             vulkan,
                             pack.id,
                             pack.handle,
-                            testBuffers,
+                            pack.buffers,
                             handles,
                             args.externalCommands,
                             &ctx,

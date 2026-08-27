@@ -174,6 +174,7 @@ pub fn update_thread_func(args: Args) !void {
         .handles = handles,
         .nameArray = &nameArray,
         .mainSqlite = mainRoSqlite,
+        .vulkan = args.vulkan,
     };
 
     const resourceArg = ResourceThreadArgs{
@@ -182,7 +183,6 @@ pub fn update_thread_func(args: Args) !void {
         .group = &resourceGroup,
         .handleArray = &databaseHandleArray,
         .handleMutex = &handleMutex,
-        .vulkan = args.vulkan,
         .externalCommands = args.commands,
         .uctx = args.uctx,
     };

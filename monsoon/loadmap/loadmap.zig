@@ -17,6 +17,9 @@ const NameQueue = resource.NameQueue;
 const file = @import("fileSystem");
 const sqlite3 = ?*file.sqlite.sqlite3;
 
+const VkStruct = @import("video");
+const Buffer_t = VkStruct.Buffer_t;
+
 const u8pack = @import("u8pack").u8pack;
 
 const cglm = @import("cglm");
@@ -295,9 +298,20 @@ pub fn loadResource(
     var it1 = self.loadingQueue.iterate();
     while (it1.next()) |item| {
         for (item.ptr.grid.items) |*i| {
+            var buffers: []Buffer_t = &.{};
+
+            if (i.isGpu) {
+                buffers = try self.allocator.alloc(Buffer_t, i.bufferName.len);
+
+                for (i.bufferName, buffers) |bi, *b| {
+                    b.* = ctx.vulkan.buffers.getBuffer(bi).?;
+                }
+            }
+            defer self.allocator.free(buffers);
+
             const h = try resource.readResource(
                 ctx,
-                &.{},
+                buffers,
                 i.name,
             );
             try self.loadingItems.append(.{ .handle = h, .progress = &item.ptr.progress });

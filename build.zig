@@ -355,6 +355,7 @@ pub fn build(b: *std.Build) void {
     loadmap_mod.addImport("resource", resource_mod);
     loadmap_mod.addImport("handle", handle_mod);
     loadmap_mod.addImport("ms_std", ms_mod);
+    loadmap_mod.addImport("video", video_mod);
 
     ktx2_c.addIncludePath(b.path("include"));
     ktx2_c.addIncludePath(b.path("include/KTX"));

@@ -11,7 +11,7 @@
         {
             "name": "Plane.001_0.vtx",
             "isGpu": true,
-            "bufferName": ["featherStorageBuffer"]
+            "bufferName": ["featherMeshlet", "featherVertices", "featherMeshletVertices", "featherMeshletTriangles"]
         },
         {
             "name": "feather_lut.ktx2",
