@@ -22,6 +22,9 @@ pub fn init(gpa: Allocator, mapCount: u32) !Self {
 }
 
 pub fn deinit(self: *Self, gpa: Allocator) void {
+    for (self.loadmaps) |*value| {
+        value.free();
+    }
     gpa.free(self.loadmaps);
 }
 

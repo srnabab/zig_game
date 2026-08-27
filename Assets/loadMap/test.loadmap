@@ -5,10 +5,6 @@
     "gridLength": 800,
     "items": [
         {
-            "name": "non_exist.png",
-            "isGpu": true
-        },
-        {
             "name": "box.png",
             "isGpu": true
         },

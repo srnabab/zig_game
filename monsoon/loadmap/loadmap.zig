@@ -256,6 +256,17 @@ pub fn loadLoadmap(gpa: Allocator, mem: []u8) Allocator.Error!Self {
     };
 }
 
+pub fn free(self: *Self) void {
+    self.loadingItems.deinit();
+    self.loadingQueue.deinit();
+
+    const mem_start: [*]u8 = @ptrCast(@alignCast(self.layers.ptr));
+    const mem_end: [*]u8 = self.strs.ptr + self.strs.len;
+
+    const mem: []align(@alignOf(GridLayer)) u8 = @alignCast(mem_start[0 .. mem_end - mem_start]);
+    self.allocator.free(mem);
+}
+
 pub fn loadResource(
     self: *Self,
     ctx: *const resource.ResourceCtx,

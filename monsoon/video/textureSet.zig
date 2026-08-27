@@ -152,10 +152,6 @@ pub fn createImageTexture(
 
     // std.log.debug("ID {d}", .{ID});
 
-    if (self.map.get(ID)) |value| {
-        return value;
-    }
-
     var texture_t: Texture_t = undefined;
     var texture: *Texture = undefined;
     var stagingBuffer: VkStruct.Buffer_t = undefined;
@@ -166,6 +162,10 @@ pub fn createImageTexture(
     {
         self.mutex.lockUncancelable(self.io);
         defer self.mutex.unlock(self.io);
+
+        if (self.map.get(ID)) |value| {
+            return value;
+        }
 
         const img = try file.getImageLoadParam(self.io, @intCast(fileID), db);
         defer img.file.close(self.io);
@@ -317,6 +317,10 @@ pub fn create2DTexture(
     {
         try self.mutex.lock(self.io);
         defer self.mutex.unlock(self.io);
+
+        if (self.map.get(ID)) |value| {
+            return value;
+        }
 
         const image = try vulkan.createImage2D(width, height, format, tiling, usage);
         errdefer vulkan.destroyImage(image);
