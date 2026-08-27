@@ -55,7 +55,7 @@ const INFINITE: windows.DWORD = 0xFFFFFFFF;
 const CTRL_C_EVENT: windows.DWORD = 0;
 const CTRL_BREAK_EVENT: windows.DWORD = 1;
 
-const PHANDLER_ROUTINE = *const fn (windows.DWORD) callconv(.winapi) windows.BOOL;
+const PHANDLER_ROUTINE = ?*const fn (windows.DWORD) callconv(.winapi) windows.BOOL;
 
 const win32 = struct {
     pub extern "kernel32" fn CloseHandle(hObject: windows.HANDLE) callconv(.winapi) windows.BOOL;
@@ -248,8 +248,6 @@ pub fn main(init: std.process.Init) !void {
 
     var cookerArgv = [_][]const u8{cookerPath.?};
 
-    try cookerInit(io, &cookerArgv, dbPath, dbPathStart);
-
     // database = try db.init(allocator, databaseFilePath);
     // errdefer database.rollback();
     // defer database.deinit(allocator);
@@ -313,6 +311,8 @@ pub fn main(init: std.process.Init) !void {
         1,
     );
     if (iocp == null) return error.CreateIoCompletionPortFailed;
+
+    try cookerInit(io, &cookerArgv, dbPath, dbPathStart);
 
     global_iocp = iocp;
     _ = win32.SetConsoleCtrlHandler(consoleCtrlHandler, windows.BOOL.TRUE);
@@ -387,8 +387,8 @@ pub fn main(init: std.process.Init) !void {
         );
 
         if (completion_key == EXIT_COMPLETION_KEY) {
-            cookerWriter.interface.writeAll("404??\n") catch {};
-            // cookerWriter.flush() catch {};
+            try cookerWriter.interface.writeAll("404??\n");
+            cookerWriter.flush() catch {};
 
             const wRes = try cooker.wait(io);
 

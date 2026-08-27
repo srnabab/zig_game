@@ -2,6 +2,7 @@ const std = @import("std");
 const Io = std.Io;
 
 const db = @import("db");
+const windows = std.os.windows;
 
 var database: *db = undefined;
 
@@ -21,6 +22,7 @@ pub fn main(init: std.process.Init) !void {
 
     var stdin = stdinFile.reader(io, &stdinReadBuffer);
 
+    _ = SetConsoleCtrlHandler(null, windows.BOOL.TRUE);
     try Io.sleep(io, .fromSeconds(1), .real);
 
     var count: u32 = 0;
@@ -53,13 +55,13 @@ pub fn main(init: std.process.Init) !void {
         .{ .iterate = true },
     );
     defer contentFolder.close(io);
+    defer database.deinit(allocator);
 
     database = try db.init(io, allocator, contentFolder, databaseFilePath);
     errdefer database.rollback();
-    defer database.deinit(allocator);
 
     var pending_old_name: ?[]u8 = null;
-    var committer: db.AutoCommitter = .init(database, io, 60000);
+    var committer: db.AutoCommitter = .init(database, io, 5000);
     var future: ?Io.Future(@typeInfo(@TypeOf(db.AutoCommitter.runMonitor)).@"fn".return_type.?) = null;
     errdefer {
         if (future) |_| {
@@ -67,6 +69,7 @@ pub fn main(init: std.process.Init) !void {
         }
     }
     defer {
+        committer.last_activity = 0;
         if (future) |_| {
             _ = future.?.await(io) catch |err| std.log.err("AutoCommitter.runMonitor failed: {}", .{err});
         }
@@ -473,4 +476,15 @@ fn renameNew(
         std.log.info("rename {s} -> {s}", .{ old, name_utf8 });
         arena.free(old);
     }
+}
+const PHANDLER_ROUTINE = ?*const fn (windows.DWORD) callconv(.winapi) windows.BOOL;
+
+pub extern "kernel32" fn SetConsoleCtrlHandler(
+    HandlerRoutine: PHANDLER_ROUTINE,
+    Add: windows.BOOL,
+) callconv(.winapi) windows.BOOL;
+
+fn consoleCtrlHandler(ctrl_type: windows.DWORD) callconv(.winapi) windows.BOOL {
+    _ = ctrl_type;
+    return windows.BOOL.fromBool(true);
 }
