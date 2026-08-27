@@ -28,7 +28,7 @@ pub fn initManyDb(
     return base.initManyDb(io, global.databaseName, openTimes, rwSqlite, allocator);
 }
 
-pub fn getFile(io: std.Io, id: i32, db: ?*sqlite.sqlite3) !std.Io.File {
+pub fn getFile(io: std.Io, id: i32, db: ?*sqlite.sqlite3) base.packError!std.Io.File {
     const zone = tracy.initZone(@src(), .{ .name = "open file from database" });
     defer zone.deinit();
 

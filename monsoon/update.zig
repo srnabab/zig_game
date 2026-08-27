@@ -18,6 +18,7 @@ const ringBuffer = @import("ringBuffer");
 const vertexStruct = @import("vertexStruct");
 const mesh = @import("mesh");
 
+const vec2 = vertexStruct.vec2;
 const vec3 = vertexStruct.vec3;
 
 const file = @import("fileSystem");
@@ -91,14 +92,14 @@ pub fn update_thread_func(args: Args) !void {
         true,
     );
 
-    const test_A = try inputFunc1.registerAction(
-        inputTrigger1,
-        "test_A",
-        sdl.SDL_SCANCODE_A,
-        null,
-        null,
-        false,
-    );
+    // const test_A = try inputFunc1.registerAction(
+    //     inputTrigger1,
+    //     "test_A",
+    //     sdl.SDL_SCANCODE_A,
+    //     null,
+    //     null,
+    //     false,
+    // );
 
     const test_B = try inputFunc1.registerAction(
         inputTrigger1,
@@ -118,14 +119,14 @@ pub fn update_thread_func(args: Args) !void {
         false,
     );
 
-    const test_D = try inputFunc1.registerAction(
-        inputTrigger1,
-        "test_D",
-        sdl.SDL_SCANCODE_D,
-        null,
-        null,
-        false,
-    );
+    // const test_D = try inputFunc1.registerAction(
+    //     inputTrigger1,
+    //     "test_D",
+    //     sdl.SDL_SCANCODE_D,
+    //     null,
+    //     null,
+    //     false,
+    // );
 
     const test_Q = try inputFunc1.registerAction(
         inputTrigger1,
@@ -144,9 +145,8 @@ pub fn update_thread_func(args: Args) !void {
         null,
         false,
     );
-
-    const lmap = try loadmap.loadLoadmap(gpa, &.{});
-    _ = lmap;
+    // const lmap = try loadmap.loadLoadmap(gpa, &.{});
+    // _ = lmap;
 
     var resourceGroup: Io.Group = .init;
 
@@ -168,21 +168,27 @@ pub fn update_thread_func(args: Args) !void {
     var nameArray: NameQueue = .init(gpa);
     defer nameArray.deinit();
 
-    const resourceArg = ResourceThreadArgs{
+    const resourceCtx = resource.ResourceCtx{
         .io = io,
-        .group = &resourceGroup,
         .gpa = gpa,
+        .handles = handles,
         .nameArray = &nameArray,
+        .mainSqlite = mainRoSqlite,
+    };
+
+    const resourceArg = ResourceThreadArgs{
+        .ctx = &resourceCtx,
+
+        .group = &resourceGroup,
         .handleArray = &databaseHandleArray,
         .handleMutex = &handleMutex,
-        .handles = handles,
         .vulkan = args.vulkan,
         .externalCommands = args.commands,
         .uctx = args.uctx,
     };
 
     for (0..7) |_| {
-        try resourceGroup.concurrent(io, resource.processResource, .{resourceArg});
+        try resourceGroup.concurrent(io, resource.processResource, .{&resourceArg});
     }
     defer resourceGroup.cancel(io);
 
@@ -197,16 +203,19 @@ pub fn update_thread_func(args: Args) !void {
     var lastMouseX: f32 = 0;
     var lastMouseY: f32 = 0;
 
-    const rng_impl: std.Random.IoSource = .{ .io = io };
-    const rng = rng_impl.interface();
+    // const rng_impl: std.Random.IoSource = .{ .io = io };
+    // const rng = rng_impl.interface();
 
-    var testBoxPng: ?Handle = null;
+    // var testBoxPng: ?Handle = null;
 
     var inputs: []input.Input = &.{};
     var lastTimestamp = sdl.SDL_GetTicksNS();
 
     var accumulateTime: u64 = 0;
     var testHandle: Handle = undefined;
+
+    _ = try resource.readResource(&resourceCtx, &.{}, "test.lMap");
+    try Io.sleep(io, .fromMilliseconds(100), .real);
 
     out: while (true) {
         {
@@ -232,21 +241,21 @@ pub fn update_thread_func(args: Args) !void {
                 inputs = &.{};
             }
 
-            if (test_A.downIsTrue()) {
-                // sceneChanged = true;
+            // if (test_A.downIsTrue()) {
+            //     // sceneChanged = true;
 
-                resourceArray.mutex.lockUncancelable(io);
-                defer resourceArray.mutex.unlock(io);
-                const ptr = try resourceArray.array.addOne();
-                ptr.* = .{ .position2D = .{
-                    .x = @floatFromInt(rng.intRangeAtMost(i32, -400, 400)),
-                    .y = @floatFromInt(rng.intRangeAtMost(i32, -300, 300)),
-                    .width = 48,
-                    .height = 32,
-                    .depth = 0.1,
-                    .texture = @ptrCast(testBoxPng),
-                } };
-            }
+            //     resourceArray.mutex.lockUncancelable(io);
+            //     defer resourceArray.mutex.unlock(io);
+            //     const ptr = try resourceArray.array.addOne();
+            //     ptr.* = .{ .position2D = .{
+            //         .x = @floatFromInt(rng.intRangeAtMost(i32, -400, 400)),
+            //         .y = @floatFromInt(rng.intRangeAtMost(i32, -300, 300)),
+            //         .width = 48,
+            //         .height = 32,
+            //         .depth = 0.1,
+            //         .texture = @ptrCast(testBoxPng),
+            //     } };
+            // }
 
             if (test_B.downIsTrue()) {
                 resourceArray.mutex.lockUncancelable(io);
@@ -286,41 +295,30 @@ pub fn update_thread_func(args: Args) !void {
                 std.log.debug("ccc", .{});
             }
 
-            if (test_D.downIsTrue()) {
-                _ = try resource.readResource(
-                    io,
-                    gpa,
-                    handles,
-                    &nameArray,
-                    mainRoSqlite,
-                    &.{},
-                    "Plane.001_0.vtx",
-                );
-                _ = try resource.readResource(
-                    io,
-                    gpa,
-                    handles,
-                    &nameArray,
-                    mainRoSqlite,
-                    &.{},
-                    "feather_lut.ktx2",
-                );
-            }
+            // if (test_D.downIsTrue()) {
+            //     _ = try resource.readResource(
+            //         &resourceCtx,
+            //         &.{},
+            //         "Plane.001_0.vtx",
+            //     );
+            //     _ = try resource.readResource(
+            //         &resourceCtx,
+            //         &.{},
+            //         "feather_lut.ktx2",
+            //     );
+            // }
+            try args.uctx.loadmaps.load(&resourceCtx, 0, vec2{ 0, 0 });
 
             if (sceneChanged) {
                 sceneChanged = false;
 
                 // std.log.debug("update: idx {d}", .{resourceArrayIndex});
-                testBoxPng = try resource.readResource(
-                    io,
-                    gpa,
-                    handles,
-                    &nameArray,
-                    mainRoSqlite,
-                    &.{},
-                    "box.png",
-                );
-                std.log.debug("box {any}", .{testBoxPng});
+                // testBoxPng = try resource.readResource(
+                //     &resourceCtx,
+                //     &.{},
+                //     "box.png",
+                // );
+                // std.log.debug("box {any}", .{testBoxPng});
 
                 resourceArray.mutex.lockUncancelable(io);
                 defer resourceArray.mutex.unlock(io);
@@ -331,7 +329,7 @@ pub fn update_thread_func(args: Args) !void {
                     .width = 48,
                     .height = 32,
                     .depth = 0.1,
-                    .texture = @ptrCast(testBoxPng),
+                    .texture = @ptrCast(resource.getResourceHandle(file.getID("box.png")) orelse unreachable),
                 } };
 
                 // resourceValue += 1;

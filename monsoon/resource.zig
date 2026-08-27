@@ -121,14 +121,20 @@ pub const ResourcesQueue = MutexArray(Resource);
 pub const NameQueue = MutexArray(ID_FileType_Handle);
 pub const DataBaseHandleArrayType = ringBuffer(sqlite3, 8);
 
-pub const ResourceThreadArgs = struct {
-    io: std.Io,
-    group: *std.Io.Group,
+pub const ResourceCtx = struct {
+    io: Io,
     gpa: std.mem.Allocator,
+    handles: *global.HandlesType,
     nameArray: *NameQueue,
+    mainSqlite: sqlite3,
+};
+
+pub const ResourceThreadArgs = struct {
+    ctx: *const ResourceCtx,
+
+    group: *std.Io.Group,
     handleArray: *DataBaseHandleArrayType,
     handleMutex: *Io.Mutex,
-    handles: *global.HandlesType,
     vulkan: *VkStruct,
     externalCommands: *ExternalCommands,
     uctx: *resourceProcess.UserContext,
@@ -141,23 +147,19 @@ pub fn deinit(gpa: Allocator) void {
 }
 
 pub fn readResource(
-    io: Io,
-    gpa: std.mem.Allocator,
-    handles: *global.HandlesType,
-    nameArray: *NameQueue,
-    mainSqlite: sqlite3,
+    ctx: *const ResourceCtx,
     buffers: []VkStruct.Buffer_t,
     fileName: []const u8,
-) !?Handle {
+) !Handle {
     const fileID = file.getID(fileName);
 
     if (idHandleCache.contains(fileID)) {
         return idHandleCache.get(fileID).?;
     }
 
-    const fileType = file.getFileType(fileID, mainSqlite) catch |err| {
+    const fileType = file.getFileType(fileID, ctx.mainSqlite) catch |err| {
         std.log.err("{s}", .{@errorName(err)});
-        return null;
+        return err;
     };
 
     var handleType: Handles.ResourceType = .others;
@@ -168,32 +170,33 @@ pub fn readResource(
                     break :s value.@"1";
                 }
             }
-            return null;
+            break :s .others;
         },
     };
 
-    const handle_ = handles.createHandle(Handles.WaitFill, handleType);
+    const handle_ = ctx.handles.createHandle(Handles.WaitFill, handleType);
 
-    const buffers_dupe = try gpa.dupe(VkStruct.Buffer_t, buffers);
-    try nameArray.append(io, .{
+    const buffers_dupe = try ctx.gpa.dupe(VkStruct.Buffer_t, buffers);
+    try ctx.nameArray.append(ctx.io, .{
         .fileType = fileType,
         .handle = handle_,
         .id = fileID,
         .buffers = buffers_dupe,
     });
 
-    try idHandleCache.put(gpa, fileID, handle_);
+    try idHandleCache.put(ctx.gpa, fileID, handle_);
 
     return handle_;
 }
 
-pub fn processResource(args: ResourceThreadArgs) Io.Cancelable!void {
-    const io = args.io;
-    const gpa = args.gpa;
-    const nameArray = args.nameArray;
+pub fn processResource(args: *const ResourceThreadArgs) Io.Cancelable!void {
+    const io = args.ctx.io;
+    const gpa = args.ctx.gpa;
+    const nameArray = args.ctx.nameArray;
     const handleMutex = args.handleMutex;
     const handleArray = args.handleArray;
     const vulkan = args.vulkan;
+    const handles = args.ctx.handles;
 
     while (true) {
         try nameArray.mutex.lock(io);
@@ -201,7 +204,7 @@ pub fn processResource(args: ResourceThreadArgs) Io.Cancelable!void {
         nameArray.mutex.unlock(io);
 
         if (pack_) |pack| {
-            errdefer args.handles.destroyHandle(pack.handle);
+            errdefer handles.destroyHandle(pack.handle);
             defer gpa.free(pack.buffers);
 
             var sqlite: ?sqlite3 = null;
@@ -244,7 +247,7 @@ pub fn processResource(args: ResourceThreadArgs) Io.Cancelable!void {
                             pack.id,
                             pack.handle,
                             testBuffers,
-                            args.handles,
+                            handles,
                             args.externalCommands,
                             &ctx,
                         ) catch continue;
@@ -258,7 +261,7 @@ pub fn processResource(args: ResourceThreadArgs) Io.Cancelable!void {
                             pack.id,
                             pack.handle,
                             &.{},
-                            args.handles,
+                            handles,
                             args.externalCommands,
                             @constCast(&resourceProcess.Example_Reader.Ctx{}),
                         );
@@ -279,6 +282,9 @@ pub fn processResource(args: ResourceThreadArgs) Io.Cancelable!void {
 
         try std.Io.sleep(io, .fromMilliseconds(1), .real);
     }
+}
+pub fn getResourceHandle(id: i32) ?Handle {
+    return idHandleCache.get(id);
 }
 
 fn processResource_Unknown(

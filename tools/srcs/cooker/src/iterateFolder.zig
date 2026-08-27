@@ -344,7 +344,7 @@ pub fn processFile(
                         name,
                     },
                 );
-                // std.log.debug("{s}", .{@tagName(fType)});
+                std.log.debug("{s}", .{@tagName(fType)});
 
                 try updateLoadParameter(
                     io,

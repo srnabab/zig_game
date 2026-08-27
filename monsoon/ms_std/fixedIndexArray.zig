@@ -20,6 +20,39 @@ pub fn FixedIndexArray(T: type) type {
             ptr: *T,
         };
 
+        const Iterator = struct {
+            array: []Item,
+            index: usize = 0,
+
+            pub fn next(self: *Iterator) ?IndexAndPtr {
+                while (true) {
+                    if (self.index >= self.array.len) return null;
+
+                    switch (self.array[self.index]) {
+                        .data => {
+                            self.index += 1;
+                            return .{
+                                .index = self.index - 1,
+                                .ptr = &self.array[self.index - 1].data,
+                            };
+                        },
+                        .free => {
+                            self.index += 1;
+                        },
+                    }
+                }
+            }
+
+            pub fn reset(self: *Iterator) void {
+                self.index = 0;
+            }
+        };
+
+        pub const empty = Self{
+            .items = undefined,
+            .freeList = null,
+        };
+
         items: std.array_list.Managed(Item),
         freeList: ?*freeListNode,
 
@@ -58,6 +91,11 @@ pub fn FixedIndexArray(T: type) type {
             };
         }
 
+        pub fn append(self: *Self, item: T) !void {
+            const ptr = try self.addOne();
+            ptr.ptr.* = item;
+        }
+
         pub fn remove(self: *Self, index: usize) void {
             if (index >= self.items.items.len) return;
 
@@ -72,6 +110,12 @@ pub fn FixedIndexArray(T: type) type {
 
         pub fn get(self: *Self, index: usize) *T {
             return &self.items.items[index].data;
+        }
+
+        pub fn iterate(self: *Self) Iterator {
+            return Iterator{
+                .array = self.items.items,
+            };
         }
     };
 }

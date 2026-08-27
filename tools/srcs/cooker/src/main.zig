@@ -39,6 +39,9 @@ pub fn main(init: std.process.Init) !void {
                     contentDatabaseRelativePathStart = try std.fmt.allocPrintSentinel(allocator, "{s}", .{b}, 0);
                     std.log.debug("child: {s}", .{b});
                 },
+                2 => {
+                    db.iterateFolder.forceUpdata = (std.fmt.parseInt(u8, b, 10) catch 0) == 1;
+                },
                 else => {
                     if (std.mem.eql(u8, "404", b)) {
                         break;
@@ -59,6 +62,10 @@ pub fn main(init: std.process.Init) !void {
 
     database = try db.init(io, allocator, contentFolder, databaseFilePath);
     errdefer database.rollback();
+
+    if (db.iterateFolder.forceUpdata) {
+        try database.processFolder(contentFolder, io, allocator);
+    }
 
     var pending_old_name: ?[]u8 = null;
     var committer: db.AutoCommitter = .init(database, io, 5000);

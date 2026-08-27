@@ -291,7 +291,7 @@ pub fn build(b: *std.Build) void {
     const ktx_mod = ktx2_c.createModule();
 
     const loadmap_mod = b.createModule(.{
-        .root_source_file = b.path("monsoon/loadmap/loadmap.zig"),
+        .root_source_file = b.path("monsoon/loadmap/use.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -302,6 +302,11 @@ pub fn build(b: *std.Build) void {
     });
     const setPass_mod = b.createModule(.{
         .root_source_file = b.path("src/setPass.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const u8pack_mod = b.createModule(.{
+        .root_source_file = b.path("monsoon/u8pack.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -327,6 +332,7 @@ pub fn build(b: *std.Build) void {
     resourceProcess_mod.addImport("global", global_mod);
     resourceProcess_mod.addImport("mesh", mesh_mod);
     resourceProcess_mod.addImport("textureSet", textureSet_mod);
+    resourceProcess_mod.addImport("loadmap", loadmap_mod);
 
     setPass_mod.addImport("vertexStruct", vertexStruct_mod);
     setPass_mod.addImport("cglm", cglm_mod);
@@ -343,6 +349,12 @@ pub fn build(b: *std.Build) void {
     ms_mod.addImport("cglm", cglm_mod);
 
     loadmap_mod.addImport("cglm", cglm_mod);
+    loadmap_mod.addImport("u8pack", u8pack_mod);
+    loadmap_mod.addImport("fileSystem", fileSystem_mod);
+    loadmap_mod.addImport("global", global_mod);
+    loadmap_mod.addImport("resource", resource_mod);
+    loadmap_mod.addImport("handle", handle_mod);
+    loadmap_mod.addImport("ms_std", ms_mod);
 
     ktx2_c.addIncludePath(b.path("include"));
     ktx2_c.addIncludePath(b.path("include/KTX"));

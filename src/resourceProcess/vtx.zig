@@ -281,27 +281,5 @@ pub const VTX_Reader = struct {
             @intCast(stride),
             handle,
         );
-
-        // {
-        //     try resourceArray.mutex.lock(io);
-        //     defer resourceArray.mutex.unlock(io);
-        //     const ptr = resourceArray.array.addOne() catch |err| {
-        //         std.log.err("{s}", .{@errorName(err)});
-        //         return err;
-        //     };
-        //     ptr.* = .{ .mesh = .{
-        //         .fileID = @intCast(fileID),
-        //         .vertexStride = @intCast(stride),
-        //         .handle = handle,
-        //         .meshletStagingBuffer = stagingBuffer1,
-        //         .verticesStagingBuffer = stagingBuffer0,
-        //         .meshletVerticesStagingBuffer = stagingBuffer2,
-        //         .meshletTrianglesStagingBuffer = stagingBuffer3,
-        //         .meshletSize = @intCast(res.mesh.meshletsSize),
-        //         .verticesSize = @intCast(res.mesh.verticesSize),
-        //         .meshletVerticesSize = @intCast(res.mesh.meshletVerticesSize),
-        //         .meshletTrianglesSize = @intCast(res.mesh.meshletTrianglesSize),
-        //     } };
-        // }
     }
 };

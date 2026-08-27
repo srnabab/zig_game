@@ -13,6 +13,7 @@ const shader = @import("resourceProcess/shader.zig");
 const pipeline = @import("resourceProcess/pipeline.zig");
 const ktx2 = @import("resourceProcess/ktx2.zig");
 const loadmap = @import("resourceProcess/loadmap.zig");
+const lMap = @import("resourceProcess/lMap.zig");
 
 // shared
 const tables = @import("tables");
@@ -37,23 +38,26 @@ const MutexArray = mstd.MutexArray;
 
 const mesh = @import("mesh");
 const textureSet = @import("textureSet");
+const loadMap = @import("loadmap");
 
 pub const UserContext = struct {
     /// engine will use this
     pTextureSet: textureSet,
+    loadmaps: loadMap,
 
     meshes: mesh,
 
     pub fn initUserContext(gpa: Allocator, vulkan: *VkStruct, handles: *global.HandlesType) !UserContext {
         return .{
             .meshes = .init(gpa, vulkan, handles),
+            .loadmaps = try .init(gpa, 1),
             .pTextureSet = undefined,
         };
     }
 
     pub fn deinitUserContext(self: *UserContext, gpa: Allocator) void {
-        _ = gpa;
         self.meshes.deinit();
+        self.loadmaps.deinit(gpa);
     }
 };
 
@@ -142,6 +146,7 @@ pub const ProcessType = enum {
     UNKNOWN,
     // add here
     LoadMap,
+    LMap,
 };
 
 const KV = struct {
@@ -173,6 +178,7 @@ pub const list = [_]KV{
     .{ ".sampler", ProcessType.SamplerB },
     .{ ".ktx2", ProcessType.KTX2 },
     .{ ".loadmap", ProcessType.LoadMap },
+    .{ ".lMap", ProcessType.LMap },
 };
 
 const HandleType = @import("handle").ResourceType;
@@ -188,6 +194,7 @@ pub const Mappings = [_]ProcessType_HandleType{
 
 const PNG = png.PNG;
 const GLTF = gltf.GLTF;
+const LMap = lMap.LMap;
 
 pub fn judgeFileTypeByContent(content: []u8) ProcessType {
     if (std.mem.eql(u8, content, @constCast(&PNG))) {
@@ -334,14 +341,13 @@ pub const Example_Reader = struct {
         _ = gpa;
         _ = sqlite;
         _ = vulkan;
-        _ = fileID;
         _ = handle;
         _ = buffers;
         _ = handles;
         _ = commands;
         _ = uctx;
 
-        std.log.debug("unsupported type {s}", .{@tagName(fType)});
+        std.log.debug("unsupported type {s}, {d}", .{ @tagName(fType), fileID });
         unreachable;
     }
 };
@@ -357,3 +363,4 @@ pub const LoadMap_Cooker = loadmap.LoadMap_Cooker;
 pub const KTX2_Reader = ktx2.KTX2_Reader;
 pub const VTX_Reader = vtx.VTX_Reader;
 pub const PNG_Reader = png.PNG_Reader;
+pub const LMap_Reader = lMap.LMap_Reader;

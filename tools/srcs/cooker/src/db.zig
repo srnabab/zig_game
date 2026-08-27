@@ -66,8 +66,8 @@ pub const AutoCommitter = struct {
                 self.is_active = false; // 提交后关闭监控
                 break;
             } else {
-                // std.log.debug("hang", .{});
-                try self.io.sleep(.fromMilliseconds(self.wait - diff), .real);
+                const sleepTime = @min(500, self.wait - diff);
+                try self.io.sleep(.fromMilliseconds(sleepTime), .real);
             }
         }
     }
@@ -195,15 +195,15 @@ pub fn processFolder(self: *Self, content: std.Io.Dir, io: std.Io, allocator: st
     try iterateFolder.processContentFolder(
         content,
         io,
-        .{
-            .db = self.db,
-            .ContentPathT = self.ContentPathT,
-            .ImageLoadParameterT = self.ImageLoadParameterT,
-            .ModelLoadParameterT = self.ModelLoadParameterT,
-            .ShaderPipelineGraphEdgeT = self.ShaderPipelineGraphEdgeT,
-            .ShaderPipelineGraphNodeT = self.ShaderPipelineGraphNodeT,
-            .contentPathExist = self.contentPathExist,
-        },
+        // .{
+        //     .db = self.db,
+        //     .ContentPathT = self.ContentPathT,
+        //     .ImageLoadParameterT = self.ImageLoadParameterT,
+        //     .ModelLoadParameterT = self.ModelLoadParameterT,
+        //     .ShaderPipelineGraphEdgeT = self.ShaderPipelineGraphEdgeT,
+        //     .ShaderPipelineGraphNodeT = self.ShaderPipelineGraphNodeT,
+        //     .contentPathExist = self.contentPathExist,
+        // },
         allocator,
     );
 }

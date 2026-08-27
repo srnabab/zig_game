@@ -15,6 +15,8 @@ const ContentPath = tables.ContentPath;
 const ImageLoadParameter = tables.ImageLoadParameter;
 const ModelLoadParameter = tables.ModelLoadParameter;
 
+pub const packError = sqlDB.sqliteError || std.Io.File.OpenError;
+
 fn assertEqual(a: c_int, b: c_int) void {
     // std.log.debug("a {d}", .{a});
     std.debug.assert(a == b);
@@ -30,6 +32,7 @@ fn getRelativePath(id: i64, result: []u8, db: ?*sqlite.sqlite3) !void {
 
     ContentPathT.get("RelativePath", null, "ID = ?", .{id}, &ptrs, &types) catch |err| {
         std.log.err("err {s} {s} ID{d} ", .{ @errorName(err), result, id });
+        return err;
     };
 }
 
@@ -140,7 +143,7 @@ pub fn initManyDb(io: std.Io, databaseName: []const u8, openTimes: u32, rwSqlite
     return dbs;
 }
 
-pub fn getFile(io: std.Io, id: i64, cwd: std.Io.Dir, db: ?*sqlite.sqlite3) !std.Io.File {
+pub fn getFile(io: std.Io, id: i64, cwd: std.Io.Dir, db: ?*sqlite.sqlite3) packError!std.Io.File {
     var buffer = [_]u8{0} ** 256;
 
     try getRelativePath(id, &buffer, db);

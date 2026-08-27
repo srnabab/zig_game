@@ -1,4 +1,5 @@
 const std = @import("std");
+const atomic = std.atomic;
 
 const Option = enum {
     Reuse,
@@ -8,7 +9,7 @@ const Option = enum {
 const Context = opaque {};
 pub const Handle = *Context;
 pub const WaitFill = std.math.maxInt(u32);
-const InvalidVersion = std.math.maxInt(u24);
+const InvalidVersion = std.math.maxInt(u16);
 
 pub const ResourceType = enum(u8) {
     texture,
@@ -21,18 +22,19 @@ pub const ResourceType = enum(u8) {
     others,
 };
 
-const Content = packed struct {
+const Content = struct {
     resourceType: ResourceType,
-    version: u24,
-    index: u32,
+    padding: u8,
+    version: atomic.Value(u16),
+    index: atomic.Value(u32),
 };
 
 pub fn getIndex(handle: Handle) ?u32 {
     const ptr: *Content = @ptrCast(@alignCast(handle));
 
-    if (ptr.version == InvalidVersion) return null;
+    if (ptr.version.load(.monotonic) == InvalidVersion) return null;
 
-    return ptr.index;
+    return ptr.index.load(.monotonic);
 }
 
 pub fn typeCompare(handle: Handle, exceptedType: ResourceType) bool {
@@ -44,7 +46,7 @@ pub fn typeCompare(handle: Handle, exceptedType: ResourceType) bool {
 pub fn handleIsValid(handle: Handle) bool {
     const ptr: *Content = @ptrCast(@alignCast(handle));
 
-    return ptr.version != InvalidVersion;
+    return ptr.version.load(.monotonic) != InvalidVersion;
 }
 
 pub fn Handles(comptime capacity: u32, comptime option: Option) type {
@@ -74,14 +76,12 @@ pub fn Handles(comptime capacity: u32, comptime option: Option) type {
             if (option == .Reuse) {
                 if (self.loop) {
                     for (self.array[self.lastEndIndex..], self.lastEndIndex..) |value, i| {
-                        if (value.index == std.math.maxInt(u32)) {
+                        if (value.index.load(.monotonic) == std.math.maxInt(u32)) {
                             self.lastEndIndex = @intCast(i);
 
-                            self.array[i] = .{
-                                .resourceType = resourceType,
-                                .version = if (index == WaitFill) InvalidVersion else 0,
-                                .index = index,
-                            };
+                            self.array[i].resourceType = resourceType;
+                            self.array[i].version.store(if (index == WaitFill) InvalidVersion else 0, .monotonic);
+                            self.array[i].index.store(index, .monotonic);
 
                             return @ptrCast(@alignCast(&self.array[i]));
                         }
@@ -95,11 +95,9 @@ pub fn Handles(comptime capacity: u32, comptime option: Option) type {
                         self.loop = true;
                     }
 
-                    self.array[current] = .{
-                        .resourceType = resourceType,
-                        .version = if (index == WaitFill) InvalidVersion else 0,
-                        .index = index,
-                    };
+                    self.array[current].resourceType = resourceType;
+                    self.array[current].version.store(if (index == WaitFill) InvalidVersion else 0, .monotonic);
+                    self.array[current].index.store(index, .monotonic);
 
                     return @ptrCast(@alignCast(&self.array[current]));
                 }
@@ -108,11 +106,9 @@ pub fn Handles(comptime capacity: u32, comptime option: Option) type {
 
                 std.debug.assert(current < capacity);
 
-                self.array[current] = .{
-                    .resourceType = resourceType,
-                    .version = if (index == WaitFill) InvalidVersion else 0,
-                    .index = index,
-                };
+                self.array[current].resourceType = resourceType;
+                self.array[current].version.store(if (index == WaitFill) InvalidVersion else 0, .monotonic);
+                self.array[current].index.store(index, .monotonic);
 
                 return @ptrCast(@alignCast(&self.array[current]));
             }
@@ -124,21 +120,17 @@ pub fn Handles(comptime capacity: u32, comptime option: Option) type {
 
                 const ptr: *Content = @ptrCast(@alignCast(handle));
 
-                ptr.* = .{
-                    .resourceType = .others,
-                    .version = InvalidVersion,
-                    .index = std.math.maxInt(u32),
-                };
+                ptr.resourceType = .others;
+                ptr.version.store(InvalidVersion, .monotonic);
+                ptr.index.store(std.math.maxInt(u32), .monotonic);
             } else if (option == .Once) {
                 _ = self;
 
                 const ptr: *Content = @ptrCast(@alignCast(handle));
 
-                ptr.* = .{
-                    .resourceType = .others,
-                    .version = InvalidVersion,
-                    .index = std.math.maxInt(u32),
-                };
+                ptr.resourceType = .others;
+                ptr.version.store(InvalidVersion, .monotonic);
+                ptr.index.store(std.math.maxInt(u32), .monotonic);
             }
         }
 
@@ -146,8 +138,8 @@ pub fn Handles(comptime capacity: u32, comptime option: Option) type {
             _ = self;
             const ptr: *Content = @ptrCast(@alignCast(handle));
 
-            ptr.version = 0;
-            ptr.index = index;
+            ptr.version.store(0, .monotonic);
+            ptr.index.store(index, .monotonic);
         }
     };
 }

@@ -20,11 +20,6 @@
         {
             "name": "feather_lut.ktx2",
             "isGpu": true
-        },
-        {
-            "name": "large_bilied_crow1Blue-violet.binary",
-            "isGpu": true,
-            "bufferName": ["featherParameters"]
         }
     ],
     "grids": [],

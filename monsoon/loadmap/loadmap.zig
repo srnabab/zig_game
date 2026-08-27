@@ -1,6 +1,23 @@
 const std = @import("std");
+const Io = std.Io;
 const Allocator = std.mem.Allocator;
 const atomic = std.atomic;
+
+const mstd = @import("ms_std");
+const FixedIndexArray = mstd.FixedIndexArray;
+
+const Handles = @import("handle");
+const Handle = Handles.Handle;
+
+const global = @import("global");
+const resource = @import("resource");
+
+const NameQueue = resource.NameQueue;
+
+const file = @import("fileSystem");
+const sqlite3 = ?*file.sqlite.sqlite3;
+
+const u8pack = @import("u8pack").u8pack;
 
 const cglm = @import("cglm");
 
@@ -16,8 +33,8 @@ const GridLayer = struct {
     grids: []Grid,
 
     pub fn getGridIndex(self: *const GridLayer, x: i32, y: i32) ?u32 {
-        const X: u32 = cglm.abs(x - self.leftUp[0]) / self.gridLength;
-        const Y: u32 = cglm.abs(y - self.leftUp[1]) / self.gridLength;
+        const X: u32 = @as(u32, @intCast(cglm.abs(x - self.leftUp[0]))) / self.gridLength;
+        const Y: u32 = @as(u32, @intCast(cglm.abs(y - self.leftUp[1]))) / self.gridLength;
 
         if (X >= 0 and X < self.col and Y >= 0 and Y < self.row) {
             return Y * self.col + X;
@@ -49,15 +66,20 @@ const Grid = struct {
 };
 
 const Item = struct {
-    name: []u8,
+    name: u8pack([]u8),
     isGpu: bool,
-    bufferName: [][]u8 = &.{},
+    bufferName: []u8pack([]u8) = &.{},
 };
 
 const Loading = struct {
     grid: *Grid,
     progress: atomic.Value(u32) = .init(0),
     done: bool = false,
+};
+
+const LoadingItem = struct {
+    handle: Handles.Handle,
+    progress: *atomic.Value(u32),
 };
 
 layers: []GridLayer,
@@ -69,7 +91,8 @@ passes: []Pass,
 strs: []u8,
 
 allocator: Allocator,
-loadingQueue: std.ArrayList(Loading),
+loadingQueue: FixedIndexArray(Loading),
+loadingItems: FixedIndexArray(LoadingItem),
 
 pub const empty = Self{
     .layers = &.{},
@@ -80,9 +103,10 @@ pub const empty = Self{
     .strs = &.{},
     .allocator = undefined,
     .loadingQueue = .empty,
+    .loadingItems = .empty,
 };
 
-pub fn loadLoadmap(gpa: Allocator, mem: []u8) !Self {
+pub fn loadLoadmap(gpa: Allocator, mem: []u8) Allocator.Error!Self {
     if (mem.len < 64) return .empty;
 
     const depth = std.mem.readInt(u32, mem[4..8], .native);
@@ -171,7 +195,7 @@ pub fn loadLoadmap(gpa: Allocator, mem: []u8) !Self {
                 pos += @intCast(nameLen);
                 strPos += @intCast(nameLen);
 
-                gridItems[ii].isGpu = mem[pos] != 0;
+                gridItems[ii].isGpu = (mem[pos] != 0);
                 pos += 1;
 
                 const bufferNameCount = std.mem.readInt(u32, mem[pos..][0..4], .native);
@@ -226,21 +250,26 @@ pub fn loadLoadmap(gpa: Allocator, mem: []u8) !Self {
         .bufferNames = bufferNames,
         .passes = passes,
         .strs = strs,
-        .loadingQueue = try .initCapacity(gpa, 4),
+        .loadingQueue = .init(gpa),
+        .loadingItems = .init(gpa),
         .allocator = gpa,
     };
 }
 
-pub fn loadResource(self: *Self, pos: cglm.vec2) !void {
-    const x: i32 = @intCast(pos[0]);
-    const y: i32 = @intCast(pos[1]);
+pub fn loadResource(
+    self: *Self,
+    ctx: *const resource.ResourceCtx,
+    pos: cglm.vec2,
+) !void {
+    const x: i32 = @intFromFloat(pos[0]);
+    const y: i32 = @intFromFloat(pos[1]);
 
     for (self.layers) |layer| {
         const center = layer.getGridIndex(x, y) orelse return;
 
         switch (layer.grids[center].state) {
             .unloaded => {
-                try self.loadingQueue.append(self.allocator, .{ .grid = &layer.grids[center] });
+                try self.loadingQueue.append(.{ .grid = &layer.grids[center] });
                 layer.grids[center].state = .loading;
             },
             .loading, .loaded => {
@@ -250,5 +279,33 @@ pub fn loadResource(self: *Self, pos: cglm.vec2) !void {
                 // cancel
             },
         }
+    }
+
+    var it1 = self.loadingQueue.iterate();
+    while (it1.next()) |item| {
+        for (item.ptr.grid.items) |*i| {
+            const h = try resource.readResource(
+                ctx,
+                &.{},
+                i.name,
+            );
+            try self.loadingItems.append(.{ .handle = h, .progress = &item.ptr.progress });
+        }
+    }
+
+    var it2 = self.loadingItems.iterate();
+    while (it2.next()) |item| {
+        if (Handles.handleIsValid(item.ptr.handle)) {
+            _ = item.ptr.progress.fetchAdd(1, .seq_cst);
+            self.loadingItems.remove(item.index);
+        }
+    }
+
+    it1.reset();
+    while (it1.next()) |item| {
+        if (item.ptr.progress.load(.seq_cst) == item.ptr.grid.items.len) {
+            item.ptr.grid.state = .loaded;
+        }
+        self.loadingQueue.remove(item.index);
     }
 }

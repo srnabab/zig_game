@@ -161,6 +161,8 @@ var cooker: std.process.Child = undefined;
 var cookerWriterBuffer = [_]u8{0} ** 1024;
 var cookerWriter: std.Io.File.Writer = undefined;
 
+var forceUpdate = false;
+
 pub fn main(init: std.process.Init) !void {
     const io = init.io;
     const gpa = init.gpa;
@@ -205,6 +207,7 @@ pub fn main(init: std.process.Init) !void {
             if (arg.len >= 6) {
                 if (std.mem.eql(u8, arg[0..6], "-force")) {
                     // db.iterateFolder.forceUpdata = true;
+                    forceUpdate = true;
 
                     continue;
                 }
@@ -790,6 +793,13 @@ fn cookerInit(
 
     try cookerWriter.interface.writeAll(databaseFilePath);
     try cookerWriter.interface.writeAll(contentDatabaseRelativePathStart);
+
+    if (forceUpdate) {
+        try cookerWriter.interface.writeAll("1?");
+    } else {
+        try cookerWriter.interface.writeAll("0?");
+    }
+
     try cookerWriter.interface.writeAll("404?");
     try cookerWriter.flush();
 }
