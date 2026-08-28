@@ -426,7 +426,7 @@ pub fn render_thread_func(args: Args) !void {
 
             const zone2 = tracy.initZone(@src(), .{ .name = "pass add" });
             for (args.passes.passes) |*value| {
-                if (value.enabled) {
+                if (value.enabled > 0) {
                     // renderDebug.printPassInfo(vulkan, value);
                     value.addCommand(
                         value.userdata,

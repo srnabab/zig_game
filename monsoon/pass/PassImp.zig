@@ -24,7 +24,7 @@ pub const Pass = struct {
     pushConstant: PushConstantPack = .{},
     userdata: ?*anyopaque = null,
 
-    enabled: bool = false,
+    enabled: u8 = 0,
 
     vtable: *const VTable,
 
@@ -80,15 +80,15 @@ pub const Pass = struct {
     }
 
     pub fn enable(self: *Pass) void {
-        self.enabled = true;
+        self.enabled += 1;
     }
 
     pub fn disable(self: *Pass) void {
-        self.enabled = false;
+        self.enabled -= 1;
     }
 
     pub fn setUserdata(self: *Pass, userdata: *anyopaque) void {
-        if (!self.enabled) self.userdata = userdata;
+        if (self.enabled == 0) self.userdata = userdata;
     }
 
     pub fn setDescriptorSets(self: *Pass, descriptorSets: []vk.VkDescriptorSet, gpa: std.mem.Allocator) !void {
@@ -181,7 +181,7 @@ pub fn initFromRenderFlow(io: std.Io, gpa: std.mem.Allocator, vulkan: *VkStruct,
             }
         }
 
-        passes[passedIndex].enabled = false;
+        passes[passedIndex].enabled = 0;
 
         try passMap.put(passes[passedIndex].name, &passes[passedIndex]);
     }
@@ -216,9 +216,9 @@ pub fn deinit(self: *Self, gpa: std.mem.Allocator) void {
 }
 
 pub fn disablePass(self: Self, pass: []const u8) void {
-    self.passMap.getPtr(pass).?.*.enabled = false;
+    self.passMap.getPtr(pass).?.*.enabled -= 1;
 }
 
 pub fn enablePass(self: Self, pass: []const u8) void {
-    self.passMap.getPtr(pass).?.*.enabled = true;
+    self.passMap.getPtr(pass).?.*.enabled += 1;
 }
