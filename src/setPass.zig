@@ -884,6 +884,7 @@ fn initIv_Feather(userdata: ?*anyopaque, pass: *Pass, vulkan: *VkStruct, command
     const instances = vulkan.getBufferAddress(pass.buffer[6]);
     const meshes = vulkan.getBufferAddress(pass.buffer[7]);
     const payloads = vulkan.getBufferAddress(pass.buffer[8]);
+    const params = vulkan.getBufferAddress(pass.buffer[9]);
 
     var push = Iv_feather_PushConstant{
         .meshlet = meshlet,
@@ -893,7 +894,7 @@ fn initIv_Feather(userdata: ?*anyopaque, pass: *Pass, vulkan: *VkStruct, command
         .instances = instances,
         .meshes = meshes,
         .payloads = payloads,
-        .params = 0,
+        .params = params,
         .paramTextureIndex = 0,
     };
     pass.setPushConstants(@ptrCast(@alignCast(&push)), 0);

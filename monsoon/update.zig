@@ -291,6 +291,7 @@ pub fn update_thread_func(args: Args) !void {
                     .mesh = m,
                     .passName = "ic_task",
                 } };
+
                 // @breakpoint();
                 std.log.debug("ccc", .{});
             }

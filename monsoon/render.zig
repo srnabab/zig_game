@@ -363,6 +363,7 @@ pub fn render_thread_func(args: Args) !void {
                                 try resources.pushLast(r);
                                 continue;
                             };
+                            const tidx = pTextureSet.getDescriptorSetIndex(@ptrCast(resource.getResourceHandle(file.getID("feather_lut.ktx2"))));
 
                             cs_mesh_drawCount = try passGroupMapping.add(mi.passName, .{
                                 .instanceID = idx1,
@@ -370,6 +371,7 @@ pub fn render_thread_func(args: Args) !void {
                             });
                             std.log.debug("aaaaaaa", .{});
                             // passes.enablePass(mi.passName);
+                            passes.passMap.get("iv_feather").?.setPushConstants(@constCast(&std.mem.toBytes(tidx)), 64);
                             passes.enablePass("c_command_prefix_sum");
                             passes.enablePass("ic_task");
                             passes.enablePass("iv_feather");

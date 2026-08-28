@@ -60,7 +60,7 @@ pub const Shader_Cooker = struct {
         defer gpa.free(spvFullPath);
 
         const runRes = try std.process.run(gpa, io, .{
-            .argv = &[_][]const u8{ "glslc", "--target-env=vulkan1.4", "-o", spvFullPath, fullPath },
+            .argv = &[_][]const u8{ "glslc", "--target-env=vulkan1.4", "-g", "-o", spvFullPath, fullPath },
         });
         defer {
             gpa.free(runRes.stderr);
