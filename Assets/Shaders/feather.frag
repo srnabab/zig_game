@@ -218,19 +218,21 @@ float GetParameter(uint paramIndex, uint waveLength_idx, uint i, uint j, float s
     uint col = 400 * waveLength_idx + 20 * i + j;
 
     uint start = 16 * paramIndex;
-    uint end = 16 * (paramIndex + 1);
+    // uint end = 16 * (paramIndex + 1);
 
     mat4 params = mat4(0.0);
 
-    for (uint m_i = 0, p_i = start;m_i < 16;m_i += 1, p_i += 4) {
-        params[m_i][0] = pc.params.params[col + p_i * 20000];
-        params[m_i][1] = pc.params.params[col + (p_i + 1) * 20000];
-        params[m_i][2] = pc.params.params[col + (p_i + 2) * 20000];
-        params[m_i][3] = pc.params.params[col + (p_i + 3) * 20000];
+    for (uint m_i = 0, p_i = start;m_i < 4;m_i += 1, p_i += 4) {
+        params[m_i][0] = pc.params.params[col * 192 + p_i];
+        params[m_i][1] = pc.params.params[col * 192 + (p_i + 1)];
+        params[m_i][2] = pc.params.params[col * 192 + (p_i + 2)];
+        params[m_i][3] = pc.params.params[col * 192 + (p_i + 3)];
     }
 
     // bicubic inter
-    return dot(s_vec, params * t_vec);
+    float res = dot(s_vec, params * t_vec);
+
+    return res;
 }
 
 vec2 ImportanceSampleNDF(float m_eff, float sigma, float u1, float u2)
@@ -301,7 +303,7 @@ float AverageBrdf(float F_eff, float m_eff, float sigma, vec3 omega_h, vec3 omeg
 }
 
 float AverageBrdf_WaveLength(uint waveLength_index, uint index_i, uint index_j, float s, float t, float theta_in, float brdf_sigma,
-                            vec3 local_X, vec3 local_Y, vec3 local_Z) {
+                            vec3 local_X, vec3 local_Y, vec3 local_Z, float cos_theta, float cos_phi) {
     float phi_eff = GetParameter(1, waveLength_index, index_i, index_j, s, t);
     // float phi_eff = 0.0;
     vec3 omega_eff = vec3(cos(theta_in) * sin(phi_eff), sin(theta_in), cos(theta_in) * cos(phi_eff));
@@ -311,6 +313,7 @@ float AverageBrdf_WaveLength(uint waveLength_index, uint index_i, uint index_j, 
     // vec2 theta_phi_h = vec2(0.0);
     vec3 omega_h = vec3(cos(theta_phi_h.x) * sin(theta_phi_h.y), sin(theta_phi_h.x), cos(theta_phi_h.x) * cos(theta_phi_h.y));
     float F_eff = GetParameter(2, waveLength_index, index_i, index_j, s, t);
+    F_eff /= max(cos_theta * cos_phi, 0.0001);
     // float F_eff = 0.0;
     vec3 omega_o = 2 * dot(omega_eff, omega_h) * omega_h - omega_eff;
     float average_brdf = AverageBrdf(F_eff, m_eff, brdf_sigma, omega_h, omega_eff, omega_o, local_X, local_Y, local_Z);
@@ -332,22 +335,24 @@ vec3 AverageBrdf_RGB(vec2 v, vec3 tangent, vec3 bitangent, vec3 brdf_n, float br
 
     mat3 brdf_TBN = mat3(local_X, local_Y, local_Z);
     
-    vec3 omega_in = transpose(brdf_TBN) * ubo.lightDirection;
+    vec3 omega_in = transpose(brdf_TBN) * normalize(ubo.lightDirection);
     float theta_in = asin(omega_in.y);
-    float phi_in = atan(omega_in.z, omega_in.x + 1e-6);
-    float cos_theta_in = cos(theta_in) * 20;
+    float phi_in = atan(omega_in.x, omega_in.z + 1e-6);
+    float cos_theta = cos(theta_in);
+    float cos_theta_in = cos_theta * 20;
     uint index_i = clamp(int(floor(cos_theta_in)), 0, 19);
     float s = cos_theta_in - index_i;
-    float cos_phi_in = cos(phi_in) * 20;
+    float cos_phi = cos(phi_in);
+    float cos_phi_in = cos_phi * 20;
     uint index_j = clamp(int(floor(cos_phi_in)), 0, 19);
     float t = cos_phi_in - index_j;
 
     float red = AverageBrdf_WaveLength(red_l_index, index_i, index_j, s, t, theta_in, brdf_sigma,
-                                                    local_X, local_Y, local_Z);
+                                                    local_X, local_Y, local_Z, cos_theta, cos_phi);
     float green = AverageBrdf_WaveLength(green_l_index, index_i, index_j, s, t, theta_in, brdf_sigma,
-                                                    local_X, local_Y, local_Z);
+                                                    local_X, local_Y, local_Z, cos_theta, cos_phi);
     float blue = AverageBrdf_WaveLength(blue_l_index, index_i, index_j, s, t, theta_in, brdf_sigma,
-                                                    local_X, local_Y, local_Z);
+                                                    local_X, local_Y, local_Z, cos_theta, cos_phi);
 
     return vec3(red, green, blue);
 
@@ -823,11 +828,19 @@ void main() {
         rgb_bp = AverageBrdf_RGB(v_bp, brdf_t_bp, brdf_b_bp, brdf_n, brdf_sigma) + base_color;
     }
 
-    outColor = vec4(w_t * vec3(0.0, 0.0, 0.0) + 
-                    w_r * vec3(0.7, 0.7, 0.7) +
-                    w_b * vec3(0.02, 0.02, 0.02) +
-                    w_bd * rgb_bd +
-                    w_bp * rgb_bp, alpha);
+    vec3 final_color = vec3(w_t * vec3(0.0, 0.0, 0.0) + 
+                        w_r * vec3(0.7, 0.7, 0.7) +
+                        w_b * vec3(0.02, 0.02, 0.02) +
+                        w_bd * rgb_bd +
+                        w_bp * rgb_bp);
+
+    float exposure = 0.1;
+    vec3 mapped = vec3(1.0) - exp(-final_color * exposure);
+    vec3 ldr_color = pow(mapped, vec3(1.0 / 2.2));
+
+    outColor = vec4(ldr_color, alpha);
+
+    
     // outColor = vec4(w_r, 0, 0, 1.0);
     // outColor = vec4(0, w_b, 0, 1.0);
     // outColor = vec4(0, 0, w_bd, 1.0);

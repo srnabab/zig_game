@@ -186,6 +186,8 @@ pub fn render_thread_func(args: Args) !void {
     cglm.glmc_perspective(std.math.rad_per_deg * 60.0, (aspect / 300) * VIEW_SCALE, 0.1, 100.0, &pUIUbo2.proj);
     // pUIUbo2.proj[1][1] *= -1;
     pUIUbo2.cameraPos = eye2;
+    pUIUbo2.lightDirection = cglm.vec3{ 0.0, 0.5, 1.5 };
+
     const pData2 = @as(*shaderStruct.UniformBufferObjectCamera, @ptrCast(@alignCast(ubo2.pMappedData)));
     pData2.* = pUIUbo2;
 
