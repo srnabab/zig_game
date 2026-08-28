@@ -252,19 +252,23 @@ pub fn processResource(args: *const ResourceThreadArgs) Io.Cancelable!void {
                             &ctx,
                         ) catch continue;
                     } else {
-                        try resourceProcess.Example_Reader.processResource(
-                            t,
-                            io,
-                            gpa,
-                            sqlite.?,
-                            vulkan,
-                            pack.id,
-                            pack.handle,
-                            &.{},
-                            handles,
-                            args.externalCommands,
-                            @constCast(&resourceProcess.Example_Reader.Ctx{}),
-                        );
+                        if (comptime resourceProcess.useExample(t)) {
+                            try resourceProcess.Example_Reader.processResource(
+                                t,
+                                io,
+                                gpa,
+                                sqlite.?,
+                                vulkan,
+                                pack.id,
+                                pack.handle,
+                                &.{},
+                                handles,
+                                args.externalCommands,
+                                @constCast(&resourceProcess.Example_Reader.Ctx{}),
+                            );
+                        } else {
+                            @compileError(std.fmt.comptimePrint("no reader for {s}", .{@tagName(t)}));
+                        }
                     }
                 },
             }

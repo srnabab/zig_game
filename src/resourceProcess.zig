@@ -14,6 +14,7 @@ const pipeline = @import("resourceProcess/pipeline.zig");
 const ktx2 = @import("resourceProcess/ktx2.zig");
 const loadmap = @import("resourceProcess/loadmap.zig");
 const lMap = @import("resourceProcess/lMap.zig");
+const binary = @import("resourceProcess/binary.zig");
 
 // shared
 const tables = @import("tables");
@@ -147,6 +148,7 @@ pub const ProcessType = enum {
     // add here
     LoadMap,
     LMap,
+    Binary,
 };
 
 const KV = struct {
@@ -179,6 +181,7 @@ pub const list = [_]KV{
     .{ ".ktx2", ProcessType.KTX2 },
     .{ ".loadmap", ProcessType.LoadMap },
     .{ ".lMap", ProcessType.LMap },
+    .{ ".binary", ProcessType.Binary },
 };
 
 const HandleType = @import("handle").ResourceType;
@@ -364,3 +367,37 @@ pub const KTX2_Reader = ktx2.KTX2_Reader;
 pub const VTX_Reader = vtx.VTX_Reader;
 pub const PNG_Reader = png.PNG_Reader;
 pub const LMap_Reader = lMap.LMap_Reader;
+pub const Binary_Reader = binary.Binary_Reader;
+
+pub const TypeUseExample = [_]ProcessType{
+    .DIR,
+    .GLTF,
+    .OBJ,
+    .MTL,
+    .HASHTABLE,
+    .Sampler,
+    .LoadMap,
+    .Pipeline,
+    .UNKNOWN,
+    .PipeB,
+    .WAV,
+    .TXT,
+    .TTF,
+    .TSDI,
+    .SPV,
+    .SamplerB,
+    .Shader,
+    .TSD,
+};
+
+pub fn useExample(comptime fType: ProcessType) bool {
+    comptime {
+        for (TypeUseExample) |value| {
+            if (value == fType) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+}
