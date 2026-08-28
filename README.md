@@ -15,10 +15,13 @@ sometimes build may failed at first time, retry a few times will success
 git clone https://github.com/srnabab/zig_game.git
 cd zig_game
 git lfs pull
+cd tools/srcs/cooker
+zig build
+cd ..
 cd watcher
 zig build run 
-# until success run then terminate it
-cd ..
+# until success run then terminate it or wahtever.
+cd ../../../
 zig build run
 ```
 
@@ -26,11 +29,16 @@ zig build run
 
 ```
 .
+├── AGENTS.md # agent self-update rules
 ├── LICENSE
 ├── README.md
-├── Sampler # sampler config json
-├── Shaders # shader source file
-├── TODO.md
+├── .watching # dirs watched by watcher
+├── Assets # asset source files
+    ├── loadMap # loadmap source files
+    ├── pipeline # pipeline config json
+    ├── Sampler # sampler config json
+    ├── schema # pipeline/sampler/loadmap json schema
+    └── Shaders # shader source file
 ├── build.zig 
 ├── build.zig.zon
 ├── build_script 
@@ -44,18 +52,27 @@ zig build run
 ├── dependencies
 ├── include
 ├── lib # dll and lib
-├── pipeline # pipeline config json
+├── monsoon # engine code (migrated from src)
 ├── shared # zig file across watcher and game
-├── src # game src
-├── watcher
-    ├── build.zig
-    ├── build.zig.zon
-    └── src # watcher src
+├── src # game code
+├── tools
+    ├── srcs
+    │   ├── cooker # resource preprocessor, child process of watcher
+    │   │   ├── build.zig
+    │   │   └── src
+    │   ├── loadmapConverter # loadmap preprocessor
+    │   │   └── src
+    │   └── watcher
+    │       ├── build.zig
+    │       ├── build.zig.zon
+    │       └── src # watcher src
+    └── *.exe # built tool binaries (cooker / loadmapConverter / watcher)
 ├── zig-out
     └── bin
         ├── Content
             ├── Audio
             ├── Fonts
+            ├── LoadMap
             ├── Model
             ├── Pipeline # pipeline binary with spv shader
             ├── Sampler # sampler pack
