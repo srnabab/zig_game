@@ -76,7 +76,7 @@ pub fn render_thread_func(args: Args) !void {
     const vulkan = args.vulkan;
     // const handles = args.handles;
     var passes = args.passes;
-    const meshes = &args.uctx.meshes;
+    // const meshes = &args.uctx.meshes;
     const instances = args.instances;
     const externalCommands = args.externalCommands;
 
@@ -390,7 +390,7 @@ pub fn render_thread_func(args: Args) !void {
             const infos = stateBuffering.getReadyBuffer();
             defer stateBuffering.returnReadyBuffer(infos);
 
-            try meshes.upload(&commands, passes.passMap.get("ic_task").?.buffer[4]);
+            // try meshes.upload(&commands, passes.passMap.get("ic_task").?.buffer[4]);
             try instances.upload(&commands, vulkan, passes.passMap.get("ic_task").?.buffer[3]);
             try passGroupMapping.upload(
                 vulkan,

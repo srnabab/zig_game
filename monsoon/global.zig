@@ -64,3 +64,5 @@ pub var storExecuteSequencePrint = true;
 pub var game_end: std.atomic.Value(u8) = .init(0);
 pub var resourceQueueIndex: std.atomic.Value(u8) = .init(0);
 pub var resourceQueueMutexs: [2]std.Io.Mutex = .{ .init, .init };
+
+pub var nodeChildrenAppendBreakPoint = false;

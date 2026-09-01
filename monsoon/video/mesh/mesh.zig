@@ -9,7 +9,7 @@ const vertexStruct = @import("vertexStruct");
 const VkStruct = @import("video");
 const processRender = @import("processRender");
 // const OneTimeCommand = processRender.oneTimeCommand;
-const Commands = processRender.commands;
+const Commands = processRender.externalCommands;
 const vk = VkStruct.vk;
 
 const Mesh = vertexStruct.Mesh;
@@ -185,7 +185,7 @@ pub fn upload(self: *Self, commands: *Commands, buffer: VkStruct.Buffer_t) !void
         .size = meshs.len * @sizeOf(Mesh),
     }};
 
-    try commands.cacheCommand(.{ .copyBuffer = .{
+    try commands.externalCommand(.{ .copyBuffer = .{
         .srcBuffer = stagingBuffer,
         .dstBuffer = buffer,
         .regions = &copyRegion,

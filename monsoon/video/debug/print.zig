@@ -92,6 +92,14 @@ pub fn printAllInfoToTxt() void {
                 ) catch continue;
                 len = info.len;
             },
+            .computeIndirectRecord => |r| {
+                const info = std.fmt.bufPrint(
+                    &infoBuffer,
+                    "ID: {d}\nbuffer = {*}, offset = {d}\n\n",
+                    .{ entry.key_ptr.*, r.buffer, r.offset },
+                ) catch continue;
+                len = info.len;
+            },
             .copyBuffer => |r| {
                 const info = std.fmt.bufPrint(
                     &infoBuffer,
@@ -160,8 +168,8 @@ pub fn printAllInfoToTxt() void {
             else => continue,
         }
 
-        fileWriter.interface.print("{d} {s} {s}", .{
-            entry.key_ptr.*,
+        fileWriter.interface.print("{s} {s} {s}", .{
+            @tagName(com.?.command),
             @tagName(entry.value_ptr.*.data.commandPoolType),
             infoBuffer[0..len],
         }) catch |err| {

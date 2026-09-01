@@ -30,8 +30,8 @@ pub fn build(b: *std.Build) void {
     const cglm_dep = b.dependency("cglm", .{});
     const cglm_install_step = cglm_dep.builder.getInstallStep();
 
-    const mvzr = b.dependency("mvzr", .{});
-    const mvzr_mod = mvzr.module("mvzr");
+    // const mvzr = b.dependency("mvzr", .{});
+    // const mvzr_mod = mvzr.module("mvzr");
 
     const vma_c = b.addTranslateC(.{
         .root_source_file = b.path("include/vma/vk_mem_alloc_namespace.h"),
@@ -374,7 +374,7 @@ pub fn build(b: *std.Build) void {
 
     renderDebug_mod.addImport("processRender", processRender_mod);
     renderDebug_mod.addImport("global", global_mod);
-    renderDebug_mod.addImport("mvzr", mvzr_mod);
+    // renderDebug_mod.addImport("mvzr", mvzr_mod);
     renderDebug_mod.addImport("video", video_mod);
     renderDebug_mod.addImport("pass", pass_mod);
 

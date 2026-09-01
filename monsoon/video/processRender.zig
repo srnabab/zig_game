@@ -371,6 +371,8 @@ fn Graph(T: type) type {
         data: T = undefined,
 
         pub fn parentsAppend(self: *Self, ID: *u32) !void {
+            if (self.ID == ID.*) return;
+
             if (!(try self.parents.append(ID))) {
                 self.parentsLen += 1;
 
@@ -379,18 +381,22 @@ fn Graph(T: type) type {
         }
 
         pub fn childrenAppend(self: *Self, ID: *u32) !void {
-            if (!(try self.children.append(ID))) {
-                self.childrenLen += 1;
+            if (self.ID == ID.*) return;
 
-                // if (self.ID == 26 and ID.* == 22) {
+            if (global.nodeChildrenAppendBreakPoint) {
+                // if (self.ID == 27 and ID.* == 25) {
                 //     @breakpoint();
                 // }
-                // if (self.ID == 20 and ID.* == 3) {
-                //     @breakpoint();
-                // }
+                if (self.ID == 22 and ID.* == 27) {
+                    @breakpoint();
+                }
                 // if (self.ID == 1 and ID.* == 19) {
                 //     @breakpoint();
                 // }
+            }
+
+            if (!(try self.children.append(ID))) {
+                self.childrenLen += 1;
 
                 // if (logParam) std.log.debug("{d} children append: {d}\n", .{ self.ID, ID.* });
             }
@@ -3928,9 +3934,25 @@ pub const commands = struct {
         errdefer zone2.deinit();
         re: switch (command) {
             .fillBuffer => {
-                node.data.commandPoolType = .graphic;
+                // node.data.commandPoolType = .graphic;
 
                 const fillBuffer = command.fillBuffer;
+
+                var dstBufferQueueType = self.vulkan.buffers.getBufferQueueType(fillBuffer.buffer);
+                dstBufferQueueType = s: switch (dstBufferQueueType) {
+                    .init, .present => {
+                        break :s .graphic;
+                    },
+                    else => {
+                        break :s dstBufferQueueType;
+                    },
+                };
+
+                node.data.commandPoolType = dstBufferQueueType;
+
+                // if (global.nodeChildrenAppendBreakPoint) {
+                //     if (ID == 20) @breakpoint();
+                // }
 
                 {
                     if (!Handles.handleIsValid(@ptrCast(fillBuffer.buffer))) reAdd = true;
@@ -3946,7 +3968,7 @@ pub const commands = struct {
                 }};
                 const bufferNode = try self.changeBufferQueueHelper(
                     fillBuffer.buffer,
-                    .graphic,
+                    dstBufferQueueType,
                     &region,
                     .fillBuffer,
                     ID,
@@ -4108,6 +4130,12 @@ pub const commands = struct {
                     );
                     twoNodeIndex += 1;
                 }
+
+                // if (global.nodeChildrenAppendBreakPoint) {
+                //     if (ID == 24) {
+                //         @breakpoint();
+                //     }
+                // }
 
                 const linkNodes = try self.pipelineBarrierNodeConnect(
                     allTwoNodes,

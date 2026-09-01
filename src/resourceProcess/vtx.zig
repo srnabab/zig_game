@@ -281,5 +281,6 @@ pub const VTX_Reader = struct {
             @intCast(stride),
             handle,
         );
+        try meshes.upload(commands, buffer_ts.?[4]);
     }
 };

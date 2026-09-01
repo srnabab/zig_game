@@ -597,7 +597,6 @@ const twoU64 = extern struct {
 
 fn initC_CommandPrefixSum(userdata: ?*anyopaque, pass: *Pass, vulkan: *VkStruct, commands: *Commands, gpa: std.mem.Allocator) !void {
     _ = userdata;
-    _ = gpa;
 
     const BufferAddress0 = vulkan.getBufferAddress(pass.buffer[0]);
     const BufferAddress1 = vulkan.getBufferAddress(pass.buffer[1]);
@@ -607,6 +606,12 @@ fn initC_CommandPrefixSum(userdata: ?*anyopaque, pass: *Pass, vulkan: *VkStruct,
         .b = BufferAddress1,
     };
     pass.setPushConstants(@ptrCast(@alignCast(&push)), 0);
+
+    var descriptorSets = [_]vk.VkDescriptorSet{
+        vulkan.globalTextureDescriptorSet,
+    };
+
+    try pass.setDescriptorSets(&descriptorSets, gpa);
 
     try commands.cacheCommand(.{ .fillBuffer = .{
         .buffer = pass.buffer[1],
@@ -707,7 +712,6 @@ const ic_Task_PushConstant = extern struct {
 
 fn initIc_Task(userdata: ?*anyopaque, pass: *Pass, vulkan: *VkStruct, commands: *Commands, gpa: std.mem.Allocator) !void {
     _ = userdata;
-    _ = gpa;
     _ = commands;
 
     const commnadAddress = vulkan.getBufferAddress(pass.buffer[1]);
@@ -728,6 +732,12 @@ fn initIc_Task(userdata: ?*anyopaque, pass: *Pass, vulkan: *VkStruct, commands: 
     };
     const dst: *ic_Task_PushConstant = @ptrCast(@alignCast(pass.pushConstant.pValues));
     dst.* = push;
+
+    var descriptorSets = [_]vk.VkDescriptorSet{
+        vulkan.globalTextureDescriptorSet,
+    };
+
+    try pass.setDescriptorSets(&descriptorSets, gpa);
 }
 
 fn addIc_TaskCommand(
