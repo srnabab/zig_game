@@ -384,13 +384,16 @@ fn Graph(T: type) type {
             if (self.ID == ID.*) return;
 
             if (global.nodeChildrenAppendBreakPoint) {
-                // if (self.ID == 27 and ID.* == 25) {
+                // if (self.ID == 9 and ID.* == 10) {
                 //     @breakpoint();
                 // }
-                if (self.ID == 22 and ID.* == 27) {
-                    @breakpoint();
-                }
-                // if (self.ID == 1 and ID.* == 19) {
+                // if (self.ID == 10 and ID.* == 13) {
+                //     @breakpoint();
+                // }
+                // if (self.ID == 9 and ID.* == 13) {
+                //     @breakpoint();
+                // }
+                // if (self.ID == 0 and ID.* == 18) {
                 //     @breakpoint();
                 // }
             }
@@ -2869,190 +2872,192 @@ pub const commands = struct {
         graphicCurrentNode: *?*QueueNode,
         computeCurrentNode: *?*QueueNode,
         transferCurrentNode: *?*QueueNode,
-    ) !twoQueueNode {
+    ) ![3]twoQueueNode {
         const zone = tracy.initZone(@src(), .{ .name = "pipeline barrier node connect" });
         defer zone.deinit();
 
-        var graphicSet: bool = false;
-        var computeSet: bool = false;
-        var transferSet: bool = false;
-
         const allocator = self.stackAllocators[self.stackAllocatorsIndex].allocator();
 
-        const twoNodes = allocator.alloc(twoQueueNode, nodes.len) catch unreachable;
-        defer allocator.free(twoNodes);
+        // std.log.debug("----------------------------------------\n", .{});
+        // for (nodes) |value| {
+        //     if (value.a) |a| {
+        //         std.log.debug("a: {d}", .{a.ID});
+        //     }
+        //     if (value.b) |b| {
+        //         std.log.debug("b: {d}", .{b.ID});
+        //     }
+        // }
 
-        const oneNodes = allocator.alloc(twoQueueNode, nodes.len) catch unreachable;
-        defer allocator.free(oneNodes);
+        // const NodeB = struct {
+        //     node: *QueueNode,
+        //     idx: i32 = -1,
+        // };
 
-        const newNodesA = allocator.alloc(?*QueueNode, nodes.len) catch unreachable;
-        defer allocator.free(newNodesA);
+        const QueueChain = struct {
+            nodesA: []?*QueueNode,
+            nodesB: []?*QueueNode,
+            a: u32 = 0,
+            b: u32 = 0,
 
-        const newNodesB = allocator.alloc(?*QueueNode, nodes.len) catch unreachable;
-        defer allocator.free(newNodesB);
+            lastA: ?*QueueNode = null,
+            midA: ?*QueueNode = null,
+            lastB: ?*QueueNode = null,
+            midB: ?*QueueNode = null,
 
-        var lastSrcStageMask: vk.VkPipelineStageFlags2 = std.math.maxInt(u64);
+            midBidxs: []i32,
+            bx: u32 = 0,
+            lastSrcStageMask: vk.VkPipelineStageFlags2 = std.math.maxInt(u64),
+        };
 
-        for (newNodesA, newNodesB, twoNodes, oneNodes) |
-            *a,
-            *b,
-            *c,
-            *d,
-        | {
-            a.* = null;
-            b.* = null;
-            c.* = .{};
-            d.* = .{};
+        const queueTypes = [_]VkStruct.CommandPoolType{ .graphic, .compute, .transfer };
+
+        var chains: [3]QueueChain = undefined;
+
+        for (&chains, queueTypes) |*chain, _| {
+            chain.* = .{
+                .nodesA = allocator.alloc(?*QueueNode, nodes.len) catch unreachable,
+                .nodesB = allocator.alloc(?*QueueNode, nodes.len) catch unreachable,
+                .midBidxs = allocator.alloc(i32, nodes.len) catch unreachable,
+            };
+            for (chain.nodesA, chain.nodesB, chain.midBidxs) |
+                *a,
+                *b,
+                *c,
+            | {
+                a.* = null;
+                b.* = null;
+                c.* = -1;
+            }
         }
-
-        var two: u32 = 0;
-        var one: u32 = 0;
-
-        for (nodes) |node| {
-            if (node.a == null) {
-                oneNodes[one] = node;
-                one += 1;
-                continue;
-            }
-            if (node.b == null) {
-                oneNodes[one] = node;
-                one += 1;
-            } else {
-                // std.log.debug("a {}", .{node.a.?});
-                twoNodes[two] = node;
-                two += 1;
-            }
-        }
-
-        for (twoNodes[0..two]) |node| {
-            for (newNodesA) |*value| {
-                if (value.* == null) {
-                    value.* = node.a;
-                    break;
-                }
-                if (value.* == node.a) {
-                    break;
-                }
-            }
-
-            for (newNodesB) |*value| {
-                if (value.* == null) {
-                    value.* = node.b;
-                    break;
-                }
-                if (value.* == node.b) {
-                    break;
-                }
+        defer {
+            for (&chains) |*chain| {
+                allocator.free(chain.nodesA);
+                allocator.free(chain.nodesB);
             }
         }
 
-        var lastA: ?*QueueNode = null;
-        var midA: ?*QueueNode = null;
-        var lastB: ?*QueueNode = null;
-        var midB: ?*QueueNode = null;
-        // for (newNodesA, newNodesB, 0..) |a, b, i| {
-        for (newNodesA, newNodesB) |a, b| {
-            // std.log.debug("index {d}", .{i});
+        for (nodes, 0..) |node, i| {
+            if (node.a) |a| {
+                const queueType = a.data.commandPoolType;
 
-            if (a) |aa| {
-                const srcStageMask = self.queue.getPtr(aa.ID).?.command.pipelineBarrier.lastSrcStageMask;
+                const chain = &chains[
+                    switch (queueType) {
+                        .graphic => 0,
+                        .compute => 1,
+                        .transfer => 2,
+                        else => unreachable,
+                    }
+                ];
 
-                if (aa.data.commandPoolType == .transfer and !transferSet) {
-                    transferSet = true;
-                    transferCurrentNode.* = aa;
-                } else if (aa.data.commandPoolType == .compute and !computeSet) {
-                    computeSet = true;
-                    computeCurrentNode.* = aa;
-                } else if (aa.data.commandPoolType == .graphic and !graphicSet) {
-                    graphicSet = true;
-                    graphicCurrentNode.* = aa;
+                if (chain.a == 0) {
+                    chain.lastA = a;
+                    chain.midA = a;
                 }
 
-                // may need type check
-
-                lastSrcStageMask = @min(lastSrcStageMask, srcStageMask);
-                if (lastA == null) {
-                    lastA = aa;
-                    midA = aa;
-                } else {
-                    try self.nodeDag.childrenAppend(aa, lastA.?);
-                    try lastA.?.parentsAppend(&aa.ID);
-
-                    lastA = aa;
+                for (chain.nodesA) |value| {
+                    if (value == null) {
+                        // std.log.debug("*****************\n", .{});
+                        // std.log.debug("a: {d}", .{a.ID});
+                        chain.nodesA[chain.a] = a;
+                        chain.a += 1;
+                        break;
+                    } else if (value == a) break;
                 }
             }
 
-            if (b) |bb| {
-                if (lastB == null) {
-                    lastB = bb;
-                    midB = bb;
-                } else {
-                    try bb.parentsAppend(&lastB.?.ID);
-                    try self.nodeDag.childrenAppend(lastB.?, bb);
+            if (node.b) |b| {
+                const queueType = b.data.commandPoolType;
+                const chain = &chains[
+                    switch (queueType) {
+                        .graphic => 0,
+                        .compute => 1,
+                        .transfer => 2,
+                        else => unreachable,
+                    }
+                ];
 
-                    lastB = bb;
+                if (chain.b == 0) {
+                    chain.lastB = b;
+                    chain.midB = b;
+                }
+
+                if (b == chain.midB) {
+                    chain.midBidxs[chain.bx] = @intCast(i);
+                    chain.bx += 1;
+                }
+
+                for (chain.nodesB) |value| {
+                    if (value == null) {
+                        chain.nodesB[chain.b] = b;
+                        chain.b += 1;
+                        break;
+                    } else if (value == b) break;
                 }
             }
         }
 
-        if (lastB) |b| {
-            var tempNode: *QueueNode = b;
+        for (&chains) |*chain| {
+            for (chain.nodesA) |a| {
+                if (a) |aa| {
+                    const srcStageMask = self.queue.getPtr(aa.ID).?.command.pipelineBarrier.lastSrcStageMask;
 
-            for (oneNodes[0..one]) |node| {
-                if (node.a == null) continue;
+                    // may need type check
 
-                try self.nodeDag.childrenAppend(tempNode, node.a.?);
-                try node.a.?.parentsAppend(&tempNode.ID);
+                    chain.lastSrcStageMask = @min(chain.lastSrcStageMask, srcStageMask);
 
-                tempNode = node.a.?;
-            }
+                    try self.nodeConnect(aa, chain.lastA.?);
 
-            lastB = tempNode;
-        } else if (midA) |a| {
-            var tempNode: *QueueNode = a;
-
-            for (oneNodes[0..one]) |node| {
-                if (node.a == null) continue;
-
-                try self.nodeDag.childrenAppend(tempNode, node.a.?);
-                try node.a.?.parentsAppend(&tempNode.ID);
-
-                tempNode = node.a.?;
-            }
-
-            midA = tempNode;
-        } else if (lastA == null) {
-            var tempNode: *QueueNode = undefined;
-
-            for (oneNodes[0..one]) |node| {
-                if (node.a == null) continue;
-                if (lastA == null) {
-                    lastA = node.a;
-                    tempNode = lastA.?;
-                    continue;
+                    chain.lastA = aa;
                 }
-                if (node.a.? == tempNode) continue;
-
-                try self.nodeDag.childrenAppend(tempNode, node.a.?);
-                try node.a.?.parentsAppend(&tempNode.ID);
-
-                tempNode = node.a.?;
             }
 
-            midA = tempNode;
+            for (chain.nodesB) |b| {
+                if (b) |bb| {
+                    try self.nodeConnect(chain.lastB.?, bb);
+
+                    chain.lastB = bb;
+                }
+            }
         }
 
-        if (midA != null and midB != null) {
-            try self.nodeDag.childrenAppend(midA.?, midB.?);
-            try midB.?.parentsAppend(&midA.?.ID);
-        }
+        var result: [3]twoQueueNode = undefined;
+        @memset(&result, twoQueueNode{});
+        for (chains, queueTypes) |cha, queueType| {
+            if (cha.bx != 0) {
+                for (cha.midBidxs[0..cha.bx]) |bidx| {
+                    const pairedA = nodes[@intCast(bidx)].a.?;
+                    const qType = pairedA.data.commandPoolType;
 
-        if (lastA != null) {
-            const srcStageMask = &self.queue.getPtr(lastA.?.ID).?.command.pipelineBarrier.lastSrcStageMask;
-            srcStageMask.* = lastSrcStageMask;
-        }
+                    const chain = &chains[
+                        switch (qType) {
+                            .graphic => 0,
+                            .compute => 1,
+                            .transfer => 2,
+                            else => unreachable,
+                        }
+                    ];
+                    try self.nodeConnect(chain.midA.?, cha.midB.?);
+                }
+            }
 
-        return .{ .a = lastA, .b = if (lastB == null) midA else lastB };
+            if (cha.lastA != null) {
+                const srcStageMask = &self.queue.getPtr(cha.lastA.?.ID).?.command.pipelineBarrier.lastSrcStageMask;
+                srcStageMask.* = cha.lastSrcStageMask;
+            }
+
+            const res = twoQueueNode{ .a = cha.lastA, .b = if (cha.lastB == null) cha.midA else cha.lastB };
+            switch (queueType) {
+                .graphic => result[0] = res,
+                .compute => result[1] = res,
+                .transfer => result[2] = res,
+                else => unreachable,
+            }
+        }
+        graphicCurrentNode.* = chains[0].lastA;
+        computeCurrentNode.* = chains[1].lastA;
+        transferCurrentNode.* = chains[2].lastA;
+
+        return result;
     }
 
     fn bindVertexBuffer(
@@ -3100,7 +3105,7 @@ pub const commands = struct {
         buffers: ?[]VkStruct.Buffer_t,
         textures: ?[]texture.Texture_t,
         indirectBuffer: ?VkStruct.Buffer_t,
-        currentNode: **QueueNode,
+        // currentNode: **QueueNode,
         graphicCurrentNode: *?*QueueNode,
         computeCurrentNode: *?*QueueNode,
         transferCurrentNode: *?*QueueNode,
@@ -3248,18 +3253,13 @@ pub const commands = struct {
             computeCurrentNode,
             transferCurrentNode,
         );
-        if (res.a) |aa| {
-            if (res.b) |bb| {
-                try self.nodeDag.childrenAppend(bb, renderingNode.*.?);
-                try renderingNode.*.?.parentsAppend(&bb.ID);
+        for (res) |value| {
+            if (value.b) |bb| {
+                try self.nodeConnect(bb, renderingNode.*.?);
+                // currentNode.* = bb;
             } else {
-                try self.nodeDag.childrenAppend(aa, renderingNode.*.?);
-                try renderingNode.*.?.parentsAppend(&aa.ID);
+                // currentNode.* = renderingNode.*.?;
             }
-
-            currentNode.* = aa;
-        } else {
-            currentNode.* = renderingNode.*.?;
         }
     }
 
@@ -3526,8 +3526,7 @@ pub const commands = struct {
                             linkNodeEnd = tempNode.a.?;
                             linkNodeStart = linkNodeEnd;
                         } else {
-                            try linkNodeEnd.?.parentsAppend(&tempNode.a.?.ID);
-                            try self.nodeDag.childrenAppend(tempNode.a.?, linkNodeEnd.?);
+                            try self.nodeConnect(tempNode.a.?, linkNodeEnd.?);
 
                             linkNodeEnd = tempNode.a.?;
                         }
@@ -3560,8 +3559,7 @@ pub const commands = struct {
                         linkNodeEnd = tempNode;
                         linkNodeStart = linkNodeEnd;
                     } else {
-                        try self.nodeDag.childrenAppend(linkNodeEnd.?, tempNode);
-                        try tempNode.parentsAppend(&linkNodeEnd.?.ID);
+                        try self.nodeConnect(linkNodeEnd.?, tempNode);
 
                         linkNodeEnd = tempNode;
                     }
@@ -3608,8 +3606,7 @@ pub const commands = struct {
                             linkNodeEnd = tempNode.a.?;
                             linkNodeStart = linkNodeEnd;
                         } else {
-                            try linkNodeEnd.?.parentsAppend(&tempNode.a.?.ID);
-                            try self.nodeDag.childrenAppend(tempNode.a.?, linkNodeEnd.?);
+                            try self.nodeConnect(tempNode.a.?, linkNodeEnd.?);
 
                             linkNodeEnd = tempNode.a.?;
                         }
@@ -3703,8 +3700,7 @@ pub const commands = struct {
                         linkNodeEnd = tempNode;
                         linkNodeStart = linkNodeEnd;
                     } else {
-                        try linkNodeEnd.?.parentsAppend(&tempNode.ID);
-                        try self.nodeDag.childrenAppend(tempNode, linkNodeEnd.?);
+                        try self.nodeConnect(tempNode, linkNodeEnd.?);
 
                         linkNodeEnd = tempNode;
                     }
@@ -3725,8 +3721,7 @@ pub const commands = struct {
                 linkNodeEnd = tempNode;
                 linkNodeStart = linkNodeEnd;
             } else {
-                try linkNodeEnd.?.parentsAppend(&tempNode.ID);
-                try self.nodeDag.childrenAppend(tempNode, linkNodeEnd.?);
+                try self.nodeConnect(tempNode, linkNodeEnd.?);
 
                 linkNodeEnd = tempNode;
             }
@@ -3767,8 +3762,7 @@ pub const commands = struct {
                 linkNodeEnd = tempNode.a.?;
                 linkNodeStart = linkNodeEnd;
             } else {
-                try linkNodeEnd.?.parentsAppend(&tempNode.a.?.ID);
-                try self.nodeDag.childrenAppend(tempNode.a.?, linkNodeEnd.?);
+                try self.nodeConnect(tempNode.a.?, linkNodeEnd.?);
 
                 linkNodeEnd = tempNode.a.?;
             }
@@ -3789,8 +3783,7 @@ pub const commands = struct {
                 linkNodeEnd = pushConstantNode.a;
                 linkNodeStart = linkNodeEnd;
             } else {
-                try linkNodeEnd.?.parentsAppend(&pushConstantNode.a.?.ID);
-                try self.nodeDag.childrenAppend(pushConstantNode.a.?, linkNodeEnd.?);
+                try self.nodeConnect(pushConstantNode.a.?, linkNodeEnd.?);
 
                 linkNodeEnd = pushConstantNode.a.?;
             }
@@ -3819,11 +3812,9 @@ pub const commands = struct {
 
             if (linkNodeEnd) |b| {
                 if (linkNodeEnd != linkNodeStart) {
-                    try self.nodeDag.childrenAppend(linkNodeStart.?, node);
-                    try node.parentsAppend(&linkNodeStart.?.ID);
+                    try self.nodeConnect(linkNodeStart.?, node);
                 } else {
-                    try self.nodeDag.childrenAppend(b, node);
-                    try node.parentsAppend(&b.ID);
+                    try self.nodeConnect(b, node);
                 }
 
                 for (a_children.list.items) |value| {
@@ -3835,8 +3826,7 @@ pub const commands = struct {
 
                 a.clearChildren();
 
-                try self.nodeDag.childrenAppend(a, b);
-                try b.parentsAppend(&a.ID);
+                try self.nodeConnect(a, b);
             } else {
                 for (a_children.list.items) |value| {
                     const childrenNode: *QueueNode = @alignCast(@fieldParentPtr("ID", value));
@@ -3847,24 +3837,19 @@ pub const commands = struct {
 
                 a.clearChildren();
 
-                try self.nodeDag.childrenAppend(a, node);
-                try node.parentsAppend(&a.ID);
+                try self.nodeConnect(a, node);
             }
         } else {
             if (linkNodeEnd) |b| {
-                try self.nodeDag.childrenAppend(renderingNode.?, b);
-                try b.parentsAppend(&renderingNode.?.ID);
+                try self.nodeConnect(renderingNode.?, b);
 
                 if (linkNodeEnd != linkNodeStart) {
-                    try self.nodeDag.childrenAppend(linkNodeStart.?, node);
-                    try node.parentsAppend(&linkNodeStart.?.ID);
+                    try self.nodeConnect(linkNodeStart.?, node);
                 } else {
-                    try self.nodeDag.childrenAppend(linkNodeEnd.?, node);
-                    try node.parentsAppend(&linkNodeEnd.?.ID);
+                    try self.nodeConnect(linkNodeEnd.?, node);
                 }
             } else {
-                try self.nodeDag.childrenAppend(renderingNode.?, node);
-                try node.parentsAppend(&renderingNode.?.ID);
+                try self.nodeConnect(renderingNode.?, node);
             }
         }
     }
@@ -3904,7 +3889,6 @@ pub const commands = struct {
         var transferCurrentNode: ?*QueueNode = null;
         var renderingCurrentNode: ?*QueueNode = null;
 
-        var currentNode = node;
         const ptr = try self.queue.getOrPut(ID);
         // ptr.value_ptr.ID = ID;
         // ptr.value_ptr.timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds();
@@ -3985,14 +3969,28 @@ pub const commands = struct {
                     .ptr = @intFromPtr(vkBuffer),
                 };
 
-                if (bufferNode.b) |b| {
-                    try self.nodeDag.childrenAppend(bufferNode.a.?, b);
-                    try b.parentsAppend(&bufferNode.a.?.ID);
-
-                    try self.nodeDag.childrenAppend(b, node);
-                    try node.parentsAppend(&b.ID);
+                var currentNode: ?*QueueNode = null;
+                if (bufferNode.a) |a| {
+                    try self.nodeConnect(a, node);
 
                     currentNode = bufferNode.a.?;
+                } else if (bufferNode.b) |b| {
+                    try self.nodeConnect(bufferNode.a.?, b);
+
+                    try self.nodeConnect(b, node);
+
+                    currentNode = bufferNode.a.?;
+                } else {
+                    currentNode = self.nodeDag.get(0).?;
+                }
+
+                if (currentNode != null) {
+                    switch (currentNode.?.data.commandPoolType) {
+                        .graphic => graphicCurrentNode = currentNode,
+                        .compute => computeCurrentNode = currentNode,
+                        .transfer => transferCurrentNode = currentNode,
+                        else => unreachable,
+                    }
                 }
 
                 self.vulkan.buffers.setWritedType(fillBuffer.buffer, .clear);
@@ -4157,8 +4155,7 @@ pub const commands = struct {
                     linkNodeEnd = pipelineNode.a.?;
                     linkNodeStart = linkNodeEnd;
                 } else {
-                    try linkNodeEnd.?.parentsAppend(&pipelineNode.a.?.ID);
-                    try self.nodeDag.childrenAppend(pipelineNode.a.?, linkNodeEnd.?);
+                    try self.nodeConnect(pipelineNode.a.?, linkNodeEnd.?);
 
                     linkNodeEnd = pipelineNode.a.?;
                 }
@@ -4182,8 +4179,7 @@ pub const commands = struct {
                         linkNodeEnd = descriptorSetNode.a.?;
                         linkNodeStart = linkNodeEnd;
                     } else {
-                        try linkNodeEnd.?.parentsAppend(&descriptorSetNode.a.?.ID);
-                        try self.nodeDag.childrenAppend(descriptorSetNode.a.?, linkNodeEnd.?);
+                        try self.nodeConnect(descriptorSetNode.a.?, linkNodeEnd.?);
 
                         linkNodeEnd = descriptorSetNode.a.?;
                     }
@@ -4204,27 +4200,26 @@ pub const commands = struct {
                     linkNodeEnd = pushConstantNode.a.?;
                     linkNodeStart = linkNodeEnd;
                 } else {
-                    try linkNodeEnd.?.parentsAppend(&pushConstantNode.a.?.ID);
-                    try self.nodeDag.childrenAppend(pushConstantNode.a.?, linkNodeEnd.?);
+                    try self.nodeConnect(pushConstantNode.a.?, linkNodeEnd.?);
 
                     linkNodeEnd = pushConstantNode.a.?;
                 }
 
-                if (linkNodes.a) |a| {
-                    currentNode = a;
-                    if (linkNodes.b) |b| {
-                        try self.nodeDag.childrenAppend(b, linkNodeEnd.?);
-                        try linkNodeEnd.?.parentsAppend(&b.ID);
-                    } else {
-                        try self.nodeDag.childrenAppend(a, linkNodeEnd.?);
-                        try linkNodeEnd.?.parentsAppend(&a.ID);
+                for (linkNodes) |nodes| {
+                    if (nodes.b) |b| {
+                        try self.nodeConnect(b, linkNodeEnd.?);
                     }
-                } else {
-                    currentNode = linkNodeEnd.?;
                 }
+                //  else {
+                //     switch (linkNodeEnd.?.data.commandPoolType) {
+                //         .graphic => graphicCurrentNode = linkNodeEnd.?,
+                //         .compute => computeCurrentNode = linkNodeEnd.?,
+                //         .transfer => transferCurrentNode = linkNodeEnd.?,
+                //         else => unreachable,
+                //     }
+                // }
 
-                try self.nodeDag.childrenAppend(linkNodeStart.?, node);
-                try node.parentsAppend(&linkNodeStart.?.ID);
+                try self.nodeConnect(linkNodeStart.?, node);
             },
             .drawMeshIndirect, .draw2D, .present, .drawMesh, .drawIndirect => {
                 node.data.commandPoolType = .graphic;
@@ -4463,7 +4458,7 @@ pub const commands = struct {
                     buffers,
                     pTextures,
                     indirectBuffer,
-                    &currentNode,
+
                     &graphicCurrentNode,
                     &computeCurrentNode,
                     &transferCurrentNode,
@@ -4537,15 +4532,10 @@ pub const commands = struct {
                     // renderDebug.printToDot();
                     // std.log.debug("", .{});
 
-                    try self.nodeDag.childrenAppend(node, transNode.a.?);
-                    try transNode.a.?.parentsAppend(&node.ID);
+                    try self.nodeConnect(node, transNode.a.?);
                 }
 
                 renderingCurrentNode = renderingNode;
-
-                if (currentNode == node) {
-                    currentNode = self.nodeDag.get(0).?;
-                }
             },
             .copyBuffer => {
                 const copyBuffer = command.copyBuffer;
@@ -4619,11 +4609,10 @@ pub const commands = struct {
                     &transferCurrentNode,
                 );
 
-                if (res.a) |aa| {
-                    try self.nodeDag.childrenAppend(res.b.?, currentNode);
-                    try currentNode.parentsAppend(&res.b.?.ID);
-
-                    currentNode = aa;
+                for (res) |value| {
+                    if (value.b) |bb| {
+                        try self.nodeConnect(bb, node);
+                    }
                 }
 
                 ptr.value_ptr.*.command.copyBuffer.regions = try allocator.dupe(vk.VkBufferCopy2, tempRegions);
@@ -4717,18 +4706,10 @@ pub const commands = struct {
                     &computeCurrentNode,
                     &transferCurrentNode,
                 );
-                if (res.a) |aa| {
-                    if (res.b) |bb| {
-                        try self.nodeDag.childrenAppend(bb, currentNode);
-                        try currentNode.parentsAppend(&bb.ID);
-                    } else {
-                        try self.nodeDag.childrenAppend(aa, currentNode);
-                        try currentNode.parentsAppend(&aa.ID);
+                for (res) |value| {
+                    if (value.b) |bb| {
+                        try self.nodeConnect(bb, node);
                     }
-
-                    std.log.debug("", .{});
-
-                    currentNode = aa;
                 }
 
                 // cache outputs
@@ -4750,185 +4731,139 @@ pub const commands = struct {
         }
 
         const endID = self.nodeDag.innerID - 1;
-        // _ = startID;
-        // _ = endID;
-        // std.log.debug("range {d}-{d}", .{ startID, endID });
-
-        // self.nodeDag.print();
-
         const zone3 = tracy.initZone(@src(), .{ .name = "infer dependency 2" });
         errdefer zone3.deinit();
 
-        // std.log.debug("current ID {d}", .{currentNode.ID});
+        const currentNodes = [3]?*QueueNode{ graphicCurrentNode, transferCurrentNode, computeCurrentNode };
 
-        // std.log.debug("graphic {d}, compute {d}, transfer {d}", .{
-        //     if (graphicCurrentNode != null) graphicCurrentNode.?.ID else 1000,
-        //     if (computeCurrentNode != null) computeCurrentNode.?.ID else 1000,
-        //     if (transferCurrentNode != null) transferCurrentNode.?.ID else 1000,
-        // });
+        for (currentNodes) |currentNode_| {
+            const currentNode = if (currentNode_ != null) currentNode_.? else continue;
 
-        const comm = self.queue.get(currentNode.ID).?;
-        if (comm.command == .start) {
-            if (command != .present) {
-                std.debug.panic("not supported command type {s} end with start", .{@tagName(comm.command)});
-            }
-        } else {
-            var dependencyLinked = false;
+            const comm = self.queue.get(currentNode.ID).?;
+            if (comm.command == .start) {
+                // if (command != .present) {
+                //     std.debug.panic("not supported command type {s} end with start", .{@tagName(comm.command)});
+                // }
+                try self.nodeConnect(currentNode, node);
+            } else {
+                var dependencyLinked = false;
 
-            for (dependenciesArray.items) |dependency| {
-                const dependencyID = self.cacheMap.get(@intFromPtr(dependency));
+                for (dependenciesArray.items) |dependency| {
+                    const dependencyID = self.cacheMap.get(@intFromPtr(dependency));
 
-                if (dependencyID == null) continue;
-                const idx = dependencyID.?;
+                    if (dependencyID == null) continue;
+                    const idx = dependencyID.?;
 
-                // std.log.debug("dependency id {d}", .{idx});
+                    const dependencyNode = self.nodeDag.get(idx).?;
 
-                const dependencyNode = self.nodeDag.get(idx).?;
+                    if (dependencyNode.ID >= startID and dependencyNode.ID <= endID) {
+                        continue;
+                    }
+                    if (dependencyNode.ID == currentNode.ID) {
+                        continue;
+                    }
+                    if (dependencyNode.data.commandPoolType == currentNode.data.commandPoolType) {
+                        const depEndID =
+                            self.nodeDag.toEnd(dependencyNode.ID) orelse dependencyNode.ID;
+                        const curEndID =
+                            self.nodeDag.toEnd(currentNode.ID) orelse currentNode.ID;
 
-                // std.log.debug("{d} {*}, {d} {*}", .{ dependencyNode.ID, dependencyNode, currentNode.ID, currentNode });
+                        if (depEndID == curEndID) continue;
 
-                if (dependencyNode.ID >= startID and dependencyNode.ID <= endID) {
-                    // std.log.debug("{d} {*}, {d} {*}", .{ dependencyNode.ID, dependencyNode, currentNode.ID, currentNode });
-                    continue;
-                }
-                if (dependencyNode.ID == currentNode.ID) {
-                    continue;
-                }
-                if (dependencyNode.data.commandPoolType == currentNode.data.commandPoolType) {
-                    const depEndID =
-                        self.nodeDag.toEnd(dependencyNode.ID) orelse dependencyNode.ID;
-                    const curEndID =
-                        self.nodeDag.toEnd(currentNode.ID) orelse currentNode.ID;
+                        try self.nodeConnect(dependencyNode, currentNode);
 
-                    // std.log.debug("ID {d}, ID {d}", .{ dependencyNode.ID, currentNode.ID });
-                    // std.log.debug("dep {d}, cur {d}\n", .{ depEndID, curEndID });
-
-                    if (depEndID == curEndID) continue;
-
-                    try self.nodeDag.childrenAppend(dependencyNode, currentNode);
-                    try currentNode.parentsAppend(&dependencyNode.ID);
-
-                    dependencyLinked = true;
-                    continue;
-                }
-
-                const pCommand = self.queue.getPtr(dependencyNode.ID);
-                if (pCommand == null) continue;
-
-                const cmd = pCommand.?;
-
-                if (cmd.command != .pipelineBarrier) {
-                    // if (dependencyNode.ID == 15) @breakpoint();
-                    var secondLinked = false;
-                    // std.log.debug("skip ID {d}", .{dependencyNode.ID});
-
-                    switch (dependencyNode.data.commandPoolType) {
-                        .transfer => {
-                            if (transferCurrentNode) |dNode| {
-                                try self.nodeDag.childrenAppend(dependencyNode, dNode);
-                                try dNode.parentsAppend(&dependencyNode.ID);
-
-                                // currentNode.listID.?.* = dependencyNode.listID.?.*;
-
-                                dependencyLinked = true;
-                                secondLinked = true;
-                            }
-                            // else std.log.debug("skip ID {d}", .{dependencyNode.ID});
-                        },
-                        .compute => {
-                            if (computeCurrentNode) |dNode| {
-                                try self.nodeDag.childrenAppend(dependencyNode, dNode);
-                                try dNode.parentsAppend(&dependencyNode.ID);
-
-                                // currentNode.listID.?.* = dependencyNode.listID.?.*;
-
-                                dependencyLinked = true;
-                                secondLinked = true;
-                            }
-                            //  else std.log.debug("skip ID {d}", .{dependencyNode.ID});
-                        },
-                        .graphic => {
-                            if (graphicCurrentNode) |dNode| {
-                                try self.nodeDag.childrenAppend(dependencyNode, dNode);
-                                try dNode.parentsAppend(&dependencyNode.ID);
-
-                                // currentNode.listID.?.* = dependencyNode.listID.?.*;
-
-                                dependencyLinked = true;
-                                secondLinked = true;
-                            }
-                            //  else std.log.debug("skip ID {d}", .{dependencyNode.ID});
-                        },
-                        else => unreachable,
+                        dependencyLinked = true;
+                        continue;
                     }
 
-                    if (!secondLinked) {
-                        const zone4 = tracy.initZone(@src(), .{ .name = "infer dependency 3" });
-                        defer zone4.deinit();
+                    const pCommand = self.queue.getPtr(dependencyNode.ID);
+                    if (pCommand == null) continue;
 
-                        const currentEndID = self.nodeDag.toEnd(currentNode.ID);
-                        if (currentEndID) |ceid| {
-                            var tempNode: ?*QueueNode = currentNode;
-                            while (tempNode.?.data.commandPoolType != dependencyNode.data.commandPoolType) {
-                                // std.log.debug("temp {s}, dep {s}", .{
-                                //     @tagName(tempNode.?.data.commandPoolType),
-                                //     @tagName(dependencyNode.data.commandPoolType),
-                                // });
+                    const cmd = pCommand.?;
 
-                                var tempIdx: u32 = 0;
-                                var childID = tempNode.?.children.list.items[tempIdx].*;
-                                var childEndID = self.nodeDag.toEnd(childID) orelse childID;
+                    if (cmd.command != .pipelineBarrier) {
+                        var secondLinked = false;
 
-                                while (ceid != childEndID) {
-                                    tempIdx += 1;
-                                    if (tempIdx >= tempNode.?.childrenLen) break;
-                                    childID = tempNode.?.children.list.items[tempIdx].*;
-                                    childEndID = self.nodeDag.toEnd(childID) orelse childID;
-                                } else {
-                                    tempNode = self.nodeDag.get(childID);
+                        switch (dependencyNode.data.commandPoolType) {
+                            .transfer => {
+                                if (transferCurrentNode) |dNode| {
+                                    try self.nodeConnect(dependencyNode, dNode);
+
+                                    dependencyLinked = true;
+                                    secondLinked = true;
                                 }
+                            },
+                            .compute => {
+                                if (computeCurrentNode) |dNode| {
+                                    try self.nodeConnect(dependencyNode, dNode);
 
-                                if (childID == childEndID) {
-                                    tempNode = null;
-                                    break;
+                                    dependencyLinked = true;
+                                    secondLinked = true;
                                 }
-                            }
-                            if (tempNode) |n| {
-                                // std.log.debug("final link node id {d}", .{n.ID});
-                                // std.log.debug("skip end {d}, final end {d}", .{
-                                //     self.nodeDag.toEndMap.get(dependencyNode.ID) orelse 1000,
-                                //     self.nodeDag.toEndMap.get(n.ID) orelse 1000,
-                                // });
-                                const skipEndId =
-                                    self.nodeDag.toEnd(dependencyNode.ID) orelse dependencyNode.ID;
-                                const finalEndId =
-                                    self.nodeDag.toEnd(n.ID) orelse n.ID;
+                            },
+                            .graphic => {
+                                if (graphicCurrentNode) |dNode| {
+                                    try self.nodeConnect(dependencyNode, dNode);
 
-                                if (skipEndId == finalEndId) continue;
+                                    dependencyLinked = true;
+                                    secondLinked = true;
+                                }
+                            },
+                            else => unreachable,
+                        }
 
-                                try self.nodeDag.childrenAppend(dependencyNode, n);
-                                try n.parentsAppend(&dependencyNode.ID);
+                        if (!secondLinked) {
+                            const zone4 = tracy.initZone(@src(), .{ .name = "infer dependency 3" });
+                            defer zone4.deinit();
+
+                            const currentEndID = self.nodeDag.toEnd(currentNode.ID);
+                            if (currentEndID) |ceid| {
+                                var tempNode: ?*QueueNode = currentNode;
+                                while (tempNode.?.data.commandPoolType != dependencyNode.data.commandPoolType) {
+                                    var tempIdx: u32 = 0;
+                                    var childID = tempNode.?.children.list.items[tempIdx].*;
+                                    var childEndID = self.nodeDag.toEnd(childID) orelse childID;
+
+                                    while (ceid != childEndID) {
+                                        tempIdx += 1;
+                                        if (tempIdx >= tempNode.?.childrenLen) break;
+                                        childID = tempNode.?.children.list.items[tempIdx].*;
+                                        childEndID = self.nodeDag.toEnd(childID) orelse childID;
+                                    } else {
+                                        tempNode = self.nodeDag.get(childID);
+                                    }
+
+                                    if (childID == childEndID) {
+                                        tempNode = null;
+                                        break;
+                                    }
+                                }
+                                if (tempNode) |n| {
+                                    const skipEndId =
+                                        self.nodeDag.toEnd(dependencyNode.ID) orelse dependencyNode.ID;
+                                    const finalEndId =
+                                        self.nodeDag.toEnd(n.ID) orelse n.ID;
+
+                                    if (skipEndId == finalEndId) continue;
+
+                                    try self.nodeConnect(dependencyNode, n);
+                                }
                             }
                         }
+
+                        continue;
                     }
-
-                    continue;
                 }
-            }
 
-            if (!dependencyLinked) {
-                const root = self.nodeDag.get(0).?;
-                try self.nodeDag.childrenAppend(root, currentNode);
-                try currentNode.parentsAppend(&root.ID);
+                if (!dependencyLinked) {
+                    const root = self.nodeDag.get(0).?;
+                    try self.nodeConnect(root, currentNode);
+                }
 
-                // currentNode.listID.?.* = self.nodeDag.newListID();
-            }
-
-            if (currentNode.parentsLen == 0) {
-                // std.log.debug("no parent {d}", .{currentNode.ID});
-                const root = self.nodeDag.get(0).?;
-                try self.nodeDag.childrenAppend(root, currentNode);
-                try currentNode.parentsAppend(&root.ID);
+                if (currentNode.parentsLen == 0) {
+                    const root = self.nodeDag.get(0).?;
+                    try self.nodeConnect(root, currentNode);
+                }
             }
         }
         zone3.deinit();
@@ -4937,6 +4872,9 @@ pub const commands = struct {
             try self.cacheMap.put(value.ptr, value.index);
         }
 
+        // renderDebug.printToDot();
+        // renderDebug.printAllInfoToTxt();
+        // @breakpoint();
         // self.nodeDag.print();
     }
 
@@ -4967,14 +4905,12 @@ pub const commands = struct {
 
                 childrenNode.parentsRemove(&lastNode.ID);
 
-                try self.nodeDag.childrenAppend(endRenderingNode, childrenNode);
-                try childrenNode.parentsAppend(&endRenderingNode.ID);
+                try self.nodeConnect(endRenderingNode, childrenNode);
             }
 
             lastNode.clearChildren();
 
-            try self.nodeDag.childrenAppend(lastNode, endRenderingNode);
-            try endRenderingNode.parentsAppend(&lastNode.ID);
+            try self.nodeConnect(lastNode, endRenderingNode);
         }
 
         const root = self.nodeDag.get(0).?;
@@ -5040,6 +4976,17 @@ pub const commands = struct {
             }
         }
         self.cachedCommand.clearRetainingCapacity();
+    }
+
+    fn nodeConnect(self: *Self, parent: *QueueNode, child: *QueueNode) !void {
+        if (parent.ID != 0 and parent.data.commandPoolType != child.data.commandPoolType) {
+            const commandType1 = std.meta.activeTag(self.queue.get(parent.ID).?.command);
+            const commandType2 = std.meta.activeTag(self.queue.get(child.ID).?.command);
+            if (commandType1 != .pipelineBarrier or commandType2 != .pipelineBarrier) return;
+        }
+
+        try self.nodeDag.childrenAppend(parent, child);
+        try child.parentsAppend(&parent.ID);
     }
 };
 

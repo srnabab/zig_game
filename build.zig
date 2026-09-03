@@ -372,6 +372,7 @@ pub fn build(b: *std.Build) void {
     instance_mod.addImport("global", global_mod);
     instance_mod.addImport("handle", handle_mod);
 
+    renderDebug_mod.addImport("vulkanType", vulkanType_mod);
     renderDebug_mod.addImport("processRender", processRender_mod);
     renderDebug_mod.addImport("global", global_mod);
     // renderDebug_mod.addImport("mvzr", mvzr_mod);
@@ -427,6 +428,7 @@ pub fn build(b: *std.Build) void {
     resultToError_mod.addImport("enumFromC", enum_c_mod);
     resultToError_mod.addImport("vulkan", vk_c_mod);
     resultToError_mod.addImport("renderDebug", renderDebug_mod);
+    resultToError_mod.addImport("vulkanType", vulkanType_mod);
 
     cglm_c.addIncludePath(b.path("include"));
 

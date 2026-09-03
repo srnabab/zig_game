@@ -274,7 +274,10 @@ pub fn update_thread_func(args: Args) !void {
 
             if (test_C.downIsTrue()) a: {
                 std.log.debug("x", .{});
-                global.nodeChildrenAppendBreakPoint = true;
+                // global.nodeChildrenAppendBreakPoint = true;
+                global.stopNodeDagPrint = false;
+                global.printDagToDot = true;
+
                 resourceArray.mutex.lockUncancelable(io);
                 defer resourceArray.mutex.unlock(io);
 

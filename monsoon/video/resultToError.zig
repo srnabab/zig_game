@@ -2,8 +2,8 @@ const std = @import("std");
 const renderDebug = @import("renderDebug");
 
 const vk = @import("vulkan");
-const VkError = @import("vulkanType.zig").VkError;
-pub const vulkanType = @import("vulkanType.zig");
+const VkError = @import("vulkanType").VkError;
+pub const vulkanType = @import("vulkanType");
 const VkResult = vulkanType.VkResult;
 pub fn VkResultToError(result: vk.VkResult) VkError!void {
     if (result < 0) {

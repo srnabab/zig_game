@@ -35,6 +35,13 @@ pub const VkPipelineStageFlagBits2: type = cEnum.generateEnumFromC(
     "VK_PIPELINE_STAGE_2_OPTICAL_FLOW_BIT_NV",
 );
 
+pub const VkAccessFlagBits2: type = cEnum.generateEnumFromC(
+    vk,
+    vk.VkAccessFlagBits2,
+    "VK_ACCESS_2_NONE",
+    "VK_ACCESS_2_MEMORY_DECOMPRESSION_WRITE_BIT_EXT",
+);
+
 pub const VkImageLayout: type = cEnum.generateEnumFromC(
     vk,
     vk.VkImageLayout,

@@ -1756,6 +1756,22 @@ pub fn getQueueIndex(self: *Self, queueType: CommandPoolType) u32 {
     });
 }
 
+pub fn getQueueType(self: *Self, index: u32) CommandPoolType {
+    if (index > std.math.maxInt(i32)) {
+        return .init;
+    }
+
+    if (@as(i32, @intCast(index)) == self.graphicQueueFamily.familyIndice) {
+        return .graphic;
+    } else if (@as(i32, @intCast(index)) == self.computeQueueFamily.familyIndice) {
+        return .compute;
+    } else if (@as(i32, @intCast(index)) == self.transferQueueFamily.familyIndice) {
+        return .transfer;
+    } else {
+        return .init;
+    }
+}
+
 pub fn createViewport(self: *Self, viewport: vk.VkViewport) !Viewport_t {
     return self.viewports.createViewport(viewport);
 }
