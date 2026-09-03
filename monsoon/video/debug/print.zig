@@ -134,11 +134,12 @@ pub fn printAllInfoToTxt() void {
             .copyBufferToImageRecord => |r| {
                 const info = std.fmt.bufPrint(
                     &infoBuffer,
-                    "ID: {d}\nbuffer = {*}, texture = {*}, dst image layout = {d}\n\n",
+                    "ID: {d}\nbuffer = {*}, texture = {*}, dst image layout = {s}({d})\n\n",
                     .{
                         entry.key_ptr.*,
                         commands.vulkan.buffers.getVkBuffer(r.buffer),
                         commands.pTextureSet.getVkImage(r.texture),
+                        @tagName(@as(VulkanType.VkImageLayout, @enumFromInt(r.dstImageLayout))),
                         r.dstImageLayout,
                     },
                 ) catch continue;
@@ -188,14 +189,18 @@ pub fn printAllInfoToTxt() void {
                             var dstAccessName: [512]u8 = undefined;
                             info = std.fmt.bufPrint(
                                 infoBuffer[len..],
-                                "ID: {d}\nsrcStageMask = {s}, srcAccessMask = {s}, dstStageMask = {s}, dstAccessMask = {s}, srcQueueFamilyIndex = {s}" ++
+                                "ID: {d}\nsrcStageMask = {s}({d}), srcAccessMask = {s}({d}), dstStageMask = {s}({d}), dstAccessMask = {s}({d}), srcQueueFamilyIndex = {s}" ++
                                     ", dstQueueFamilyIndex = {s}, buffer = {*}, offset = {d}, size = {d}\n\n",
                                 .{
                                     entry.key_ptr.*,
                                     vkValueName(VulkanType.VkPipelineStageFlagBits2, &srcStageName, b.srcStageMask),
+                                    b.srcStageMask,
                                     vkValueName(VulkanType.VkAccessFlagBits2, &srcAccessName, b.srcAccessMask),
+                                    b.srcAccessMask,
                                     vkValueName(VulkanType.VkPipelineStageFlagBits2, &dstStageName, b.dstStageMask),
+                                    b.dstStageMask,
                                     vkValueName(VulkanType.VkAccessFlagBits2, &dstAccessName, b.dstAccessMask),
+                                    b.dstAccessMask,
                                     @tagName(commands.vulkan.getQueueType(b.srcQueueFamilyIndex)),
                                     @tagName(commands.vulkan.getQueueType(b.dstQueueFamilyIndex)),
                                     b.buffer,
@@ -211,16 +216,22 @@ pub fn printAllInfoToTxt() void {
                             var dstAccessName: [512]u8 = undefined;
                             info = std.fmt.bufPrint(
                                 infoBuffer[len..],
-                                "ID: {d}\nsrcStageMask = {s}, srcAccessMask = {s}, dstStageMask = {s}, dstAccessMask = {s}, oldLayout = {s}" ++
-                                    ", newLayout = {s}, srcQueueFamilyIndex = {s}, dstQueueFamilyIndex = {s}, image = {*}, subresourceRange ={}\n\n",
+                                "ID: {d}\nsrcStageMask = {s}({d}), srcAccessMask = {s}({d}), dstStageMask = {s}({d}), dstAccessMask = {s}({d}), oldLayout = {s}({d})" ++
+                                    ", newLayout = {s}({d}), srcQueueFamilyIndex = {s}, dstQueueFamilyIndex = {s}, image = {*}, subresourceRange ={}\n\n",
                                 .{
                                     entry.key_ptr.*,
                                     vkValueName(VulkanType.VkPipelineStageFlagBits2, &srcStageName, b.srcStageMask),
+                                    b.srcStageMask,
                                     vkValueName(VulkanType.VkAccessFlagBits2, &srcAccessName, b.srcAccessMask),
+                                    b.srcAccessMask,
                                     vkValueName(VulkanType.VkPipelineStageFlagBits2, &dstStageName, b.dstStageMask),
+                                    b.dstStageMask,
                                     vkValueName(VulkanType.VkAccessFlagBits2, &dstAccessName, b.dstAccessMask),
+                                    b.dstAccessMask,
                                     @tagName(@as(VulkanType.VkImageLayout, @enumFromInt(b.oldLayout))),
+                                    b.oldLayout,
                                     @tagName(@as(VulkanType.VkImageLayout, @enumFromInt(b.newLayout))),
+                                    b.newLayout,
                                     @tagName(commands.vulkan.getQueueType(b.srcQueueFamilyIndex)),
                                     @tagName(commands.vulkan.getQueueType(b.dstQueueFamilyIndex)),
                                     b.image,
