@@ -584,15 +584,15 @@ pub fn pickPhysicalDevice(instance: vk.VkInstance, allocator: std.mem.Allocator,
         if (supported) {
             switch (deviceProperty2.properties.deviceType) {
                 vk.VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU => {
-                    // resIndex = @intCast(i + 1);
-                    // biggestMemory = @max(biggestMemory, memoryCount);
+                    resIndex = @intCast(i + 1);
+                    biggestMemory = @max(biggestMemory, memoryCount);
 
-                    // gpuType = deviceProperty2.properties.deviceType;
+                    gpuType = deviceProperty2.properties.deviceType;
 
-                    // unsupportedCount = innerUnsupportedCount;
-                    // originalCount = innerOriginalCount;
+                    unsupportedCount = innerUnsupportedCount;
+                    originalCount = innerOriginalCount;
 
-                    // std.log.debug("device: choosed {s}", .{@tagName(@as(VkPhysicalType, @enumFromInt(deviceProperty2.properties.deviceType)))});
+                    std.log.debug("device: choosed {s}", .{@tagName(@as(VkPhysicalType, @enumFromInt(deviceProperty2.properties.deviceType)))});
                 },
                 vk.VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU => {
                     if (resIndex == 0) {

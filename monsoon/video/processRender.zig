@@ -387,10 +387,10 @@ fn Graph(T: type) type {
                 // if (self.ID == 49 and ID.* == 51) {
                 //     @breakpoint();
                 // }
-                // if (self.ID == 11 and ID.* == 52) {
+                // if (self.ID == 9 and ID.* == 10) {
                 //     @breakpoint();
                 // }
-                // if (self.ID == 51 and ID.* == 16) {
+                // if (self.ID == 15 and ID.* == 16) {
                 //     @breakpoint();
                 // }
                 // if (self.ID == 52 and ID.* == 49) {
@@ -1144,6 +1144,24 @@ pub const commands = struct {
         node: *QueueNode,
         ID: u32,
     };
+
+    const QueueChain = struct {
+        nodesA: []?*QueueNode = &.{},
+        nodesB: []?*QueueNode = &.{},
+        a: u32 = 0,
+        b: u32 = 0,
+
+        lastA: ?*QueueNode = null,
+        midA: ?*QueueNode = null,
+        lastB: ?*QueueNode = null,
+        midB: ?*QueueNode = null,
+
+        midBidxs: []i32 = &.{},
+        bx: u32 = 0,
+        lastSrcStageMask: vk.VkPipelineStageFlags2 = std.math.maxInt(u64),
+        queueType: VkStruct.CommandPoolType = .init,
+    };
+
     const Rendering = struct {
         flags: vk.VkRenderingFlags = 0,
         renderArea: vk.VkRect2D = std.mem.zeroes(vk.VkRect2D),
@@ -2868,13 +2886,22 @@ pub const commands = struct {
         return transNode;
     }
 
+    fn pipelineBarrierNodeConnectQueueIndex(queueType: VkStruct.CommandPoolType) u32 {
+        return switch (queueType) {
+            .graphic => 0,
+            .transfer => 1,
+            .compute => 2,
+            else => unreachable,
+        };
+    }
+
     fn pipelineBarrierNodeConnect(
         self: *Self,
         nodes: []twoQueueNode,
         graphicCurrentNode: *?*QueueNode,
         computeCurrentNode: *?*QueueNode,
         transferCurrentNode: *?*QueueNode,
-    ) ![3]twoQueueNode {
+    ) ![3]QueueChain {
         const zone = tracy.initZone(@src(), .{ .name = "pipeline barrier node connect" });
         defer zone.deinit();
 
@@ -2895,31 +2922,16 @@ pub const commands = struct {
         //     idx: i32 = -1,
         // };
 
-        const QueueChain = struct {
-            nodesA: []?*QueueNode,
-            nodesB: []?*QueueNode,
-            a: u32 = 0,
-            b: u32 = 0,
-
-            lastA: ?*QueueNode = null,
-            midA: ?*QueueNode = null,
-            lastB: ?*QueueNode = null,
-            midB: ?*QueueNode = null,
-
-            midBidxs: []i32,
-            bx: u32 = 0,
-            lastSrcStageMask: vk.VkPipelineStageFlags2 = std.math.maxInt(u64),
-        };
-
-        const queueTypes = [_]VkStruct.CommandPoolType{ .graphic, .compute, .transfer };
+        const queueTypes = [_]VkStruct.CommandPoolType{ .graphic, .transfer, .compute };
 
         var chains: [3]QueueChain = undefined;
 
-        for (&chains, queueTypes) |*chain, _| {
+        for (&chains, queueTypes) |*chain, qType| {
             chain.* = .{
                 .nodesA = allocator.alloc(?*QueueNode, nodes.len) catch unreachable,
                 .nodesB = allocator.alloc(?*QueueNode, nodes.len) catch unreachable,
                 .midBidxs = allocator.alloc(i32, nodes.len) catch unreachable,
+                .queueType = qType,
             };
             for (chain.nodesA, chain.nodesB, chain.midBidxs) |
                 *a,
@@ -2931,25 +2943,12 @@ pub const commands = struct {
                 c.* = -1;
             }
         }
-        defer {
-            for (&chains) |*chain| {
-                allocator.free(chain.nodesA);
-                allocator.free(chain.nodesB);
-            }
-        }
 
         for (nodes, 0..) |node, i| {
             if (node.a) |a| {
                 const queueType = a.data.commandPoolType;
 
-                const chain = &chains[
-                    switch (queueType) {
-                        .graphic => 0,
-                        .compute => 1,
-                        .transfer => 2,
-                        else => unreachable,
-                    }
-                ];
+                const chain = &chains[pipelineBarrierNodeConnectQueueIndex(queueType)];
 
                 if (chain.a == 0) {
                     chain.lastA = a;
@@ -2969,14 +2968,7 @@ pub const commands = struct {
 
             if (node.b) |b| {
                 const queueType = b.data.commandPoolType;
-                const chain = &chains[
-                    switch (queueType) {
-                        .graphic => 0,
-                        .compute => 1,
-                        .transfer => 2,
-                        else => unreachable,
-                    }
-                ];
+                const chain = &chains[pipelineBarrierNodeConnectQueueIndex(queueType)];
 
                 if (chain.b == 0) {
                     chain.lastB = b;
@@ -3019,47 +3011,35 @@ pub const commands = struct {
                 }
             }
         }
-
-        var result: [3]twoQueueNode = undefined;
-        @memset(&result, twoQueueNode{});
-        for (chains, queueTypes) |cha, queueType| {
-            if (cha.bx != 0) {
-                for (cha.midBidxs[0..cha.bx]) |bidx| {
-                    const pairedA = nodes[@intCast(bidx)].a.?;
-                    const qType = pairedA.data.commandPoolType;
-
-                    const chain = &chains[
-                        switch (qType) {
-                            .graphic => 0,
-                            .compute => 1,
-                            .transfer => 2,
-                            else => unreachable,
-                        }
-                    ];
-                    try self.nodeConnect(chain.midA.?, cha.midB.?);
-                }
-            }
-
-            if (cha.midA != null and cha.midB != null) {
-                try self.nodeConnect(cha.midA.?, cha.midB.?);
-            }
-
-            if (cha.lastA != null) {
-                const srcStageMask = &self.queue.getPtr(cha.lastA.?.ID).?.command.pipelineBarrier.lastSrcStageMask;
-                srcStageMask.* = cha.lastSrcStageMask;
-            }
-
-            const res = twoQueueNode{ .a = cha.lastA, .b = if (cha.lastB == null) cha.midA else cha.lastB };
-            switch (queueType) {
-                .graphic => result[0] = res,
-                .compute => result[1] = res,
-                .transfer => result[2] = res,
-                else => unreachable,
-            }
-        }
         graphicCurrentNode.* = chains[0].lastA;
         computeCurrentNode.* = chains[1].lastA;
         transferCurrentNode.* = chains[2].lastA;
+
+        // var result: [3]twoQueueNode = undefined;
+        // @memset(&result, twoQueueNode{});
+        // for (chains) |cha| {
+        //     if (cha.bx != 0) {
+        //         for (cha.midBidxs[0..cha.bx]) |bidx| {
+        //             const pairedA = nodes[@intCast(bidx)].a.?;
+        //             const qType = pairedA.data.commandPoolType;
+
+        //             const chain = &chains[pipelineBarrierNodeConnectQueueIndex(qType)];
+        //             try self.nodeConnect(chain.midA.?, cha.midB.?);
+        //         }
+        //     }
+
+        //     if (cha.midA != null and cha.midB != null) {
+        //         try self.nodeConnect(cha.midA.?, cha.midB.?);
+        //     }
+
+        //     if (cha.lastA != null) {
+        //         const srcStageMask = &self.queue.getPtr(cha.lastA.?.ID).?.command.pipelineBarrier.lastSrcStageMask;
+        //         srcStageMask.* = cha.lastSrcStageMask;
+        //     }
+
+        //     const res = twoQueueNode{ .a = cha.lastA, .b = if (cha.lastB == null) cha.midA else cha.lastB };
+        //     result[pipelineBarrierNodeConnectQueueIndex(cha.queueType)] = res;
+        // }
 
         if (graphicCurrentNode.* == null and computeCurrentNode.* == null and transferCurrentNode.* == null) {
             graphicCurrentNode.* = self.nodeDag.map.get(0).?;
@@ -3067,7 +3047,7 @@ pub const commands = struct {
             transferCurrentNode.* = self.nodeDag.map.get(0).?;
         }
 
-        return result;
+        return chains;
     }
 
     fn bindVertexBuffer(
@@ -3120,6 +3100,8 @@ pub const commands = struct {
         computeCurrentNode: *?*QueueNode,
         transferCurrentNode: *?*QueueNode,
         renderingNode: *?*QueueNode,
+        chains: *[3]QueueChain,
+        allTwoNodes: *[]twoQueueNode,
         allocator: std.mem.Allocator,
         commandType: drawC.CommandType,
         commandID: u32,
@@ -3134,9 +3116,9 @@ pub const commands = struct {
         const textureLen: u32 = if (textures != null) @intCast(textures.?.len) else 0;
         const totalCount = bufferLen + renderingColorTextureLen + textureLen + 2;
 
-        var totalQueueNodes = try allocator.alloc(twoQueueNode, totalCount);
-        defer allocator.free(totalQueueNodes);
-        for (totalQueueNodes) |*value| {
+        allTwoNodes.* = try allocator.alloc(twoQueueNode, totalCount);
+
+        for (allTwoNodes.*) |*value| {
             value.* = .{};
         }
 
@@ -3154,7 +3136,7 @@ pub const commands = struct {
                         useAsIndirect = true;
                     }
                 }
-                totalQueueNodes[i] = try self.changeBufferQueueHelper(
+                allTwoNodes.*[i] = try self.changeBufferQueueHelper(
                     buffer,
                     .graphic,
                     &bufferOffset,
@@ -3168,7 +3150,7 @@ pub const commands = struct {
 
         if (textures) |ts| {
             for (ts, 0..) |tex, i| {
-                totalQueueNodes[bufferLen + i] = try self.transLayoutHelper(
+                allTwoNodes.*[bufferLen + i] = try self.transLayoutHelper(
                     self.pTextureSet,
                     tex,
                     0,
@@ -3187,7 +3169,7 @@ pub const commands = struct {
                 pRendering.colorAttachments[0..pRendering.colorAttachmentCount],
                 0..,
             ) |value, attachment, i| {
-                totalQueueNodes[bufferLen + textureLen + i] = try self.transLayoutHelper(
+                allTwoNodes.*[bufferLen + textureLen + i] = try self.transLayoutHelper(
                     self.pTextureSet,
                     value,
                     0,
@@ -3227,8 +3209,8 @@ pub const commands = struct {
                 );
             }
 
-            totalQueueNodes[totalQueueNodes.len - 2] = depthImageQueueNode;
-            totalQueueNodes[totalQueueNodes.len - 1] = stencilImageQueueNode;
+            allTwoNodes.*[allTwoNodes.len - 2] = depthImageQueueNode;
+            allTwoNodes.*[allTwoNodes.len - 1] = stencilImageQueueNode;
 
             const beginRenderingQueueNode = try self.addCommand2(.{ .beginRendering = .{
                 .flags = pRendering.flags,
@@ -3257,18 +3239,17 @@ pub const commands = struct {
             renderingNode.* = self.nodeDag.get(renderingRes.value_ptr.*).?;
         }
 
-        const res = try self.pipelineBarrierNodeConnect(
-            totalQueueNodes,
+        chains.* = try self.pipelineBarrierNodeConnect(
+            allTwoNodes.*,
             graphicCurrentNode,
             computeCurrentNode,
             transferCurrentNode,
         );
-        for (res) |value| {
-            if (value.b) |bb| {
+        for (chains.*) |value| {
+            if (value.lastB) |bb| {
                 try self.nodeConnect(bb, renderingNode.*.?);
-                // currentNode.* = bb;
-            } else {
-                // currentNode.* = renderingNode.*.?;
+            } else if (value.midA) |bb| {
+                try self.nodeConnect(bb, renderingNode.*.?);
             }
         }
     }
@@ -3898,6 +3879,9 @@ pub const commands = struct {
         var computeCurrentNode: ?*QueueNode = null;
         var transferCurrentNode: ?*QueueNode = null;
         var renderingCurrentNode: ?*QueueNode = null;
+        var chains: [3]QueueChain = undefined;
+        @memset(&chains, .{});
+        var allTwoNodes: []twoQueueNode = &.{};
 
         const ptr = try self.queue.getOrPut(ID);
         // ptr.value_ptr.ID = ID;
@@ -4093,7 +4077,7 @@ pub const commands = struct {
                 // var nodeA: ?*QueueNode = null;
 
                 var twoNodeIndex: u32 = 0;
-                const allTwoNodes = try allocator.alloc(
+                allTwoNodes = try allocator.alloc(
                     twoQueueNode,
                     pTextures.len + usedBuffers.len,
                 );
@@ -4145,7 +4129,7 @@ pub const commands = struct {
                 //     }
                 // }
 
-                const linkNodes = try self.pipelineBarrierNodeConnect(
+                chains = try self.pipelineBarrierNodeConnect(
                     allTwoNodes,
                     &graphicCurrentNode,
                     &computeCurrentNode,
@@ -4215,8 +4199,10 @@ pub const commands = struct {
                     linkNodeEnd = pushConstantNode.a.?;
                 }
 
-                for (linkNodes) |nodes| {
-                    if (nodes.b) |b| {
+                for (chains) |nodes| {
+                    if (nodes.lastB) |b| {
+                        try self.nodeConnect(b, linkNodeEnd.?);
+                    } else if (nodes.midA) |b| {
                         try self.nodeConnect(b, linkNodeEnd.?);
                     }
                 }
@@ -4473,6 +4459,8 @@ pub const commands = struct {
                     &computeCurrentNode,
                     &transferCurrentNode,
                     &renderingNode,
+                    &chains,
+                    &allTwoNodes,
                     allocator,
                     std.meta.activeTag(command),
                     ID,
@@ -4611,16 +4599,18 @@ pub const commands = struct {
                     false,
                 );
 
-                var nodes = [_]twoQueueNode{ srcBufferNode, dstBufferNode };
-                const res = try self.pipelineBarrierNodeConnect(
-                    &nodes,
+                allTwoNodes = @constCast(&[_]twoQueueNode{ srcBufferNode, dstBufferNode });
+                chains = try self.pipelineBarrierNodeConnect(
+                    allTwoNodes,
                     &graphicCurrentNode,
                     &computeCurrentNode,
                     &transferCurrentNode,
                 );
 
-                for (res) |value| {
-                    if (value.b) |bb| {
+                for (chains) |value| {
+                    if (value.lastB) |bb| {
+                        try self.nodeConnect(bb, node);
+                    } else if (value.midA) |bb| {
                         try self.nodeConnect(bb, node);
                     }
                 }
@@ -4708,16 +4698,18 @@ pub const commands = struct {
                 const dependencyPtr = try dependenciesArray.addOne();
                 self.addBuffer_tDependency(dependencyPtr, copyBufferToImage.buffer);
 
-                var nodes = [_]twoQueueNode{ imageQueueNode, bufferQueueNode };
+                allTwoNodes = @constCast(&[_]twoQueueNode{ imageQueueNode, bufferQueueNode });
 
-                const res = try self.pipelineBarrierNodeConnect(
-                    &nodes,
+                chains = try self.pipelineBarrierNodeConnect(
+                    allTwoNodes,
                     &graphicCurrentNode,
                     &computeCurrentNode,
                     &transferCurrentNode,
                 );
-                for (res) |value| {
-                    if (value.b) |bb| {
+                for (chains) |value| {
+                    if (value.lastB) |bb| {
+                        try self.nodeConnect(bb, node);
+                    } else if (value.midA) |bb| {
                         try self.nodeConnect(bb, node);
                     }
                 }
@@ -4770,9 +4762,7 @@ pub const commands = struct {
                     if (dependencyNode.ID >= startID and dependencyNode.ID <= endID) {
                         continue;
                     }
-                    if (dependencyNode.ID == currentNode.ID) {
-                        continue;
-                    }
+
                     if (dependencyNode.data.commandPoolType == currentNode.data.commandPoolType) {
                         const depEndID =
                             self.nodeDag.toEnd(dependencyNode.ID) orelse dependencyNode.ID;
@@ -4793,72 +4783,40 @@ pub const commands = struct {
                     const cmd = pCommand.?;
 
                     if (cmd.command != .pipelineBarrier) {
-                        const secondLinked = false;
+                        const zone4 = tracy.initZone(@src(), .{ .name = "infer dependency 3" });
+                        defer zone4.deinit();
 
-                        // switch (dependencyNode.data.commandPoolType) {
-                        //     .transfer => {
-                        //         if (transferCurrentNode) |dNode| {
-                        //             try self.nodeConnect(dependencyNode, dNode);
+                        const currentEndID = self.nodeDag.toEnd(currentNode.ID);
+                        if (currentEndID) |ceid| {
+                            var tempNode: ?*QueueNode = currentNode;
+                            while (tempNode.?.data.commandPoolType != dependencyNode.data.commandPoolType) {
+                                var tempIdx: u32 = 0;
+                                var childID = tempNode.?.children.list.items[tempIdx].*;
+                                var childEndID = self.nodeDag.toEnd(childID) orelse childID;
 
-                        //             dependencyLinked = true;
-                        //             secondLinked = true;
-                        //         }
-                        //     },
-                        //     .compute => {
-                        //         if (computeCurrentNode) |dNode| {
-                        //             try self.nodeConnect(dependencyNode, dNode);
-
-                        //             dependencyLinked = true;
-                        //             secondLinked = true;
-                        //         }
-                        //     },
-                        //     .graphic => {
-                        //         if (graphicCurrentNode) |dNode| {
-                        //             try self.nodeConnect(dependencyNode, dNode);
-
-                        //             dependencyLinked = true;
-                        //             secondLinked = true;
-                        //         }
-                        //     },
-                        //     else => unreachable,
-                        // }
-
-                        if (!secondLinked) {
-                            const zone4 = tracy.initZone(@src(), .{ .name = "infer dependency 3" });
-                            defer zone4.deinit();
-
-                            const currentEndID = self.nodeDag.toEnd(currentNode.ID);
-                            if (currentEndID) |ceid| {
-                                var tempNode: ?*QueueNode = currentNode;
-                                while (tempNode.?.data.commandPoolType != dependencyNode.data.commandPoolType) {
-                                    var tempIdx: u32 = 0;
-                                    var childID = tempNode.?.children.list.items[tempIdx].*;
-                                    var childEndID = self.nodeDag.toEnd(childID) orelse childID;
-
-                                    while (ceid != childEndID) {
-                                        tempIdx += 1;
-                                        if (tempIdx >= tempNode.?.childrenLen) break;
-                                        childID = tempNode.?.children.list.items[tempIdx].*;
-                                        childEndID = self.nodeDag.toEnd(childID) orelse childID;
-                                    } else {
-                                        tempNode = self.nodeDag.get(childID);
-                                    }
-
-                                    if (childID == childEndID) {
-                                        tempNode = null;
-                                        break;
-                                    }
+                                while (ceid != childEndID) {
+                                    tempIdx += 1;
+                                    if (tempIdx >= tempNode.?.childrenLen) break;
+                                    childID = tempNode.?.children.list.items[tempIdx].*;
+                                    childEndID = self.nodeDag.toEnd(childID) orelse childID;
+                                } else {
+                                    tempNode = self.nodeDag.get(childID);
                                 }
-                                if (tempNode) |n| {
-                                    const skipEndId =
-                                        self.nodeDag.toEnd(dependencyNode.ID) orelse dependencyNode.ID;
-                                    const finalEndId =
-                                        self.nodeDag.toEnd(n.ID) orelse n.ID;
 
-                                    if (skipEndId == finalEndId) continue;
-
-                                    try self.nodeConnect(dependencyNode, n);
+                                if (childID == childEndID) {
+                                    tempNode = null;
+                                    break;
                                 }
+                            }
+                            if (tempNode) |n| {
+                                const skipEndId =
+                                    self.nodeDag.toEnd(dependencyNode.ID) orelse dependencyNode.ID;
+                                const finalEndId =
+                                    self.nodeDag.toEnd(n.ID) orelse n.ID;
+
+                                if (skipEndId == finalEndId) continue;
+
+                                try self.nodeConnect(dependencyNode, n);
                             }
                         }
 
@@ -4866,18 +4824,56 @@ pub const commands = struct {
                     }
                 }
 
-                if (!dependencyLinked) {
-                    const root = self.nodeDag.get(0).?;
-                    try self.nodeConnect(root, currentNode);
-                }
+                // if (!dependencyLinked) {
+                //     const root = self.nodeDag.get(0).?;
+                //     try self.nodeConnect(root, currentNode);
+                // }
 
-                if (currentNode.parentsLen == 0) {
-                    const root = self.nodeDag.get(0).?;
-                    try self.nodeConnect(root, currentNode);
-                }
+                // if (currentNode.parentsLen == 0) {
+                //     const root = self.nodeDag.get(0).?;
+                //     try self.nodeConnect(root, currentNode);
+                // }
             }
         }
         zone3.deinit();
+
+        for (currentNodes, &chains) |currentNode, *cha| {
+            if (cha.midA != null and cha.midB != null) {
+                try self.nodeConnect(cha.midA.?, cha.midB.?);
+            }
+
+            if (currentNode != null and currentNode.?.parentsLen == 0) {
+                cha.midB = currentNode;
+            }
+            if (cha.bx != 0) {
+                for (cha.midBidxs[0..cha.bx]) |bidx| {
+                    const pairedA = allTwoNodes[@intCast(bidx)].a.?;
+                    const qType = pairedA.data.commandPoolType;
+
+                    const chain = &chains[pipelineBarrierNodeConnectQueueIndex(qType)];
+                    try self.nodeConnect(chain.midA.?, cha.midB.?);
+                }
+            }
+
+            //     if (cha.midA != null and cha.midB != null) {
+            //         try self.nodeConnect(cha.midA.?, cha.midB.?);
+            //     }
+
+            if (cha.lastA != null) {
+                const srcStageMask = &self.queue.getPtr(cha.lastA.?.ID).?.command.pipelineBarrier.lastSrcStageMask;
+                srcStageMask.* = cha.lastSrcStageMask;
+            }
+
+            //     const res = twoQueueNode{ .a = cha.lastA, .b = if (cha.lastB == null) cha.midA else cha.lastB };
+            //     result[pipelineBarrierNodeConnectQueueIndex(cha.queueType)] = res;
+        }
+
+        for (currentNodes) |currentNode| {
+            if (currentNode != null and currentNode.?.parentsLen == 0) {
+                const root = self.nodeDag.get(0).?;
+                try self.nodeConnect(root, currentNode.?);
+            }
+        }
 
         for (needToCacheArray.items) |value| {
             try self.cacheMap.put(value.ptr, value.index);

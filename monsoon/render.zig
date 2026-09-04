@@ -285,7 +285,7 @@ pub fn render_thread_func(args: Args) !void {
             // _ = frame;
 
             if (frame == 0) {
-                global.nodeChildrenAppendBreakPoint = true;
+                // global.nodeChildrenAppendBreakPoint = true;
                 // global.stopNodeDagPrint = false;
                 // global.printDagToDot = true;
                 // global.game_end.store(1, .seq_cst);
@@ -455,8 +455,8 @@ pub fn render_thread_func(args: Args) !void {
             try commands.addCommandEnd();
 
             if (global.nodeChildrenAppendBreakPoint) {
-                renderDebug.printToDot();
-                renderDebug.printAllInfoToTxt();
+                // renderDebug.printToDot();
+                // renderDebug.printAllInfoToTxt();
                 // global.game_end.store(1, .seq_cst);
                 global.nodeChildrenAppendBreakPoint = false;
             }
@@ -465,6 +465,7 @@ pub fn render_thread_func(args: Args) !void {
                 // renderDebug.printToDot();
                 // renderDebug.printAllInfoToTxt();
                 // global.game_end.store(1, .seq_cst);
+                // break;
                 // global.nodeChildrenAppendBreakPoint = false;
             }
 
