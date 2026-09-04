@@ -275,8 +275,8 @@ pub fn update_thread_func(args: Args) !void {
             if (test_C.downIsTrue()) a: {
                 std.log.debug("x", .{});
                 // global.nodeChildrenAppendBreakPoint = true;
-                global.stopNodeDagPrint = false;
-                global.printDagToDot = true;
+
+                // global.game_end.store(1, .seq_cst);
 
                 resourceArray.mutex.lockUncancelable(io);
                 defer resourceArray.mutex.unlock(io);
@@ -364,6 +364,9 @@ pub fn update_thread_func(args: Args) !void {
             }
 
             if (test_E.downIsTrue()) {
+                // global.stopNodeDagPrint = false;
+                global.nodeChildrenAppendBreakPoint = true;
+                // global.printDagToDot = true;
                 stateBufferValue += 1;
             }
 

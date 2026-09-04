@@ -131,6 +131,9 @@ pub fn printAllInfoToTxt() void {
         var infoBuffer = [_]u8{0} ** 10240;
         var len: usize = 0;
         switch (com.?.command) {
+            // .beginRendering => |r| {
+            //     _ = r;
+            // },
             .copyBufferToImageRecord => |r| {
                 const info = std.fmt.bufPrint(
                     &infoBuffer,
@@ -277,6 +280,20 @@ pub fn printAllInfoToTxt() void {
             @tagName(entry.value_ptr.*.data.commandPoolType),
             infoBuffer[0..len],
         }) catch |err| {
+            std.log.err("write err: {s} 8", .{@errorName(err)});
+            return;
+        };
+    }
+
+    for (commands.pTextureSet.array.items) |tex| {
+        fileWriter.interface.print("\ntexture ID {d}, image {*}", .{
+            tex.ID,
+            @as(vk.VkImage, @ptrFromInt(tex.image.vkImage)),
+        }) catch |err| {
+            std.log.err("write err: {s} 8", .{@errorName(err)});
+            return;
+        };
+        fileWriter.flush() catch |err| {
             std.log.err("write err: {s} 8", .{@errorName(err)});
             return;
         };

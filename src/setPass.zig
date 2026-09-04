@@ -754,6 +754,13 @@ fn addIc_TaskCommand(
     // @breakpoint();
     pass.setPushConstants(@as([*]u8, @ptrCast(@alignCast(userdata)))[0..@sizeOf(u32)], 48);
 
+    try commands.addCommand(.fillBuffer, .{ .fillBuffer = .{
+        .buffer = pass.buffer[6],
+        .offset = 0,
+        .size = 4,
+        .value = 0,
+    } });
+
     try commands.addCommand(.computeIndirect, .{ .computeIndirect = .{
         .pipeline = pass.pipeline,
         .descriptorSets = pass.descriptorSet,
@@ -935,13 +942,6 @@ fn addIv_FeatherCommand(
     _ = vulkan;
     _ = textureSet;
     _ = userdata;
-
-    try commands.addCommand(.fillBuffer, .{ .fillBuffer = .{
-        .buffer = pass.buffer[0],
-        .offset = 0,
-        .size = 4,
-        .value = 0,
-    } });
 
     try commands.addCommand(.drawIndirect, .{ .drawIndirect = .{
         .descriptorSets = pass.descriptorSet,

@@ -384,16 +384,16 @@ fn Graph(T: type) type {
             if (self.ID == ID.*) return;
 
             if (global.nodeChildrenAppendBreakPoint) {
-                // if (self.ID == 9 and ID.* == 10) {
+                // if (self.ID == 49 and ID.* == 51) {
                 //     @breakpoint();
                 // }
-                // if (self.ID == 10 and ID.* == 13) {
+                // if (self.ID == 11 and ID.* == 52) {
                 //     @breakpoint();
                 // }
-                // if (self.ID == 9 and ID.* == 13) {
+                // if (self.ID == 51 and ID.* == 16) {
                 //     @breakpoint();
                 // }
-                // if (self.ID == 0 and ID.* == 18) {
+                // if (self.ID == 52 and ID.* == 49) {
                 //     @breakpoint();
                 // }
             }
@@ -605,13 +605,15 @@ fn DAG(T: type) type {
             // if (self.innerID != 0)
             //     std.log.debug("ID {d}", .{self.innerID});
 
-            // if (self.innerID == 5) @breakpoint();
-            // if (self.innerID == 33) @breakpoint();
-            // if (self.innerID == 35) @breakpoint();
-            // if (self.innerID == 41) @breakpoint();
-            // if (self.innerID == 39) @breakpoint();
-            // if (self.innerID == 15) @breakpoint();
-            // if (self.innerID == 18) @breakpoint();
+            if (global.nodeChildrenAppendBreakPoint) {
+                // if (self.innerID == 50) @breakpoint();
+                // if (self.innerID == 31) @breakpoint();
+                // if (self.innerID == 35) @breakpoint();
+                // if (self.innerID == 45) @breakpoint();
+                // if (self.innerID == 52) @breakpoint();
+                // if (self.innerID == 15) @breakpoint();
+                // if (self.innerID == 9) @breakpoint();
+            }
 
             self.innerID += 1;
 
@@ -2541,7 +2543,7 @@ pub const commands = struct {
                         };
                         break :blk node;
                     };
-                    node.data.commandPoolType = .graphic;
+                    node.data.commandPoolType = if (self.vulkan.queueTypeCount > 1) changeBufferQueue.dstQueueFamily else .graphic;
                     // if (node.data.commandPoolType == .transfer) {
                     //     @breakpoint();
                     // }
@@ -2685,7 +2687,7 @@ pub const commands = struct {
                 // rootNode.listID = self.nodeDag.currentListID;
                 if (self.vulkan.queueTypeCount != 1) {
                     rootNode.data.commandPoolType = switch (enterCommandType) {
-                        .compute => .compute,
+                        .compute, .computeIndirect => .compute,
                         else => .graphic,
                     };
                 } else {
@@ -2981,10 +2983,8 @@ pub const commands = struct {
                     chain.midB = b;
                 }
 
-                if (b == chain.midB) {
-                    chain.midBidxs[chain.bx] = @intCast(i);
-                    chain.bx += 1;
-                }
+                chain.midBidxs[chain.bx] = @intCast(i);
+                chain.bx += 1;
 
                 for (chain.nodesB) |value| {
                     if (value == null) {
@@ -3040,6 +3040,10 @@ pub const commands = struct {
                 }
             }
 
+            if (cha.midA != null and cha.midB != null) {
+                try self.nodeConnect(cha.midA.?, cha.midB.?);
+            }
+
             if (cha.lastA != null) {
                 const srcStageMask = &self.queue.getPtr(cha.lastA.?.ID).?.command.pipelineBarrier.lastSrcStageMask;
                 srcStageMask.* = cha.lastSrcStageMask;
@@ -3056,6 +3060,12 @@ pub const commands = struct {
         graphicCurrentNode.* = chains[0].lastA;
         computeCurrentNode.* = chains[1].lastA;
         transferCurrentNode.* = chains[2].lastA;
+
+        if (graphicCurrentNode.* == null and computeCurrentNode.* == null and transferCurrentNode.* == null) {
+            graphicCurrentNode.* = self.nodeDag.map.get(0).?;
+            computeCurrentNode.* = self.nodeDag.map.get(0).?;
+            transferCurrentNode.* = self.nodeDag.map.get(0).?;
+        }
 
         return result;
     }
@@ -3932,7 +3942,7 @@ pub const commands = struct {
                     },
                 };
 
-                node.data.commandPoolType = dstBufferQueueType;
+                node.data.commandPoolType = if (self.vulkan.queueTypeCount > 1) dstBufferQueueType else .graphic;
 
                 // if (global.nodeChildrenAppendBreakPoint) {
                 //     if (ID == 20) @breakpoint();
@@ -3970,14 +3980,14 @@ pub const commands = struct {
                 };
 
                 var currentNode: ?*QueueNode = null;
-                if (bufferNode.a) |a| {
-                    try self.nodeConnect(a, node);
-
-                    currentNode = bufferNode.a.?;
-                } else if (bufferNode.b) |b| {
+                if (bufferNode.b) |b| {
                     try self.nodeConnect(bufferNode.a.?, b);
 
                     try self.nodeConnect(b, node);
+
+                    currentNode = bufferNode.a.?;
+                } else if (bufferNode.a) |a| {
+                    try self.nodeConnect(a, node);
 
                     currentNode = bufferNode.a.?;
                 } else {
@@ -4736,9 +4746,10 @@ pub const commands = struct {
 
         const currentNodes = [3]?*QueueNode{ graphicCurrentNode, transferCurrentNode, computeCurrentNode };
 
-        for (currentNodes) |currentNode_| {
+        for (currentNodes, 0..) |currentNode_, i| {
             const currentNode = if (currentNode_ != null) currentNode_.? else continue;
-
+            _ = i;
+            // std.log.debug("queue {d}", .{i});
             const comm = self.queue.get(currentNode.ID).?;
             if (comm.command == .start) {
                 // if (command != .present) {
@@ -4782,35 +4793,35 @@ pub const commands = struct {
                     const cmd = pCommand.?;
 
                     if (cmd.command != .pipelineBarrier) {
-                        var secondLinked = false;
+                        const secondLinked = false;
 
-                        switch (dependencyNode.data.commandPoolType) {
-                            .transfer => {
-                                if (transferCurrentNode) |dNode| {
-                                    try self.nodeConnect(dependencyNode, dNode);
+                        // switch (dependencyNode.data.commandPoolType) {
+                        //     .transfer => {
+                        //         if (transferCurrentNode) |dNode| {
+                        //             try self.nodeConnect(dependencyNode, dNode);
 
-                                    dependencyLinked = true;
-                                    secondLinked = true;
-                                }
-                            },
-                            .compute => {
-                                if (computeCurrentNode) |dNode| {
-                                    try self.nodeConnect(dependencyNode, dNode);
+                        //             dependencyLinked = true;
+                        //             secondLinked = true;
+                        //         }
+                        //     },
+                        //     .compute => {
+                        //         if (computeCurrentNode) |dNode| {
+                        //             try self.nodeConnect(dependencyNode, dNode);
 
-                                    dependencyLinked = true;
-                                    secondLinked = true;
-                                }
-                            },
-                            .graphic => {
-                                if (graphicCurrentNode) |dNode| {
-                                    try self.nodeConnect(dependencyNode, dNode);
+                        //             dependencyLinked = true;
+                        //             secondLinked = true;
+                        //         }
+                        //     },
+                        //     .graphic => {
+                        //         if (graphicCurrentNode) |dNode| {
+                        //             try self.nodeConnect(dependencyNode, dNode);
 
-                                    dependencyLinked = true;
-                                    secondLinked = true;
-                                }
-                            },
-                            else => unreachable,
-                        }
+                        //             dependencyLinked = true;
+                        //             secondLinked = true;
+                        //         }
+                        //     },
+                        //     else => unreachable,
+                        // }
 
                         if (!secondLinked) {
                             const zone4 = tracy.initZone(@src(), .{ .name = "infer dependency 3" });
@@ -4872,9 +4883,13 @@ pub const commands = struct {
             try self.cacheMap.put(value.ptr, value.index);
         }
 
-        // renderDebug.printToDot();
-        // renderDebug.printAllInfoToTxt();
-        // @breakpoint();
+        if (global.nodeChildrenAppendBreakPoint) {
+            // renderDebug.printToDot();
+            // renderDebug.printAllInfoToTxt();
+            // global.game_end.store(1, .seq_cst);
+
+            // @breakpoint();
+        }
         // self.nodeDag.print();
     }
 

@@ -285,10 +285,10 @@ pub fn render_thread_func(args: Args) !void {
             // _ = frame;
 
             if (frame == 0) {
-                // global.nodeChildrenAppendBreakPoint = true;
+                global.nodeChildrenAppendBreakPoint = true;
                 // global.stopNodeDagPrint = false;
                 // global.printDagToDot = true;
-                global.game_end.store(1, .seq_cst);
+                // global.game_end.store(1, .seq_cst);
                 // global.stopNodeDagDetailPrint = false;
                 // global.storExecuteSequencePrint = false;
                 //     passes.enablePass("indirect2D");
@@ -454,10 +454,18 @@ pub fn render_thread_func(args: Args) !void {
 
             try commands.addCommandEnd();
 
-            if (frame == 0) {
+            if (global.nodeChildrenAppendBreakPoint) {
                 renderDebug.printToDot();
                 renderDebug.printAllInfoToTxt();
                 // global.game_end.store(1, .seq_cst);
+                global.nodeChildrenAppendBreakPoint = false;
+            }
+
+            if (frame == 0) {
+                // renderDebug.printToDot();
+                // renderDebug.printAllInfoToTxt();
+                // global.game_end.store(1, .seq_cst);
+                // global.nodeChildrenAppendBreakPoint = false;
             }
 
             vulkan.writeCachedDescriptorSetResources();
