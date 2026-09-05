@@ -166,7 +166,7 @@ pub fn rollback(self: *Self) void {
 }
 
 pub fn commit(self: *Self) void {
-    // std.log.debug("commit", .{});
+    std.log.debug("commit", .{});
     _ = sqlite.sqlite3_exec(self.db, "COMMIT;", null, null, null);
 }
 

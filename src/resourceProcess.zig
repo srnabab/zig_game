@@ -15,6 +15,7 @@ const ktx2 = @import("resourceProcess/ktx2.zig");
 const loadmap = @import("resourceProcess/loadmap.zig");
 const lMap = @import("resourceProcess/lMap.zig");
 const binary = @import("resourceProcess/binary.zig");
+const scene = @import("resourceProcess/scene.zig");
 
 // shared
 const tables = @import("tables");
@@ -149,6 +150,7 @@ pub const ProcessType = enum {
     LoadMap,
     LMap,
     Binary,
+    Scene,
 };
 
 const KV = struct {
@@ -182,6 +184,7 @@ pub const list = [_]KV{
     .{ ".loadmap", ProcessType.LoadMap },
     .{ ".lMap", ProcessType.LMap },
     .{ ".binary", ProcessType.Binary },
+    .{ ".scene", ProcessType.Scene },
 };
 
 const HandleType = @import("handle").ResourceType;
@@ -311,10 +314,11 @@ pub const Example_Cooker = struct {
         _ = io;
         _ = gpa;
         _ = contentFolderPath;
-        _ = fileName;
+
         _ = content;
         _ = fullPath;
         _ = database;
+        std.log.debug("skip {s}", .{fileName});
     }
 
     pub fn judgeFileType2(content: []u8, fType: ProcessType) ProcessType {
@@ -362,6 +366,7 @@ pub const Sampler_Cooker = sampler.Sampler_Cooker;
 pub const Shader_Cooker = shader.Shader_Cooker;
 pub const Pipeline_Cooker = pipeline.Pipeline_Cooker;
 pub const LoadMap_Cooker = loadmap.LoadMap_Cooker;
+pub const Scene_Cooker = scene.Scene_Cooker;
 
 pub const KTX2_Reader = ktx2.KTX2_Reader;
 pub const VTX_Reader = vtx.VTX_Reader;

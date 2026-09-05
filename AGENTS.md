@@ -68,6 +68,7 @@ The batch scripts in `build_script/` (`shaderCompile.bat`, `pipelineParse.bat`, 
 - **Handle system**: `src/handle/handle.zig` — 10240 handles with `Once` reuse
 - **Pipeline schema**: `schema/pipeline.schema.json` (JSON Schema draft-2020-12) documents the `.pipe` format; enums unconstrained (plain strings), unknown fields allowed
 - **Sampler schema**: `schema/sampler.schema.json` (JSON Schema draft-2020-12) documents the `.samp` format (flat VkSamplerCreateInfo, integer enums); same permissive policy as the pipeline schema
+- **Scene schema**: `Assets/schema/scene.schema.json` (JSON Schema draft-2020-12) — top-level **array** of placed instances, each an object `{pass: string, pos/scale/rotation: number arrays, textures: string array}` (all required) with optional `model: string`; unknown fields rejected (`additionalProperties: false`). Example: `Assets/scene/test.scene`
 - **LoadMap schema**: `Assets/schema/loadmap.schema.json` (JSON Schema draft-2020-12) documents recursive grid loadmap format; `gridLength` required everywhere, `leftUp` required in grids, `items` entries are `{name, isGpu, bufferName(optional string array)}` objects (`name`/`isGpu` required), `passes` string array in root and grids, `depth` is a non-negative parsing-limit-only int, unknown fields rejected (`additionalProperties: false`)
 
 ## lMap binary format

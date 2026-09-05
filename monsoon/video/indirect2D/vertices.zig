@@ -69,34 +69,34 @@ pub fn addInstance(
 }
 
 pub fn uploadInstance(graphic: *Commands, vulkan: *VkStruct) !void {
-    if (instanceUpdated) {
-        const bufferSize = @sizeOf(vertexStruct.Instance) * (updateEnd - updateStart);
-        const stagingBuffer = try vulkan.createBufferByUsage(
-            @intCast(bufferSize),
-            0,
-            .staging,
-            false,
-            null,
-        );
+    if (!instanceUpdated) return;
 
-        vulkan.buffers.copyDataToMapped(stagingBuffer, 0, vertexStruct.Instance, instances2D.items[updateStart..updateEnd]);
+    const bufferSize = @sizeOf(vertexStruct.Instance) * (updateEnd - updateStart);
+    const stagingBuffer = try vulkan.createBufferByUsage(
+        @intCast(bufferSize),
+        0,
+        .staging,
+        false,
+        null,
+    );
 
-        var region = [_]vk.VkBufferCopy2{.{
-            .sType = vk.VK_STRUCTURE_TYPE_BUFFER_COPY_2,
-            .pNext = null,
-            .srcOffset = 0,
-            .dstOffset = updateStart * @sizeOf(vertexStruct.Instance),
-            .size = bufferSize,
-        }};
+    vulkan.buffers.copyDataToMapped(stagingBuffer, 0, vertexStruct.Instance, instances2D.items[updateStart..updateEnd]);
 
-        try graphic.cacheCommand(.{ .copyBuffer = .{
-            .srcBuffer = stagingBuffer,
-            .dstBuffer = instanceBuffer2D,
-            .regions = &region,
-        } });
+    var region = [_]vk.VkBufferCopy2{.{
+        .sType = vk.VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+        .pNext = null,
+        .srcOffset = 0,
+        .dstOffset = updateStart * @sizeOf(vertexStruct.Instance),
+        .size = bufferSize,
+    }};
 
-        instanceUpdated = false;
-    }
+    try graphic.cacheCommand(.{ .copyBuffer = .{
+        .srcBuffer = stagingBuffer,
+        .dstBuffer = instanceBuffer2D,
+        .regions = &region,
+    } });
+
+    instanceUpdated = false;
 }
 
 pub fn getTotalCount() u32 {

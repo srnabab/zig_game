@@ -8,8 +8,6 @@ struct Instance {
     vec3 pos;
     vec2 scale;
     uint textureIndex;
-    uint16_t samplerIndex;
-    uint16_t flag;
 };
 
 layout(buffer_reference, scalar) readonly buffer InstanceBuffer {
@@ -31,7 +29,6 @@ layout(set = 1, binding = 0) uniform UniformBufferObject {
 
 layout(location = 0) out vec2 outUV;
 layout(location = 1) flat out uint outTexIndex;
-layout(location = 2) flat out uint outSamplerIndex;
 
 void main() {
     uint idx = pc.instanceIDs.instanceIDs[gl_InstanceIndex];
@@ -51,5 +48,4 @@ void main() {
     
     outUV = uvs[vIdx];
     outTexIndex = sprite.textureIndex;
-    outSamplerIndex = 0;
 }
