@@ -214,7 +214,7 @@ pub fn update_thread_func(args: Args) !void {
     var accumulateTime: u64 = 0;
     var testHandle: Handle = undefined;
 
-    _ = try resource.readResource(&resourceCtx, &.{}, "test.lMap");
+    _ = try resource.readResource(&resourceCtx, resourceCtx.mainSqlite, &.{}, "test.lMap");
     try Io.sleep(io, .fromMilliseconds(200), .real);
 
     out: while (true) {

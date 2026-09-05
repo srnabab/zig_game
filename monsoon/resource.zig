@@ -148,6 +148,7 @@ pub fn deinit(gpa: Allocator) void {
 
 pub fn readResource(
     ctx: *const ResourceCtx,
+    sqlite: sqlite3,
     buffers: []VkStruct.Buffer_t,
     fileName: []const u8,
 ) !Handle {
@@ -157,7 +158,7 @@ pub fn readResource(
         return idHandleCache.get(fileID).?;
     }
 
-    const fileType = file.getFileType(fileID, ctx.mainSqlite) catch |err| {
+    const fileType = file.getFileType(fileID, sqlite) catch |err| {
         std.log.err("{s}", .{@errorName(err)});
         return err;
     };

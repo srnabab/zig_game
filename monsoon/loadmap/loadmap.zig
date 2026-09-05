@@ -311,6 +311,7 @@ pub fn loadResource(
 
             const h = try resource.readResource(
                 ctx,
+                ctx.mainSqlite,
                 buffers,
                 i.name,
             );
