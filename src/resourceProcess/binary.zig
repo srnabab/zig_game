@@ -29,21 +29,20 @@ pub const Binary_Reader = struct {
 
     pub fn processResource(
         comptime fType: ProcessType,
-        io: Io,
-        gpa: Allocator,
+        ctx: *const resource.ResourceCtx,
         sqlite: sqlite3,
-        vulkan: *VkStruct,
         fileID: i32,
         handle: Handle,
         buffers: ?[]VkStruct.Buffer_t,
-        handles: *global.HandlesType,
         commands: *ExternalCommands,
         uctx: *Ctx,
     ) !u32 {
         _ = fType;
         _ = handle;
         _ = uctx;
-        _ = handles;
+        const io = ctx.io;
+        const gpa = ctx.gpa;
+        const vulkan = ctx.vulkan;
 
         var bin_file = file.getFile(io, fileID, sqlite) catch return Handles.WaitFill;
         defer bin_file.close(io);

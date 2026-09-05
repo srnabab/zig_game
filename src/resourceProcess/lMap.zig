@@ -37,23 +37,20 @@ pub const LMap_Reader = struct {
 
     pub fn processResource(
         comptime fType: ProcessType,
-        io: Io,
-        gpa: Allocator,
+        ctx: *const resource.ResourceCtx,
         sqlite: sqlite3,
-        vulkan: *VkStruct,
         fileID: i32,
         handle: Handle,
         buffers: ?[]VkStruct.Buffer_t,
-        handles: *global.HandlesType,
         commands: *ExternalCommands,
         uctx: *Ctx,
     ) !u32 {
         _ = fType;
-        _ = vulkan;
         _ = handle;
         _ = buffers;
-        _ = handles;
         _ = commands;
+        const io = ctx.io;
+        const gpa = ctx.gpa;
         const lmap = uctx.loadmaps;
 
         var mapFile = file.getFile(io, fileID, sqlite) catch return Handles.WaitFill;

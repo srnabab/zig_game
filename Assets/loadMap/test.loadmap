@@ -21,6 +21,10 @@
             "name": "large_bilied_crow1Blue-violet.binary",
             "isGpu": true,
             "bufferName": ["featherParameters"]
+        },
+        {
+            "name": "test.scene",
+            "isGpu": false
         }
     ],
     "grids": [],

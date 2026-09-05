@@ -1177,6 +1177,7 @@ pub const commands = struct {
     };
 
     mutex: std.Io.Mutex = .init,
+    cacheMutex: [2]std.Io.Mutex = [2]std.Io.Mutex{ .init, .init },
     io: std.Io,
 
     vulkan: *VkStruct,
@@ -1212,7 +1213,8 @@ pub const commands = struct {
     stackAllocators: [global.MaxFrameInFlight]std.heap.FixedBufferAllocator,
     stackAllocatorsIndex: u32 = 0,
 
-    cachedCommand: std.array_list.Managed(drawC.comm),
+    cachedCommands: [2]std.array_list.Managed(drawC.comm),
+    cacheIdx: u32 = 0,
 
     end: bool = false,
 
@@ -1236,6 +1238,8 @@ pub const commands = struct {
 
         const allocator2 = fixedBufferAllocator.threadSafeAllocator();
 
+        const cachedCommands = [_]std.array_list.Managed(drawC.comm){.init(allocator2)} ** 2;
+
         return Self{
             .io = io,
             .queue = .init(allocator2),
@@ -1251,7 +1255,7 @@ pub const commands = struct {
             .allocator = allocator2,
             .heapAllocator = allocator,
             .pTextureSet = pTextureSet,
-            .cachedCommand = .init(allocator2),
+            .cachedCommands = cachedCommands,
             .drawCacheMap = .init(allocator2),
         };
     }
@@ -1276,7 +1280,8 @@ pub const commands = struct {
         self.renderingMap.deinit();
 
         self.u32Mem.deinit(self.allocator);
-        self.cachedCommand.deinit();
+        self.cachedCommands[0].deinit();
+        self.cachedCommands[1].deinit();
         self.drawCacheMap.deinit();
 
         self.fixedBufferAllocator.reset();
@@ -1294,7 +1299,8 @@ pub const commands = struct {
         self.combineMap.clearRetainingCapacity();
 
         self.cacheMap.clearRetainingCapacity();
-        self.cachedCommand.clearRetainingCapacity();
+        self.cachedCommands[0].clearRetainingCapacity();
+        self.cachedCommands[1].clearRetainingCapacity();
         self.drawCacheMap.clearRetainingCapacity();
 
         var it2 = self.renderingMap.iterator();
@@ -1311,7 +1317,7 @@ pub const commands = struct {
         const zone = tracy.initZone(@src(), .{ .name = "mem reset" });
         defer zone.deinit();
 
-        const slice = try self.cachedCommand.toOwnedSlice();
+        const slice = try self.cachedCommands[self.cacheIdx].toOwnedSlice();
         const slice_new = try self.heapAllocator.dupe(drawC.comm, slice);
         defer self.heapAllocator.free(slice_new);
 
@@ -1323,11 +1329,11 @@ pub const commands = struct {
         self.combineMap = .init(self.allocator);
         self.cacheMap = .init(self.allocator);
         self.renderingMap = .init(self.allocator);
-        self.cachedCommand = .init(self.allocator);
+        self.cachedCommands[self.cacheIdx] = .init(self.allocator);
         self.u32Mem = try .initCapacity(self.allocator, 128);
         self.drawCacheMap = .init(self.allocator);
 
-        try self.cachedCommand.appendSlice(slice_new);
+        try self.cachedCommands[self.cacheIdx].appendSlice(slice_new);
     }
 
     pub fn startCommand(self: *Self) !void {
@@ -4939,10 +4945,10 @@ pub const commands = struct {
     }
 
     pub fn cacheCommand(self: *Self, command: drawC.comm) !void {
-        try self.mutex.lock(self.io);
-        defer self.mutex.unlock(self.io);
+        try self.cacheMutex[self.cacheIdx].lock(self.io);
+        defer self.cacheMutex[self.cacheIdx].unlock(self.io);
 
-        const ptr = try self.cachedCommand.addOne();
+        const ptr = try self.cachedCommands[self.cacheIdx].addOne();
         ptr.* = command;
 
         const allocator = self.allocator;
@@ -4964,12 +4970,20 @@ pub const commands = struct {
     }
 
     pub fn addCachedCommand(self: *Self) !void {
-        if (self.cachedCommand.items.len == 0) return;
+        const idx = self.cacheIdx;
+
+        try self.cacheMutex[idx].lock(self.io);
+        defer self.cacheMutex[idx].unlock(self.io);
+
+        self.cacheIdx += 1;
+        self.cacheIdx %= self.cachedCommands.len;
+
+        if (self.cachedCommands[idx].items.len == 0) return;
 
         // const coms = try self.cachedCommand.toOwnedSlice();
         // defer self.allocator.free(coms);
 
-        for (self.cachedCommand.items) |comm| {
+        for (self.cachedCommands[idx].items) |comm| {
             // @breakpoint();
             try self.addCommand(std.meta.activeTag(comm), comm);
 
@@ -4986,7 +5000,7 @@ pub const commands = struct {
                 },
             }
         }
-        self.cachedCommand.clearRetainingCapacity();
+        self.cachedCommands[idx].clearRetainingCapacity();
     }
 
     fn nodeConnect(self: *Self, parent: *QueueNode, child: *QueueNode) !void {

@@ -35,21 +35,19 @@ pub const KTX2_Reader = struct {
 
     pub fn processResource(
         comptime fType: ProcessType,
-        io: Io,
-        gpa: Allocator,
+        ctx: *const resource.ResourceCtx,
         sqlite: sqlite3,
-        vulkan: *VkStruct,
         fileID: i32,
         handle: Handle,
         buffers: ?[]Buffer_t,
-        handles: *global.HandlesType,
         commands: *ExternalCommands,
         uctx: *Ctx,
     ) !u32 {
         _ = fType;
         _ = buffers;
-        _ = handles;
-
+        const io = ctx.io;
+        const gpa = ctx.gpa;
+        const vulkan = ctx.vulkan;
         const pTextureSet = uctx.pTextureSet;
 
         const img = file.getFile(io, fileID, sqlite.?) catch |err| {

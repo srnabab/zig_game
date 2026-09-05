@@ -333,24 +333,18 @@ pub const Example_Reader = struct {
 
     pub fn processResource(
         comptime fType: ProcessType,
-        io: Io,
-        gpa: Allocator,
+        ctx: *const resource.ResourceCtx,
         sqlite: sqlite3,
-        vulkan: *VkStruct,
         fileID: i32,
         handle: Handle,
         buffers: ?[]VkStruct.Buffer_t,
-        handles: *global.HandlesType,
         commands: *ExternalCommands,
         uctx: *Ctx,
-    ) Io.Cancelable!void {
-        _ = io;
-        _ = gpa;
+    ) !u32 {
+        _ = ctx;
         _ = sqlite;
-        _ = vulkan;
         _ = handle;
         _ = buffers;
-        _ = handles;
         _ = commands;
         _ = uctx;
 
@@ -373,6 +367,7 @@ pub const VTX_Reader = vtx.VTX_Reader;
 pub const PNG_Reader = png.PNG_Reader;
 pub const LMap_Reader = lMap.LMap_Reader;
 pub const Binary_Reader = binary.Binary_Reader;
+pub const Scene_Reader = scene.Scene_Reader;
 
 pub const TypeUseExample = [_]ProcessType{
     .DIR,

@@ -116,18 +116,19 @@ pub const VTX_Reader = struct {
     };
     pub fn processResource(
         comptime fType: ProcessType,
-        io: Io,
-        gpa: Allocator,
+        ctx: *const resource.ResourceCtx,
         sqlite: sqlite3,
-        vulkan: *VkStruct,
         fileID: i32,
         handle: Handle,
         buffer_ts: ?[]Buffer_t,
-        handles: *global.HandlesType,
         commands: *ExternalCommands,
         uctx: *Ctx,
     ) !u32 {
         _ = fType;
+        const io = ctx.io;
+        const gpa = ctx.gpa;
+        const vulkan = ctx.vulkan;
+        const handles = ctx.handles;
         const meshes = uctx.meshes;
 
         const res = file.getMeshLoadParam(io, fileID, sqlite) catch |err| {

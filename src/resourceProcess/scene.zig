@@ -2,6 +2,8 @@ const std = @import("std");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 
+const global = @import("global");
+
 const vk = @import("vulkan");
 const tables = @import("tables");
 const resourceProcess = @import("../resourceProcess.zig");
@@ -10,6 +12,15 @@ const db = @import("db");
 const ProcessType = resourceProcess.ProcessType;
 
 const judgeFileTypeByContent = resourceProcess.judgeFileTypeByContent;
+
+const file = @import("fileSystem");
+const sqlite3 = ?*file.sqlite.sqlite3;
+const VkStruct = @import("video");
+const ExternalCommands = @import("processRender").externalCommands;
+const Handles = @import("handle");
+const Handle = Handles.Handle;
+const mstd = @import("ms_std");
+const resource = @import("resource");
 
 pub const Scene_Cooker = struct {
     pub const TableName = "ContentPathT";
@@ -66,5 +77,31 @@ pub const Scene_Cooker = struct {
         _ = content;
 
         return fType;
+    }
+};
+
+pub const Scene_Reader = struct {
+    pub const Ctx = struct {};
+
+    pub fn processResource(
+        comptime fType: ProcessType,
+        ctx: *const resource.ResourceCtx,
+        sqlite: sqlite3,
+        fileID: i32,
+        handle: Handle,
+        buffers: ?[]VkStruct.Buffer_t,
+        commands: *ExternalCommands,
+        uctx: *Ctx,
+    ) !u32 {
+        _ = ctx;
+        _ = sqlite;
+        _ = handle;
+        _ = buffers;
+        _ = commands;
+        _ = uctx;
+
+        std.log.debug("unsupported type {s}, {d}", .{ @tagName(fType), fileID });
+        // unreachable;
+        return Handles.WaitFill;
     }
 };

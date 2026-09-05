@@ -195,7 +195,6 @@ pub fn processResource(args: *const ResourceThreadArgs) Io.Cancelable!void {
     const nameArray = args.ctx.nameArray;
     const handleMutex = args.handleMutex;
     const handleArray = args.handleArray;
-    const vulkan = args.ctx.vulkan;
     const handles = args.ctx.handles;
 
     while (true) {
@@ -232,39 +231,33 @@ pub fn processResource(args: *const ResourceThreadArgs) Io.Cancelable!void {
 
                         const field = @field(resourceProcess, readerName);
 
-                        var ctx: field.Ctx = undefined;
+                        var uctx: field.Ctx = undefined;
                         const ctxInfo = @typeInfo(field.Ctx);
                         inline for (ctxInfo.@"struct".fields) |f| {
-                            @field(ctx, f.name) = &@field(args.uctx, f.name);
+                            @field(uctx, f.name) = &@field(args.uctx, f.name);
                         }
 
                         const index: u32 = field.processResource(
                             t,
-                            io,
-                            gpa,
+                            args.ctx,
                             sqlite.?,
-                            vulkan,
                             pack.id,
                             pack.handle,
                             pack.buffers,
-                            handles,
                             args.externalCommands,
-                            &ctx,
+                            &uctx,
                         ) catch continue;
 
                         handles.setIndex(pack.handle, index);
                     } else {
                         if (comptime resourceProcess.useExample(t)) {
-                            try resourceProcess.Example_Reader.processResource(
+                            _ = try resourceProcess.Example_Reader.processResource(
                                 t,
-                                io,
-                                gpa,
+                                args.ctx,
                                 sqlite.?,
-                                vulkan,
                                 pack.id,
                                 pack.handle,
                                 &.{},
-                                handles,
                                 args.externalCommands,
                                 @constCast(&resourceProcess.Example_Reader.Ctx{}),
                             );

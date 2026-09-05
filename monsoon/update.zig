@@ -215,7 +215,7 @@ pub fn update_thread_func(args: Args) !void {
     var testHandle: Handle = undefined;
 
     _ = try resource.readResource(&resourceCtx, &.{}, "test.lMap");
-    try Io.sleep(io, .fromMilliseconds(100), .real);
+    try Io.sleep(io, .fromMilliseconds(200), .real);
 
     out: while (true) {
         {
