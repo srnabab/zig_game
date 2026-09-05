@@ -126,7 +126,7 @@ pub const VTX_Reader = struct {
         handles: *global.HandlesType,
         commands: *ExternalCommands,
         uctx: *Ctx,
-    ) !void {
+    ) !u32 {
         _ = fType;
         const meshes = uctx.meshes;
 
@@ -268,7 +268,7 @@ pub const VTX_Reader = struct {
         }
         // global.game_end.store(1, .seq_cst);
 
-        _ = try meshes.addMesh(
+        const index = try meshes.addMesh(
             @intCast(fileID),
             buffers[0],
             sizes[0],
@@ -282,5 +282,7 @@ pub const VTX_Reader = struct {
             handle,
         );
         try meshes.upload(commands, buffer_ts.?[4]);
+
+        return index;
     }
 };

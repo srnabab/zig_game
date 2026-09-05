@@ -45,7 +45,7 @@ pub const KTX2_Reader = struct {
         handles: *global.HandlesType,
         commands: *ExternalCommands,
         uctx: *Ctx,
-    ) !void {
+    ) !u32 {
         _ = fType;
         _ = buffers;
         _ = handles;
@@ -192,7 +192,7 @@ pub const KTX2_Reader = struct {
             }
         }
 
-        _ = try pTextureSet.createTextureFromResource(
+        return try pTextureSet.createTextureFromResource(
             io,
             gpa,
             .{
@@ -214,30 +214,5 @@ pub const KTX2_Reader = struct {
             vulkan,
             commands,
         );
-
-        // {
-        //     try resourceArray.mutex.lock(io);
-        //     defer resourceArray.mutex.unlock(io);
-        //     const ptr = resourceArray.array.addOne() catch |err| {
-        //         std.log.err("{s}", .{@errorName(err)});
-        //         return err;
-        //     };
-        //     ptr.* = .{ .texture = .{
-        //         .regions = regions,
-        //         .width = @intCast(imgWidth),
-        //         .height = @intCast(imgHeight),
-        //         .depth = @intCast(imgDepth),
-        //         .baseLayer = 0,
-        //         .layerCount = texture.*.numLayers,
-        //         .mipLevels = texture.*.numLevels,
-        //         .fileID = @intCast(fileID),
-        //         .vkImage = @ptrFromInt(image.vkImage),
-        //         .vkImageView = imageView,
-        //         .allocation = @ptrFromInt(image.allocation),
-        //         .staginfBuffer = stagingBuffer,
-        //         .format = texture.*.vkFormat,
-        //         .handle = handle,
-        //     } };
-        // }
     }
 };

@@ -39,22 +39,22 @@ pub const Binary_Reader = struct {
         handles: *global.HandlesType,
         commands: *ExternalCommands,
         uctx: *Ctx,
-    ) !void {
+    ) !u32 {
         _ = fType;
         _ = handle;
         _ = uctx;
         _ = handles;
 
-        var bin_file = file.getFile(io, fileID, sqlite) catch return;
+        var bin_file = file.getFile(io, fileID, sqlite) catch return Handles.WaitFill;
         defer bin_file.close(io);
 
-        const stat = bin_file.stat(io) catch return;
+        const stat = bin_file.stat(io) catch return Handles.WaitFill;
 
         var buffer = [_]u8{0} ** 256;
         var fileReader = bin_file.reader(io, &buffer);
         const content = fileReader.interface.readAlloc(gpa, stat.size) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
-            return;
+            return Handles.WaitFill;
         };
         defer gpa.free(content);
 
@@ -67,7 +67,7 @@ pub const Binary_Reader = struct {
                 null,
             ) catch |err| {
                 std.log.err("{s}", .{@errorName(err)});
-                return;
+                return Handles.WaitFill;
             };
             errdefer vulkan.destroyBuffer(stagingBuffer);
             vulkan.buffers.copyDataToMapped(stagingBuffer, 0, u8, content);
@@ -90,5 +90,7 @@ pub const Binary_Reader = struct {
         } else {
             std.debug.panic("not implemented", .{});
         }
+
+        return Handles.WaitFill;
     }
 };

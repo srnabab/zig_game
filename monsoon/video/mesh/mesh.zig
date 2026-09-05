@@ -62,9 +62,9 @@ pub fn addMesh(
     meshletTrianglesSize: u64,
     verticeStride: u32,
     handle: ?Handle,
-) !Mesh_t {
+) !u32 {
     if (self.meshMap.get(fileID)) |mesh| {
-        return mesh;
+        return Handles.getIndex(@ptrCast(mesh)).?;
     }
 
     const meshletCount = meshletSize / @sizeOf(vertexStruct.Meshlet);
@@ -129,17 +129,7 @@ pub fn addMesh(
     });
     const index = self.meshs.items.len - 1;
 
-    const finalHandle = bl: {
-        if (handle) |h| {
-            self.handles.setIndex(h, @intCast(index));
-
-            break :bl h;
-        } else {
-            break :bl self.handles.createHandle(@intCast(index), .mesh);
-        }
-    };
-
-    try self.meshMap.put(fileID, @ptrCast(finalHandle));
+    try self.meshMap.put(fileID, @ptrCast(handle));
 
     self.updated = true;
 
@@ -151,7 +141,7 @@ pub fn addMesh(
         self.updateStart = @min(self.updateStart, index);
     }
 
-    return @ptrCast(finalHandle);
+    return @intCast(index);
 }
 
 pub fn getMesh(self: *Self, fileID: u32) !Mesh_t {

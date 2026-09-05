@@ -238,7 +238,7 @@ pub fn processResource(args: *const ResourceThreadArgs) Io.Cancelable!void {
                             @field(ctx, f.name) = &@field(args.uctx, f.name);
                         }
 
-                        field.processResource(
+                        const index: u32 = field.processResource(
                             t,
                             io,
                             gpa,
@@ -251,6 +251,8 @@ pub fn processResource(args: *const ResourceThreadArgs) Io.Cancelable!void {
                             args.externalCommands,
                             &ctx,
                         ) catch continue;
+
+                        handles.setIndex(pack.handle, index);
                     } else {
                         if (comptime resourceProcess.useExample(t)) {
                             try resourceProcess.Example_Reader.processResource(

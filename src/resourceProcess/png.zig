@@ -118,7 +118,7 @@ pub const PNG_Reader = struct {
         handles: *global.HandlesType,
         commands: *ExternalCommands,
         uctx: *Ctx,
-    ) !void {
+    ) !u32 {
         _ = fType;
         _ = buffers;
         _ = handles;
@@ -207,7 +207,7 @@ pub const PNG_Reader = struct {
             },
         };
 
-        _ = try pTextureSet.createTextureFromResource(
+        return try pTextureSet.createTextureFromResource(
             io,
             gpa,
 
@@ -230,31 +230,5 @@ pub const PNG_Reader = struct {
             vulkan,
             commands,
         );
-        // std.log.debug("r {s} {d}", .{ @tagName(fType), frame });
-
-        // {
-        //     try resourceArray.mutex.lock(io);
-        //     defer resourceArray.mutex.unlock(io);
-        //     const ptr = resourceArray.array.addOne() catch |err| {
-        //         std.log.err("{s}", .{@errorName(err)});
-        //         return err;
-        //     };
-        //     ptr.* = .{ .texture = .{
-        //         .width = @intCast(imgWidth),
-        //         .height = @intCast(imgHeight),
-        //         .fileID = @intCast(fileID),
-        //         .vkImage = @ptrFromInt(image.vkImage),
-        //         .vkImageView = imageView,
-        //         .allocation = @ptrFromInt(image.allocation),
-        //         .staginfBuffer = stagingBuffer,
-        //         .format = img.image.format,
-        //         .handle = handle,
-        //         .baseLayer = 0,
-        //         .layerCount = 1,
-        //         .mipLevels = 0,
-        //         .depth = 1,
-        //         .regions = region,
-        //     } };
-        // }
     }
 };

@@ -440,9 +440,10 @@ pub fn createTextureFromResource(
     textureResource: resource.Texture,
     vulkan: *VkStruct,
     commands: *ExternalCommands,
-) !Texture_t {
+) !u32 {
     var texture: *Texture = undefined;
     var texture_t: Texture_t = undefined;
+    var index: u32 = 0;
     defer gpa.free(textureResource.regions);
 
     {
@@ -450,7 +451,7 @@ pub fn createTextureFromResource(
         defer self.mutex.unlock(io);
 
         if (self.map.get(textureResource.fileID)) |value| {
-            return value;
+            return Handles.getIndex(@ptrCast(value)).?;
         }
 
         if (!Handles.typeCompare(textureResource.handle, .texture)) return error.InvalidHandle;
@@ -458,7 +459,7 @@ pub fn createTextureFromResource(
         texture_t = @ptrCast(textureResource.handle);
 
         texture = try self.array.addOne();
-        const index: u32 = @intCast(self.array.items.len - 1);
+        index = @intCast(self.array.items.len - 1);
 
         const layouts = try self.layoutMemory.create(1);
         texture.* = .{
@@ -480,7 +481,6 @@ pub fn createTextureFromResource(
             .extra_imageViews = undefined,
         };
 
-        self.handles.setIndex(@ptrCast(texture_t), index);
         for (0..layouts.len) |i| {
             texture.layouts[i] = vk.VK_IMAGE_LAYOUT_UNDEFINED;
         }
@@ -523,7 +523,7 @@ pub fn createTextureFromResource(
         } },
     );
 
-    return texture_t;
+    return index;
 }
 
 fn acquireDescriptorSetIndex(self: *Self, ID: u32) !u32 {

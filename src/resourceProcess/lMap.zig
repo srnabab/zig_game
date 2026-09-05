@@ -47,7 +47,7 @@ pub const LMap_Reader = struct {
         handles: *global.HandlesType,
         commands: *ExternalCommands,
         uctx: *Ctx,
-    ) Io.Cancelable!void {
+    ) !u32 {
         _ = fType;
         _ = vulkan;
         _ = handle;
@@ -56,20 +56,22 @@ pub const LMap_Reader = struct {
         _ = commands;
         const lmap = uctx.loadmaps;
 
-        var mapFile = file.getFile(io, fileID, sqlite) catch return;
+        var mapFile = file.getFile(io, fileID, sqlite) catch return Handles.WaitFill;
         defer mapFile.close(io);
 
-        const stat = mapFile.stat(io) catch return;
+        const stat = mapFile.stat(io) catch return Handles.WaitFill;
 
         var buffer = [_]u8{0} ** 256;
         var fileReader = mapFile.reader(io, &buffer);
         const content = fileReader.interface.readAlloc(gpa, stat.size) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
-            return;
+            return Handles.WaitFill;
         };
         defer gpa.free(content);
 
-        const load_map = loadMap.loadmap.loadLoadmap(gpa, content) catch return;
+        const load_map = loadMap.loadmap.loadLoadmap(gpa, content) catch return Handles.WaitFill;
         lmap.addMap(load_map, 0);
+
+        return Handles.WaitFill;
     }
 };
