@@ -407,6 +407,8 @@ pub fn main(init: std.process.Init) !void {
                 try cookerInit(io, &cookerArgv, dbPath, dbPathStart);
             };
 
+            std.log.debug("Saving", .{});
+
             continue;
         }
 

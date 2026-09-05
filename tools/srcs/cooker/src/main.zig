@@ -94,7 +94,7 @@ pub fn main(init: std.process.Init) !void {
         const num = try std.fmt.parseInt(u32, b[0..numEnd], 10);
 
         var action_num = num;
-        // std.log.debug("from child: {d}", .{action_num});
+        std.log.debug("from child: {d}", .{action_num});
         if (num > 1000) {
             action_num -= 1000;
             inContent = true;
@@ -109,6 +109,7 @@ pub fn main(init: std.process.Init) !void {
             4 => "rename (old)",
             5 => "rename (new)",
             404 => return,
+            234 => "save",
             else => "unknown",
         };
 
@@ -373,7 +374,7 @@ pub fn main(init: std.process.Init) !void {
                 ) catch continue;
                 pending_old_name = null;
             },
-            1234 => {
+            234 => {
                 if (future) |_| {
                     _ = future.?.await(io) catch |err| std.log.err("AutoCommitter.runMonitor failed: {}", .{err});
                     future = null;
