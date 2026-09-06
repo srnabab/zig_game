@@ -28,6 +28,8 @@ const ExternalCommands = @import("processRender").externalCommands;
 const mesh = @import("mesh");
 const textureSet = @import("textureSet");
 
+const ResourceError = resource.ResourceError;
+
 pub const KTX2_Reader = struct {
     pub const Ctx = struct {
         pTextureSet: *textureSet,
@@ -37,12 +39,12 @@ pub const KTX2_Reader = struct {
         comptime fType: ProcessType,
         ctx: *const resource.ResourceCtx,
         sqlite: sqlite3,
-        fileID: i32,
+        fileID: u32,
         handle: Handle,
         buffers: ?[]Buffer_t,
         commands: *ExternalCommands,
         uctx: *Ctx,
-    ) !u32 {
+    ) ResourceError!u32 {
         _ = fType;
         _ = buffers;
         const io = ctx.io;
@@ -63,7 +65,7 @@ pub const KTX2_Reader = struct {
 
         var buffer = [_]u8{0} ** 8;
         var reader = img.reader(io, &buffer);
-        try reader.seekTo(0);
+        reader.seekTo(0) catch return ResourceError.Unavaliable;
 
         const fileMem = reader.interface.readAlloc(gpa, imgStat.size) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
@@ -155,7 +157,9 @@ pub const KTX2_Reader = struct {
             return Handles.WaitFill;
         };
 
-        const regions = try gpa.alloc(vk.VkBufferImageCopy, texture.*.numLayers * texture.*.numFaces * texture.*.numLevels);
+        const regions = gpa.alloc(vk.VkBufferImageCopy, texture.*.numLayers * texture.*.numFaces * texture.*.numLevels) catch
+            return Handles.WaitFill;
+
         errdefer gpa.free(regions);
 
         // std.log.debug("layers {d}, dimension {d}", .{ texture.*.numLayers, texture.*.numDimensions });
@@ -190,7 +194,7 @@ pub const KTX2_Reader = struct {
             }
         }
 
-        return try pTextureSet.createTextureFromResource(
+        return pTextureSet.createTextureFromResource(
             io,
             gpa,
             .{
@@ -211,6 +215,6 @@ pub const KTX2_Reader = struct {
             },
             vulkan,
             commands,
-        );
+        ) catch return Handles.WaitFill;
     }
 };

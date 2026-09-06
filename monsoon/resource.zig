@@ -32,9 +32,14 @@ const vec3 = vertexStruct.vec3;
 
 const resourceProcess = @import("resourceProcess");
 
+pub const ResourceError = error{
+    Invalid,
+    Unavaliable,
+};
+
 pub const ResourceType = enum {
     // texture,
-    position2D,
+    // position2D,
     // mesh,
     instance,
     meshInstance,
@@ -43,7 +48,7 @@ pub const ResourceType = enum {
 
 pub const Resource = union(ResourceType) {
     // texture: Texture,
-    position2D: Position2D,
+    // position2D: Position2D,
     // mesh: Mesh,
     instance: Instance,
     meshInstance: MeshInstance,
@@ -112,7 +117,7 @@ pub const Position2D = struct {
 };
 
 const ID_FileType_Handle = struct {
-    id: i32,
+    id: u32,
     buffers: []VkStruct.Buffer_t,
     fileType: file.FileType,
     handle: Handle,
@@ -142,7 +147,7 @@ pub const ResourceThreadArgs = struct {
     uctx: *resourceProcess.UserContext,
 };
 
-var idHandleCache: std.AutoHashMapUnmanaged(i32, Handle) = .empty;
+var idHandleCache: std.AutoHashMapUnmanaged(u32, Handle) = .empty;
 
 pub fn deinit(gpa: Allocator) void {
     idHandleCache.deinit(gpa);
@@ -200,7 +205,7 @@ pub fn processResource(args: *const ResourceThreadArgs) Io.Cancelable!void {
     const handleArray = args.handleArray;
     const handles = args.ctx.handles;
 
-    while (true) {
+    r: while (true) {
         try nameArray.mutex.lock(io);
         const pack_ = nameArray.array.pop();
         nameArray.mutex.unlock(io);
@@ -249,12 +254,20 @@ pub fn processResource(args: *const ResourceThreadArgs) Io.Cancelable!void {
                             pack.buffers,
                             args.externalCommands,
                             &uctx,
-                        ) catch continue;
+                        ) catch |err| a: switch (err) {
+                            ResourceError.Invalid => {
+                                continue :r;
+                            },
+                            ResourceError.Unavaliable => {
+                                nameArray.append(io, pack) catch continue :r;
+                                break :a Handles.WaitFill;
+                            },
+                        };
 
                         handles.setIndex(pack.handle, index);
                     } else {
                         if (comptime resourceProcess.useExample(t)) {
-                            _ = try resourceProcess.Example_Reader.processResource(
+                            _ = resourceProcess.Example_Reader.processResource(
                                 t,
                                 args.ctx,
                                 sqlite.?,
@@ -263,7 +276,7 @@ pub fn processResource(args: *const ResourceThreadArgs) Io.Cancelable!void {
                                 &.{},
                                 args.externalCommands,
                                 @constCast(&resourceProcess.Example_Reader.Ctx{}),
-                            );
+                            ) catch {};
                         } else {
                             @compileError(std.fmt.comptimePrint("no reader for {s}", .{@tagName(t)}));
                         }
@@ -285,7 +298,7 @@ pub fn processResource(args: *const ResourceThreadArgs) Io.Cancelable!void {
         try std.Io.sleep(io, .fromMilliseconds(1), .real);
     }
 }
-pub fn getResourceHandle(id: i32) ?Handle {
+pub fn getResourceHandle(id: u32) ?Handle {
     return idHandleCache.get(id);
 }
 

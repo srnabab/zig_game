@@ -57,8 +57,6 @@ pub const Instance = extern struct {
     position: vec3,
     scale: vec2,
     textureIndex: u32,
-    samplerIndex: u16,
-    flags: u16,
 };
 
 pub const Meshlet = extern struct {

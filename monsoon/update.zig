@@ -67,6 +67,7 @@ pub fn update_thread_func(args: Args) !void {
     const handles = args.handles;
     // const vulkan = args.vulkan;
     const meshes = &args.uctx.meshes;
+    const pTextureSet = &args.uctx.pTextureSet;
 
     var tracyAllocator = tracy.TracingAllocator.initNamed("pool", gpa);
     defer tracyAllocator.deinit();
@@ -316,6 +317,7 @@ pub fn update_thread_func(args: Args) !void {
             //     );
             // }
             try args.uctx.loadmaps.load(&resourceCtx, 0, vec2{ 0, 0 });
+            try args.uctx.instances2.load(io, pTextureSet, &args.uctx.vertices);
 
             if (sceneChanged) {
                 sceneChanged = false;
@@ -328,17 +330,17 @@ pub fn update_thread_func(args: Args) !void {
                 // );
                 // std.log.debug("box {any}", .{testBoxPng});
 
-                resourceArray.mutex.lockUncancelable(io);
-                defer resourceArray.mutex.unlock(io);
-                const ptr = try resourceArray.array.addOne();
-                ptr.* = .{ .position2D = .{
-                    .x = 0,
-                    .y = 0,
-                    .width = 48,
-                    .height = 32,
-                    .depth = 0.1,
-                    .texture = @ptrCast(resource.getResourceHandle(file.getID("box.png")) orelse unreachable),
-                } };
+                // resourceArray.mutex.lockUncancelable(io);
+                // defer resourceArray.mutex.unlock(io);
+                // const ptr = try resourceArray.array.addOne();
+                // ptr.* = .{ .position2D = .{
+                //     .x = 0,
+                //     .y = 0,
+                //     .width = 48,
+                //     .height = 32,
+                //     .depth = 0.1,
+                //     .texture = @ptrCast(resource.getResourceHandle(file.getID("box.png")) orelse unreachable),
+                // } };
 
                 // resourceValue += 1;
             }

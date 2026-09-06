@@ -1455,7 +1455,7 @@ pub fn destroyImage(self: *Self, image: Image) void {
     self.vmaS.destroyImage(@ptrFromInt(image.vkImage), @ptrFromInt(image.allocation));
 }
 
-pub fn readPipelineFileAndAdd(self: *Self, io: std.Io, fileID: i32, sqlite: ?*file.sqlite.sqlite3, isMesh: bool) !Pipeline_t {
+pub fn readPipelineFileAndAdd(self: *Self, io: std.Io, fileID: u32, sqlite: ?*file.sqlite.sqlite3, isMesh: bool) !Pipeline_t {
     const zone = tracy.initZone(@src(), .{ .name = "read pipeline file and add" });
     defer zone.deinit();
 

@@ -108,16 +108,16 @@ const list = [_]KV{
 .{ "Instance", 101 },
 };
 
-break: map std.StaticStringMap(i32).initComptime(list);
+break: map std.StaticStringMap(u32).initComptime(list);
 };
  
 
 
-pub fn comptimeGetID(comptime fileName: []const u8) i32 {
+pub fn comptimeGetID(comptime fileName: []const u8) u32 {
 comptime {
 return FileNameIdHashMap.get(fileName) orelse @compileError("not found");
 }
 }
 
-pub fn getID(fileName: []const u8) i32 {    return FileNameIdHashMap.get(fileName) orelse std.debug.panic("ilegal name {s}", .{fileName}); }
+pub fn getID(fileName: []const u8) u32 {    return FileNameIdHashMap.get(fileName) orelse std.debug.panic("ilegal name {s}", .{fileName}); }
 pub const MaxID = 101;

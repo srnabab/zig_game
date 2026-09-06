@@ -101,6 +101,8 @@ pub const PNG_Cooker = struct {
     }
 };
 
+const ResourceError = resource.ResourceError;
+
 pub const PNG_Reader = struct {
     pub const Ctx = struct {
         pTextureSet: *textureSet,
@@ -110,12 +112,12 @@ pub const PNG_Reader = struct {
         comptime fType: ProcessType,
         ctx: *const resource.ResourceCtx,
         sqlite: sqlite3,
-        fileID: i32,
+        fileID: u32,
         handle: Handle,
         buffers: ?[]Buffer_t,
         commands: *ExternalCommands,
         uctx: *Ctx,
-    ) !u32 {
+    ) ResourceError!u32 {
         _ = fType;
         _ = buffers;
         const io = ctx.io;
@@ -136,7 +138,7 @@ pub const PNG_Reader = struct {
 
         var buffer = [_]u8{0} ** 8;
         var reader = img.file.reader(io, &buffer);
-        try reader.seekTo(0);
+        reader.seekTo(0) catch return ResourceError.Unavaliable;
 
         const fileMem = reader.interface.readAlloc(gpa, imgStat.size) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
@@ -187,7 +189,7 @@ pub const PNG_Reader = struct {
             return Handles.WaitFill;
         };
 
-        var region = try gpa.alloc(vk.VkBufferImageCopy, 1);
+        var region = gpa.alloc(vk.VkBufferImageCopy, 1) catch return ResourceError.Unavaliable;
         region[0] = .{
             .bufferOffset = 0,
             .bufferRowLength = 0,
@@ -206,7 +208,7 @@ pub const PNG_Reader = struct {
             },
         };
 
-        return try pTextureSet.createTextureFromResource(
+        return pTextureSet.createTextureFromResource(
             io,
             gpa,
 
@@ -228,6 +230,6 @@ pub const PNG_Reader = struct {
             },
             vulkan,
             commands,
-        );
+        ) catch return Handles.WaitFill;
     }
 };

@@ -186,7 +186,7 @@ pub fn build(b: *std.Build) void {
     });
 
     const vertices_mod = b.createModule(.{
-        .root_source_file = b.path("monsoon/video/vertices.zig"),
+        .root_source_file = b.path("monsoon/video/indirect2D/vertices.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -315,8 +315,21 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const instance_mod2 = b.createModule(.{
+        .root_source_file = b.path("monsoon/instances/instances.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     // aaa
+    instance_mod2.addImport("pass", pass_mod);
+    instance_mod2.addImport("vertices", vertices_mod);
+    instance_mod2.addImport("cglm", cglm_mod);
+    instance_mod2.addImport("handle", handle_mod);
+    instance_mod2.addImport("textureSet", textureSet_mod);
+
+    resourceProcess_mod.addImport("vertices", vertices_mod);
+    resourceProcess_mod.addImport("instance2", instance_mod2);
     resourceProcess_mod.addImport("handle", handle_mod);
     resourceProcess_mod.addImport("vulkan", vk_c_mod);
     resourceProcess_mod.addImport("tables", tables_mod);
@@ -590,6 +603,7 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("vulkan", vk_c_mod);
     exe_mod.addImport("resource", resource_mod);
     exe_mod.addImport("mesh", mesh_mod);
+    exe_mod.addImport("instances2", instance_mod2);
     exe_mod.addIncludePath(b.path("include/"));
 
     exe_mod.addLibraryPath(b.path("lib/"));

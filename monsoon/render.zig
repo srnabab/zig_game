@@ -19,7 +19,7 @@ const vertexStruct = @import("vertexStruct");
 const resource = @import("resource");
 const Queue = mstd.Queue;
 const Handles = @import("handle");
-const vertices2D = @import("video/indirect2D/vertices.zig");
+const vertices2D = @import("vertices");
 
 const PassGroupMapping = @import("passGroupMapping");
 
@@ -234,19 +234,6 @@ pub fn render_thread_func(args: Args) !void {
 
     commands.setViewport(viewport_test);
     commands.setScissor(scissor_test);
-    {
-        const indirect2DBuffers = passes.passMap.get("indirect2D").?.buffer;
-
-        // vertices2D.init(instanceIDsBuffer_t: *opaque {}, indirectDrawCommandBuffer_t: *opaque {}, instanceBuffer_t: *opaque {}, allocator: Allocator, commands: *commands)
-        try vertices2D.init(
-            indirect2DBuffers[2],
-            indirect2DBuffers[0],
-            indirect2DBuffers[1],
-            gpa,
-            &commands,
-        );
-    }
-    defer vertices2D.deinit();
 
     var viewBoundsAndTotalSpriteCount = ViewBoundsAndTotalSpriteCount{
         .viewBounds = .{ 0.0, 0.0, 0.0, 0.0 },
@@ -324,24 +311,6 @@ pub fn render_thread_func(args: Args) !void {
                 while (total > 0) : (total -= 1) {
                     const r = resources.popFirst() orelse break;
                     switch (r) {
-                        .position2D => |pos2D| {
-                            if (!Handles.handleIsValid(@ptrCast(pos2D.texture))) {
-                                try resources.pushLast(r);
-
-                                continue;
-                            }
-                            try passes.passMap.get("indirect2D").?.useTexture(pos2D.texture, gpa);
-                            _ = try vertices2D.addInstance(
-                                pos2D.x,
-                                pos2D.y,
-                                pos2D.width,
-                                pos2D.height,
-                                pos2D.depth,
-                                pos2D.texture,
-                                pTextureSet,
-                            );
-                            // std.log.debug("set", .{});
-                        },
                         .instance => |i| {
                             const texIdx = if (i.texture) |t|
                                 pTextureSet.getDescriptorSetIndex(t)
@@ -400,9 +369,9 @@ pub fn render_thread_func(args: Args) !void {
                 passes.passMap.get("ic_task").?.buffer[1],
                 passes.passMap.get("ic_task").?.buffer[2],
             );
-            try vertices2D.uploadInstance(&commands, vulkan);
+            try args.uctx.vertices.uploadInstance(vulkan);
 
-            viewBoundsAndTotalSpriteCount.totalSpriteCount = vertices2D.getTotalCount();
+            viewBoundsAndTotalSpriteCount.totalSpriteCount = args.uctx.vertices.getTotalCount();
             viewBoundsAndTotalSpriteCount.viewBounds = .{ -300, 300, -400, 400 };
 
             try vulkan.waitEndFence();

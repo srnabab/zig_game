@@ -23,7 +23,7 @@ pub fn _createSampler(
     db: file.sqlite3,
     pAllocCallBacks: [*c]vk.VkAllocationCallbacks,
     allocator: std.mem.Allocator,
-    ID: i32,
+    ID: u32,
     anisotropy: f32,
 ) !vk.VkSampler {
     var info = try samplerRead.readSampler(io, ID, db, allocator);

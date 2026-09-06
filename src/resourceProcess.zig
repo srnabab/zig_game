@@ -15,7 +15,7 @@ const ktx2 = @import("resourceProcess/ktx2.zig");
 const loadmap = @import("resourceProcess/loadmap.zig");
 const lMap = @import("resourceProcess/lMap.zig");
 const binary = @import("resourceProcess/binary.zig");
-const Instance = @import("resourceProcess/Instance.zig");
+const Instance = @import("resourceProcess/instance.zig");
 
 // shared
 const tables = @import("tables");
@@ -41,11 +41,15 @@ const MutexArray = mstd.MutexArray;
 const mesh = @import("mesh");
 const textureSet = @import("textureSet");
 const loadMap = @import("loadmap");
+const instance2 = @import("instance2");
+const vertices2D = @import("vertices");
 
 pub const UserContext = struct {
     /// engine will use this
     pTextureSet: textureSet,
     loadmaps: loadMap,
+    instances2: instance2,
+    vertices: vertices2D,
 
     meshes: mesh,
 
@@ -53,6 +57,8 @@ pub const UserContext = struct {
         return .{
             .meshes = .init(gpa, vulkan, handles),
             .loadmaps = try .init(gpa, 1),
+            .instances2 = .init(gpa),
+            .vertices = undefined,
             .pTextureSet = undefined,
         };
     }
@@ -60,6 +66,8 @@ pub const UserContext = struct {
     pub fn deinitUserContext(self: *UserContext, gpa: Allocator) void {
         self.meshes.deinit();
         self.loadmaps.deinit(gpa);
+        self.instances2.deinit();
+        self.vertices.deinit();
     }
 };
 
@@ -335,12 +343,12 @@ pub const Example_Reader = struct {
         comptime fType: ProcessType,
         ctx: *const resource.ResourceCtx,
         sqlite: sqlite3,
-        fileID: i32,
+        fileID: u32,
         handle: Handle,
         buffers: ?[]VkStruct.Buffer_t,
         commands: *ExternalCommands,
         uctx: *Ctx,
-    ) !u32 {
+    ) resource.ResourceError!u32 {
         _ = ctx;
         _ = sqlite;
         _ = handle;

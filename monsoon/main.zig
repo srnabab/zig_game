@@ -36,6 +36,7 @@ const setPass = @import("setPass");
 const ExternalCommands = @import("processRender").externalCommands;
 
 const resourceProcess = @import("resourceProcess");
+const vertices2D = @import("vertices");
 
 // const cgltf = @import("cgltf");
 
@@ -190,12 +191,17 @@ pub fn main(init: std.process.Init) !void {
     var externalCommands = ExternalCommands.init(io, allocator_t.*);
     defer externalCommands.deinit();
 
+    const indirect2DBuffers = passes.passMap.get("indirect2D").?.buffer;
+    var vertices = try vertices2D.init(indirect2DBuffers[2], indirect2DBuffers[0], indirect2DBuffers[1], allocator_t.*, &externalCommands);
+
     var uctx = try resourceProcess.UserContext.initUserContext(allocator_t.*, &vulkan, &handles);
     defer uctx.deinitUserContext(allocator_t.*);
     uctx.pTextureSet = pTextureSet;
+    uctx.vertices = vertices;
     defer uctx.pTextureSet.deinit(&vulkan);
 
     pTextureSet = undefined;
+    vertices = undefined;
 
     var render_t = try Thread.spawn(
         .{},

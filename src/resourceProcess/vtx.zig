@@ -110,6 +110,8 @@ pub const VTX_Cooker = struct {
     }
 };
 
+const ResourceError = resource.ResourceError;
+
 pub const VTX_Reader = struct {
     pub const Ctx = struct {
         meshes: *mesh,
@@ -118,12 +120,12 @@ pub const VTX_Reader = struct {
         comptime fType: ProcessType,
         ctx: *const resource.ResourceCtx,
         sqlite: sqlite3,
-        fileID: i32,
+        fileID: u32,
         handle: Handle,
         buffer_ts: ?[]Buffer_t,
         commands: *ExternalCommands,
         uctx: *Ctx,
-    ) !u32 {
+    ) ResourceError!u32 {
         _ = fType;
         const io = ctx.io;
         const gpa = ctx.gpa;
@@ -137,7 +139,7 @@ pub const VTX_Reader = struct {
         };
         defer res.file.close(io);
 
-        const stat = try res.file.stat(io);
+        const stat = res.file.stat(io) catch return ResourceError.Unavaliable;
 
         var buffer = [_]u8{0} ** 256;
         var fileReader = res.file.reader(io, &buffer);
@@ -242,13 +244,13 @@ pub const VTX_Reader = struct {
         };
 
         for (0..4) |i| {
-            const bufferAndOffset = try vulkan.buffers.createVirtualBuffer(
+            const bufferAndOffset = vulkan.buffers.createVirtualBuffer(
                 buffer_ts.?[i],
                 0,
                 sizes[i],
                 16,
                 handles,
-            );
+            ) catch return Handles.WaitFill;
 
             var copyRegion = [1]vk.VkBufferCopy2{.{
                 .sType = vk.VK_STRUCTURE_TYPE_BUFFER_COPY_2,
@@ -258,18 +260,18 @@ pub const VTX_Reader = struct {
                 .size = sizes[i],
             }};
 
-            try commands.externalCommand(.{
+            commands.externalCommand(.{
                 .copyBuffer = .{
                     .srcBuffer = buffers[i],
                     .dstBuffer = bufferAndOffset.buffer,
                     .regions = &copyRegion,
                 },
-            });
+            }) catch return Handles.WaitFill;
             buffers[i] = bufferAndOffset.buffer;
         }
         // global.game_end.store(1, .seq_cst);
 
-        const index = try meshes.addMesh(
+        const index = meshes.addMesh(
             @intCast(fileID),
             buffers[0],
             sizes[0],
@@ -281,8 +283,8 @@ pub const VTX_Reader = struct {
             sizes[3],
             @intCast(stride),
             handle,
-        );
-        try meshes.upload(commands, buffer_ts.?[4]);
+        ) catch return ResourceError.Unavaliable;
+        meshes.upload(commands, buffer_ts.?[4]) catch return Handles.WaitFill;
 
         return index;
     }

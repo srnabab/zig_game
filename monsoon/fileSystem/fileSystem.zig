@@ -28,7 +28,7 @@ pub fn initManyDb(
     return base.initManyDb(io, global.databaseName, openTimes, rwSqlite, allocator);
 }
 
-pub fn getFile(io: std.Io, id: i32, db: ?*sqlite.sqlite3) base.packError!std.Io.File {
+pub fn getFile(io: std.Io, id: u32, db: ?*sqlite.sqlite3) base.packError!std.Io.File {
     const zone = tracy.initZone(@src(), .{ .name = "open file from database" });
     defer zone.deinit();
 
@@ -40,7 +40,7 @@ pub const imageLoad = struct {
     image: base.Image,
 };
 
-pub fn getImageLoadParam(io: std.Io, id: i32, db: ?*sqlite.sqlite3) !imageLoad {
+pub fn getImageLoadParam(io: std.Io, id: u32, db: ?*sqlite.sqlite3) !imageLoad {
     const zone = tracy.initZone(@src(), .{ .name = "get image load parameter" });
     defer zone.deinit();
 
@@ -61,7 +61,7 @@ pub const meshLoad = struct {
     mesh: base.Mesh,
 };
 
-pub fn getMeshLoadParam(io: std.Io, id: i32, db: ?*sqlite.sqlite3) !meshLoad {
+pub fn getMeshLoadParam(io: std.Io, id: u32, db: ?*sqlite.sqlite3) !meshLoad {
     const zone = tracy.initZone(@src(), .{ .name = "get mesh load parameter" });
     defer zone.deinit();
 
@@ -82,7 +82,7 @@ pub const getID = base.getID;
 
 pub const FileType = base.FileType;
 
-pub fn getFileType(id: i32, db: ?*sqlite.sqlite3) sqlDB.sqliteError!FileType {
+pub fn getFileType(id: u32, db: ?*sqlite.sqlite3) sqlDB.sqliteError!FileType {
     return base.getFileType(id, db);
 }
 

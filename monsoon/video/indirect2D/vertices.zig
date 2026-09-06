@@ -1,18 +1,21 @@
 const std = @import("std");
 const VkStruct = @import("video");
 const vertexStruct = @import("vertexStruct");
-const Commands = @import("processRender").commands;
+const Commands = @import("processRender").externalCommands;
 const textureSet = @import("textureSet");
 const vk = VkStruct.vk;
 
-var instanceIDsBuffer: VkStruct.Buffer_t = undefined;
-var indirectDrawCommandBuffer: VkStruct.Buffer_t = undefined;
-var instances2D: std.array_list.Managed(vertexStruct.Instance) = undefined;
-var instanceBuffer2D: VkStruct.Buffer_t = undefined;
+const Self = @This();
 
-var instanceUpdated = false;
-var updateStart: u32 = 0;
-var updateEnd: u32 = 0;
+instanceIDsBuffer: VkStruct.Buffer_t = undefined,
+indirectDrawCommandBuffer: VkStruct.Buffer_t = undefined,
+instances2D: std.array_list.Managed(vertexStruct.Instance) = undefined,
+instanceBuffer2D: VkStruct.Buffer_t = undefined,
+commands: *Commands,
+
+instanceUpdated: bool = false,
+updateStart: u32 = 0,
+updateEnd: u32 = 0,
 
 pub fn init(
     instanceIDsBuffer_t: VkStruct.Buffer_t,
@@ -20,32 +23,35 @@ pub fn init(
     instanceBuffer_t: VkStruct.Buffer_t,
     allocator: std.mem.Allocator,
     commands: *Commands,
-) !void {
-    instanceIDsBuffer = instanceIDsBuffer_t;
-    indirectDrawCommandBuffer = indirectDrawCommandBuffer_t;
-    instanceBuffer2D = instanceBuffer_t;
-    instances2D = .init(allocator);
-
-    try commands.cacheCommand(.{ .fillBuffer = .{
-        .buffer = indirectDrawCommandBuffer,
+) !Self {
+    try commands.externalCommand(.{ .fillBuffer = .{
+        .buffer = indirectDrawCommandBuffer_t,
         .offset = 0,
         .size = 4,
         .value = 6,
     } });
+
+    return .{
+        .instanceIDsBuffer = instanceIDsBuffer_t,
+        .indirectDrawCommandBuffer = indirectDrawCommandBuffer_t,
+        .instanceBuffer2D = instanceBuffer_t,
+        .instances2D = .init(allocator),
+        .commands = commands,
+    };
 }
 
-pub fn deinit() void {
-    instances2D.deinit();
+pub fn deinit(self: *Self) void {
+    self.instances2D.deinit();
 }
 
 pub fn addInstance(
+    self: *Self,
     x: f32,
     y: f32,
     width: f32,
     height: f32,
     depth: f32,
-    texture: textureSet.Texture_t,
-    pTextureSet: *textureSet,
+    textureIndex: u32,
 ) !u32 {
 
     // const textureContent = pTextureSet.getTextureCotent(texture);
@@ -53,25 +59,23 @@ pub fn addInstance(
     // const scale_x = width / @as(f32, @floatFromInt(textureContent.source_width));
     // const scale_y = height / @as(f32, @floatFromInt(textureContent.source_height));
 
-    const ptr = try instances2D.addOne();
+    const ptr = try self.instances2D.addOne();
     ptr.* = .{
         .position = [3]f32{ x, y, depth },
         .scale = [2]f32{ width, height },
-        .textureIndex = pTextureSet.getDescriptorSetIndex(texture),
-        .samplerIndex = 0,
-        .flags = 0,
+        .textureIndex = textureIndex,
     };
-    instanceUpdated = true;
+    self.instanceUpdated = true;
 
-    updateEnd = @intCast(instances2D.items.len);
+    self.updateEnd = @intCast(self.instances2D.items.len);
 
-    return @intCast(instances2D.items.len - 1);
+    return @intCast(self.instances2D.items.len - 1);
 }
 
-pub fn uploadInstance(graphic: *Commands, vulkan: *VkStruct) !void {
-    if (!instanceUpdated) return;
+pub fn uploadInstance(self: *Self, vulkan: *VkStruct) !void {
+    if (!self.instanceUpdated) return;
 
-    const bufferSize = @sizeOf(vertexStruct.Instance) * (updateEnd - updateStart);
+    const bufferSize = @sizeOf(vertexStruct.Instance) * (self.updateEnd - self.updateStart);
     const stagingBuffer = try vulkan.createBufferByUsage(
         @intCast(bufferSize),
         0,
@@ -80,25 +84,25 @@ pub fn uploadInstance(graphic: *Commands, vulkan: *VkStruct) !void {
         null,
     );
 
-    vulkan.buffers.copyDataToMapped(stagingBuffer, 0, vertexStruct.Instance, instances2D.items[updateStart..updateEnd]);
+    vulkan.buffers.copyDataToMapped(stagingBuffer, 0, vertexStruct.Instance, self.instances2D.items[self.updateStart..self.updateEnd]);
 
     var region = [_]vk.VkBufferCopy2{.{
         .sType = vk.VK_STRUCTURE_TYPE_BUFFER_COPY_2,
         .pNext = null,
         .srcOffset = 0,
-        .dstOffset = updateStart * @sizeOf(vertexStruct.Instance),
+        .dstOffset = self.updateStart * @sizeOf(vertexStruct.Instance),
         .size = bufferSize,
     }};
 
-    try graphic.cacheCommand(.{ .copyBuffer = .{
+    try self.commands.externalCommand(.{ .copyBuffer = .{
         .srcBuffer = stagingBuffer,
-        .dstBuffer = instanceBuffer2D,
+        .dstBuffer = self.instanceBuffer2D,
         .regions = &region,
     } });
 
-    instanceUpdated = false;
+    self.instanceUpdated = false;
 }
 
-pub fn getTotalCount() u32 {
-    return @intCast(instances2D.items.len);
+pub fn getTotalCount(self: *Self) u32 {
+    return @intCast(self.instances2D.items.len);
 }

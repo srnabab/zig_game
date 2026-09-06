@@ -157,7 +157,7 @@ pub fn getFile(io: std.Io, id: i64, cwd: std.Io.Dir, db: ?*sqlite.sqlite3) packE
 
 pub const FileType = resourceProcess.ProcessType;
 
-pub fn getFileType(id: i32, db: ?*sqlite.sqlite3) sqlDB.sqliteError!FileType {
+pub fn getFileType(id: u32, db: ?*sqlite.sqlite3) sqlDB.sqliteError!FileType {
     var ContentPathT = ContentPath.init(db);
 
     var res: i64 = 0;
@@ -211,7 +211,7 @@ const imageLoad = struct {
     image: Image,
 };
 
-pub fn getImageLoadParam(id: i32, db: ?*sqlite.sqlite3) !imageLoad {
+pub fn getImageLoadParam(id: u32, db: ?*sqlite.sqlite3) !imageLoad {
     const fType = try getFileType(id, db);
     switch (fType) {
         .PNG => {
@@ -262,7 +262,7 @@ const meshLoad = struct {
     mesh: Mesh,
 };
 
-pub fn getMeshLoadParam(id: i32, db: ?*sqlite.sqlite3) !meshLoad {
+pub fn getMeshLoadParam(id: u32, db: ?*sqlite.sqlite3) !meshLoad {
     const fType = try getFileType(id, db);
     switch (fType) {
         .VTX => {

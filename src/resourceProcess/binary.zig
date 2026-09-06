@@ -24,6 +24,8 @@ const vertexStruct = @import("vertexStruct");
 const Buffer_t = VkStruct.Buffer_t;
 const ExternalCommands = @import("processRender").externalCommands;
 
+const ResourceError = resource.ResourceError;
+
 pub const Binary_Reader = struct {
     pub const Ctx = struct {};
 
@@ -31,12 +33,12 @@ pub const Binary_Reader = struct {
         comptime fType: ProcessType,
         ctx: *const resource.ResourceCtx,
         sqlite: sqlite3,
-        fileID: i32,
+        fileID: u32,
         handle: Handle,
         buffers: ?[]VkStruct.Buffer_t,
         commands: *ExternalCommands,
         uctx: *Ctx,
-    ) !u32 {
+    ) ResourceError!u32 {
         _ = fType;
         _ = handle;
         _ = uctx;
@@ -79,13 +81,16 @@ pub const Binary_Reader = struct {
                 .size = stat.size,
             }};
 
-            try commands.externalCommand(.{
+            commands.externalCommand(.{
                 .copyBuffer = .{
                     .srcBuffer = stagingBuffer,
                     .dstBuffer = bs[0],
                     .regions = &copyRegion,
                 },
-            });
+            }) catch |err| {
+                std.log.err("{s}", .{@errorName(err)});
+                return Handles.WaitFill;
+            };
         } else {
             std.debug.panic("not implemented", .{});
         }

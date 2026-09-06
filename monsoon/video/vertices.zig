@@ -266,7 +266,7 @@ pub fn upload(graphic: *Commands) !void {
     }
 }
 
-pub fn addInstance(x: f32, y: f32, width: f32, height: f32, depth: f32, texture: textureSet.Texture_t) !u32 {
+pub fn addInstance(x: f32, y: f32, width: f32, height: f32, depth: f32, textureIndex: u32) !u32 {
     const zone = tracy.initZone(@src(), .{ .name = "addInstance" });
     defer zone.deinit();
 
@@ -279,8 +279,7 @@ pub fn addInstance(x: f32, y: f32, width: f32, height: f32, depth: f32, texture:
     ptr.* = .{
         .position = [3]f32{ x, y, depth },
         .scale = [2]f32{ width, height },
-        .textureIndex = pTextureSet.getDescriptorSetIndex(texture),
-        .flags = 0,
+        .textureIndex = textureIndex,
     };
     instanceUpdated = true;
 

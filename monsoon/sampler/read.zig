@@ -5,7 +5,7 @@ const fileSystem = @import("fileSystem");
 
 const tracy = @import("tracy");
 
-pub fn readSampler(io: std.Io, id: i32, db: fileSystem.sqlite3, allocator: std.mem.Allocator) !vk.VkSamplerCreateInfo {
+pub fn readSampler(io: std.Io, id: u32, db: fileSystem.sqlite3, allocator: std.mem.Allocator) !vk.VkSamplerCreateInfo {
     const zone = tracy.initZone(@src(), .{ .name = "read sampler" });
     defer zone.deinit();
 

@@ -39,7 +39,7 @@ pub const LMap_Reader = struct {
         comptime fType: ProcessType,
         ctx: *const resource.ResourceCtx,
         sqlite: sqlite3,
-        fileID: i32,
+        fileID: u32,
         handle: Handle,
         buffers: ?[]VkStruct.Buffer_t,
         commands: *ExternalCommands,

@@ -22,6 +22,13 @@ const Handle = Handles.Handle;
 const mstd = @import("ms_std");
 const resource = @import("resource");
 
+const cglm = @import("cglm");
+
+const instance2 = @import("instance2");
+const textureSet = @import("textureSet");
+
+const instance = instance2.instance;
+
 pub const Instance_Cooker = struct {
     pub const TableName = "ContentPathT";
     pub const Enable = true;
@@ -81,28 +88,29 @@ pub const Instance_Cooker = struct {
 };
 
 pub const Instance_Reader = struct {
-    pub const Ctx = struct {};
+    pub const Ctx = struct {
+        instances2: *instance2,
+        pTextureSet: *textureSet,
+    };
 
     pub fn processResource(
         comptime fType: ProcessType,
         ctx: *const resource.ResourceCtx,
         sqlite: sqlite3,
-        fileID: i32,
+        fileID: u32,
         handle: Handle,
         buffers: ?[]VkStruct.Buffer_t,
         commands: *ExternalCommands,
         uctx: *Ctx,
-    ) !u32 {
+    ) resource.ResourceError!u32 {
         _ = fType;
         _ = handle;
         _ = buffers;
         _ = commands;
-        _ = uctx;
 
         const io = ctx.io;
         const gpa = ctx.gpa;
 
-        // instance.schema.json 布局：root { "$schema", items[] }
         const Item = struct {
             pass: []const u8,
             pos: []f32,
@@ -141,18 +149,44 @@ pub const Instance_Reader = struct {
         };
         defer parsed.deinit();
 
-        for (parsed.value.items, 0..) |item, i| {
-            if (item.pass.len == 0) {
-                std.log.err("instance item {d}: empty pass", .{i});
-                return Handles.WaitFill;
-            }
-            if (item.pos.len != 3 or item.scale.len != 3 or item.rotation.len != 3) {
-                std.log.err("instance item {d}: pos/scale/rotation must have length 3", .{i});
-                return Handles.WaitFill;
-            }
+        const instances = gpa.alloc(instance, parsed.value.items.len) catch return Handles.WaitFill;
+        defer gpa.free(instances);
+
+        for (parsed.value.items, instances) |item, *ins| {
+            ins.textures = uctx.instances2.instances.allocator.alloc(Handle, item.textures.len) catch return resource.ResourceError.Unavaliable;
+        }
+        errdefer for (instances) |*ins| {
+            uctx.instances2.instances.allocator.free(ins.textures);
+        };
+
+        for (parsed.value.items, instances, 0..) |item, *ins, i| {
             std.log.debug("item {d}: pass {s}, pos {any}, scale {any}, rotation {any}, textures {any}, model {any}", .{ i, item.pass, item.pos, item.scale, item.rotation, item.textures, item.model });
 
-            // const ress = resource.getResourceHandle(fileID) orelse unreachable;
+            if (item.pos.len != 3 or item.scale.len != 3 or item.rotation.len != 3) return resource.ResourceError.Invalid;
+            ins.pos = .{ item.pos[0], item.pos[1], item.pos[2] };
+            ins.scale = .{ item.scale[0], item.scale[1], item.scale[2] };
+            ins.rotation = .{ item.rotation[0], item.rotation[1], item.rotation[2] };
+
+            const pass = ctx.passes.passMap.get(item.pass) orelse return resource.ResourceError.Invalid;
+            ins.pass = pass;
+
+            for (item.textures, ins.textures) |value, *t| {
+                const tex = uctx.pTextureSet.getTexture(file.getID(value)) orelse return resource.ResourceError.Unavaliable;
+                if (!Handles.handleIsValid(@ptrCast(tex))) return resource.ResourceError.Unavaliable;
+
+                t.* = @ptrCast(tex);
+            }
+
+            if (item.model) |modelName| {
+                ins.model = resource.getResourceHandle(file.getID(modelName)) orelse return resource.ResourceError.Unavaliable;
+            }
+        }
+
+        for (instances) |ins| {
+            uctx.instances2.add(io, ins) catch |err| {
+                std.log.err("instances2 add {s}", .{@errorName(err)});
+                return Handles.WaitFill;
+            };
         }
 
         return Handles.WaitFill;
