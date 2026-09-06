@@ -15,7 +15,7 @@ const ktx2 = @import("resourceProcess/ktx2.zig");
 const loadmap = @import("resourceProcess/loadmap.zig");
 const lMap = @import("resourceProcess/lMap.zig");
 const binary = @import("resourceProcess/binary.zig");
-const scene = @import("resourceProcess/scene.zig");
+const Instance = @import("resourceProcess/Instance.zig");
 
 // shared
 const tables = @import("tables");
@@ -150,7 +150,7 @@ pub const ProcessType = enum {
     LoadMap,
     LMap,
     Binary,
-    Scene,
+    Instance,
 };
 
 const KV = struct {
@@ -184,7 +184,7 @@ pub const list = [_]KV{
     .{ ".loadmap", ProcessType.LoadMap },
     .{ ".lMap", ProcessType.LMap },
     .{ ".binary", ProcessType.Binary },
-    .{ ".scene", ProcessType.Scene },
+    .{ ".instance", ProcessType.Instance },
 };
 
 const HandleType = @import("handle").ResourceType;
@@ -360,14 +360,14 @@ pub const Sampler_Cooker = sampler.Sampler_Cooker;
 pub const Shader_Cooker = shader.Shader_Cooker;
 pub const Pipeline_Cooker = pipeline.Pipeline_Cooker;
 pub const LoadMap_Cooker = loadmap.LoadMap_Cooker;
-pub const Scene_Cooker = scene.Scene_Cooker;
+pub const Instance_Cooker = Instance.Instance_Cooker;
 
 pub const KTX2_Reader = ktx2.KTX2_Reader;
 pub const VTX_Reader = vtx.VTX_Reader;
 pub const PNG_Reader = png.PNG_Reader;
 pub const LMap_Reader = lMap.LMap_Reader;
 pub const Binary_Reader = binary.Binary_Reader;
-pub const Scene_Reader = scene.Scene_Reader;
+pub const Instance_Reader = Instance.Instance_Reader;
 
 pub const TypeUseExample = [_]ProcessType{
     .DIR,

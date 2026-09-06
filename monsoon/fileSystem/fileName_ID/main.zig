@@ -117,7 +117,7 @@ pub fn main(init: std.process.Init) !void {
     const end = "};\n\nbreak: map std.StaticStringMap(i32).initComptime(list);\n};\n";
     _ = try writer.write(end);
 
-    const func = " \n\n\npub fn comptimeGetID(comptime fileName: []const u8) i32 {\ncomptime {\n" ++ "return FileNameIdHashMap.get(fileName) orelse @compileError(\"not found\");\n}\n}\n\n" ++ "pub fn getID(fileName: []const u8) i32 {" ++ "    return FileNameIdHashMap.get(fileName) orelse std.debug.panic(\"ilegal name\", .{}); }";
+    const func = " \n\n\npub fn comptimeGetID(comptime fileName: []const u8) i32 {\ncomptime {\n" ++ "return FileNameIdHashMap.get(fileName) orelse @compileError(\"not found\");\n}\n}\n\n" ++ "pub fn getID(fileName: []const u8) i32 {" ++ "    return FileNameIdHashMap.get(fileName) orelse std.debug.panic(\"ilegal name {s}\", .{fileName}); }";
     _ = try writer.write(func);
 
     var sBuffer = [_]u8{0} ** 256;

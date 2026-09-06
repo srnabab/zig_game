@@ -1,5 +1,5 @@
 {
-    "$schema": "../schema/scene.schema.json",
+    "$schema": "../schema/instance.schema.json",
     "items": [
         {
             "pass": "indirect2D",

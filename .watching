@@ -2,6 +2,6 @@ Assets\Shaders
 Assets\Sampler
 Assets\pipeline
 Assets\loadMap
-Assets\scene
+Assets\instance
 zig-out\bin\Content
 tools\srcs\cooker

@@ -23,7 +23,7 @@
             "bufferName": ["featherParameters"]
         },
         {
-            "name": "test.scene",
+            "name": "test.instance",
             "isGpu": false
         }
     ],

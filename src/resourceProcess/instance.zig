@@ -22,7 +22,7 @@ const Handle = Handles.Handle;
 const mstd = @import("ms_std");
 const resource = @import("resource");
 
-pub const Scene_Cooker = struct {
+pub const Instance_Cooker = struct {
     pub const TableName = "ContentPathT";
     pub const Enable = true;
     const TableType = tables.ContentPath;
@@ -53,7 +53,7 @@ pub const Scene_Cooker = struct {
         _ = content;
         _ = database;
         std.log.debug("{s}", .{contentFolderPath});
-        const dstPath = try std.fmt.allocPrint(gpa, "{s}\\Scene\\{s}", .{ contentFolderPath, fileName });
+        const dstPath = try std.fmt.allocPrint(gpa, "{s}\\Instance\\{s}", .{ contentFolderPath, fileName });
         defer gpa.free(dstPath);
         std.log.debug("{s}", .{dstPath});
 
@@ -80,7 +80,7 @@ pub const Scene_Cooker = struct {
     }
 };
 
-pub const Scene_Reader = struct {
+pub const Instance_Reader = struct {
     pub const Ctx = struct {};
 
     pub fn processResource(
