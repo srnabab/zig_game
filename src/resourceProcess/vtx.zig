@@ -133,7 +133,7 @@ pub const VTX_Reader = struct {
 
         const res = file.getMeshLoadParam(io, fileID, sqlite) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
-            return err;
+            return Handles.WaitFill;
         };
         defer res.file.close(io);
 
@@ -143,7 +143,7 @@ pub const VTX_Reader = struct {
         var fileReader = res.file.reader(io, &buffer);
         var content = fileReader.interface.readAlloc(gpa, stat.size) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
-            return err;
+            return Handles.WaitFill;
         };
         defer gpa.free(content);
 
@@ -183,7 +183,7 @@ pub const VTX_Reader = struct {
             null,
         ) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
-            return err;
+            return Handles.WaitFill;
         };
         errdefer vulkan.destroyBuffer(verticesStagingBuffer);
         vulkan.buffers.copyDataToMapped(verticesStagingBuffer, 0, u8, vertices);
@@ -196,7 +196,7 @@ pub const VTX_Reader = struct {
             null,
         ) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
-            return err;
+            return Handles.WaitFill;
         };
         errdefer vulkan.destroyBuffer(meshletStagingBuffer);
         vulkan.buffers.copyDataToMapped(meshletStagingBuffer, 0, u8, meshlets);
@@ -209,7 +209,7 @@ pub const VTX_Reader = struct {
             null,
         ) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
-            return err;
+            return Handles.WaitFill;
         };
         errdefer vulkan.destroyBuffer(meshletVerticesStagingBuffer);
         vulkan.buffers.copyDataToMapped(meshletVerticesStagingBuffer, 0, u8, meshletVertices);
@@ -222,7 +222,7 @@ pub const VTX_Reader = struct {
             null,
         ) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
-            return err;
+            return Handles.WaitFill;
         };
         errdefer vulkan.destroyBuffer(meshletTrianglesStagingBuffer);
         vulkan.buffers.copyDataToMapped(meshletTrianglesStagingBuffer, 0, u8, meshletTriangles);

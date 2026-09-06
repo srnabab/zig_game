@@ -125,13 +125,13 @@ pub const PNG_Reader = struct {
 
         const img = file.getImageLoadParam(io, fileID, sqlite.?) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
-            return err;
+            return Handles.WaitFill;
         };
         defer img.file.close(io);
 
         const imgStat = img.file.stat(io) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
-            return err;
+            return Handles.WaitFill;
         };
 
         var buffer = [_]u8{0} ** 8;
@@ -140,7 +140,7 @@ pub const PNG_Reader = struct {
 
         const fileMem = reader.interface.readAlloc(gpa, imgStat.size) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
-            return err;
+            return Handles.WaitFill;
         };
         defer gpa.free(fileMem);
 
@@ -160,7 +160,7 @@ pub const PNG_Reader = struct {
 
         const stagingBuffer = vulkan.createBufferByUsage(pixelSize, 0, .staging, false, null) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
-            return err;
+            return Handles.WaitFill;
         };
         errdefer vulkan.destroyBuffer(stagingBuffer);
 
@@ -174,7 +174,7 @@ pub const PNG_Reader = struct {
             img.image.usage,
         ) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
-            return err;
+            return Handles.WaitFill;
         };
         errdefer vulkan.destroyImage(image);
 
@@ -184,7 +184,7 @@ pub const PNG_Reader = struct {
             vk.VK_IMAGE_ASPECT_COLOR_BIT,
         ) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
-            return err;
+            return Handles.WaitFill;
         };
 
         var region = try gpa.alloc(vk.VkBufferImageCopy, 1);

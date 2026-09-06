@@ -104,7 +104,7 @@ pub fn render_thread_func(args: Args) !void {
         try value.init(null, vulkan, &commands, allocator_t.*);
     }
 
-    vulkan.logBufferPtr();
+    // vulkan.logBufferPtr();
 
     var graphic = OneTimeCommand.init(io, allocator_t.*, vulkan);
     defer graphic.deinit() catch |err| {
@@ -260,7 +260,7 @@ pub fn render_thread_func(args: Args) !void {
     // global.stopExecuteNodePrint = false;
     // global.game_end.store(1, .seq_cst);
 
-    vulkan.logBufferPtr();
+    // vulkan.logBufferPtr();
     // vulkan.logPipeline();
     var resources: Queue(resource.Resource) = try .init(gpa, io);
     defer resources.deinit();
@@ -483,7 +483,7 @@ pub fn render_thread_func(args: Args) !void {
         }
     }
 
-    vulkan.logBufferPtr();
+    // vulkan.logBufferPtr();
 
     // textureSett.logImagePtr();
 

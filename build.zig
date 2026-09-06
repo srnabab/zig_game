@@ -392,6 +392,7 @@ pub fn build(b: *std.Build) void {
     pass_mod.addImport("fileSystem", fileSystem_mod);
     pass_mod.addImport("vulkan", vk_c_mod);
 
+    resource_mod.addImport("pass", pass_mod);
     resource_mod.addImport("processRender", processRender_mod);
     resource_mod.addImport("video", video_mod);
     resource_mod.addImport("vk", vk_c_mod);

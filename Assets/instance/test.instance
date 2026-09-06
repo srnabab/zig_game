@@ -3,7 +3,7 @@
     "items": [
         {
             "pass": "indirect2D",
-            "pos": [0, 0],
+            "pos": [0, 0, 0],
             "rotation": [0, 0, 0],
             "scale": [0, 0, 0],
             "textures": ["box.png"]

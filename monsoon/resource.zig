@@ -19,10 +19,11 @@ const global = @import("global");
 const ringBuffer = mstd.RingBuffer;
 const MutexArray = mstd.MutexArray;
 const ExternalCommands = @import("processRender").externalCommands;
-const mesh = @import("mesh");
 
 const file = @import("fileSystem");
 const sqlite3 = ?*file.sqlite.sqlite3;
+
+const pass = @import("pass");
 
 const stb_image = @import("stb_image");
 // const ktx_vulkan = @import("ktx_vulkan");
@@ -128,6 +129,7 @@ pub const ResourceCtx = struct {
     nameArray: *NameQueue,
     vulkan: *VkStruct,
     mainSqlite: sqlite3,
+    passes: *pass,
 };
 
 pub const ResourceThreadArgs = struct {

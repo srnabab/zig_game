@@ -52,13 +52,13 @@ pub const KTX2_Reader = struct {
 
         const img = file.getFile(io, fileID, sqlite.?) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
-            return err;
+            return Handles.WaitFill;
         };
         defer img.close(io);
 
         const imgStat = img.stat(io) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
-            return err;
+            return Handles.WaitFill;
         };
 
         var buffer = [_]u8{0} ** 8;
@@ -67,7 +67,7 @@ pub const KTX2_Reader = struct {
 
         const fileMem = reader.interface.readAlloc(gpa, imgStat.size) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
-            return err;
+            return Handles.WaitFill;
         };
         defer gpa.free(fileMem);
 
@@ -88,7 +88,7 @@ pub const KTX2_Reader = struct {
 
         const stagingBuffer = vulkan.createBufferByUsage(pixelSize, 0, .staging, false, null) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
-            return err;
+            return Handles.WaitFill;
         };
         errdefer vulkan.destroyBuffer(stagingBuffer);
 
@@ -128,7 +128,7 @@ pub const KTX2_Reader = struct {
             .VK_IMAGE_LAYOUT_UNDEFINED,
         ) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
-            return err;
+            return Handles.WaitFill;
         };
         errdefer vulkan.destroyImage(image);
 
@@ -152,7 +152,7 @@ pub const KTX2_Reader = struct {
             texture.*.numLayers,
         ) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
-            return err;
+            return Handles.WaitFill;
         };
 
         const regions = try gpa.alloc(vk.VkBufferImageCopy, texture.*.numLayers * texture.*.numFaces * texture.*.numLevels);

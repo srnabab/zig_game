@@ -485,9 +485,9 @@ pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet, db: file.sq
 
     var semaphores: [global.MaxFrameInFlight * 2]vk.VkSemaphore = undefined;
     try Semaphore.createBinarySemaphore(self.device, self.pAllocCallBacks, 0, &semaphores);
-    for (semaphores) |value| {
-        std.log.debug("semaphore {*}", .{value});
-    }
+    // for (semaphores) |value| {
+    //     std.log.debug("semaphore {*}", .{value});
+    // }
     self.imageAvailableSemaphore[0] = semaphores[0];
     self.imageAvailableSemaphore[1] = semaphores[1];
     self.imageAvailableSemaphore[2] = semaphores[2];

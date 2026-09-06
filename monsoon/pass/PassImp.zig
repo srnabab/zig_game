@@ -117,7 +117,7 @@ pub fn initFromRenderFlow(io: std.Io, gpa: std.mem.Allocator, vulkan: *VkStruct,
     var skipCount: usize = 0;
     for (0..passCount) |i| {
         const pass = renderFlow.getPass(i);
-        std.log.debug("pass {s}", .{pass.name});
+        // std.log.debug("pass {s}", .{pass.name});
 
         if (pass.pipeline == null) {
             skipCount += 1;

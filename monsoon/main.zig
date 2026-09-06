@@ -236,6 +236,7 @@ pub fn main(init: std.process.Init) !void {
             .vulkan = &vulkan,
             .uctx = &uctx,
             .commands = &externalCommands,
+            .passes = &passes,
         }},
     );
     defer update_t.join();

@@ -27,6 +27,7 @@ const Handles = global.Handles;
 const Handle = Handles.Handle;
 const vk = VkStruct.vk;
 
+const pass = @import("pass");
 const sqlite3 = ?*file.sqlite.sqlite3;
 const DrawableC = ECS.CompentPool(process.Drawable);
 const Io = std.Io;
@@ -51,6 +52,7 @@ pub const Args = struct {
     vulkan: *VkStruct,
     commands: *process.externalCommands,
     uctx: *resourceProcess.UserContext,
+    passes: *pass,
 };
 
 const inputProcessInterval = std.time.ns_per_ms * 5;
@@ -175,6 +177,7 @@ pub fn update_thread_func(args: Args) !void {
         .nameArray = &nameArray,
         .mainSqlite = mainRoSqlite,
         .vulkan = args.vulkan,
+        .passes = args.passes,
     };
 
     const resourceArg = ResourceThreadArgs{
