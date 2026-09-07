@@ -1,4 +1,5 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 
 const Texture_t = @import("textureSet").Texture_t;
 const Buffer_t = @import("video").Buffer_t;
@@ -31,12 +32,11 @@ pub const Pass = struct {
 
     pub fn init(
         self: *Pass,
-        userdata: ?*anyopaque,
         vulkan: *VkStruct,
         commands: *ExternalCommands,
         gpa: std.mem.Allocator,
     ) !void {
-        try self.vtable.init(userdata, self, vulkan, commands, gpa);
+        try self.vtable.init(&self.userdata, self, vulkan, commands, gpa);
     }
 
     pub fn setPushConstants(self: *Pass, index: u32, mem: []u8, offset: u16) void {
@@ -55,14 +55,13 @@ pub const Pass = struct {
 
     pub fn addCommand(
         self: *Pass,
-        userdata: ?*anyopaque,
         vulkan: *VkStruct,
         textureSet: *TextureSet,
         commands: *Commands,
         gpa: std.mem.Allocator,
     ) !void {
         try self.vtable.addCommand(
-            userdata,
+            self.userdata,
             self,
             vulkan,
             textureSet,
@@ -147,7 +146,7 @@ pub fn initFromRenderFlow(io: std.Io, gpa: std.mem.Allocator, vulkan: *VkStruct,
         passes[passedIndex].pushConstant = try gpa.alloc(PushConstantPack, pass.pushConstant.len);
         for (pass.pushConstant, 0..) |pc, k| {
             passes[passedIndex].pushConstant[k] = pc;
-            const mem = try gpa.alloc(u8, pc.size);
+            const mem = try gpa.alignedAlloc(u8, .@"8", pc.size);
             passes[passedIndex].pushConstant[k].pValues = @ptrCast(mem.ptr);
         }
 

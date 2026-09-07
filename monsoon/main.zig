@@ -164,24 +164,24 @@ pub fn main(init: std.process.Init) !void {
     try setPass.setting();
 
     var passes: pass = undefined;
+    var passArena = std.heap.ArenaAllocator.init(allocator_t.*);
+    defer passArena.deinit();
+    const passAllocator = passArena.allocator();
     {
         var tempDb: ?*file.sqlite.sqlite3 = null;
         file.init(init.io, &tempDb);
         defer file.deinit(tempDb);
 
-        passes = try pass.initFromRenderFlow(init.io, allocator_t.*, &vulkan, tempDb);
+        passes = try pass.initFromRenderFlow(init.io, passAllocator, &vulkan, tempDb);
     }
-    defer passes.deinit(allocator_t.*);
+    defer passes.deinit(passAllocator);
 
     var externalCommands = ExternalCommands.init(io, allocator_t.*);
     defer externalCommands.deinit();
 
     for (passes.passes) |*value| {
-        try value.init(null, &vulkan, &externalCommands, allocator_t.*);
+        try value.init(&vulkan, &externalCommands, passAllocator);
     }
-    var cs_mesh_drawCount: u32 = 0;
-    // passes.passMap.get("c_command_prefix_sum").?.setUserdata(&cs_mesh_drawCount);
-    passes.passMap.get("i_feather").?.setUserdata(&cs_mesh_drawCount);
 
     const indirect2DBuffers = passes.passMap.get("indirect2D").?.buffer;
     var vertices = try vertices2D.init(indirect2DBuffers[2], indirect2DBuffers[0], indirect2DBuffers[1], allocator_t.*, &externalCommands);

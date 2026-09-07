@@ -98,13 +98,7 @@ pub fn load(
             const pU32 = @as(*u32, @ptrCast(@alignCast(item.pass.userdata.?)));
             pU32.* = cs_mesh_drawCount;
 
-            std.log.debug("aaaaaaa", .{});
-            // passes.enablePass(mi.passName);
-            // passes.passMap.get("iv_feather").?.setPushConstants(@constCast(&std.mem.toBytes(tidx)), 64);
             item.pass.setPushConstants(2, @constCast(&std.mem.toBytes(tidx)), 64);
-            // passes.enablePass("c_command_prefix_sum");
-            // passes.enablePass("ic_task");
-            // passes.enablePass("iv_feather");
             passes.enablePass("i_feather");
         }
     }

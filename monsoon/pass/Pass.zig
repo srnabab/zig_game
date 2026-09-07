@@ -13,7 +13,7 @@ const emptyVTable = VTable{
     .addCommand = addCommandEmpty,
 };
 fn initEmpty(
-    userdata: ?*anyopaque,
+    userdata: *?*anyopaque,
     pass: *PassImp.Pass,
     vulkan: *VkStruct,
     commands: *ExternalCommands,
@@ -70,7 +70,7 @@ pub const Stage = enum(u8) {
 
 pub const VTable = struct {
     init: *const fn (
-        userdata: ?*anyopaque,
+        userdata: *?*anyopaque,
         pass: *PassImp.Pass,
         vulkan: *VkStruct,
         commands: *ExternalCommands,

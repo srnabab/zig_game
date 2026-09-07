@@ -231,9 +231,6 @@ pub fn render_thread_func(args: Args) !void {
         .totalSpriteCount = 0,
     };
 
-    // global.stopExecuteNodePrint = false;
-    // global.game_end.store(1, .seq_cst);
-
     // vulkan.logBufferPtr();
     // vulkan.logPipeline();
 
@@ -244,9 +241,6 @@ pub fn render_thread_func(args: Args) !void {
     passes.enablePass("indirectCompute");
     passes.enablePass("indirect2D");
     passes.enablePass("present");
-
-    // var testTime: u32 = 0;
-    // var tests = false;
 
     while (true) {
         // if (tests) @breakpoint();
@@ -267,18 +261,10 @@ pub fn render_thread_func(args: Args) !void {
                 //     passes.enablePass("present");
                 //     // testDraw = true;
             }
-            if (frame == 1) {
-                // global.game_end.store(1, .seq_cst);
-                // global.stopNodeDagPrint = true;
-                // global.storExecuteSequencePrint = true;
-                //     passes.disablePass("indirect2D");
-                //     passes.disablePass("present");
-            }
 
             const infos = stateBuffering.getReadyBuffer();
             defer stateBuffering.returnReadyBuffer(infos);
 
-            // try meshes.upload(&commands, passes.passMap.get("i_feather").?.buffer[10]);
             try instances.upload(&commands, vulkan, passes.passMap.get("i_feather").?.buffer[9]);
             try args.uctx.passGroupMapping.upload(
                 vulkan,
@@ -321,7 +307,6 @@ pub fn render_thread_func(args: Args) !void {
                 if (value.enabled > 0) {
                     // renderDebug.printPassInfo(vulkan, value);
                     value.addCommand(
-                        value.userdata,
                         vulkan,
                         pTextureSet,
                         &commands,
