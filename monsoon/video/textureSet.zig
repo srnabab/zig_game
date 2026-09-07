@@ -5,6 +5,8 @@ const Atomic = std.atomic;
 
 const mstd = @import("ms_std");
 
+const vma = @import("vma");
+
 const file = @import("fileSystem");
 const stb_image = @import("stb_image");
 const VkStruct = @import("video");
@@ -18,7 +20,7 @@ const Handle = Handles.Handle;
 const processRender = @import("processRender");
 const ExternalCommands = processRender.externalCommands;
 const hash = std.hash;
-const resource = @import("resource");
+// const resource = @import("resource");
 
 const Self = @This();
 
@@ -28,6 +30,23 @@ pub const Offsets = struct {
 };
 
 pub const Texture_t = *opaque {};
+
+pub const ResourceTexture = struct {
+    regions: []vk.VkBufferImageCopy,
+    width: u32,
+    height: u32,
+    depth: u32,
+    fileID: u32,
+    format: vk.VkFormat,
+    baseLayer: u32,
+    layerCount: u32,
+    mipLevels: u32,
+    vkImage: vk.VkImage,
+    vkImageView: vk.VkImageView,
+    allocation: vma.VmaAllocation,
+    staginfBuffer: VkStruct.Buffer_t,
+    handle: Handles.Handle,
+};
 
 pub const Texture = struct {
     ID: u32 = std.math.maxInt(u32),
@@ -437,7 +456,7 @@ pub fn createTextureFromResource(
     self: *Self,
     io: std.Io,
     gpa: Allocator,
-    textureResource: resource.Texture,
+    textureResource: ResourceTexture,
     vulkan: *VkStruct,
     commands: *ExternalCommands,
 ) !u32 {

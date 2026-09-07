@@ -6,7 +6,6 @@ const assert = std.debug.assert;
 const mstd = @import("ms_std");
 
 const vk = @import("vk");
-const vma = @import("vma");
 const VkStruct = @import("video");
 const Handles = @import("handle");
 const Handle = Handles.Handle;
@@ -37,85 +36,6 @@ pub const ResourceError = error{
     Unavaliable,
 };
 
-pub const ResourceType = enum {
-    // texture,
-    // position2D,
-    // mesh,
-    // instance,
-    // meshInstance,
-    others,
-};
-
-pub const Resource = union(ResourceType) {
-    // texture: Texture,
-    // position2D: Position2D,
-    // mesh: Mesh,
-    // instance: Instance,
-    // meshInstance: MeshInstance,
-    others: Others,
-};
-
-pub const MeshInstance = struct {
-    passName: []const u8,
-    mesh: Mesh_t,
-    instance: Instance_t,
-};
-
-pub const Instance = struct {
-    texture: ?Texture_t,
-    handle: Handles.Handle,
-    sampler: ?u32,
-    pos: vec3,
-    scale: vec3,
-    rotation: vec3,
-};
-
-pub const Mesh = struct {
-    fileID: u32,
-    vertexStride: u32,
-    handle: Handles.Handle,
-    meshletStagingBuffer: VkStruct.Buffer_t,
-    verticesStagingBuffer: VkStruct.Buffer_t,
-    meshletVerticesStagingBuffer: VkStruct.Buffer_t,
-    meshletTrianglesStagingBuffer: VkStruct.Buffer_t,
-    meshletSize: u32,
-    verticesSize: u32,
-    meshletVerticesSize: u32,
-    meshletTrianglesSize: u32,
-};
-
-pub const Texture = struct {
-    regions: []vk.VkBufferImageCopy,
-    width: u32,
-    height: u32,
-    depth: u32,
-    fileID: u32,
-    format: vk.VkFormat,
-    baseLayer: u32,
-    layerCount: u32,
-    mipLevels: u32,
-    vkImage: vk.VkImage,
-    vkImageView: vk.VkImageView,
-    allocation: vma.VmaAllocation,
-    staginfBuffer: VkStruct.Buffer_t,
-    handle: Handles.Handle,
-};
-
-pub const Others = struct {
-    fileID: u32,
-    mem: []u8,
-    handle: Handles.Handle,
-};
-
-pub const Position2D = struct {
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-    depth: f32,
-    texture: Texture_t,
-};
-
 const ID_FileType_Handle = struct {
     id: u32,
     buffers: []VkStruct.Buffer_t,
@@ -123,7 +43,7 @@ const ID_FileType_Handle = struct {
     handle: Handle,
 };
 
-pub const ResourcesQueue = MutexArray(Resource);
+// pub const ResourcesQueue = MutexArray(Resource);
 pub const NameQueue = MutexArray(ID_FileType_Handle);
 pub const DataBaseHandleArrayType = ringBuffer(sqlite3, 8);
 
@@ -227,16 +147,6 @@ pub fn processResource(args: *const ResourceThreadArgs) Io.Cancelable!void {
                     const readerName = std.fmt.comptimePrint("{s}{s}", .{ @tagName(t), "_Reader" });
 
                     if (@hasDecl(resourceProcess, readerName)) {
-                        // const testBuffers = gpa.alloc(VkStruct.Buffer_t, 4) catch {
-                        //     return Io.Cancelable.Canceled;
-                        // };
-                        // defer gpa.free(testBuffers);
-
-                        // testBuffers[0] = vulkan.buffers.getBuffer("featherMeshlet").?;
-                        // testBuffers[1] = vulkan.buffers.getBuffer("featherVertices").?;
-                        // testBuffers[2] = vulkan.buffers.getBuffer("featherMeshletVertices").?;
-                        // testBuffers[3] = vulkan.buffers.getBuffer("featherMeshletTriangles").?;
-
                         const field = @field(resourceProcess, readerName);
 
                         var uctx: field.Ctx = undefined;
@@ -302,45 +212,45 @@ pub fn getResourceHandle(id: u32) ?Handle {
     return idHandleCache.get(id);
 }
 
-fn processResource_Unknown(
-    io: Io,
-    gpa: Allocator,
-    sqlite: sqlite3,
-    fileID: i32,
-    handle: Handle,
-    resourceArray: *MutexArray(Resource),
-) !void {
-    const f = file.getFile(io, fileID, sqlite) catch |err| {
-        std.log.err("{s}", .{@errorName(err)});
-        return err;
-    };
-    defer f.close(io);
+// fn processResource_Unknown(
+//     io: Io,
+//     gpa: Allocator,
+//     sqlite: sqlite3,
+//     fileID: i32,
+//     handle: Handle,
+//     resourceArray: *MutexArray(Resource),
+// ) !void {
+//     const f = file.getFile(io, fileID, sqlite) catch |err| {
+//         std.log.err("{s}", .{@errorName(err)});
+//         return err;
+//     };
+//     defer f.close(io);
 
-    const stat = f.stat(io) catch |err| {
-        std.log.err("{s}", .{@errorName(err)});
-        return err;
-    };
+//     const stat = f.stat(io) catch |err| {
+//         std.log.err("{s}", .{@errorName(err)});
+//         return err;
+//     };
 
-    var buffer = [_]u8{0} ** 8;
-    var reader = f.reader(io, &buffer);
-    try reader.seekTo(0);
+//     var buffer = [_]u8{0} ** 8;
+//     var reader = f.reader(io, &buffer);
+//     try reader.seekTo(0);
 
-    const content = reader.interface.readAlloc(gpa, stat.size) catch |err| {
-        std.log.err("{s}", .{@errorName(err)});
-        return err;
-    };
+//     const content = reader.interface.readAlloc(gpa, stat.size) catch |err| {
+//         std.log.err("{s}", .{@errorName(err)});
+//         return err;
+//     };
 
-    {
-        try resourceArray.mutex.lock(io);
-        defer resourceArray.mutex.unlock(io);
-        const ptr = resourceArray.array.addOne() catch |err| {
-            std.log.err("{s}", .{@errorName(err)});
-            return err;
-        };
-        ptr.* = .{ .others = .{
-            .fileID = @intCast(fileID),
-            .mem = content,
-            .handle = handle,
-        } };
-    }
-}
+//     {
+//         try resourceArray.mutex.lock(io);
+//         defer resourceArray.mutex.unlock(io);
+//         const ptr = resourceArray.array.addOne() catch |err| {
+//             std.log.err("{s}", .{@errorName(err)});
+//             return err;
+//         };
+//         ptr.* = .{ .others = .{
+//             .fileID = @intCast(fileID),
+//             .mem = content,
+//             .handle = handle,
+//         } };
+//     }
+// }

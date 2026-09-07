@@ -506,6 +506,7 @@ pub fn build(b: *std.Build) void {
     translate_mod.addImport("enumFromC", enum_c_mod);
     translate_mod.addImport("tracy", tracy.module("tracy"));
 
+    textureSet_mod.addImport("vma", vma_mod);
     textureSet_mod.addImport("stb_image", stb_image_mod);
     textureSet_mod.addImport("ms_std", ms_mod);
     textureSet_mod.addImport("vulkan", vk_c_mod);
