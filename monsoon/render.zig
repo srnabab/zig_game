@@ -49,7 +49,6 @@ pub const Args = struct {
     window: *sdl.SDL_Window,
     width: u32,
     height: u32,
-    resourceArrays: *global.ResourceArrayType,
     stateBuffering: *global.StateBufferingType,
     vulkan: *VkStruct,
     passes: pass,
@@ -70,7 +69,6 @@ pub fn render_thread_func(args: Args) !void {
     // const window = args.window;
     // const width = args.width;
     // const height = args.height;
-    const resourceArrays = args.resourceArrays;
     const stateBuffering = args.stateBuffering;
     const pTextureSet = &args.uctx.pTextureSet;
     const vulkan = args.vulkan;
@@ -238,8 +236,6 @@ pub fn render_thread_func(args: Args) !void {
 
     // vulkan.logBufferPtr();
     // vulkan.logPipeline();
-    var resources: Queue(resource.Resource) = try .init(gpa, io);
-    defer resources.deinit();
 
     const renderStart = std.Io.Timestamp.now(io, .real).toNanoseconds();
 
@@ -277,73 +273,6 @@ pub fn render_thread_func(args: Args) !void {
                 // global.storExecuteSequencePrint = true;
                 //     passes.disablePass("indirect2D");
                 //     passes.disablePass("present");
-            }
-
-            {
-                const resourceArray = resourceArrays.getReady();
-
-                if (resourceArray) |array| {
-                    const slices = array.items;
-
-                    defer resourceArrays.pushEmpty(array);
-                    defer array.clearRetainingCapacity();
-
-                    try resources.appendSlice(slices);
-                }
-            }
-
-            {
-                try resources.mutex.lock(io);
-                var total = resources.totalSize;
-                resources.mutex.unlock(io);
-
-                while (total > 0) : (total -= 1) {
-                    const r = resources.popFirst() orelse break;
-                    switch (r) {
-                        // .instance => |i| {
-                        //     const texIdx = if (i.texture) |t|
-                        //         pTextureSet.getDescriptorSetIndex(t)
-                        //     else
-                        //         0;
-
-                        //     _ = try instances.add(
-                        //         texIdx,
-                        //         i.sampler,
-                        //         i.pos,
-                        //         i.rotation,
-                        //         i.scale,
-                        //         i.handle,
-                        //     );
-                        // },
-                        // .meshInstance => |mi| {
-                        // const idx1 = Handles.getIndex(@ptrCast(mi.instance)) orelse {
-                        //     try resources.pushLast(r);
-                        //     continue;
-                        // };
-                        // const idx2 = Handles.getIndex(@ptrCast(mi.mesh)) orelse {
-                        //     try resources.pushLast(r);
-                        //     continue;
-                        // };
-                        // const tidx = pTextureSet.getDescriptorSetIndex(@ptrCast(resource.getResourceHandle(file.getID("feather_lut.ktx2"))));
-
-                        // cs_mesh_drawCount = try passGroupMapping.add(mi.passName, .{
-                        //     .instanceID = idx1,
-                        //     .meshID = idx2,
-                        // });
-                        // std.log.debug("aaaaaaa", .{});
-                        // passes.enablePass(mi.passName);
-                        // passes.passMap.get("iv_feather").?.setPushConstants(@constCast(&std.mem.toBytes(tidx)), 64);
-                        // passes.enablePass("c_command_prefix_sum");
-                        // passes.enablePass("ic_task");
-                        // passes.enablePass("iv_feather");
-                        // global.storExecuteSequencePrint = false;
-                        // global.stopNodeDagPrint = false;
-                        // global.printDagToDot = true;
-                        // std.log.debug("name {s}", .{mi.passName});
-                        // },
-                        .others => {},
-                    }
-                }
             }
 
             const infos = stateBuffering.getReadyBuffer();

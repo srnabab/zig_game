@@ -128,20 +128,6 @@ pub fn main(init: std.process.Init) !void {
     // achievements.UnlockAchievement(@ptrCast(&steam.g_rgAchievements[1]));
     // achievements.StoreStatsIfNecessary();
 
-    var resourceArrays: global.ResourceArrayType = .init();
-    var arrays: [4]std.array_list.Managed(resource.Resource) = undefined;
-    for (0..arrays.len) |i| {
-        arrays[i] = .init(allocator_t.*);
-    }
-    defer for (0..arrays.len) |i| {
-        arrays[i].deinit();
-    };
-    var arrayPtrs: [4]*std.array_list.Managed(resource.Resource) = undefined;
-    for (0..arrayPtrs.len) |i| {
-        arrayPtrs[i] = &arrays[i];
-    }
-    _ = resourceArrays.putDataIntoChannel(&arrayPtrs);
-
     var stateBuffering: global.StateBufferingType = .init(allocator_t.*);
     defer stateBuffering.deinit();
 
@@ -223,7 +209,6 @@ pub fn main(init: std.process.Init) !void {
             .window = window,
             .width = width,
             .height = height,
-            .resourceArrays = &resourceArrays,
             .stateBuffering = &stateBuffering,
             .vulkan = &vulkan,
             .passes = passes,
@@ -244,7 +229,6 @@ pub fn main(init: std.process.Init) !void {
             .gpa = allocator_t.*,
             .thread_count = update_thread,
             .pInput = input1,
-            .resourceArrays = &resourceArrays,
             .stateBuffering = &stateBuffering,
             .handles = &handles,
             .vulkan = &vulkan,

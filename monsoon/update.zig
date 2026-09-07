@@ -46,7 +46,6 @@ pub const Args = struct {
     gpa: std.mem.Allocator,
     thread_count: usize,
     pInput: *input,
-    resourceArrays: *global.ResourceArrayType,
     stateBuffering: *global.StateBufferingType,
     handles: *global.HandlesType,
     vulkan: *VkStruct,
@@ -62,7 +61,6 @@ pub fn update_thread_func(args: Args) !void {
     const gpa = args.gpa;
     const thread_count = args.thread_count;
     const pInput = args.pInput;
-    const resourceArrays = args.resourceArrays;
     const stateBuffering = args.stateBuffering;
     const handles = args.handles;
     // const vulkan = args.vulkan;
@@ -164,9 +162,6 @@ pub fn update_thread_func(args: Args) !void {
     for (dbs[1..]) |value| {
         _ = databaseHandleArray.push(value);
     }
-
-    var resourceArray: ResourcesQueue = .init(gpa);
-    defer resourceArray.deinit();
 
     var nameArray: NameQueue = .init(gpa);
     defer nameArray.deinit();
@@ -350,20 +345,6 @@ pub fn update_thread_func(args: Args) !void {
                 // } };
 
                 // resourceValue += 1;
-            }
-
-            {
-                resourceArray.mutex.lockUncancelable(io);
-                defer resourceArray.mutex.unlock(io);
-                if (resourceArray.array.items.len > 0) {
-                    const array = resourceArrays.getEmpty();
-
-                    if (array) |a| {
-                        try a.appendSlice(resourceArray.array.items);
-                        resourceArrays.pushReady(a);
-                        resourceArray.array.clearRetainingCapacity();
-                    }
-                }
             }
 
             const infos = stateBuffering.getWriteBuffer();
