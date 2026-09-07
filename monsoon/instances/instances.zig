@@ -12,6 +12,10 @@ const textureSet = @import("textureSet");
 const instances1 = @import("instance");
 const PassGroupMapping = @import("passGroupMapping");
 
+const ViewBoundsAndTotalSpriteCount = @import("setPass").ViewBoundsAndTotalSpriteCount;
+const ExternalCommands = @import("processRender").externalCommands;
+const VkStruct = @import("video");
+
 const vec3 = cglm.vec3;
 
 pub const instance = struct {
@@ -53,9 +57,12 @@ pub fn load(
     vertices: *vertices2D,
     instances: *instances1,
     passGroupMapping: *PassGroupMapping,
+    commands: *ExternalCommands,
+    vulkan: *VkStruct,
 ) !void {
     try self.mutex.lock(io);
     defer self.mutex.unlock(io);
+    _ = passes;
 
     for (self.instances.items) |item| {
         // std.log.debug("item: pass {*}, pos {any}, scale {any}, rotation {any}, textures {any}, model {any}", .{
@@ -68,6 +75,8 @@ pub fn load(
         // });
 
         if (std.mem.eql(u8, "indirect2D", item.pass.name)) {
+            const viewBoundsAndTotalSpriteCount: *ViewBoundsAndTotalSpriteCount = @ptrCast(@alignCast(item.pass.userdata));
+
             try item.pass.useTexture(@ptrCast(item.textures[0]), self.instances.allocator);
             const textureContent = pTextureSet.getTextureCotent(@ptrCast(item.textures[0]));
             _ = try vertices.addInstance(
@@ -78,6 +87,7 @@ pub fn load(
                 item.pos[2],
                 pTextureSet.getDescriptorSetIndex(@ptrCast(item.textures[0])),
             );
+            viewBoundsAndTotalSpriteCount.totalSpriteCount = vertices.getTotalCount();
         } else if (std.mem.eql(u8, "i_feather", item.pass.name)) {
             const ins = try instances.add(
                 null,
@@ -99,7 +109,15 @@ pub fn load(
             pU32.* = cs_mesh_drawCount;
 
             item.pass.setPushConstants(2, @constCast(&std.mem.toBytes(tidx)), 64);
-            passes.enablePass("i_feather");
+            try instances.upload(commands, vulkan, item.pass.buffer[9]);
+            try passGroupMapping.upload(
+                vulkan,
+                commands,
+                item.pass.name,
+                item.pass.buffer[6],
+                item.pass.buffer[8],
+            );
+            // passes.enablePass("i_feather");
         }
     }
 

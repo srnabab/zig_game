@@ -28,6 +28,5 @@
         }
     ],
     "grids": [],
-    "passes": ["indirect2D", "indirectCompute", 
-                "i_feather", "present"]
+    "passes": ["indirect2D", "i_feather", "present"]
 }

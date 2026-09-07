@@ -23,6 +23,7 @@ const Buffer_t = VkStruct.Buffer_t;
 const u8pack = @import("u8pack").u8pack;
 
 const cglm = @import("cglm");
+const pass = @import("pass");
 
 const Self = @This();
 
@@ -76,7 +77,7 @@ const Item = struct {
 
 const Loading = struct {
     grid: *Grid,
-    progress: atomic.Value(u32) = .init(0),
+    progress: *atomic.Value(u32),
     done: bool = false,
 };
 
@@ -94,7 +95,13 @@ passes: []Pass,
 strs: []u8,
 
 allocator: Allocator,
+
+progressPool: std.heap.MemoryPool(atomic.Value(u32)),
+
+loadingCacheQueue: FixedIndexArray(Loading),
+
 loadingQueue: FixedIndexArray(Loading),
+loadedQueue: FixedIndexArray(Loading),
 loadingItems: FixedIndexArray(LoadingItem),
 
 pub const empty = Self{
@@ -106,7 +113,10 @@ pub const empty = Self{
     .strs = &.{},
     .allocator = undefined,
     .loadingQueue = .empty,
+    .loadedQueue = .empty,
+    .loadingCacheQueue = .empty,
     .loadingItems = .empty,
+    .progressPool = .empty,
 };
 
 pub fn loadLoadmap(gpa: Allocator, mem: []u8) Allocator.Error!Self {
@@ -254,14 +264,20 @@ pub fn loadLoadmap(gpa: Allocator, mem: []u8) Allocator.Error!Self {
         .passes = passes,
         .strs = strs,
         .loadingQueue = .init(gpa),
+        .loadedQueue = .init(gpa),
         .loadingItems = .init(gpa),
+        .loadingCacheQueue = .init(gpa),
         .allocator = gpa,
+        .progressPool = .empty,
     };
 }
 
 pub fn free(self: *Self) void {
     self.loadingItems.deinit();
     self.loadingQueue.deinit();
+    self.loadedQueue.deinit();
+    self.loadingCacheQueue.deinit();
+    self.progressPool.deinit(self.allocator);
 
     const mem_start: [*]u8 = @ptrCast(@alignCast(self.layers.ptr));
     const mem_end: [*]u8 = self.strs.ptr + self.strs.len;
@@ -283,19 +299,41 @@ pub fn loadResource(
 
         switch (layer.grids[center].state) {
             .unloaded => {
-                try self.loadingQueue.append(.{ .grid = &layer.grids[center] });
+                const ptr = try self.progressPool.create(self.allocator);
+                ptr.*.raw = 0;
+                try self.loadingCacheQueue.append(.{
+                    .grid = &layer.grids[center],
+                    .progress = ptr,
+                });
                 layer.grids[center].state = .loading;
             },
-            .loading, .loaded => {
+            .loading => {
                 continue;
             },
+            .loaded => {},
             .unloading => {
                 // cancel
             },
         }
     }
 
-    var it1 = self.loadingQueue.iterate();
+    var l_it = self.loadingQueue.iterate();
+    while (l_it.next()) |item| {
+        std.log.debug("{d}", .{item.ptr.progress.load(.seq_cst)});
+        if (item.ptr.progress.load(.seq_cst) == item.ptr.grid.items.len) {
+            item.ptr.grid.state = .loaded;
+            const ptr = self.loadingQueue.get(item.index);
+
+            for (ptr.grid.passes) |value| {
+                const name = self.strs[value.start .. value.start + value.len];
+                ctx.passes.enablePass(name);
+            }
+            try self.loadedQueue.append(self.loadingQueue.get(item.index).*);
+            self.loadingQueue.remove(item.index);
+        }
+    }
+
+    var it1 = self.loadingCacheQueue.iterate();
     while (it1.next()) |item| {
         for (item.ptr.grid.items) |*i| {
             var buffers: []Buffer_t = &.{};
@@ -315,7 +353,7 @@ pub fn loadResource(
                 buffers,
                 i.name,
             );
-            try self.loadingItems.append(.{ .handle = h, .progress = &item.ptr.progress });
+            try self.loadingItems.append(.{ .handle = h, .progress = item.ptr.progress });
         }
     }
 
@@ -331,7 +369,15 @@ pub fn loadResource(
     while (it1.next()) |item| {
         if (item.ptr.progress.load(.seq_cst) == item.ptr.grid.items.len) {
             item.ptr.grid.state = .loaded;
+            const ptr = self.loadingCacheQueue.get(item.index);
+
+            for (ptr.grid.passes) |value| {
+                const name = self.strs[value.start .. value.start + value.len];
+                ctx.passes.enablePass(name);
+            }
+        } else {
+            try self.loadingQueue.append(self.loadingCacheQueue.get(item.index).*);
         }
-        self.loadingQueue.remove(item.index);
+        self.loadingCacheQueue.remove(item.index);
     }
 }

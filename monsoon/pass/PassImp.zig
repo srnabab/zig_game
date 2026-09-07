@@ -233,5 +233,6 @@ pub fn disablePass(self: Self, pass: []const u8) void {
 }
 
 pub fn enablePass(self: Self, pass: []const u8) void {
+    // std.log.debug("11111111111111111111", .{});
     self.passMap.getPtr(pass).?.*.enabled += 1;
 }

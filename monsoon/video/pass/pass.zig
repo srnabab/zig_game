@@ -5,7 +5,7 @@ const VkStruct = @import("video");
 const vk = VkStruct.vk;
 
 const ProcessRender = @import("processRender");
-const Commands = ProcessRender.commands;
+const ExternalCommands = ProcessRender.externalCommands;
 
 const Self = @This();
 
@@ -95,7 +95,7 @@ pub fn add(self: *Self, passName: []const u8, mapping: vertexStruct.GroupMapping
     return @intCast(drawCount);
 }
 
-pub fn upload(self: *Self, vulkan: *VkStruct, commands: *Commands, passName: []const u8, indirectBuffer: VkStruct.Buffer_t, mappingBuffer: VkStruct.Buffer_t) !void {
+pub fn upload(self: *Self, vulkan: *VkStruct, commands: *ExternalCommands, passName: []const u8, indirectBuffer: VkStruct.Buffer_t, mappingBuffer: VkStruct.Buffer_t) !void {
     const records = self.passCommandsMap.getPtr(passName) orelse return;
 
     if (!records.updated) return;
@@ -147,7 +147,7 @@ pub fn upload(self: *Self, vulkan: *VkStruct, commands: *Commands, passName: []c
         .size = commandLen * @sizeOf(Command),
     }};
 
-    try commands.cacheCommand(.{ .copyBuffer = .{
+    try commands.externalCommand(.{ .copyBuffer = .{
         .srcBuffer = stagingBuffer1,
         .dstBuffer = indirectBuffer,
         .regions = &region,
@@ -161,7 +161,7 @@ pub fn upload(self: *Self, vulkan: *VkStruct, commands: *Commands, passName: []c
         .size = mappingLen * @sizeOf(vertexStruct.GroupMapping),
     }};
 
-    try commands.cacheCommand(.{ .copyBuffer = .{
+    try commands.externalCommand(.{ .copyBuffer = .{
         .srcBuffer = stagingBuffer2,
         .dstBuffer = mappingBuffer,
         .regions = &region,

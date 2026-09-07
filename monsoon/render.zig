@@ -38,8 +38,6 @@ const instance = @import("instance");
 
 const resourceProcess = @import("resourceProcess");
 
-const ViewBoundsAndTotalSpriteCount = @import("setPass").ViewBoundsAndTotalSpriteCount;
-
 pub const Args = struct {
     io: std.Io,
     gpa: std.mem.Allocator,
@@ -73,9 +71,9 @@ pub fn render_thread_func(args: Args) !void {
     const pTextureSet = &args.uctx.pTextureSet;
     const vulkan = args.vulkan;
     // const handles = args.handles;
-    var passes = args.passes;
+    // var passes = args.passes;
     // const meshes = &args.uctx.meshes;
-    const instances = args.instances;
+    // const instances = args.instances;
     const externalCommands = args.externalCommands;
 
     const zone = tracy.initZone(@src(), .{ .name = "render" });
@@ -226,21 +224,10 @@ pub fn render_thread_func(args: Args) !void {
     commands.setViewport(viewport_test);
     commands.setScissor(scissor_test);
 
-    var viewBoundsAndTotalSpriteCount = ViewBoundsAndTotalSpriteCount{
-        .viewBounds = .{ 0.0, 0.0, 0.0, 0.0 },
-        .totalSpriteCount = 0,
-    };
-
     // vulkan.logBufferPtr();
     // vulkan.logPipeline();
 
     const renderStart = std.Io.Timestamp.now(io, .real).toNanoseconds();
-
-    passes.passMap.get("indirectCompute").?.setUserdata(@ptrCast(&viewBoundsAndTotalSpriteCount));
-
-    passes.enablePass("indirectCompute");
-    passes.enablePass("indirect2D");
-    passes.enablePass("present");
 
     while (true) {
         // if (tests) @breakpoint();
@@ -265,18 +252,7 @@ pub fn render_thread_func(args: Args) !void {
             const infos = stateBuffering.getReadyBuffer();
             defer stateBuffering.returnReadyBuffer(infos);
 
-            try instances.upload(&commands, vulkan, passes.passMap.get("i_feather").?.buffer[9]);
-            try args.uctx.passGroupMapping.upload(
-                vulkan,
-                &commands,
-                "i_feather",
-                passes.passMap.get("i_feather").?.buffer[6],
-                passes.passMap.get("i_feather").?.buffer[8],
-            );
             try args.uctx.vertices.uploadInstance(vulkan);
-
-            viewBoundsAndTotalSpriteCount.totalSpriteCount = args.uctx.vertices.getTotalCount();
-            viewBoundsAndTotalSpriteCount.viewBounds = .{ -300, 300, -400, 400 };
 
             try vulkan.waitEndFence();
 

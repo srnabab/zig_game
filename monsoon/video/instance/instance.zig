@@ -5,7 +5,7 @@ const Handles = @import("handle");
 const Handle = Handles.Handle;
 
 const processRender = @import("processRender");
-const Commands = processRender.commands;
+const ExternalCommands = processRender.externalCommands;
 
 const vertexStruct = @import("vertexStruct");
 const cglm = vertexStruct.cglm;
@@ -93,7 +93,7 @@ pub fn add(
     return @ptrCast(finalHandle);
 }
 
-pub fn upload(self: *Self, commands: *Commands, vulkan: *VkStruct, buffer: VkStruct.Buffer_t) !void {
+pub fn upload(self: *Self, commands: *ExternalCommands, vulkan: *VkStruct, buffer: VkStruct.Buffer_t) !void {
     if (!self.updated) {
         return;
     }
@@ -119,7 +119,7 @@ pub fn upload(self: *Self, commands: *Commands, vulkan: *VkStruct, buffer: VkStr
         .size = instances.len * @sizeOf(Instance),
     }};
 
-    try commands.cacheCommand(.{ .copyBuffer = .{
+    try commands.externalCommand(.{ .copyBuffer = .{
         .srcBuffer = stagingBuffer,
         .dstBuffer = buffer,
         .regions = &copyRegion,

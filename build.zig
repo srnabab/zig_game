@@ -329,6 +329,9 @@ pub fn build(b: *std.Build) void {
     instance_mod2.addImport("textureSet", textureSet_mod);
     instance_mod2.addImport("instance", instance_mod);
     instance_mod2.addImport("passGroupMapping", passGroupMapping_mod);
+    instance_mod2.addImport("setPass", setPass_mod);
+    instance_mod2.addImport("processRender", processRender_mod);
+    instance_mod2.addImport("video", video_mod);
 
     resourceProcess_mod.addImport("instance", instance_mod);
     resourceProcess_mod.addImport("passGroupMapping", passGroupMapping_mod);
@@ -365,6 +368,7 @@ pub fn build(b: *std.Build) void {
     ms_mod.addImport("tracy", tracy.module("tracy"));
     ms_mod.addImport("cglm", cglm_mod);
 
+    loadmap_mod.addImport("pass", pass_mod);
     loadmap_mod.addImport("cglm", cglm_mod);
     loadmap_mod.addImport("u8pack", u8pack_mod);
     loadmap_mod.addImport("fileSystem", fileSystem_mod);
