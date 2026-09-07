@@ -66,7 +66,7 @@ pub fn update_thread_func(args: Args) !void {
     const stateBuffering = args.stateBuffering;
     const handles = args.handles;
     // const vulkan = args.vulkan;
-    const meshes = &args.uctx.meshes;
+    // const meshes = &args.uctx.meshes;
     const pTextureSet = &args.uctx.pTextureSet;
 
     var tracyAllocator = tracy.TracingAllocator.initNamed("pool", gpa);
@@ -104,23 +104,23 @@ pub fn update_thread_func(args: Args) !void {
     //     false,
     // );
 
-    const test_B = try inputFunc1.registerAction(
-        inputTrigger1,
-        "test_B",
-        sdl.SDL_SCANCODE_B,
-        null,
-        null,
-        false,
-    );
+    // const test_B = try inputFunc1.registerAction(
+    //     inputTrigger1,
+    //     "test_B",
+    //     sdl.SDL_SCANCODE_B,
+    //     null,
+    //     null,
+    //     false,
+    // );
 
-    const test_C = try inputFunc1.registerAction(
-        inputTrigger1,
-        "test_C",
-        sdl.SDL_SCANCODE_C,
-        null,
-        null,
-        false,
-    );
+    // const test_C = try inputFunc1.registerAction(
+    //     inputTrigger1,
+    //     "test_C",
+    //     sdl.SDL_SCANCODE_C,
+    //     null,
+    //     null,
+    //     false,
+    // );
 
     // const test_D = try inputFunc1.registerAction(
     //     inputTrigger1,
@@ -216,7 +216,7 @@ pub fn update_thread_func(args: Args) !void {
     var lastTimestamp = sdl.SDL_GetTicksNS();
 
     var accumulateTime: u64 = 0;
-    var testHandle: Handle = undefined;
+    // var testHandle: Handle = undefined;
 
     _ = try resource.readResource(&resourceCtx, resourceCtx.mainSqlite, &.{}, "test.lMap");
     try Io.sleep(io, .fromMilliseconds(200), .real);
@@ -261,48 +261,48 @@ pub fn update_thread_func(args: Args) !void {
             //     } };
             // }
 
-            if (test_B.downIsTrue()) {
-                resourceArray.mutex.lockUncancelable(io);
-                defer resourceArray.mutex.unlock(io);
-                const ptr = try resourceArray.array.addOne();
-                ptr.* = .{ .instance = .{
-                    .texture = null,
-                    .pos = vec3{ 0, 0, 0 },
-                    .scale = vec3{ 1, 1, 1 },
-                    .rotation = vec3{ 0, 0, 0 },
-                    .sampler = null,
-                    .handle = handles.createHandle(Handles.WaitFill, .instance),
-                } };
-                testHandle = ptr.instance.handle;
-            }
+            // if (test_B.downIsTrue()) {
+            //     resourceArray.mutex.lockUncancelable(io);
+            //     defer resourceArray.mutex.unlock(io);
+            //     const ptr = try resourceArray.array.addOne();
+            //     ptr.* = .{ .instance = .{
+            //         .texture = null,
+            //         .pos = vec3{ 0, 0, 0 },
+            //         .scale = vec3{ 1, 1, 1 },
+            //         .rotation = vec3{ 0, 0, 0 },
+            //         .sampler = null,
+            //         .handle = handles.createHandle(Handles.WaitFill, .instance),
+            //     } };
+            //     testHandle = ptr.instance.handle;
+            // }
 
-            if (test_C.downIsTrue()) a: {
-                std.log.debug("x", .{});
-                // global.nodeChildrenAppendBreakPoint = true;
+            // if (test_C.downIsTrue()) a: {
+            //     std.log.debug("x", .{});
+            //     // global.nodeChildrenAppendBreakPoint = true;
 
-                // global.game_end.store(1, .seq_cst);
+            //     // global.game_end.store(1, .seq_cst);
 
-                resourceArray.mutex.lockUncancelable(io);
-                defer resourceArray.mutex.unlock(io);
+            //     resourceArray.mutex.lockUncancelable(io);
+            //     defer resourceArray.mutex.unlock(io);
 
-                std.log.debug("c", .{});
-                if (!Handles.handleIsValid(testHandle)) break :a;
+            //     std.log.debug("c", .{});
+            //     if (!Handles.handleIsValid(testHandle)) break :a;
 
-                std.log.debug("cc", .{});
-                const ptr = try resourceArray.array.addOne();
-                const m = meshes.getMesh(@intCast(file.getID("Plane.001_0.vtx"))) catch {
-                    _ = resourceArray.array.pop();
-                    break :a;
-                };
-                ptr.* = .{ .meshInstance = .{
-                    .instance = @ptrCast(testHandle),
-                    .mesh = m,
-                    .passName = "ic_task",
-                } };
+            //     std.log.debug("cc", .{});
+            //     const ptr = try resourceArray.array.addOne();
+            //     const m = meshes.getMesh(@intCast(file.getID("Plane.001_0.vtx"))) catch {
+            //         _ = resourceArray.array.pop();
+            //         break :a;
+            //     };
+            //     ptr.* = .{ .meshInstance = .{
+            //         .instance = @ptrCast(testHandle),
+            //         .mesh = m,
+            //         .passName = "ic_task",
+            //     } };
 
-                // @breakpoint();
-                std.log.debug("ccc", .{});
-            }
+            //     // @breakpoint();
+            //     std.log.debug("ccc", .{});
+            // }
 
             // if (test_D.downIsTrue()) {
             //     _ = try resource.readResource(
@@ -317,7 +317,14 @@ pub fn update_thread_func(args: Args) !void {
             //     );
             // }
             try args.uctx.loadmaps.load(&resourceCtx, 0, vec2{ 0, 0 });
-            try args.uctx.instances2.load(io, pTextureSet, &args.uctx.vertices);
+            try args.uctx.instances2.load(
+                io,
+                args.passes,
+                pTextureSet,
+                &args.uctx.vertices,
+                &args.uctx.instances1,
+                &args.uctx.passGroupMapping,
+            );
 
             if (sceneChanged) {
                 sceneChanged = false;

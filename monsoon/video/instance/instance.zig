@@ -42,7 +42,6 @@ pub fn deinit(self: *Self) void {
 pub fn add(
     self: *Self,
     textureIndex: ?u32,
-    samplerIndex: ?u32,
     pos: vec3,
     scale: vec3,
     rotation: vec3,
@@ -54,7 +53,6 @@ pub fn add(
     instance.* = Instance{
         .matrix = undefined,
         .texIndex = textureIndex orelse 0,
-        .samplerIndex = samplerIndex orelse 0,
     };
 
     var matrix: mat4 align(16) = undefined;

@@ -29,6 +29,5 @@
     ],
     "grids": [],
     "passes": ["indirect2D", "indirectCompute", 
-                "c_command_prefix_sum", "ic_task",
-                "iv_feather", "present"]
+                "i_feather", "present"]
 }

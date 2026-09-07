@@ -5,6 +5,7 @@ const Buffer_t = @import("video").Buffer_t;
 const Pipeline_t = @import("video").Pipeline_t;
 const PushConstantPack = @import("processRender").drawC.PushConstantPack;
 const Commands = @import("processRender").commands;
+const ExternalCommands = @import("processRender").externalCommands;
 const vk = @import("vulkan");
 
 const VkStruct = @import("video");
@@ -20,8 +21,8 @@ pub const Pass = struct {
     buffer: []Buffer_t = &.{},
     texture: []Texture_t = &.{},
     descriptorSet: []vk.VkDescriptorSet = &.{},
-    pipeline: Pipeline_t = undefined,
-    pushConstant: PushConstantPack = .{},
+    pipeline: []Pipeline_t = &.{},
+    pushConstant: []PushConstantPack = &.{},
     userdata: ?*anyopaque = null,
 
     enabled: u8 = 0,
@@ -32,17 +33,21 @@ pub const Pass = struct {
         self: *Pass,
         userdata: ?*anyopaque,
         vulkan: *VkStruct,
-        commands: *Commands,
+        commands: *ExternalCommands,
         gpa: std.mem.Allocator,
     ) !void {
         try self.vtable.init(userdata, self, vulkan, commands, gpa);
     }
 
-    pub fn setPushConstants(self: *Pass, mem: []u8, offset: u16) void {
-        if (offset > self.pushConstant.size)
-            std.debug.panic("offset {d} > pushconstant size {d}", .{ offset, self.pushConstant.size });
+    pub fn setPushConstants(self: *Pass, index: u32, mem: []u8, offset: u16) void {
+        if (self.pushConstant.len == 0)
+            std.debug.panic("setPushConstants called on pass without push constant", .{});
+        const pack = &self.pushConstant[index];
 
-        const dst: []u8 = @as([*]u8, @ptrCast(@alignCast(self.pushConstant.pValues)))[0..self.pushConstant.size];
+        if (offset > pack.size)
+            std.debug.panic("offset {d} > pushconstant size {d}", .{ offset, pack.size });
+
+        const dst: []u8 = @as([*]u8, @ptrCast(@alignCast(pack.pValues)))[0..pack.size];
         const end = offset + @as(u16, @intCast(mem.len));
 
         @memcpy(dst[offset..end], mem);
@@ -128,18 +133,23 @@ pub fn initFromRenderFlow(io: std.Io, gpa: std.mem.Allocator, vulkan: *VkStruct,
 
         passes[passedIndex] = .{ .vtable = pass.vtable };
 
-        passes[passedIndex].pipeline = try vulkan.readPipelineFileAndAdd(
-            io,
-            file.getID(pass.pipeline.?.name),
-            sqlite,
-            pass.pipeline.?.isMesh,
-        );
+        passes[passedIndex].pipeline = try gpa.alloc(Pipeline_t, pass.pipeline.?.len);
+        for (pass.pipeline.?, 0..) |p, k| {
+            passes[passedIndex].pipeline[k] = try vulkan.readPipelineFileAndAdd(
+                io,
+                file.getID(p.name),
+                sqlite,
+                p.isMesh,
+            );
+        }
 
         passes[passedIndex].name = try gpa.dupe(u8, pass.name);
-        passes[passedIndex].pushConstant = pass.pushConstant;
-        const mem = try gpa.alloc(u8, passes[passedIndex].pushConstant.size);
-        passes[passedIndex].pushConstant.pValues = @ptrCast(mem.ptr);
-        // std.log.debug("len {d}", .{mem.len});
+        passes[passedIndex].pushConstant = try gpa.alloc(PushConstantPack, pass.pushConstant.len);
+        for (pass.pushConstant, 0..) |pc, k| {
+            passes[passedIndex].pushConstant[k] = pc;
+            const mem = try gpa.alloc(u8, pc.size);
+            passes[passedIndex].pushConstant[k].pValues = @ptrCast(mem.ptr);
+        }
 
         if (pass.buffers.len > 0) {
             passes[passedIndex].buffer = try gpa.alloc(Buffer_t, pass.buffers.len);
@@ -209,7 +219,11 @@ pub fn deinit(self: *Self, gpa: std.mem.Allocator) void {
         gpa.free(pass.name);
         gpa.free(pass.buffer);
         gpa.free(pass.texture);
-        gpa.free(@as([*]u8, @ptrCast(@alignCast(pass.pushConstant.pValues)))[0..pass.pushConstant.size]);
+        gpa.free(pass.pipeline);
+        for (pass.pushConstant) |pc| {
+            gpa.free(@as([*]u8, @ptrCast(@alignCast(pc.pValues)))[0..pc.size]);
+        }
+        gpa.free(pass.pushConstant);
         gpa.free(pass.descriptorSet);
     }
     gpa.free(self.passes);

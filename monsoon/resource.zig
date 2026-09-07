@@ -41,8 +41,8 @@ pub const ResourceType = enum {
     // texture,
     // position2D,
     // mesh,
-    instance,
-    meshInstance,
+    // instance,
+    // meshInstance,
     others,
 };
 
@@ -50,8 +50,8 @@ pub const Resource = union(ResourceType) {
     // texture: Texture,
     // position2D: Position2D,
     // mesh: Mesh,
-    instance: Instance,
-    meshInstance: MeshInstance,
+    // instance: Instance,
+    // meshInstance: MeshInstance,
     others: Others,
 };
 

@@ -1,7 +1,8 @@
 const std = @import("std");
 pub const BufferUsage = @import("processRender").drawC.BufferUsage;
-const PushConstantPack = @import("processRender").drawC.PushConstantPack;
+pub const PushConstantPack = @import("processRender").drawC.PushConstantPack;
 const Commands = @import("processRender").commands;
+const ExternalCommands = @import("processRender").externalCommands;
 const VkStruct = @import("video");
 const vk = @import("vulkan");
 const PassImp = @import("passImp");
@@ -15,7 +16,7 @@ fn initEmpty(
     userdata: ?*anyopaque,
     pass: *PassImp.Pass,
     vulkan: *VkStruct,
-    commands: *Commands,
+    commands: *ExternalCommands,
     gpa: std.mem.Allocator,
 ) !void {
     _ = userdata;
@@ -72,7 +73,7 @@ pub const VTable = struct {
         userdata: ?*anyopaque,
         pass: *PassImp.Pass,
         vulkan: *VkStruct,
-        commands: *Commands,
+        commands: *ExternalCommands,
         gpa: std.mem.Allocator,
     ) anyerror!void,
 
@@ -89,8 +90,8 @@ pub const VTable = struct {
 pub const Pass = struct {
     name: []const u8,
     buffers: []Buffer,
-    pipeline: ?Pipeline = null,
-    pushConstant: PushConstantPack,
+    pipeline: ?[]Pipeline = null,
+    pushConstant: []PushConstantPack = &.{},
 
     vtable: *const VTable = &emptyVTable,
 };

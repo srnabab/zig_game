@@ -160,7 +160,8 @@ pub const Instance_Reader = struct {
         };
 
         for (parsed.value.items, instances, 0..) |item, *ins, i| {
-            std.log.debug("item {d}: pass {s}, pos {any}, scale {any}, rotation {any}, textures {any}, model {any}", .{ i, item.pass, item.pos, item.scale, item.rotation, item.textures, item.model });
+            _ = i;
+            // std.log.debug("item {d}: pass {s}, pos {any}, scale {any}, rotation {any}, textures {any}, model {any}", .{ i, item.pass, item.pos, item.scale, item.rotation, item.textures, item.model });
 
             if (item.pos.len != 3 or item.scale.len != 3 or item.rotation.len != 3) return resource.ResourceError.Invalid;
             ins.pos = .{ item.pos[0], item.pos[1], item.pos[2] };

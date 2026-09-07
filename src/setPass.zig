@@ -10,6 +10,7 @@ const Pass = @import("pass").Pass;
 const VTable = @import("renderFlow").Pass.VTable;
 const VkStruct = @import("video");
 const Commands = @import("processRender").commands;
+const ExternalCommands = @import("processRender").externalCommands;
 const TextureSet = @import("textureSet");
 const cglm = @import("cglm");
 const renderDebug = @import("renderDebug");
@@ -25,7 +26,7 @@ fn initIndirectDraw(
     userdata: ?*anyopaque,
     pass: *Pass,
     vulkan: *VkStruct,
-    commands: *Commands,
+    commands: *ExternalCommands,
     gpa: std.mem.Allocator,
 ) !void {
     _ = userdata;
@@ -36,7 +37,7 @@ fn initIndirectDraw(
         .instanceIDs = vulkan.getBufferAddress(pass.buffer[2]),
     };
 
-    pass.setPushConstants(@ptrCast(@alignCast(&values)), 0);
+    pass.setPushConstants(0, @ptrCast(@alignCast(&values)), 0);
 
     var descriptorSets = [_]vk.VkDescriptorSet{
         vulkan.globalTextureDescriptorSet,
@@ -113,12 +114,12 @@ fn addCommand(
 
     try commands.addCommand(.drawIndirect, .{
         .drawIndirect = .{
-            .pipeline = pass.pipeline,
+            .pipeline = pass.pipeline[0],
             .usedBuffers = pass.buffer[1..],
             .indirectBuffer = pass.buffer[0],
             .pTextures = pass.texture,
             .descriptorSets = pass.descriptorSet,
-            .pushConstants = pass.pushConstant,
+            .pushConstants = pass.pushConstant[0],
         },
     });
 
@@ -174,7 +175,7 @@ fn initPresent(
     userdata: ?*anyopaque,
     pass: *Pass,
     vulkan: *VkStruct,
-    commands: *Commands,
+    commands: *ExternalCommands,
     gpa: std.mem.Allocator,
 ) !void {
     _ = commands;
@@ -218,7 +219,7 @@ fn addPresentCommand(
     try pass.useTexture(texture, gpa);
 
     var index = textureSet.getDescriptorSetIndex(texture);
-    pass.setPushConstants(@ptrCast(@alignCast(&index)), 0);
+    pass.setPushConstants(0, @ptrCast(@alignCast(&index)), 0);
 
     try commands.setRenderingColorAttachment(0, .{
         .sType = vk.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
@@ -238,10 +239,10 @@ fn addPresentCommand(
 
     try commands.addCommand(.present, .{
         .present = .{
-            .pipeline = pass.pipeline,
+            .pipeline = pass.pipeline[0],
             .pTextures = pass.texture,
             .descriptorSets = pass.descriptorSet,
-            .pushConstants = pass.pushConstant,
+            .pushConstants = pass.pushConstant[0],
         },
     });
 
@@ -281,7 +282,7 @@ fn initIndirectCompute(
     userdata: ?*anyopaque,
     pass: *Pass,
     vulkan: *VkStruct,
-    commands: *Commands,
+    commands: *ExternalCommands,
     gpa: std.mem.Allocator,
 ) !void {
     _ = userdata;
@@ -296,7 +297,7 @@ fn initIndirectCompute(
         .padding = 0,
     };
 
-    const dst: *IndirectComputePushConstant = @ptrCast(@alignCast(pass.pushConstant.pValues));
+    const dst: *IndirectComputePushConstant = @ptrCast(@alignCast(pass.pushConstant[0].pValues));
     dst.* = values;
 
     var descriptorSets = [_]vk.VkDescriptorSet{
@@ -318,7 +319,7 @@ fn addIndirectComputeCommand(
     _ = gpa;
 
     const src: *ViewBoundsAndTotalSpriteCount = @ptrCast(@alignCast(userdata.?));
-    pass.setPushConstants(@ptrCast(@alignCast(src)), 24);
+    pass.setPushConstants(0, @ptrCast(@alignCast(src)), 24);
 
     const groupCount = (src.totalSpriteCount + 31) / 32;
 
@@ -331,10 +332,10 @@ fn addIndirectComputeCommand(
 
     try commands.addCommand(.compute, .{ .compute = .{
         .descriptorSets = pass.descriptorSet,
-        .pipeline = pass.pipeline,
+        .pipeline = pass.pipeline[0],
         .pTextures = pass.texture,
         .usedBuffers = pass.buffer,
-        .pushConstants = pass.pushConstant,
+        .pushConstants = pass.pushConstant[0],
         .groupCount = groupCount,
     } });
 
@@ -432,7 +433,7 @@ fn initIm_Feather(userdata: ?*anyopaque, pass: *Pass, vulkan: *VkStruct, gpa: st
         .instances = instances,
         .meshes = meshes,
     };
-    pass.setPushConstants(&push);
+    pass.setPushConstants(0, @ptrCast(@alignCast(&push)), 0);
 
     var descriptorSets = [_]vk.VkDescriptorSet{
         vulkan.globalTextureDescriptorSet,
@@ -457,9 +458,9 @@ fn addIm_FeatherCommand(
 
     try commands.addCommand(.drawMeshIndirect, .{ .drawMeshIndirect = .{
         .descriptorSets = pass.descriptorSet,
-        .pipeline = pass.pipeline,
+        .pipeline = pass.pipeline[0],
         .usedBuffers = pass.buffer,
-        .pushConstants = pass.pushConstant,
+        .pushConstants = pass.pushConstant[0],
         .indirectBuffer = pass.buffer[0],
         .pTextures = pass.texture,
         .drawCount = drawCount,
@@ -595,111 +596,6 @@ const twoU64 = extern struct {
     b: u64,
 };
 
-fn initC_CommandPrefixSum(userdata: ?*anyopaque, pass: *Pass, vulkan: *VkStruct, commands: *Commands, gpa: std.mem.Allocator) !void {
-    _ = userdata;
-
-    const BufferAddress0 = vulkan.getBufferAddress(pass.buffer[0]);
-    const BufferAddress1 = vulkan.getBufferAddress(pass.buffer[1]);
-
-    var push = twoU64{
-        .a = BufferAddress0,
-        .b = BufferAddress1,
-    };
-    pass.setPushConstants(@ptrCast(@alignCast(&push)), 0);
-
-    var descriptorSets = [_]vk.VkDescriptorSet{
-        vulkan.globalTextureDescriptorSet,
-    };
-
-    try pass.setDescriptorSets(&descriptorSets, gpa);
-
-    try commands.cacheCommand(.{ .fillBuffer = .{
-        .buffer = pass.buffer[1],
-        .offset = 0,
-        .size = 12,
-        .value = 1,
-    } });
-}
-
-fn addC_CommandPrefixSumCommand(
-    userdata: ?*anyopaque,
-    pass: *Pass,
-    vulkan: *VkStruct,
-    textureSet: *TextureSet,
-    commands: *Commands,
-    gpa: std.mem.Allocator,
-) !void {
-    _ = textureSet;
-
-    const groupCount = @as(*u32, @ptrCast(@alignCast(userdata.?))).*;
-    // std.log.debug("groupCount : {d}", .{groupCount});
-
-    try commands.addCommand(.fillBuffer, .{ .fillBuffer = .{
-        .buffer = pass.buffer[1],
-        .offset = 0,
-        .size = 4,
-        .value = 0,
-    } });
-
-    try commands.addCommand(.compute, .{ .compute = .{
-        .pipeline = pass.pipeline,
-        .descriptorSets = pass.descriptorSet,
-        .pTextures = pass.texture,
-        .usedBuffers = pass.buffer,
-        .pushConstants = pass.pushConstant,
-        .groupCount = groupCount,
-    } });
-
-    vulkan.buffers.writeBuffer(pass.buffer[0]);
-    vulkan.buffers.writeBuffer(pass.buffer[1]);
-
-    pass.clearTexture(gpa);
-}
-
-const vtableC_CommandPrefixSum = VTable{
-    .init = initC_CommandPrefixSum,
-    .addCommand = addC_CommandPrefixSumCommand,
-};
-
-fn addC_CommandPrefixSumPass() !void {
-    const passName = "c_command_prefix_sum";
-
-    const buffer = try renderFlow.createBuffer(
-        "iv_FeatherCommand",
-        @sizeOf(vertexStruct.CustomDrawMeshTasksIndirectCommand) * 2,
-        0,
-        .storage,
-        false,
-        null,
-    );
-
-    const buffer2 = try renderFlow.createBuffer(
-        "indirectComputeCommand",
-        @sizeOf(vk.VkDispatchIndirectCommand),
-        0,
-        .indirect,
-        false,
-        null,
-    );
-
-    const pipe = try renderFlow.addPipeline("c_commandPrefixSum.pipeb", false);
-
-    try renderFlow.createPass(passName);
-    try renderFlow.addPipelineToPass(passName, pipe);
-    try renderFlow.addBufferToPass(passName, buffer);
-    try renderFlow.addBufferToPass(passName, buffer2);
-
-    try renderFlow.setPushConstant(
-        passName,
-        vk.VK_SHADER_STAGE_COMPUTE_BIT,
-        16,
-    );
-
-    try renderFlow.addVTableToPass(passName, &vtableC_CommandPrefixSum);
-
-    try renderFlow.appendPass(passName);
-}
-
 const ic_Task_PushConstant = extern struct {
     commands: u64,
     mappings: u64,
@@ -709,165 +605,6 @@ const ic_Task_PushConstant = extern struct {
     iCommands: u64,
     drawCount: u32,
 };
-
-fn initIc_Task(userdata: ?*anyopaque, pass: *Pass, vulkan: *VkStruct, commands: *Commands, gpa: std.mem.Allocator) !void {
-    _ = userdata;
-    _ = commands;
-
-    const commnadAddress = vulkan.getBufferAddress(pass.buffer[1]);
-    const mappingAddress = vulkan.getBufferAddress(pass.buffer[2]);
-    const instanceAddress = vulkan.getBufferAddress(pass.buffer[3]);
-    const meshAddress = vulkan.getBufferAddress(pass.buffer[4]);
-    const payloadAddress = vulkan.getBufferAddress(pass.buffer[5]);
-    const indirectAddress = vulkan.getBufferAddress(pass.buffer[6]);
-
-    const push = ic_Task_PushConstant{
-        .commands = commnadAddress,
-        .mappings = mappingAddress,
-        .instances = instanceAddress,
-        .meshes = meshAddress,
-        .payloads = payloadAddress,
-        .iCommands = indirectAddress,
-        .drawCount = 0,
-    };
-    const dst: *ic_Task_PushConstant = @ptrCast(@alignCast(pass.pushConstant.pValues));
-    dst.* = push;
-
-    var descriptorSets = [_]vk.VkDescriptorSet{
-        vulkan.globalTextureDescriptorSet,
-    };
-
-    try pass.setDescriptorSets(&descriptorSets, gpa);
-}
-
-fn addIc_TaskCommand(
-    userdata: ?*anyopaque,
-    pass: *Pass,
-    vulkan: *VkStruct,
-    textureSet: *TextureSet,
-    commands: *Commands,
-    gpa: std.mem.Allocator,
-) !void {
-    _ = textureSet;
-    _ = gpa;
-
-    // @breakpoint();
-    pass.setPushConstants(@as([*]u8, @ptrCast(@alignCast(userdata)))[0..@sizeOf(u32)], 48);
-
-    try commands.addCommand(.fillBuffer, .{ .fillBuffer = .{
-        .buffer = pass.buffer[6],
-        .offset = 0,
-        .size = 4,
-        .value = 0,
-    } });
-
-    try commands.addCommand(.computeIndirect, .{ .computeIndirect = .{
-        .pipeline = pass.pipeline,
-        .descriptorSets = pass.descriptorSet,
-        .pTextures = pass.texture,
-        .usedBuffers = pass.buffer,
-        .pushConstants = pass.pushConstant,
-        .indirectBuffer = pass.buffer[0],
-    } });
-
-    vulkan.buffers.writeBuffer(pass.buffer[5]);
-    vulkan.buffers.writeBuffer(pass.buffer[6]);
-}
-
-const vtableIc_Task = VTable{
-    .init = initIc_Task,
-    .addCommand = addIc_TaskCommand,
-};
-
-fn addIc_TaskPass() !void {
-    const passName = "ic_task";
-
-    const buffer0 = try renderFlow.createBuffer(
-        "indirectComputeCommand",
-        @sizeOf(vk.VkDispatchIndirectCommand),
-        0,
-        .indirect,
-        false,
-        null,
-    );
-
-    const buffer1 = try renderFlow.createBuffer(
-        "iv_FeatherCommand",
-        @sizeOf(vertexStruct.CustomDrawMeshTasksIndirectCommand) * 2,
-        0,
-        .storage,
-        false,
-        null,
-    );
-
-    const buffer2 = try renderFlow.createBuffer(
-        "groupMappings",
-        @sizeOf(vertexStruct.GroupMapping) * 4,
-        @sizeOf(vertexStruct.GroupMapping),
-        .storage,
-        false,
-        null,
-    );
-
-    // f1
-    const buffer3 = try renderFlow.createBuffer(
-        "instance3D",
-        @sizeOf(vertexStruct.Instance3D) * 4,
-        @sizeOf(vertexStruct.Instance3D),
-        .storage,
-        false,
-        null,
-    );
-
-    const buffer4 = try renderFlow.createBuffer(
-        "meshes",
-        @sizeOf(vertexStruct.Mesh) * 40,
-        @sizeOf(vertexStruct.Mesh),
-        .storage,
-        false,
-        null,
-    );
-
-    const buffer5 = try renderFlow.createBuffer(
-        "computeTaskPayload",
-        @sizeOf(vertexStruct.ComputeTaskPayload) * 400,
-        @sizeOf(vertexStruct.ComputeTaskPayload),
-        .storage,
-        false,
-        null,
-    );
-
-    const buffer6 = try renderFlow.createBuffer(
-        "indirectVertex_MeshDrawCommand",
-        @sizeOf(vk.VkDrawIndirectCommand),
-        @sizeOf(vk.VkDrawIndirectCommand),
-        .indirect,
-        false,
-        null,
-    );
-
-    const pipe = try renderFlow.addPipeline("ic_task.pipeb", false);
-
-    try renderFlow.createPass(passName);
-    try renderFlow.addPipelineToPass(passName, pipe);
-    try renderFlow.addBufferToPass(passName, buffer0);
-    try renderFlow.addBufferToPass(passName, buffer1);
-    try renderFlow.addBufferToPass(passName, buffer2);
-    try renderFlow.addBufferToPass(passName, buffer3);
-    try renderFlow.addBufferToPass(passName, buffer4);
-    try renderFlow.addBufferToPass(passName, buffer5);
-    try renderFlow.addBufferToPass(passName, buffer6);
-
-    try renderFlow.setPushConstant(
-        passName,
-        vk.VK_SHADER_STAGE_COMPUTE_BIT,
-        52,
-    );
-
-    try renderFlow.addVTableToPass(passName, &vtableIc_Task);
-
-    try renderFlow.appendPass(passName);
-}
 
 const Iv_feather_PushConstant = extern struct {
     meshlet: u64,
@@ -882,56 +619,99 @@ const Iv_feather_PushConstant = extern struct {
     paramTextureIndex: u32,
 };
 
-fn initIv_Feather(userdata: ?*anyopaque, pass: *Pass, vulkan: *VkStruct, commands: *Commands, gpa: std.mem.Allocator) !void {
+const IF = struct {
+    // merged "i_feather" pass buffer indices
+    const drawCommands: usize = 0; // indirectVertex_MeshDrawCommand
+    const meshStorage: usize = 1; // featherStorageBuffer
+    const meshlet: usize = 2; // featherMeshlet
+    const vertices: usize = 3; // featherVertices
+    const meshletVertices: usize = 4; // featherMeshletVertices
+    const meshletTriangles: usize = 5; // featherMeshletTriangles
+    const featherCommands: usize = 6; // iv_FeatherCommand
+    const dispatchCommands: usize = 7; // indirectComputeCommand
+    const groupMappings: usize = 8;
+    const instance3D: usize = 9;
+    const meshes: usize = 10;
+    const payloads: usize = 11; // computeTaskPayload
+    const params: usize = 12; // featherParameters
+};
+
+fn initI_Feather(
+    userdata: ?*anyopaque,
+    pass: *Pass,
+    vulkan: *VkStruct,
+    commands: *ExternalCommands,
+    gpa: std.mem.Allocator,
+) !void {
     _ = userdata;
 
-    const storageBufferAddress = vulkan.getBufferAddress(pass.buffer[1]);
+    // c_command_prefix_sum push (pipeline/pushConstant index 0)
+    var pushC = twoU64{
+        .a = vulkan.getBufferAddress(pass.buffer[IF.featherCommands]),
+        .b = vulkan.getBufferAddress(pass.buffer[IF.dispatchCommands]),
+    };
+    pass.setPushConstants(0, @ptrCast(@alignCast(&pushC)), 0);
 
-    const meshlet = storageBufferAddress;
+    // ic_task push (index 1)
+    const pushIc = ic_Task_PushConstant{
+        .commands = vulkan.getBufferAddress(pass.buffer[IF.featherCommands]),
+        .mappings = vulkan.getBufferAddress(pass.buffer[IF.groupMappings]),
+        .instances = vulkan.getBufferAddress(pass.buffer[IF.instance3D]),
+        .meshes = vulkan.getBufferAddress(pass.buffer[IF.meshes]),
+        .payloads = vulkan.getBufferAddress(pass.buffer[IF.payloads]),
+        .iCommands = vulkan.getBufferAddress(pass.buffer[IF.drawCommands]),
+        .drawCount = 0,
+    };
+    const dstIc: *ic_Task_PushConstant = @ptrCast(@alignCast(pass.pushConstant[1].pValues));
+    dstIc.* = pushIc;
 
-    var bufferContent = vulkan.buffers.getBufferContent(pass.buffer[2]);
-    const vertices = storageBufferAddress + bufferContent.size;
+    // iv_feather push (index 2)
+    const storageBufferAddress = vulkan.getBufferAddress(pass.buffer[IF.meshStorage]);
+    var bufferContent = vulkan.buffers.getBufferContent(pass.buffer[IF.meshlet]);
+    const verticesAddress = storageBufferAddress + bufferContent.size;
+    bufferContent = vulkan.buffers.getBufferContent(pass.buffer[IF.vertices]);
+    const meshletVerticesAddress = verticesAddress + bufferContent.size;
+    bufferContent = vulkan.buffers.getBufferContent(pass.buffer[IF.meshletVertices]);
+    const meshletTrianglesAddress = meshletVerticesAddress + bufferContent.size;
 
-    bufferContent = vulkan.buffers.getBufferContent(pass.buffer[3]);
-    const meshletVertices = vertices + bufferContent.size;
-
-    bufferContent = vulkan.buffers.getBufferContent(pass.buffer[4]);
-    const meshletTriangles = meshletVertices + bufferContent.size;
-
-    const instances = vulkan.getBufferAddress(pass.buffer[6]);
-    const meshes = vulkan.getBufferAddress(pass.buffer[7]);
-    const payloads = vulkan.getBufferAddress(pass.buffer[8]);
-    const params = vulkan.getBufferAddress(pass.buffer[9]);
-
-    var push = Iv_feather_PushConstant{
-        .meshlet = meshlet,
-        .vertices = vertices,
-        .meshletVertices = meshletVertices,
-        .meshletTriangles = meshletTriangles,
-        .instances = instances,
-        .meshes = meshes,
-        .payloads = payloads,
-        .params = params,
+    const pushIv = Iv_feather_PushConstant{
+        .meshlet = storageBufferAddress,
+        .vertices = verticesAddress,
+        .meshletVertices = meshletVerticesAddress,
+        .meshletTriangles = meshletTrianglesAddress,
+        .instances = vulkan.getBufferAddress(pass.buffer[IF.instance3D]),
+        .meshes = vulkan.getBufferAddress(pass.buffer[IF.meshes]),
+        .payloads = vulkan.getBufferAddress(pass.buffer[IF.payloads]),
+        .params = vulkan.getBufferAddress(pass.buffer[IF.params]),
         .paramTextureIndex = 0,
     };
-    pass.setPushConstants(@ptrCast(@alignCast(&push)), 0);
+    const dstIv: *Iv_feather_PushConstant = @ptrCast(@alignCast(pass.pushConstant[2].pValues));
+    dstIv.* = pushIv;
 
+    // 描述符超集: slot0 纹理, slot1 3d mvp(C/IC 计算命令只取 [0..1])
     var descriptorSets = [_]vk.VkDescriptorSet{
         vulkan.globalTextureDescriptorSet,
         vulkan.global3dMVPMatrixDescriptorSet,
     };
-
     try pass.setDescriptorSets(&descriptorSets, gpa);
 
-    try commands.cacheCommand(.{ .fillBuffer = .{
-        .buffer = pass.buffer[0],
+    // C 缓存: 预置 dispatch 头 12B = 1
+    try commands.externalCommand(.{ .fillBuffer = .{
+        .buffer = pass.buffer[IF.dispatchCommands],
+        .offset = 0,
+        .size = 12,
+        .value = 1,
+    } });
+    // IV 缓存: 预置 draw 命令顶点数 = 1(空首条占位)
+    try commands.externalCommand(.{ .fillBuffer = .{
+        .buffer = pass.buffer[IF.drawCommands],
         .offset = 4,
         .size = 4,
         .value = 1,
     } });
 }
 
-fn addIv_FeatherCommand(
+fn addI_FeatherCommand(
     userdata: ?*anyopaque,
     pass: *Pass,
     vulkan: *VkStruct,
@@ -939,30 +719,72 @@ fn addIv_FeatherCommand(
     commands: *Commands,
     gpa: std.mem.Allocator,
 ) !void {
-    _ = vulkan;
     _ = textureSet;
-    _ = userdata;
 
+    const groupCount = @as(*u32, @ptrCast(@alignCast(userdata.?))).*;
+
+    // ---- c_command_prefix_sum: 清零 dispatch + 前缀和 compute ----
+    try commands.addCommand(.fillBuffer, .{ .fillBuffer = .{
+        .buffer = pass.buffer[IF.dispatchCommands],
+        .offset = 0,
+        .size = 4,
+        .value = 0,
+    } });
+
+    try commands.addCommand(.compute, .{ .compute = .{
+        .pipeline = pass.pipeline[0],
+        .descriptorSets = pass.descriptorSet[0..1],
+        .pTextures = pass.texture,
+        .usedBuffers = pass.buffer[IF.featherCommands .. IF.dispatchCommands + 1],
+        .pushConstants = pass.pushConstant[0],
+        .groupCount = groupCount,
+    } });
+
+    vulkan.buffers.writeBuffer(pass.buffer[IF.featherCommands]);
+    vulkan.buffers.writeBuffer(pass.buffer[IF.dispatchCommands]);
+
+    // ---- ic_task: 清零 draw 命令 + computeIndirect ----
+    pass.setPushConstants(1, @as([*]u8, @ptrCast(@alignCast(userdata)))[0..@sizeOf(u32)], 48);
+
+    try commands.addCommand(.fillBuffer, .{ .fillBuffer = .{
+        .buffer = pass.buffer[IF.drawCommands],
+        .offset = 0,
+        .size = 4,
+        .value = 0,
+    } });
+
+    try commands.addCommand(.computeIndirect, .{ .computeIndirect = .{
+        .pipeline = pass.pipeline[1],
+        .descriptorSets = pass.descriptorSet[0..1],
+        .pTextures = pass.texture,
+        .usedBuffers = pass.buffer,
+        .pushConstants = pass.pushConstant[1],
+        .indirectBuffer = pass.buffer[IF.dispatchCommands],
+    } });
+
+    vulkan.buffers.writeBuffer(pass.buffer[IF.payloads]);
+    vulkan.buffers.writeBuffer(pass.buffer[IF.drawCommands]);
+
+    // ---- iv_feather: drawIndirect ----
     try commands.addCommand(.drawIndirect, .{ .drawIndirect = .{
         .descriptorSets = pass.descriptorSet,
-        .pipeline = pass.pipeline,
+        .pipeline = pass.pipeline[2],
         .usedBuffers = pass.buffer,
-        .pushConstants = pass.pushConstant,
-        .indirectBuffer = pass.buffer[0],
+        .pushConstants = pass.pushConstant[2],
+        .indirectBuffer = pass.buffer[IF.drawCommands],
         .pTextures = pass.texture,
     } });
-    // std.log.debug("addIm_FeatherCommand", .{});
 
     pass.clearTexture(gpa);
 }
 
-const vtableIv_Feather = VTable{
-    .init = initIv_Feather,
-    .addCommand = addIv_FeatherCommand,
+const vtableI_Feather = VTable{
+    .init = initI_Feather,
+    .addCommand = addI_FeatherCommand,
 };
 
-fn addIv_FeatherPass() !void {
-    const passName = "iv_feather";
+fn addI_FeatherPass() !void {
+    const passName = "i_feather";
 
     const buffer0 = try renderFlow.createBuffer(
         "indirectVertex_MeshDrawCommand",
@@ -1027,6 +849,33 @@ fn addIv_FeatherPass() !void {
     );
 
     const buffer6 = try renderFlow.createBuffer(
+        "iv_FeatherCommand",
+        @sizeOf(vertexStruct.CustomDrawMeshTasksIndirectCommand) * 2,
+        0,
+        .storage,
+        false,
+        null,
+    );
+
+    const buffer7 = try renderFlow.createBuffer(
+        "indirectComputeCommand",
+        @sizeOf(vk.VkDispatchIndirectCommand),
+        0,
+        .indirect,
+        false,
+        null,
+    );
+
+    const buffer8 = try renderFlow.createBuffer(
+        "groupMappings",
+        @sizeOf(vertexStruct.GroupMapping) * 4,
+        @sizeOf(vertexStruct.GroupMapping),
+        .storage,
+        false,
+        null,
+    );
+
+    const buffer9 = try renderFlow.createBuffer(
         "instance3D",
         @sizeOf(vertexStruct.Instance3D) * 4,
         @sizeOf(vertexStruct.Instance3D),
@@ -1035,7 +884,7 @@ fn addIv_FeatherPass() !void {
         null,
     );
 
-    const buffer7 = try renderFlow.createBuffer(
+    const buffer10 = try renderFlow.createBuffer(
         "meshes",
         @sizeOf(vertexStruct.Mesh) * 40,
         @sizeOf(vertexStruct.Mesh),
@@ -1044,7 +893,7 @@ fn addIv_FeatherPass() !void {
         null,
     );
 
-    const buffer8 = try renderFlow.createBuffer(
+    const buffer11 = try renderFlow.createBuffer(
         "computeTaskPayload",
         @sizeOf(vertexStruct.ComputeTaskPayload) * 400,
         @sizeOf(vertexStruct.ComputeTaskPayload),
@@ -1053,7 +902,7 @@ fn addIv_FeatherPass() !void {
         null,
     );
 
-    const buffer9 = try renderFlow.createBuffer(
+    const buffer12 = try renderFlow.createBuffer(
         "featherParameters",
         20000 * 192 * @sizeOf(f32),
         @sizeOf(f32),
@@ -1062,10 +911,14 @@ fn addIv_FeatherPass() !void {
         null,
     );
 
-    const pipe = try renderFlow.addPipeline("iv_feather.pipeb", false);
+    const pipeC = try renderFlow.addPipeline("c_commandPrefixSum.pipeb", false);
+    const pipeIc = try renderFlow.addPipeline("ic_task.pipeb", false);
+    const pipeIv = try renderFlow.addPipeline("iv_feather.pipeb", false);
 
     try renderFlow.createPass(passName);
-    try renderFlow.addPipelineToPass(passName, pipe);
+    try renderFlow.addPipelineToPass(passName, pipeC);
+    try renderFlow.addPipelineToPass(passName, pipeIc);
+    try renderFlow.addPipelineToPass(passName, pipeIv);
     try renderFlow.addBufferToPass(passName, buffer0);
     try renderFlow.addBufferToPass(passName, buffer1);
     try renderFlow.addBufferToPass(passName, buffer2);
@@ -1076,14 +929,15 @@ fn addIv_FeatherPass() !void {
     try renderFlow.addBufferToPass(passName, buffer7);
     try renderFlow.addBufferToPass(passName, buffer8);
     try renderFlow.addBufferToPass(passName, buffer9);
+    try renderFlow.addBufferToPass(passName, buffer10);
+    try renderFlow.addBufferToPass(passName, buffer11);
+    try renderFlow.addBufferToPass(passName, buffer12);
 
-    try renderFlow.setPushConstant(
-        passName,
-        vk.VK_SHADER_STAGE_VERTEX_BIT,
-        @sizeOf(Iv_feather_PushConstant),
-    );
+    try renderFlow.setPushConstant(passName, vk.VK_SHADER_STAGE_COMPUTE_BIT, 16);
+    try renderFlow.setPushConstant(passName, vk.VK_SHADER_STAGE_COMPUTE_BIT, 52);
+    try renderFlow.setPushConstant(passName, vk.VK_SHADER_STAGE_VERTEX_BIT, @sizeOf(Iv_feather_PushConstant));
 
-    try renderFlow.addVTableToPass(passName, &vtableIv_Feather);
+    try renderFlow.addVTableToPass(passName, &vtableI_Feather);
 
     try renderFlow.appendPass(passName);
 }
@@ -1091,9 +945,7 @@ fn addIv_FeatherPass() !void {
 pub fn setting() !void {
     try addIndirectComputePass();
     try addIndirectDrawPass();
-    try addC_CommandPrefixSumPass();
-    try addIc_TaskPass();
-    try addIv_FeatherPass();
+    try addI_FeatherPass();
     // try addIm_FeatherPass();
     try addPresentPass();
 }

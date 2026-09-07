@@ -95,7 +95,7 @@ pub fn createPass(name: []const u8) !void {
         .name = name_dupe,
         .buffers = &.{},
         .pipeline = null,
-        .pushConstant = .{},
+        .pushConstant = &.{},
     };
 
     try passMap.put(name_dupe, pass);
@@ -121,7 +121,12 @@ pub fn addPipelineToPass(passName: []const u8, pipeline: Pass.Pipeline) !void {
 
     const pip = pipelines.get(pipeline.name) orelse return error.PipelineNotFound;
 
-    pass.pipeline = pip;
+    if (pass.pipeline == null) {
+        pass.pipeline = try allocator.allocator().alloc(Pass.Pipeline, 1);
+    } else {
+        pass.pipeline = try allocator.allocator().realloc(pass.pipeline.?, pass.pipeline.?.len + 1);
+    }
+    pass.pipeline.?[pass.pipeline.?.len - 1] = pip;
 }
 
 pub fn addVTableToPass(passName: []const u8, vtable: *const Pass.VTable) !void {
@@ -133,9 +138,16 @@ pub fn addVTableToPass(passName: []const u8, vtable: *const Pass.VTable) !void {
 pub fn setPushConstant(passName: []const u8, stage: vk.VkShaderStageFlags, size: u16) !void {
     const pass = passMap.getPtr(passName) orelse return error.PassNotFound;
 
-    pass.pushConstant.stageFlag = stage;
-    pass.pushConstant.size = size;
-    pass.pushConstant.offset = 0;
+    if (pass.pushConstant.len == 0) {
+        pass.pushConstant = try allocator.allocator().alloc(Pass.PushConstantPack, 1);
+    } else {
+        pass.pushConstant = try allocator.allocator().realloc(pass.pushConstant, pass.pushConstant.len + 1);
+    }
+    pass.pushConstant[pass.pushConstant.len - 1] = .{
+        .stageFlag = stage,
+        .size = size,
+        .offset = 0,
+    };
 }
 pub fn appendPass(passName: []const u8) !void {
     const pass = passMap.get(passName) orelse return error.PassNotFound;

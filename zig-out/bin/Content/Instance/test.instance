@@ -3,10 +3,46 @@
     "items": [
         {
             "pass": "indirect2D",
-            "pos": [0, 0, 0.1],
-            "rotation": [0, 0, 0],
-            "scale": [1, 1, 1],
-            "textures": ["box.png"]
+            "pos": [
+                0,
+                0,
+                0.1
+            ],
+            "rotation": [
+                0,
+                0,
+                0
+            ],
+            "scale": [
+                1,
+                1,
+                1
+            ],
+            "textures": [
+                "box.png"
+            ]
+        },
+        {
+            "pass": "i_feather",
+            "model": "Plane.001_0.vtx",
+            "pos": [
+                0,
+                0,
+                0
+            ],
+            "rotation": [
+                0,
+                0,
+                0
+            ],
+            "scale": [
+                1,
+                1,
+                1
+            ],
+            "textures": [
+                "feather_lut.ktx2"
+            ]
         }
     ]
 }

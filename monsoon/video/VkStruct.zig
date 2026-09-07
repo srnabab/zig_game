@@ -1470,7 +1470,6 @@ pub fn readPipelineFileAndAdd(self: *Self, io: std.Io, fileID: u32, sqlite: ?*fi
     const fileContent = try fileReader.interface.readAlloc(self.allocator, fileSize);
     defer self.allocator.free(fileContent);
     zone2.deinit();
-    // std.log.debug("file len {d}", .{fileContent.len});
 
     var shaderCodes: [5][]u8 = undefined;
     var pos: u64 = 0;
@@ -1481,23 +1480,16 @@ pub fn readPipelineFileAndAdd(self: *Self, io: std.Io, fileID: u32, sqlite: ?*fi
         fileContent[0..@sizeOf(translate.VulkanPipelineInfo)],
     ));
     pos += @sizeOf(translate.VulkanPipelineInfo);
-    // std.log.debug("pos {d}", .{pos});
-    for (0..5) |i| {
-        // std.log.debug("i {d}", .{i});
 
+    for (0..5) |i| {
         if (pos >= fileSize) break;
 
         const len = std.mem.bytesToValue(u32, fileContent[pos .. pos + @sizeOf(u32)]);
-        // std.log.debug("pos {d}, len {d}", .{ pos, len });
         pos += @sizeOf(u32);
-        // std.log.debug("pos {d}", .{pos});
         shaderCodes[i] = fileContent[pos .. pos + len];
         pos += len;
-        // std.log.debug("pos {d}", .{pos});
     }
     zone3.deinit();
-
-    // std.log.debug("type {d}", .{});
 
     try translate.toVulkan(
         pipelineInfo,
@@ -1514,8 +1506,6 @@ pub fn readPipelineFileAndAdd(self: *Self, io: std.Io, fileID: u32, sqlite: ?*fi
     try self.addPipelineCreateInfo(pipelineInfo);
 
     const handle = self.handles.createHandle(Handles.WaitFill, .pipeline);
-
-    // std.log.debug("entry name {s}", .{pipelineInfo.shaderStageCreateInfo[0].pName});
 
     const len = std.mem.len(@as([*c]u8, @ptrCast(&pipelineInfo.name)));
     const name = try self.allocator.dupe(u8, pipelineInfo.name[0..len]);

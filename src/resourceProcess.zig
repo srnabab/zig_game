@@ -43,13 +43,17 @@ const textureSet = @import("textureSet");
 const loadMap = @import("loadmap");
 const instance2 = @import("instance2");
 const vertices2D = @import("vertices");
+const PassGroupMapping = @import("passGroupMapping");
+const instance1 = @import("instance");
 
 pub const UserContext = struct {
     /// engine will use this
     pTextureSet: textureSet,
     loadmaps: loadMap,
+    instances1: instance1,
     instances2: instance2,
     vertices: vertices2D,
+    passGroupMapping: PassGroupMapping,
 
     meshes: mesh,
 
@@ -58,8 +62,10 @@ pub const UserContext = struct {
             .meshes = .init(gpa, vulkan, handles),
             .loadmaps = try .init(gpa, 1),
             .instances2 = .init(gpa),
+            .passGroupMapping = .init(gpa),
             .vertices = undefined,
             .pTextureSet = undefined,
+            .instances1 = undefined,
         };
     }
 
@@ -68,6 +74,8 @@ pub const UserContext = struct {
         self.loadmaps.deinit(gpa);
         self.instances2.deinit();
         self.vertices.deinit();
+        self.passGroupMapping.deinit();
+        self.instances1.deinit();
     }
 };
 

@@ -25,7 +25,6 @@ pub const GroupMapping = extern struct {
 pub const Instance3D = extern struct {
     matrix: mat4,
     texIndex: u32,
-    samplerIndex: u32,
 };
 
 pub const Mesh = struct {

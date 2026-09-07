@@ -171,7 +171,6 @@ pub fn main(init: std.process.Init) !void {
     errdefer pTextureSet.deinit(&vulkan);
 
     var instances = instance.init(allocator_t.*, &handles);
-    defer instances.deinit();
 
     renderFlow.init(allocator_t.*);
     defer renderFlow.deinit();
@@ -191,6 +190,13 @@ pub fn main(init: std.process.Init) !void {
     var externalCommands = ExternalCommands.init(io, allocator_t.*);
     defer externalCommands.deinit();
 
+    for (passes.passes) |*value| {
+        try value.init(null, &vulkan, &externalCommands, allocator_t.*);
+    }
+    var cs_mesh_drawCount: u32 = 0;
+    // passes.passMap.get("c_command_prefix_sum").?.setUserdata(&cs_mesh_drawCount);
+    passes.passMap.get("i_feather").?.setUserdata(&cs_mesh_drawCount);
+
     const indirect2DBuffers = passes.passMap.get("indirect2D").?.buffer;
     var vertices = try vertices2D.init(indirect2DBuffers[2], indirect2DBuffers[0], indirect2DBuffers[1], allocator_t.*, &externalCommands);
 
@@ -198,10 +204,12 @@ pub fn main(init: std.process.Init) !void {
     defer uctx.deinitUserContext(allocator_t.*);
     uctx.pTextureSet = pTextureSet;
     uctx.vertices = vertices;
+    uctx.instances1 = instances;
     defer uctx.pTextureSet.deinit(&vulkan);
 
     pTextureSet = undefined;
     vertices = undefined;
+    instances = undefined;
 
     var render_t = try Thread.spawn(
         .{},
@@ -220,7 +228,7 @@ pub fn main(init: std.process.Init) !void {
             .vulkan = &vulkan,
             .passes = passes,
             .uctx = &uctx,
-            .instances = &instances,
+            .instances = &uctx.instances1,
             .externalCommands = &externalCommands,
         }},
     );

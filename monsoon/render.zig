@@ -100,10 +100,6 @@ pub fn render_thread_func(args: Args) !void {
     defer commands.deinit();
     renderDebug.init(io, &commands);
 
-    for (passes.passes) |*value| {
-        try value.init(null, vulkan, &commands, allocator_t.*);
-    }
-
     // vulkan.logBufferPtr();
 
     var graphic = OneTimeCommand.init(io, allocator_t.*, vulkan);
@@ -125,9 +121,6 @@ pub fn render_thread_func(args: Args) !void {
     }
 
     try vulkan.createAllPipelinesAdded();
-
-    var passGroupMapping = PassGroupMapping.init(gpa);
-    defer passGroupMapping.deinit();
 
     const ubo_test = try vulkan.createBufferByUsage(
         @sizeOf(shaderStruct.UniformBufferObject),
@@ -240,10 +233,6 @@ pub fn render_thread_func(args: Args) !void {
         .totalSpriteCount = 0,
     };
 
-    var cs_mesh_drawCount: u32 = 0;
-    passes.passMap.get("c_command_prefix_sum").?.setUserdata(&cs_mesh_drawCount);
-    passes.passMap.get("ic_task").?.setUserdata(&cs_mesh_drawCount);
-
     // global.stopExecuteNodePrint = false;
     // global.game_end.store(1, .seq_cst);
 
@@ -311,47 +300,47 @@ pub fn render_thread_func(args: Args) !void {
                 while (total > 0) : (total -= 1) {
                     const r = resources.popFirst() orelse break;
                     switch (r) {
-                        .instance => |i| {
-                            const texIdx = if (i.texture) |t|
-                                pTextureSet.getDescriptorSetIndex(t)
-                            else
-                                0;
+                        // .instance => |i| {
+                        //     const texIdx = if (i.texture) |t|
+                        //         pTextureSet.getDescriptorSetIndex(t)
+                        //     else
+                        //         0;
 
-                            _ = try instances.add(
-                                texIdx,
-                                i.sampler,
-                                i.pos,
-                                i.rotation,
-                                i.scale,
-                                i.handle,
-                            );
-                        },
-                        .meshInstance => |mi| {
-                            const idx1 = Handles.getIndex(@ptrCast(mi.instance)) orelse {
-                                try resources.pushLast(r);
-                                continue;
-                            };
-                            const idx2 = Handles.getIndex(@ptrCast(mi.mesh)) orelse {
-                                try resources.pushLast(r);
-                                continue;
-                            };
-                            const tidx = pTextureSet.getDescriptorSetIndex(@ptrCast(resource.getResourceHandle(file.getID("feather_lut.ktx2"))));
+                        //     _ = try instances.add(
+                        //         texIdx,
+                        //         i.sampler,
+                        //         i.pos,
+                        //         i.rotation,
+                        //         i.scale,
+                        //         i.handle,
+                        //     );
+                        // },
+                        // .meshInstance => |mi| {
+                        // const idx1 = Handles.getIndex(@ptrCast(mi.instance)) orelse {
+                        //     try resources.pushLast(r);
+                        //     continue;
+                        // };
+                        // const idx2 = Handles.getIndex(@ptrCast(mi.mesh)) orelse {
+                        //     try resources.pushLast(r);
+                        //     continue;
+                        // };
+                        // const tidx = pTextureSet.getDescriptorSetIndex(@ptrCast(resource.getResourceHandle(file.getID("feather_lut.ktx2"))));
 
-                            cs_mesh_drawCount = try passGroupMapping.add(mi.passName, .{
-                                .instanceID = idx1,
-                                .meshID = idx2,
-                            });
-                            std.log.debug("aaaaaaa", .{});
-                            // passes.enablePass(mi.passName);
-                            passes.passMap.get("iv_feather").?.setPushConstants(@constCast(&std.mem.toBytes(tidx)), 64);
-                            passes.enablePass("c_command_prefix_sum");
-                            passes.enablePass("ic_task");
-                            passes.enablePass("iv_feather");
-                            // global.storExecuteSequencePrint = false;
-                            // global.stopNodeDagPrint = false;
-                            // global.printDagToDot = true;
-                            // std.log.debug("name {s}", .{mi.passName});
-                        },
+                        // cs_mesh_drawCount = try passGroupMapping.add(mi.passName, .{
+                        //     .instanceID = idx1,
+                        //     .meshID = idx2,
+                        // });
+                        // std.log.debug("aaaaaaa", .{});
+                        // passes.enablePass(mi.passName);
+                        // passes.passMap.get("iv_feather").?.setPushConstants(@constCast(&std.mem.toBytes(tidx)), 64);
+                        // passes.enablePass("c_command_prefix_sum");
+                        // passes.enablePass("ic_task");
+                        // passes.enablePass("iv_feather");
+                        // global.storExecuteSequencePrint = false;
+                        // global.stopNodeDagPrint = false;
+                        // global.printDagToDot = true;
+                        // std.log.debug("name {s}", .{mi.passName});
+                        // },
                         .others => {},
                     }
                 }
@@ -360,14 +349,14 @@ pub fn render_thread_func(args: Args) !void {
             const infos = stateBuffering.getReadyBuffer();
             defer stateBuffering.returnReadyBuffer(infos);
 
-            // try meshes.upload(&commands, passes.passMap.get("ic_task").?.buffer[4]);
-            try instances.upload(&commands, vulkan, passes.passMap.get("ic_task").?.buffer[3]);
-            try passGroupMapping.upload(
+            // try meshes.upload(&commands, passes.passMap.get("i_feather").?.buffer[10]);
+            try instances.upload(&commands, vulkan, passes.passMap.get("i_feather").?.buffer[9]);
+            try args.uctx.passGroupMapping.upload(
                 vulkan,
                 &commands,
-                "ic_task",
-                passes.passMap.get("ic_task").?.buffer[1],
-                passes.passMap.get("ic_task").?.buffer[2],
+                "i_feather",
+                passes.passMap.get("i_feather").?.buffer[6],
+                passes.passMap.get("i_feather").?.buffer[8],
             );
             try args.uctx.vertices.uploadInstance(vulkan);
 

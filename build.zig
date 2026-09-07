@@ -327,7 +327,11 @@ pub fn build(b: *std.Build) void {
     instance_mod2.addImport("cglm", cglm_mod);
     instance_mod2.addImport("handle", handle_mod);
     instance_mod2.addImport("textureSet", textureSet_mod);
+    instance_mod2.addImport("instance", instance_mod);
+    instance_mod2.addImport("passGroupMapping", passGroupMapping_mod);
 
+    resourceProcess_mod.addImport("instance", instance_mod);
+    resourceProcess_mod.addImport("passGroupMapping", passGroupMapping_mod);
     resourceProcess_mod.addImport("vertices", vertices_mod);
     resourceProcess_mod.addImport("instance2", instance_mod2);
     resourceProcess_mod.addImport("handle", handle_mod);
