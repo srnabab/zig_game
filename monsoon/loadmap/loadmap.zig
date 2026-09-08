@@ -319,7 +319,7 @@ pub fn loadResource(
 
     var l_it = self.loadingQueue.iterate();
     while (l_it.next()) |item| {
-        std.log.debug("{d}", .{item.ptr.progress.load(.seq_cst)});
+        // std.log.debug("{d}", .{item.ptr.progress.load(.seq_cst)});
         if (item.ptr.progress.load(.seq_cst) == item.ptr.grid.items.len) {
             item.ptr.grid.state = .loaded;
             const ptr = self.loadingQueue.get(item.index);

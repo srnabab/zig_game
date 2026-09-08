@@ -34,11 +34,12 @@ pub fn Queue(T: type) type {
 
         fn ensureCapacity(self: *Self, new_capacity: usize) !void {
             if (self.buffer.len >= new_capacity) return;
+            // std.log.debug("expand", .{});
             const new_len = @max(self.buffer.len * 2, new_capacity);
 
             const old_len = self.buffer.len;
             const head = self.head;
-            const tail = (self.head + self.totalSize) % self.buffer.len;
+            const tail = (self.head + self.totalSize - 1) % self.buffer.len;
 
             self.buffer = try self.allocator.realloc(self.buffer, new_len);
 
@@ -113,6 +114,7 @@ pub fn Queue(T: type) type {
 
             const tail = (self.head + self.totalSize) % self.buffer.len;
             self.buffer[tail] = data;
+
             self.totalSize += 1;
         }
 
@@ -163,6 +165,9 @@ pub fn Queue(T: type) type {
 
             if (self.totalSize == 0) return null;
             const tail = (self.head + self.totalSize - 1) % self.buffer.len;
+
+            // std.log.debug("tail {d}", .{tail});
+
             return self.buffer[tail];
         }
 

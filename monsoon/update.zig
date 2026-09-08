@@ -197,8 +197,6 @@ pub fn update_thread_func(args: Args) !void {
 
     var stateBufferValue: u32 = 0;
 
-    var sceneChanged = true;
-
     var lastMouseX: f32 = 0;
     var lastMouseY: f32 = 0;
 
@@ -256,61 +254,6 @@ pub fn update_thread_func(args: Args) !void {
             //     } };
             // }
 
-            // if (test_B.downIsTrue()) {
-            //     resourceArray.mutex.lockUncancelable(io);
-            //     defer resourceArray.mutex.unlock(io);
-            //     const ptr = try resourceArray.array.addOne();
-            //     ptr.* = .{ .instance = .{
-            //         .texture = null,
-            //         .pos = vec3{ 0, 0, 0 },
-            //         .scale = vec3{ 1, 1, 1 },
-            //         .rotation = vec3{ 0, 0, 0 },
-            //         .sampler = null,
-            //         .handle = handles.createHandle(Handles.WaitFill, .instance),
-            //     } };
-            //     testHandle = ptr.instance.handle;
-            // }
-
-            // if (test_C.downIsTrue()) a: {
-            //     std.log.debug("x", .{});
-            //     // global.nodeChildrenAppendBreakPoint = true;
-
-            //     // global.game_end.store(1, .seq_cst);
-
-            //     resourceArray.mutex.lockUncancelable(io);
-            //     defer resourceArray.mutex.unlock(io);
-
-            //     std.log.debug("c", .{});
-            //     if (!Handles.handleIsValid(testHandle)) break :a;
-
-            //     std.log.debug("cc", .{});
-            //     const ptr = try resourceArray.array.addOne();
-            //     const m = meshes.getMesh(@intCast(file.getID("Plane.001_0.vtx"))) catch {
-            //         _ = resourceArray.array.pop();
-            //         break :a;
-            //     };
-            //     ptr.* = .{ .meshInstance = .{
-            //         .instance = @ptrCast(testHandle),
-            //         .mesh = m,
-            //         .passName = "ic_task",
-            //     } };
-
-            //     // @breakpoint();
-            //     std.log.debug("ccc", .{});
-            // }
-
-            // if (test_D.downIsTrue()) {
-            //     _ = try resource.readResource(
-            //         &resourceCtx,
-            //         &.{},
-            //         "Plane.001_0.vtx",
-            //     );
-            //     _ = try resource.readResource(
-            //         &resourceCtx,
-            //         &.{},
-            //         "feather_lut.ktx2",
-            //     );
-            // }
             try args.uctx.loadmaps.load(&resourceCtx, 0, vec2{ 0, 0 });
             try args.uctx.instances2.load(
                 io,
@@ -322,32 +265,6 @@ pub fn update_thread_func(args: Args) !void {
                 args.commands,
                 args.vulkan,
             );
-
-            if (sceneChanged) {
-                sceneChanged = false;
-
-                // std.log.debug("update: idx {d}", .{resourceArrayIndex});
-                // testBoxPng = try resource.readResource(
-                //     &resourceCtx,
-                //     &.{},
-                //     "box.png",
-                // );
-                // std.log.debug("box {any}", .{testBoxPng});
-
-                // resourceArray.mutex.lockUncancelable(io);
-                // defer resourceArray.mutex.unlock(io);
-                // const ptr = try resourceArray.array.addOne();
-                // ptr.* = .{ .position2D = .{
-                //     .x = 0,
-                //     .y = 0,
-                //     .width = 48,
-                //     .height = 32,
-                //     .depth = 0.1,
-                //     .texture = @ptrCast(resource.getResourceHandle(file.getID("box.png")) orelse unreachable),
-                // } };
-
-                // resourceValue += 1;
-            }
 
             const infos = stateBuffering.getWriteBuffer();
             defer stateBuffering.returnWriteBuffer(infos);
