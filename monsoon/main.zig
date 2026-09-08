@@ -163,6 +163,9 @@ pub fn main(init: std.process.Init) !void {
 
     try setPass.setting();
 
+    var externalCommands = ExternalCommands.init(io, allocator_t.*);
+    defer externalCommands.deinit();
+
     var passes: pass = undefined;
     var passArena = std.heap.ArenaAllocator.init(allocator_t.*);
     defer passArena.deinit();
@@ -173,11 +176,16 @@ pub fn main(init: std.process.Init) !void {
         defer file.deinit(tempDb);
 
         passes = try pass.initFromRenderFlow(init.io, passAllocator, &vulkan, tempDb);
+
+        _ = try pTextureSet.createImageTexture(
+            io,
+            comptime file.comptimeGetID("non_exist.png"),
+            &vulkan,
+            &externalCommands,
+            tempDb,
+        );
     }
     defer passes.deinit(passAllocator);
-
-    var externalCommands = ExternalCommands.init(io, allocator_t.*);
-    defer externalCommands.deinit();
 
     for (passes.passes) |*value| {
         try value.init(&vulkan, &externalCommands, passAllocator);

@@ -106,14 +106,6 @@ pub fn render_thread_func(args: Args) !void {
         var tempDb: file.sqlite3 = null;
         file.init(io, &tempDb);
         defer file.deinit(tempDb);
-
-        _ = try pTextureSet.createImageTexture(
-            io,
-            comptime file.comptimeGetID("non_exist.png"),
-            vulkan,
-            externalCommands,
-            tempDb,
-        );
     }
 
     try vulkan.createAllPipelinesAdded();

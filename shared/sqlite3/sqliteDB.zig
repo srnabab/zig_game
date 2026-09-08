@@ -234,6 +234,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
         pub fn createTable(self: *Self) sqliteError!void {
             if (sqlite.sqlite3_exec(self.db, @ptrCast(SQL.ptr), null, null, null) != sqlite.SQLITE_OK) {
                 std.log.err("create table {s} failed", .{self.tableName});
+                @breakpoint();
                 return sqliteError.SQLError;
             }
         }
@@ -304,14 +305,15 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                         const res = sqlite.sqlite3_bind_text(stmt, @intCast(i + 1), @field(T, pp.paramName), -1, sqlite.SQLITE_STATIC);
                         if (res != sqlite.SQLITE_OK) {
                             std.log.err("text {s}", .{sqlite.sqlite3_errmsg(self.db)});
+                            @breakpoint();
                         }
                     },
                 }
             }
 
             if (sqlite.sqlite3_step(stmt) != sqlite.SQLITE_DONE) {
-                // @breakpoint();
                 std.log.err("insert {s}", .{sqlite.sqlite3_errmsg(self.db)});
+                @breakpoint();
 
                 return sqliteError.StepError;
             }
@@ -404,6 +406,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                         );
                         if (res != sqlite.SQLITE_OK) {
                             std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
+                            @breakpoint();
                         }
                     },
                     else => {
@@ -423,6 +426,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                             );
                             if (res != sqlite.SQLITE_OK) {
                                 std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
+                                @breakpoint();
                             }
                         } else if (slice) {
                             const res = sqlite.sqlite3_bind_text(
@@ -434,6 +438,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                             );
                             if (res != sqlite.SQLITE_OK) {
                                 std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
+                                @breakpoint();
                             }
                         } else {
                             // @compileLog("sss");
@@ -445,6 +450,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
 
             if (sqlite.sqlite3_step(stmt) != sqlite.SQLITE_DONE) {
                 std.log.err("update {s}", .{sqlite.sqlite3_errmsg(self.db)});
+                @breakpoint();
                 return sqliteError.StepError;
             }
         }
@@ -517,6 +523,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                             );
                             if (res != sqlite.SQLITE_OK) {
                                 std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
+                                @breakpoint();
                             }
                         } else if (slice) {
                             const res = sqlite.sqlite3_bind_text(
@@ -528,6 +535,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                             );
                             if (res != sqlite.SQLITE_OK) {
                                 std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
+                                @breakpoint();
                             }
                         } else {
                             // @compileLog("sss");
@@ -601,6 +609,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                         // std.log.info("name {s}", .{@field(values, fields_info[i].name)});
                         if (res != sqlite.SQLITE_OK) {
                             std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
+                            @breakpoint();
                         }
                     },
                     *const []const u8 => {
@@ -614,6 +623,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                         // std.log.info("name {s}", .{@field(values, fields_info[i].name)});
                         if (res != sqlite.SQLITE_OK) {
                             std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
+                            @breakpoint();
                         }
                     },
                     else => {
@@ -634,6 +644,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                             // std.log.info("name {s}", .{@field(values, fields_info[i].name)});
                             if (res != sqlite.SQLITE_OK) {
                                 std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
+                                @breakpoint();
                             }
                         } else if (slice) {
                             const res = sqlite.sqlite3_bind_text(
@@ -646,6 +657,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                             // std.log.info("name {s}", .{@field(values, fields_info[i].name)});
                             if (res != sqlite.SQLITE_OK) {
                                 std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
+                                @breakpoint();
                             }
                         } else {
                             // @compileLog("sss");
@@ -791,6 +803,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                         // std.log.info("name {s}", .{@field(values, fields_info[i].name)});
                         if (res != sqlite.SQLITE_OK) {
                             std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
+                            @breakpoint();
                         }
                     },
                     *const []const u8 => {
@@ -804,6 +817,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                         // std.log.info("name {s}", .{@field(values, fields_info[i].name)});
                         if (res != sqlite.SQLITE_OK) {
                             std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
+                            @breakpoint();
                         }
                     },
                     else => {
@@ -824,6 +838,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                             // std.log.info("name {s}", .{@field(values, fields_info[i].name)});
                             if (res != sqlite.SQLITE_OK) {
                                 std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
+                                @breakpoint();
                             }
                         } else if (slice) {
                             const res = sqlite.sqlite3_bind_text(
@@ -836,6 +851,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                             // std.log.info("name {s}", .{@field(values, fields_info[i].name)});
                             if (res != sqlite.SQLITE_OK) {
                                 std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
+                                @breakpoint();
                             }
                         } else {
                             // @compileLog("sss");
@@ -890,6 +906,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
             }
             if (res != sqlite.SQLITE_DONE) {
                 std.log.err("total {d}", .{count});
+                @breakpoint();
                 return sqliteError.StepError;
             }
         }
@@ -950,6 +967,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                         // std.log.info("name {s}", .{@field(values, fields_info[i].name)});
                         if (res != sqlite.SQLITE_OK) {
                             std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
+                            @breakpoint();
                         }
                     },
                     *const []const u8 => {
@@ -963,6 +981,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                         // std.log.info("name {s}", .{@field(values, fields_info[i].name)});
                         if (res != sqlite.SQLITE_OK) {
                             std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
+                            @breakpoint();
                         }
                     },
                     else => {
@@ -983,6 +1002,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                             // std.log.info("name {s}", .{@field(values, fields_info[i].name)});
                             if (res != sqlite.SQLITE_OK) {
                                 std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
+                                @breakpoint();
                             }
                         } else if (slice) {
                             const res = sqlite.sqlite3_bind_text(
@@ -995,6 +1015,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                             // std.log.info("name {s}", .{@field(values, fields_info[i].name)});
                             if (res != sqlite.SQLITE_OK) {
                                 std.log.err("text {s} ({s})", .{ sqlite.sqlite3_errmsg(self.db), @field(values, fields_info[i].name) });
+                                @breakpoint();
                             }
                         } else {
                             // @compileLog("sss");
@@ -1016,7 +1037,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
             const res = sqlite.sqlite3_prepare_v2(db, zSql, nByte, ppStmt, pzTail);
             if (res != sqlite.SQLITE_OK) {
                 std.log.err("failed to prepare stmt {d}\n {s}\n{s}", .{ res, sqlite.sqlite3_errmsg(db), zSql });
-                // @breakpoint();
+                @breakpoint();
                 return sqliteError.SQLError;
             }
         }
