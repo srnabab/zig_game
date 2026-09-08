@@ -185,11 +185,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const vertices_mod = b.createModule(.{
-        .root_source_file = b.path("monsoon/video/indirect2D/vertices.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
     const cglm_c = b.addTranslateC(.{
         .root_source_file = b.path("include/cglm/call.h"),
         .target = target,
@@ -262,16 +257,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    const mesh_mod = b.createModule(.{
-        .root_source_file = b.path("monsoon/video/mesh/mesh.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    const instance_mod = b.createModule(.{
-        .root_source_file = b.path("monsoon/video/instance/instance.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
     const passGroupMapping_mod = b.createModule(.{
         .root_source_file = b.path("monsoon/video/pass/pass.zig"),
         .target = target,
@@ -321,21 +306,36 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // ===== custom structs: src/customStruct 由 src/build 管线构建并接线 =====
+    const customConfig = @import("src/build/config.zig");
+    const customBuild = @import("src/build/out.zig");
+    const cfg: customConfig.Config = .{
+        .b = b,
+        .target = target,
+        .optimize = optimize,
+        .video = video_mod,
+        .processRender = processRender_mod,
+        .vertexStruct = vertexStruct_mod,
+        .global = global_mod,
+        .handle = handle_mod,
+        .exe = exe_mod,
+        .resource = resource_mod,
+        .resourceProcess = resourceProcess_mod,
+        .instances2 = instance_mod2,
+    };
+    _ = customBuild.build(cfg);
+
     // aaa
     instance_mod2.addImport("pass", pass_mod);
-    instance_mod2.addImport("vertices", vertices_mod);
     instance_mod2.addImport("cglm", cglm_mod);
     instance_mod2.addImport("handle", handle_mod);
     instance_mod2.addImport("textureSet", textureSet_mod);
-    instance_mod2.addImport("instance", instance_mod);
     instance_mod2.addImport("passGroupMapping", passGroupMapping_mod);
     instance_mod2.addImport("setPass", setPass_mod);
     instance_mod2.addImport("processRender", processRender_mod);
     instance_mod2.addImport("video", video_mod);
 
-    resourceProcess_mod.addImport("instance", instance_mod);
     resourceProcess_mod.addImport("passGroupMapping", passGroupMapping_mod);
-    resourceProcess_mod.addImport("vertices", vertices_mod);
     resourceProcess_mod.addImport("instance2", instance_mod2);
     resourceProcess_mod.addImport("handle", handle_mod);
     resourceProcess_mod.addImport("vulkan", vk_c_mod);
@@ -350,7 +350,6 @@ pub fn build(b: *std.Build) void {
     resourceProcess_mod.addImport("stb_image", stb_image_mod);
     resourceProcess_mod.addImport("processRender", processRender_mod);
     resourceProcess_mod.addImport("global", global_mod);
-    resourceProcess_mod.addImport("mesh", mesh_mod);
     resourceProcess_mod.addImport("textureSet", textureSet_mod);
     resourceProcess_mod.addImport("loadmap", loadmap_mod);
 
@@ -385,14 +384,6 @@ pub fn build(b: *std.Build) void {
     passGroupMapping_mod.addImport("video", video_mod);
     passGroupMapping_mod.addImport("processRender", processRender_mod);
 
-    instance_mod.addImport("processRender", processRender_mod);
-    instance_mod.addImport("vertexStruct", vertexStruct_mod);
-    instance_mod.addImport("video", video_mod);
-    instance_mod.addImport("fileSystem", fileSystem_mod);
-    instance_mod.addImport("vulkan", vk_c_mod);
-    instance_mod.addImport("global", global_mod);
-    instance_mod.addImport("handle", handle_mod);
-
     renderDebug_mod.addImport("vulkanType", vulkanType_mod);
     renderDebug_mod.addImport("processRender", processRender_mod);
     renderDebug_mod.addImport("global", global_mod);
@@ -420,8 +411,6 @@ pub fn build(b: *std.Build) void {
     resource_mod.addImport("vma", vma_mod);
     resource_mod.addImport("handle", handle_mod);
     resource_mod.addImport("textureSet", textureSet_mod);
-    resource_mod.addImport("mesh", mesh_mod);
-    resource_mod.addImport("instance", instance_mod);
     resource_mod.addImport("vertexStruct", vertexStruct_mod);
     resource_mod.addImport("global", global_mod);
     resource_mod.addImport("stb_image", stb_image_mod);
@@ -430,14 +419,6 @@ pub fn build(b: *std.Build) void {
     resource_mod.addImport("ms_std", ms_mod);
     resource_mod.addImport("resourceProcess", resourceProcess_mod);
     // resource_mod.addImport("ktx_vulkan", ktx_vulkan_mod);
-
-    mesh_mod.addImport("processRender", processRender_mod);
-    mesh_mod.addImport("vertexStruct", vertexStruct_mod);
-    mesh_mod.addImport("video", video_mod);
-    mesh_mod.addImport("fileSystem", fileSystem_mod);
-    mesh_mod.addImport("vulkan", vk_c_mod);
-    mesh_mod.addImport("global", global_mod);
-    mesh_mod.addImport("handle", handle_mod);
 
     vertexStruct_mod.addImport("cglm", cglm_mod);
 
@@ -453,15 +434,6 @@ pub fn build(b: *std.Build) void {
     resultToError_mod.addImport("vulkanType", vulkanType_mod);
 
     cglm_c.addIncludePath(b.path("include"));
-
-    vertices_mod.addImport("tracy", tracy.module("tracy"));
-    vertices_mod.addImport("vertexStruct", vertexStruct_mod);
-    vertices_mod.addImport("vulkan", vk_c_mod);
-    vertices_mod.addImport("global", global_mod);
-    vertices_mod.addImport("video", video_mod);
-    vertices_mod.addImport("cglm", cglm_mod);
-    vertices_mod.addImport("textureSet", textureSet_mod);
-    vertices_mod.addImport("processRender", processRender_mod);
 
     sampler_read_mod.addImport("vulkan", vk_c_mod);
     sampler_read_mod.addImport("fileSystem", fileSystem_mod);
@@ -554,7 +526,6 @@ pub fn build(b: *std.Build) void {
     video_mod.addImport("capability", vulkanCapability_mod);
 
     processRender_mod.addImport("video", video_mod);
-    processRender_mod.addImport("mesh", mesh_mod);
     processRender_mod.addImport("vulkan", vk_c_mod);
     processRender_mod.addImport("textureSet", textureSet_mod);
     processRender_mod.addImport("global", global_mod);
@@ -587,7 +558,6 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("ms_std", ms_mod);
     exe_mod.addImport("loadmap", loadmap_mod);
     exe_mod.addImport("passGroupMapping", passGroupMapping_mod);
-    exe_mod.addImport("instance", instance_mod);
     exe_mod.addImport("renderDebug", renderDebug_mod);
     exe_mod.addImport("textureSet", textureSet_mod);
     exe_mod.addImport("renderFlow", renderFlow_mod);
@@ -606,12 +576,10 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("steam", steam_mod);
     exe_mod.addImport("processRender", processRender_mod);
     exe_mod.addImport("tracy", tracy.module("tracy"));
-    exe_mod.addImport("vertices", vertices_mod);
     exe_mod.addImport("handle", handle_mod);
     exe_mod.addImport("sdl", sdl_mod);
     exe_mod.addImport("vulkan", vk_c_mod);
     exe_mod.addImport("resource", resource_mod);
-    exe_mod.addImport("mesh", mesh_mod);
     exe_mod.addImport("instances2", instance_mod2);
     exe_mod.addIncludePath(b.path("include/"));
 

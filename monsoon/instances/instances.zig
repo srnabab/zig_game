@@ -117,7 +117,6 @@ pub fn load(
                 item.pass.buffer[6],
                 item.pass.buffer[8],
             );
-            // passes.enablePass("i_feather");
         }
     }
 

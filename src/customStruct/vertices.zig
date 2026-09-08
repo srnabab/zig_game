@@ -2,7 +2,6 @@ const std = @import("std");
 const VkStruct = @import("video");
 const vertexStruct = @import("vertexStruct");
 const Commands = @import("processRender").externalCommands;
-const textureSet = @import("textureSet");
 const vk = VkStruct.vk;
 
 const Self = @This();

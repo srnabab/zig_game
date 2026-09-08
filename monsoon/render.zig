@@ -1,4 +1,6 @@
 const std = @import("std");
+const Io = std.Io;
+
 const builtin = @import("builtin");
 const sdl = @import("sdl").sdl;
 const mstd = @import("ms_std");
@@ -16,7 +18,6 @@ const Commands = processRender.commands;
 const textureSet = @import("textureSet");
 const shaderStruct = @import("video/shaderStruct.zig");
 const vertexStruct = @import("vertexStruct");
-const resource = @import("resource");
 const Queue = mstd.Queue;
 const Handles = @import("handle");
 const vertices2D = @import("vertices");
@@ -49,7 +50,7 @@ pub const Args = struct {
     height: u32,
     stateBuffering: *global.StateBufferingType,
     vulkan: *VkStruct,
-    passes: pass,
+    passes: *pass,
     uctx: *resourceProcess.UserContext,
     instances: *instance,
     externalCommands: *processRender.externalCommands,
@@ -71,7 +72,7 @@ pub fn render_thread_func(args: Args) !void {
     const pTextureSet = &args.uctx.pTextureSet;
     const vulkan = args.vulkan;
     // const handles = args.handles;
-    // var passes = args.passes;
+    const passes = args.passes;
     // const meshes = &args.uctx.meshes;
     // const instances = args.instances;
     const externalCommands = args.externalCommands;
@@ -244,14 +245,6 @@ pub fn render_thread_func(args: Args) !void {
             const infos = stateBuffering.getReadyBuffer();
             defer stateBuffering.returnReadyBuffer(infos);
 
-            try args.uctx.vertices.uploadInstance(vulkan);
-
-            try vulkan.waitEndFence();
-
-            try commands.startCommand();
-            try externalCommands.addExternalCommand(&commands);
-            try commands.addCachedCommand();
-
             for (infos.items) |value| {
                 var f_v: f32 = @floatFromInt(value);
                 f_v *= 0.1;
@@ -269,6 +262,14 @@ pub fn render_thread_func(args: Args) !void {
                 const pData3 = @as(*shaderStruct.UniformBufferObjectCamera, @ptrCast(@alignCast(ubo2.pMappedData)));
                 pData3.* = pUIUbo2;
             }
+
+            try upload(io, vulkan, passes, pTextureSet, args.uctx, &commands);
+
+            try vulkan.waitEndFence();
+
+            try commands.startCommand();
+            try externalCommands.addExternalCommand(&commands);
+            try commands.addCachedCommand();
 
             const zone2 = tracy.initZone(@src(), .{ .name = "pass add" });
             for (args.passes.passes) |*value| {
@@ -310,7 +311,6 @@ pub fn render_thread_func(args: Args) !void {
             }
 
             vulkan.writeCachedDescriptorSetResources();
-            // renderDebug.printAllInfoToTxt();
 
             try graphic.executeCommands(&commands);
 
@@ -329,4 +329,11 @@ pub fn render_thread_func(args: Args) !void {
 
     _ = endSemaphore;
     _ = thread_count;
+}
+pub fn upload(io: Io, vulkan: *VkStruct, passes: *pass, pTextureSet: *textureSet, uctx: *resourceProcess.UserContext, commands: *Commands) !void {
+    _ = io;
+    _ = passes;
+    _ = pTextureSet;
+    _ = commands;
+    try uctx.vertices.uploadInstance(vulkan);
 }

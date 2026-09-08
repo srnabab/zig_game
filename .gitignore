@@ -20,6 +20,7 @@ pkgconfig/
 trace/
 windbg/
 build/
+!src/build/
 *.rdi
 *.pdb
 *.exe

@@ -219,7 +219,7 @@ pub fn main(init: std.process.Init) !void {
             .height = height,
             .stateBuffering = &stateBuffering,
             .vulkan = &vulkan,
-            .passes = passes,
+            .passes = &passes,
             .uctx = &uctx,
             .instances = &uctx.instances1,
             .externalCommands = &externalCommands,
