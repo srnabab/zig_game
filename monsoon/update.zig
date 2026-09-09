@@ -262,8 +262,6 @@ pub fn update_thread_func(args: Args) !void {
                 &args.uctx.vertices,
                 &args.uctx.instances1,
                 &args.uctx.passGroupMapping,
-                args.commands,
-                args.vulkan,
             );
 
             const infos = stateBuffering.getWriteBuffer();

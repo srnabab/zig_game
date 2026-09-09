@@ -1,7 +1,11 @@
 const std = @import("std");
+const Io = std.Io;
+
 const VkStruct = @import("video");
 const vertexStruct = @import("vertexStruct");
-const Commands = @import("processRender").externalCommands;
+const processRender = @import("processRender");
+const ExternalCommands = processRender.externalCommands;
+const Commands = processRender.commands;
 const vk = VkStruct.vk;
 
 const Self = @This();
@@ -10,7 +14,8 @@ instanceIDsBuffer: VkStruct.Buffer_t = undefined,
 indirectDrawCommandBuffer: VkStruct.Buffer_t = undefined,
 instances2D: std.array_list.Managed(vertexStruct.Instance) = undefined,
 instanceBuffer2D: VkStruct.Buffer_t = undefined,
-commands: *Commands,
+
+mutex: std.Io.Mutex = .init,
 
 instanceUpdated: bool = false,
 updateStart: u32 = 0,
@@ -21,7 +26,7 @@ pub fn init(
     indirectDrawCommandBuffer_t: VkStruct.Buffer_t,
     instanceBuffer_t: VkStruct.Buffer_t,
     allocator: std.mem.Allocator,
-    commands: *Commands,
+    commands: *ExternalCommands,
 ) !Self {
     try commands.externalCommand(.{ .fillBuffer = .{
         .buffer = indirectDrawCommandBuffer_t,
@@ -35,7 +40,6 @@ pub fn init(
         .indirectDrawCommandBuffer = indirectDrawCommandBuffer_t,
         .instanceBuffer2D = instanceBuffer_t,
         .instances2D = .init(allocator),
-        .commands = commands,
     };
 }
 
@@ -45,6 +49,7 @@ pub fn deinit(self: *Self) void {
 
 pub fn addInstance(
     self: *Self,
+    io: Io,
     x: f32,
     y: f32,
     width: f32,
@@ -52,7 +57,8 @@ pub fn addInstance(
     depth: f32,
     textureIndex: u32,
 ) !u32 {
-
+    try self.mutex.lock(io);
+    defer self.mutex.unlock(io);
     // const textureContent = pTextureSet.getTextureCotent(texture);
 
     // const scale_x = width / @as(f32, @floatFromInt(textureContent.source_width));
@@ -71,8 +77,10 @@ pub fn addInstance(
     return @intCast(self.instances2D.items.len - 1);
 }
 
-pub fn uploadInstance(self: *Self, vulkan: *VkStruct) !void {
+pub fn uploadInstance(self: *Self, io: Io, vulkan: *VkStruct, commands: *Commands) !void {
     if (!self.instanceUpdated) return;
+    try self.mutex.lock(io);
+    defer self.mutex.unlock(io);
 
     const bufferSize = @sizeOf(vertexStruct.Instance) * (self.updateEnd - self.updateStart);
     const stagingBuffer = try vulkan.createBufferByUsage(
@@ -93,7 +101,7 @@ pub fn uploadInstance(self: *Self, vulkan: *VkStruct) !void {
         .size = bufferSize,
     }};
 
-    try self.commands.externalCommand(.{ .copyBuffer = .{
+    try commands.cacheCommand(.{ .copyBuffer = .{
         .srcBuffer = stagingBuffer,
         .dstBuffer = self.instanceBuffer2D,
         .regions = &region,

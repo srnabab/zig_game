@@ -13,8 +13,6 @@ const instances1 = @import("instance");
 const PassGroupMapping = @import("passGroupMapping");
 
 const ViewBoundsAndTotalSpriteCount = @import("setPass").ViewBoundsAndTotalSpriteCount;
-const ExternalCommands = @import("processRender").externalCommands;
-const VkStruct = @import("video");
 
 const vec3 = cglm.vec3;
 
@@ -57,8 +55,6 @@ pub fn load(
     vertices: *vertices2D,
     instances: *instances1,
     passGroupMapping: *PassGroupMapping,
-    commands: *ExternalCommands,
-    vulkan: *VkStruct,
 ) !void {
     try self.mutex.lock(io);
     defer self.mutex.unlock(io);
@@ -80,6 +76,7 @@ pub fn load(
             try item.pass.useTexture(@ptrCast(item.textures[0]), self.instances.allocator);
             const textureContent = pTextureSet.getTextureCotent(@ptrCast(item.textures[0]));
             _ = try vertices.addInstance(
+                io,
                 item.pos[0],
                 item.pos[1],
                 item.scale[0] * @as(f32, @floatFromInt(textureContent.source_width)),
@@ -90,10 +87,11 @@ pub fn load(
             viewBoundsAndTotalSpriteCount.totalSpriteCount = vertices.getTotalCount();
         } else if (std.mem.eql(u8, "i_feather", item.pass.name)) {
             const ins = try instances.add(
+                io,
                 null,
                 item.pos,
-                item.rotation,
                 item.scale,
+                item.rotation,
                 null,
             );
             const idx1 = Handles.getIndex(@ptrCast(ins)) orelse continue;
@@ -101,7 +99,7 @@ pub fn load(
 
             const tidx = pTextureSet.getDescriptorSetIndex(@ptrCast(item.textures[0]));
 
-            const cs_mesh_drawCount = try passGroupMapping.add(item.pass.name, .{
+            const cs_mesh_drawCount = try passGroupMapping.add(io, item.pass.name, .{
                 .instanceID = idx1,
                 .meshID = idx2,
             });
@@ -109,14 +107,6 @@ pub fn load(
             pU32.* = cs_mesh_drawCount;
 
             item.pass.setPushConstants(2, @constCast(&std.mem.toBytes(tidx)), 64);
-            try instances.upload(commands, vulkan, item.pass.buffer[9]);
-            try passGroupMapping.upload(
-                vulkan,
-                commands,
-                item.pass.name,
-                item.pass.buffer[6],
-                item.pass.buffer[8],
-            );
         }
     }
 

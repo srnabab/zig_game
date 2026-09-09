@@ -10,9 +10,9 @@ const processRender = @import("processRender");
 const Commands = processRender.commands;
 
 pub fn upload(io: Io, vulkan: *VkStruct, passes: *pass, pTextureSet: *textureSet, uctx: *resourceProcess.UserContext, commands: *Commands) !void {
-    _ = io;
     _ = passes;
     _ = pTextureSet;
-    _ = commands;
-    try uctx.vertices.uploadInstance(vulkan);
+    try uctx.vertices.uploadInstance(io, vulkan, commands);
+    try uctx.instances1.upload(io, vulkan, commands);
+    try uctx.passGroupMapping.upload(io, vulkan, commands);
 }

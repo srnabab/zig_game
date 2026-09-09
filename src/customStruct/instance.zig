@@ -1,11 +1,12 @@
 const std = @import("std");
+const Io = std.Io;
 
 const global = @import("global");
 const Handles = @import("handle");
 const Handle = Handles.Handle;
 
 const processRender = @import("processRender");
-const ExternalCommands = processRender.externalCommands;
+const Commands = processRender.commands;
 
 const vertexStruct = @import("vertexStruct");
 const cglm = vertexStruct.cglm;
@@ -23,15 +24,19 @@ pub const Instance_t = *opaque {};
 
 instances: std.array_list.Managed(Instance),
 handles: *global.HandlesType,
+buffer: VkStruct.Buffer_t,
+
+mutex: std.Io.Mutex = .init,
 
 updated: bool = false,
 updateStart: u32 = 0,
 updateEnd: u32 = 0,
 
-pub fn init(allocator: std.mem.Allocator, handles: *global.HandlesType) Self {
+pub fn init(allocator: std.mem.Allocator, handles: *global.HandlesType, buffer: VkStruct.Buffer_t) Self {
     return Self{
         .instances = .init(allocator),
         .handles = handles,
+        .buffer = buffer,
     };
 }
 
@@ -41,12 +46,16 @@ pub fn deinit(self: *Self) void {
 
 pub fn add(
     self: *Self,
+    io: Io,
     textureIndex: ?u32,
     pos: vec3,
     scale: vec3,
     rotation: vec3,
     handle: ?Handle,
 ) !Instance_t {
+    try self.mutex.lock(io);
+    defer self.mutex.unlock(io);
+
     const instance = try self.instances.addOne();
     const index: u32 = @intCast(self.instances.items.len - 1);
 
@@ -93,10 +102,12 @@ pub fn add(
     return @ptrCast(finalHandle);
 }
 
-pub fn upload(self: *Self, commands: *ExternalCommands, vulkan: *VkStruct, buffer: VkStruct.Buffer_t) !void {
+pub fn upload(self: *Self, io: Io, vulkan: *VkStruct, commands: *Commands) !void {
     if (!self.updated) {
         return;
     }
+    try self.mutex.lock(io);
+    defer self.mutex.unlock(io);
 
     self.updated = false;
 
@@ -119,9 +130,9 @@ pub fn upload(self: *Self, commands: *ExternalCommands, vulkan: *VkStruct, buffe
         .size = instances.len * @sizeOf(Instance),
     }};
 
-    try commands.externalCommand(.{ .copyBuffer = .{
+    try commands.cacheCommand(.{ .copyBuffer = .{
         .srcBuffer = stagingBuffer,
-        .dstBuffer = buffer,
+        .dstBuffer = self.buffer,
         .regions = &copyRegion,
     } });
 }

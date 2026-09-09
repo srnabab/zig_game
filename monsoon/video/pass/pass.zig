@@ -1,11 +1,12 @@
 const std = @import("std");
+const Io = std.Io;
 
 const vertexStruct = @import("vertexStruct");
 const VkStruct = @import("video");
 const vk = VkStruct.vk;
 
 const ProcessRender = @import("processRender");
-const ExternalCommands = ProcessRender.externalCommands;
+const Commands = ProcessRender.commands;
 
 const Self = @This();
 
@@ -19,12 +20,23 @@ const Records = struct {
     updated: bool,
 };
 
+/// passName -> 该 pass 上传所需的目标 buffer
+const Target = struct {
+    indirectBuffer: VkStruct.Buffer_t,
+    mappingBuffer: VkStruct.Buffer_t,
+};
+
+updates: std.ArrayList([]const u8),
 passCommandsMap: std.StringHashMap(Records),
+uploadTargets: std.StringHashMap(Target),
+mutex: std.Io.Mutex = .init,
 allocator: std.mem.Allocator,
 
 pub fn init(allocator: std.mem.Allocator) Self {
     return .{
         .passCommandsMap = .init(allocator),
+        .uploadTargets = .init(allocator),
+        .updates = .empty,
         .allocator = allocator,
     };
 }
@@ -40,9 +52,27 @@ pub fn deinit(self: *Self) void {
         self.allocator.free(entry.value_ptr.mappings);
     }
     self.passCommandsMap.deinit();
+    self.uploadTargets.deinit();
+    self.updates.deinit(self.allocator);
 }
 
-pub fn add(self: *Self, passName: []const u8, mapping: vertexStruct.GroupMapping) !u32 {
+/// 注册 passName 的上传目标 buffer, 在 initUserContext 中调用
+pub fn addUploadTarget(
+    self: *Self,
+    passName: []const u8,
+    indirectBuffer: VkStruct.Buffer_t,
+    mappingBuffer: VkStruct.Buffer_t,
+) !void {
+    try self.uploadTargets.put(passName, .{
+        .indirectBuffer = indirectBuffer,
+        .mappingBuffer = mappingBuffer,
+    });
+}
+
+pub fn add(self: *Self, io: Io, passName: []const u8, mapping: vertexStruct.GroupMapping) !u32 {
+    try self.mutex.lock(io);
+    defer self.mutex.unlock(io);
+
     const getOrPut = try self.passCommandsMap.getOrPut(passName);
 
     if (!getOrPut.found_existing) {
@@ -90,80 +120,88 @@ pub fn add(self: *Self, passName: []const u8, mapping: vertexStruct.GroupMapping
 
     const drawCount = getOrPut.value_ptr.meshIdList.items.len;
 
+    if (!getOrPut.value_ptr.updated) try self.updates.append(self.allocator, passName);
+
     getOrPut.value_ptr.updated = true;
 
     return @intCast(drawCount);
 }
 
-pub fn upload(self: *Self, vulkan: *VkStruct, commands: *ExternalCommands, passName: []const u8, indirectBuffer: VkStruct.Buffer_t, mappingBuffer: VkStruct.Buffer_t) !void {
-    const records = self.passCommandsMap.getPtr(passName) orelse return;
+pub fn upload(self: *Self, io: Io, vulkan: *VkStruct, commands: *Commands) !void {
+    try self.mutex.lock(io);
+    defer self.mutex.unlock(io);
 
-    if (!records.updated) return;
+    while (self.updates.pop()) |name| {
+        const records = self.passCommandsMap.getPtr(name) orelse continue;
+        const targets = self.uploadTargets.get(name) orelse continue;
 
-    records.updated = false;
+        if (!records.updated) continue;
 
-    const commandLen = records.commands.len;
+        records.updated = false;
 
-    const mappingLen = a: {
-        var size: usize = 0;
-        for (records.mappings) |mappings| {
-            size += mappings.items.len;
+        const commandLen = records.commands.len;
+
+        const mappingLen = a: {
+            var size: usize = 0;
+            for (records.mappings) |mappings| {
+                size += mappings.items.len;
+            }
+
+            break :a size;
+        };
+        std.log.debug("command len {d}", .{commandLen});
+        std.log.debug("mapping len {d}", .{mappingLen});
+
+        const stagingBuffer1 = try vulkan.createBufferByUsage(
+            commandLen * @sizeOf(Command),
+            0,
+            .staging,
+            false,
+            null,
+        );
+
+        const stagingBuffer2 = try vulkan.createBufferByUsage(
+            mappingLen * @sizeOf(vertexStruct.GroupMapping),
+            0,
+            .staging,
+            false,
+            null,
+        );
+
+        vulkan.buffers.copyDataToMapped(stagingBuffer1, 0, Command, records.commands);
+
+        var offset: usize = 0;
+        for (records.mappings) |m| {
+            vulkan.buffers.copyDataToMapped(stagingBuffer2, offset, vertexStruct.GroupMapping, m.items);
+            offset += m.items.len;
         }
 
-        break :a size;
-    };
-    std.log.debug("command len {d}", .{commandLen});
-    std.log.debug("mapping len {d}", .{mappingLen});
+        var region = [_]vk.VkBufferCopy2{.{
+            .sType = vk.VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+            .pNext = null,
+            .srcOffset = 0,
+            .dstOffset = 0,
+            .size = commandLen * @sizeOf(Command),
+        }};
 
-    const stagingBuffer1 = try vulkan.createBufferByUsage(
-        commandLen * @sizeOf(Command),
-        0,
-        .staging,
-        false,
-        null,
-    );
+        try commands.cacheCommand(.{ .copyBuffer = .{
+            .srcBuffer = stagingBuffer1,
+            .dstBuffer = targets.indirectBuffer,
+            .regions = &region,
+        } });
 
-    const stagingBuffer2 = try vulkan.createBufferByUsage(
-        mappingLen * @sizeOf(vertexStruct.GroupMapping),
-        0,
-        .staging,
-        false,
-        null,
-    );
+        region = [_]vk.VkBufferCopy2{.{
+            .sType = vk.VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+            .pNext = null,
+            .srcOffset = 0,
+            .dstOffset = 0,
+            .size = mappingLen * @sizeOf(vertexStruct.GroupMapping),
+        }};
 
-    vulkan.buffers.copyDataToMapped(stagingBuffer1, 0, Command, records.commands);
-
-    var offset: usize = 0;
-    for (records.mappings) |m| {
-        vulkan.buffers.copyDataToMapped(stagingBuffer2, offset, vertexStruct.GroupMapping, m.items);
-        offset += m.items.len;
+        try commands.cacheCommand(.{ .copyBuffer = .{
+            .srcBuffer = stagingBuffer2,
+            .dstBuffer = targets.mappingBuffer,
+            .regions = &region,
+        } });
     }
-
-    var region = [_]vk.VkBufferCopy2{.{
-        .sType = vk.VK_STRUCTURE_TYPE_BUFFER_COPY_2,
-        .pNext = null,
-        .srcOffset = 0,
-        .dstOffset = 0,
-        .size = commandLen * @sizeOf(Command),
-    }};
-
-    try commands.externalCommand(.{ .copyBuffer = .{
-        .srcBuffer = stagingBuffer1,
-        .dstBuffer = indirectBuffer,
-        .regions = &region,
-    } });
-
-    region = [_]vk.VkBufferCopy2{.{
-        .sType = vk.VK_STRUCTURE_TYPE_BUFFER_COPY_2,
-        .pNext = null,
-        .srcOffset = 0,
-        .dstOffset = 0,
-        .size = mappingLen * @sizeOf(vertexStruct.GroupMapping),
-    }};
-
-    try commands.externalCommand(.{ .copyBuffer = .{
-        .srcBuffer = stagingBuffer2,
-        .dstBuffer = mappingBuffer,
-        .regions = &region,
-    } });
 }

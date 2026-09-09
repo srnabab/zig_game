@@ -33,8 +33,7 @@ const Handles = @import("handle");
 const Handle = Handles.Handle;
 const mstd = @import("ms_std");
 const resource = @import("resource");
-
-const Resource = resource.Resource;
+const pass = @import("pass");
 
 const MutexArray = mstd.MutexArray;
 
@@ -57,16 +56,27 @@ pub const UserContext = struct {
 
     meshes: mesh,
 
-    pub fn initUserContext(gpa: Allocator, vulkan: *VkStruct, handles: *global.HandlesType) !UserContext {
-        return .{
+    pub fn initUserContext(
+        gpa: Allocator,
+        vulkan: *VkStruct,
+        handles: *global.HandlesType,
+        passes: *pass,
+        externalCommands: *ExternalCommands,
+    ) !UserContext {
+        const indirect2DBuffers = passes.passMap.get("indirect2D").?.buffer;
+        const iFeatherBuffers = passes.passMap.get("i_feather").?.buffer; // IF.instance3D = 9
+
+        var uctx: UserContext = .{
             .meshes = .init(gpa, vulkan, handles),
             .loadmaps = try .init(gpa, 1),
             .instances2 = .init(gpa),
             .passGroupMapping = .init(gpa),
-            .vertices = undefined,
+            .vertices = try vertices2D.init(indirect2DBuffers[2], indirect2DBuffers[0], indirect2DBuffers[1], gpa, externalCommands),
+            .instances1 = instance1.init(gpa, handles, iFeatherBuffers[9]),
             .pTextureSet = undefined,
-            .instances1 = undefined,
         };
+        try uctx.passGroupMapping.addUploadTarget("i_feather", iFeatherBuffers[6], iFeatherBuffers[8]); // IF.featherCommands / IF.groupMappings
+        return uctx;
     }
 
     pub fn deinitUserContext(self: *UserContext, gpa: Allocator) void {
