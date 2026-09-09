@@ -5,6 +5,8 @@ const builtin = @import("builtin");
 const sdl = @import("sdl").sdl;
 const mstd = @import("ms_std");
 
+const upload = @import("renderUpload").upload;
+
 const global = @import("global");
 const tracy = @import("tracy");
 
@@ -329,11 +331,4 @@ pub fn render_thread_func(args: Args) !void {
 
     _ = endSemaphore;
     _ = thread_count;
-}
-pub fn upload(io: Io, vulkan: *VkStruct, passes: *pass, pTextureSet: *textureSet, uctx: *resourceProcess.UserContext, commands: *Commands) !void {
-    _ = io;
-    _ = passes;
-    _ = pTextureSet;
-    _ = commands;
-    try uctx.vertices.uploadInstance(vulkan);
 }

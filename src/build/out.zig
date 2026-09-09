@@ -27,10 +27,8 @@ pub const Modules = struct {
 };
 
 /// 依次调用 list 中的构建函数, 完成创建 + 上游/下游接线
-pub fn build(cfg: Config) Modules {
-    var result: Modules = undefined;
-    inline for (list) |entry| {
-        @field(result, entry.name) = entry.build(cfg);
-    }
-    return result;
+pub fn build(cfg: Config) void {
+    _ = vertices.build(cfg);
+    _ = instance.build(cfg);
+    _ = mesh.build(cfg);
 }

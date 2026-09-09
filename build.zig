@@ -305,8 +305,13 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const renderUpload_mod = b.createModule(.{
+        .root_source_file = b.path("src/renderUpload.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
-    // ===== custom structs: src/customStruct 由 src/build 管线构建并接线 =====
+    //
     const customConfig = @import("src/build/config.zig");
     const customBuild = @import("src/build/out.zig");
     const cfg: customConfig.Config = .{
@@ -323,9 +328,15 @@ pub fn build(b: *std.Build) void {
         .resourceProcess = resourceProcess_mod,
         .instances2 = instance_mod2,
     };
-    _ = customBuild.build(cfg);
+    customBuild.build(cfg);
 
     // aaa
+    renderUpload_mod.addImport("processRender", processRender_mod);
+    renderUpload_mod.addImport("textureSet", textureSet_mod);
+    renderUpload_mod.addImport("video", video_mod);
+    renderUpload_mod.addImport("pass", pass_mod);
+    renderUpload_mod.addImport("resourceProcess", resourceProcess_mod);
+
     instance_mod2.addImport("pass", pass_mod);
     instance_mod2.addImport("cglm", cglm_mod);
     instance_mod2.addImport("handle", handle_mod);
@@ -581,6 +592,7 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("vulkan", vk_c_mod);
     exe_mod.addImport("resource", resource_mod);
     exe_mod.addImport("instances2", instance_mod2);
+    exe_mod.addImport("renderUpload", renderUpload_mod);
     exe_mod.addIncludePath(b.path("include/"));
 
     exe_mod.addLibraryPath(b.path("lib/"));
