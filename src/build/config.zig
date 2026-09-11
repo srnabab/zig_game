@@ -16,6 +16,7 @@ pub const Config = struct {
     vertexStruct: *std.Build.Module,
     global: *std.Build.Module,
     handle: *std.Build.Module,
+    u8pack: *std.Build.Module,
 
     // ---- 下游: 引擎中需要 @import 自定义结构体的消费者模块 ----
     exe: *std.Build.Module,

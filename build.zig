@@ -257,11 +257,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    const passGroupMapping_mod = b.createModule(.{
-        .root_source_file = b.path("monsoon/video/pass/pass.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
     const vulkanCapability_mod = b.createModule(.{
         .root_source_file = b.path("monsoon/video/capability.zig"),
         .target = target,
@@ -323,6 +318,7 @@ pub fn build(b: *std.Build) void {
         .vertexStruct = vertexStruct_mod,
         .global = global_mod,
         .handle = handle_mod,
+        .u8pack = u8pack_mod,
         .exe = exe_mod,
         .resource = resource_mod,
         .resourceProcess = resourceProcess_mod,
@@ -346,14 +342,12 @@ pub fn build(b: *std.Build) void {
     instance_mod2.addImport("cglm", cglm_mod);
     instance_mod2.addImport("handle", handle_mod);
     instance_mod2.addImport("textureSet", textureSet_mod);
-    instance_mod2.addImport("passGroupMapping", passGroupMapping_mod);
     instance_mod2.addImport("setPass", setPass_mod);
     instance_mod2.addImport("processRender", processRender_mod);
     instance_mod2.addImport("video", video_mod);
 
     resourceProcess_mod.addImport("u8pack", u8pack_mod);
     resourceProcess_mod.addImport("pass", pass_mod);
-    resourceProcess_mod.addImport("passGroupMapping", passGroupMapping_mod);
     resourceProcess_mod.addImport("instance2", instance_mod2);
     resourceProcess_mod.addImport("handle", handle_mod);
     resourceProcess_mod.addImport("vulkan", vk_c_mod);
@@ -398,11 +392,6 @@ pub fn build(b: *std.Build) void {
 
     ktx2_c.addIncludePath(b.path("include"));
     ktx2_c.addIncludePath(b.path("include/KTX"));
-
-    passGroupMapping_mod.addImport("vertexStruct", vertexStruct_mod);
-    passGroupMapping_mod.addImport("video", video_mod);
-    passGroupMapping_mod.addImport("processRender", processRender_mod);
-    passGroupMapping_mod.addImport("u8pack", u8pack_mod);
 
     renderDebug_mod.addImport("vulkanType", vulkanType_mod);
     renderDebug_mod.addImport("processRender", processRender_mod);
@@ -582,7 +571,6 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("setPass", setPass_mod);
     exe_mod.addImport("ms_std", ms_mod);
     exe_mod.addImport("loadmap", loadmap_mod);
-    exe_mod.addImport("passGroupMapping", passGroupMapping_mod);
     exe_mod.addImport("renderDebug", renderDebug_mod);
     exe_mod.addImport("textureSet", textureSet_mod);
     exe_mod.addImport("renderFlow", renderFlow_mod);
