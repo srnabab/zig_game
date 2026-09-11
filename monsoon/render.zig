@@ -37,7 +37,7 @@ const file = @import("fileSystem");
 const mesh = @import("mesh");
 const pass = @import("pass");
 
-const instance = @import("instance");
+const meshInstance = @import("meshInstance");
 
 const resourceProcess = @import("resourceProcess");
 
@@ -54,7 +54,7 @@ pub const Args = struct {
     vulkan: *VkStruct,
     passes: *pass,
     uctx: *resourceProcess.UserContext,
-    instances: *instance,
+    instances: *meshInstance,
     externalCommands: *processRender.externalCommands,
 };
 

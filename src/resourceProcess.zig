@@ -45,13 +45,13 @@ const loadMap = @import("loadmap");
 const instance2 = @import("instance2");
 const vertices2D = @import("vertices");
 const PassGroupMapping = @import("passGroupMapping");
-const instance1 = @import("instance");
+const meshInstance = @import("meshInstance");
 
 pub const UserContext = struct {
     /// engine will use this
     pTextureSet: textureSet,
     loadmaps: loadMap,
-    instances1: instance1,
+    instances1: meshInstance,
     instances2: instance2,
     vertices: vertices2D,
     passGroupMapping: PassGroupMapping,
@@ -74,7 +74,7 @@ pub const UserContext = struct {
             .instances2 = .init(gpa),
             .passGroupMapping = .init(gpa),
             .vertices = try vertices2D.init(indirect2DBuffers[2], indirect2DBuffers[0], indirect2DBuffers[1], gpa, externalCommands),
-            .instances1 = instance1.init(gpa, handles, iFeatherBuffers[9]),
+            .instances1 = meshInstance.init(gpa, handles, iFeatherBuffers[9]),
             .pTextureSet = undefined,
         };
         try uctx.passGroupMapping.addUploadTarget(toStr2("i_feather"), iFeatherBuffers[6], iFeatherBuffers[8]); // IF.featherCommands / IF.groupMappings

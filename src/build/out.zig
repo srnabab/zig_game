@@ -2,7 +2,7 @@ const std = @import("std");
 const Config = @import("config.zig").Config;
 
 const vertices = @import("vertices.zig");
-const instance = @import("instance.zig");
+const meshInstance = @import("meshInstance.zig");
 const mesh = @import("mesh.zig");
 
 const Entry = struct {
@@ -15,20 +15,20 @@ const Entry = struct {
 /// build.zig 无需任何改动
 pub const list = [_]Entry{
     .{ .name = vertices.name, .build = vertices.build },
-    .{ .name = instance.name, .build = instance.build },
+    .{ .name = meshInstance.name, .build = meshInstance.build },
     .{ .name = mesh.name, .build = mesh.build },
 };
 
 /// 构建完成后暴露给引擎侧引用的模块集合
 pub const Modules = struct {
     vertices: *std.Build.Module,
-    instance: *std.Build.Module,
+    meshInstance: *std.Build.Module,
     mesh: *std.Build.Module,
 };
 
 /// 依次调用 list 中的构建函数, 完成创建 + 上游/下游接线
 pub fn build(cfg: Config) void {
     _ = vertices.build(cfg);
-    _ = instance.build(cfg);
+    _ = meshInstance.build(cfg);
     _ = mesh.build(cfg);
 }

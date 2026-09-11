@@ -9,7 +9,7 @@ const pass = @import("pass");
 const vertices2D = @import("vertices");
 const cglm = @import("cglm");
 const textureSet = @import("textureSet");
-const instances1 = @import("instance");
+const meshInstance = @import("meshInstance");
 const PassGroupMapping = @import("passGroupMapping");
 const u8pack = @import("u8pack");
 const toStr = u8pack.toStr;
@@ -56,7 +56,7 @@ pub fn load(
     passes: *pass,
     pTextureSet: *textureSet,
     vertices: *vertices2D,
-    instances: *instances1,
+    instances: *meshInstance,
     passGroupMapping: *PassGroupMapping,
 ) !void {
     try self.mutex.lock(io);

@@ -23,7 +23,6 @@ const Records = struct {
     updated: bool,
 };
 
-/// passName -> 该 pass 上传所需的目标 buffer
 const Target = struct {
     indirectBuffer: VkStruct.Buffer_t,
     mappingBuffer: VkStruct.Buffer_t,
