@@ -14,3 +14,5 @@ pub const MutexArray = @import("mutexArray.zig").MutexArray;
 pub const Math = @import("math.zig");
 
 pub const meta = @import("meta/meta.zig");
+
+pub const ComptimeAllocator = @import("comptimeAllocator.zig").ComptimeAllocator;

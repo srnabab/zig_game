@@ -1,14 +1,16 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 
 pub const Pass = @import("pass.zig");
 const vk = @import("vulkan");
 
-const Allocator = std.mem.Allocator;
+const u8pack = @import("u8pack");
+const Str = u8pack.Str;
 
-var passMap: std.StringHashMap(Pass.Pass) = undefined;
+var passMap: u8pack.HashMap(Pass.Pass) = undefined;
 var passArray: std.array_list.Managed(Pass.Pass) = undefined;
-var buffers: std.StringHashMap(Pass.Buffer) = undefined;
-var pipelines: std.StringHashMap(Pass.Pipeline) = undefined;
+var buffers: u8pack.HashMap(Pass.Buffer) = undefined;
+var pipelines: u8pack.HashMap(Pass.Pipeline) = undefined;
 var allocator: std.heap.ArenaAllocator = undefined;
 
 pub fn init(gpa: Allocator) void {
@@ -28,81 +30,103 @@ pub fn deinit() void {
 }
 
 pub fn createBuffer(
-    name: []const u8,
+    comptime ctx: ?*u8pack.CTX,
+    comptime name: []const u8,
     initSize: u64,
     stride: u64,
     usage: Pass.BufferUsage,
-    isVirtualBlock: bool,
-    parentName: ?[]const u8,
+    comptime isVirtualBlock: bool,
+    comptime parentName: ?[]const u8,
 ) !Pass.Buffer {
-    if (buffers.get(name)) |buffer| {
-        return buffer;
-    }
+    if (ctx != null) {
+        ctx.?.buffers = ctx.?.buffers ++ .{name};
 
-    var offset: u64 = 0;
+        return undefined;
+    } else {
+        var name_str = u8pack.toStr(name);
+        if (buffers.get(name_str)) |buffer| {
+            return buffer;
+        }
 
-    if (isVirtualBlock) {
-        if (parentName) |n| {
-            if (buffers.getPtr(n)) |b| {
-                if (b.residuentCapacity < initSize) {
-                    return error.OutOfMemory;
+        var offset: u64 = 0;
+
+        if (isVirtualBlock) {
+            if (parentName) |n| {
+                const n_str = u8pack.toStr(n);
+                if (buffers.getPtr(n_str)) |b| {
+                    if (b.residuentCapacity < initSize) {
+                        return error.OutOfMemory;
+                    }
+                    offset = b.initSize - b.residuentCapacity;
+
+                    b.residuentCapacity -= initSize;
+                } else {
+                    return error.VirtualBlockWithoutParent;
                 }
-                offset = b.initSize - b.residuentCapacity;
-
-                b.residuentCapacity -= initSize;
             } else {
                 return error.VirtualBlockWithoutParent;
             }
-        } else {
-            return error.VirtualBlockWithoutParent;
         }
+
+        const name_dupe = try allocator.allocator().dupe(u8, name);
+        name_str.name = name_dupe;
+
+        const buffer = Pass.Buffer{
+            .name = name_str,
+            .parentName = if (isVirtualBlock) u8pack.toStr(parentName.?) else null,
+            .initSize = initSize,
+            .usage = usage,
+            .stride = stride,
+            .residuentCapacity = initSize,
+            .offset = offset,
+        };
+
+        try buffers.put(name_str, buffer);
+
+        return buffer;
     }
-
-    const name_dupe = try allocator.allocator().dupe(u8, name);
-
-    const buffer = Pass.Buffer{
-        .name = name_dupe,
-        .parentName = if (isVirtualBlock) parentName else null,
-        .initSize = initSize,
-        .usage = usage,
-        .stride = stride,
-        .residuentCapacity = initSize,
-        .offset = offset,
-    };
-
-    try buffers.put(name_dupe, buffer);
-
-    return buffer;
 }
 
-pub fn addPipeline(name: []const u8, isMesh: bool) !Pass.Pipeline {
+pub fn addPipeline(comptime ctx: ?*u8pack.CTX, comptime name: []const u8, isMesh: bool) !Pass.Pipeline {
+    if (ctx != null) return undefined;
+
     const name_dupe = try allocator.allocator().dupe(u8, name);
+    var name_str = u8pack.toStr(name);
+    name_str.name = name_dupe;
 
     const pipeline = Pass.Pipeline{
-        .name = name_dupe,
+        .name = name_str,
         .isMesh = isMesh,
     };
 
-    try pipelines.put(name_dupe, pipeline);
+    try pipelines.put(name_str, pipeline);
 
     return pipeline;
 }
 
-pub fn createPass(name: []const u8) !void {
-    const name_dupe = try allocator.allocator().dupe(u8, name);
+pub fn createPass(comptime ctx: ?*u8pack.CTX, comptime name: []const u8) !void {
+    if (ctx != null) {
+        ctx.?.passes = ctx.?.passes ++ .{name};
+    } else {
+        const name_dupe = try allocator.allocator().dupe(u8, name);
+        var name_str = u8pack.toStr(name);
+        name_str.name = name_dupe;
 
-    const pass = Pass.Pass{
-        .name = name_dupe,
-        .buffers = &.{},
-        .pipeline = null,
-        .pushConstant = &.{},
-    };
+        const pass = Pass.Pass{
+            .name = name_str,
+            .buffers = &.{},
+            .pipeline = null,
+            .pushConstant = &.{},
+        };
 
-    try passMap.put(name_dupe, pass);
+        try passMap.put(name_str, pass);
+    }
 }
 
-pub fn addBufferToPass(passName: []const u8, buffer: Pass.Buffer) !void {
-    const pass = passMap.getPtr(passName) orelse return error.PassNotFound;
+pub fn addBufferToPass(comptime ctx: ?*u8pack.CTX, comptime passName: []const u8, buffer: Pass.Buffer) !void {
+    if (ctx != null) return;
+
+    const pass = passMap.getPtr(u8pack.toStr(passName)) orelse return error.PassNotFound;
 
     const buf = buffers.get(buffer.name) orelse return error.BufferNotFound;
 
@@ -116,8 +140,10 @@ pub fn addBufferToPass(passName: []const u8, buffer: Pass.Buffer) !void {
     pass.buffers[index] = buf;
 }
 
-pub fn addPipelineToPass(passName: []const u8, pipeline: Pass.Pipeline) !void {
-    const pass = passMap.getPtr(passName) orelse return error.PassNotFound;
+pub fn addPipelineToPass(comptime ctx: ?*u8pack.CTX, comptime passName: []const u8, pipeline: Pass.Pipeline) !void {
+    if (ctx != null) return;
+
+    const pass = passMap.getPtr(u8pack.toStr(passName)) orelse return error.PassNotFound;
 
     const pip = pipelines.get(pipeline.name) orelse return error.PipelineNotFound;
 
@@ -129,14 +155,18 @@ pub fn addPipelineToPass(passName: []const u8, pipeline: Pass.Pipeline) !void {
     pass.pipeline.?[pass.pipeline.?.len - 1] = pip;
 }
 
-pub fn addVTableToPass(passName: []const u8, vtable: *const Pass.VTable) !void {
-    const pass = passMap.getPtr(passName) orelse return error.PassNotFound;
+pub fn addVTableToPass(comptime ctx: ?*u8pack.CTX, comptime passName: []const u8, vtable: *const Pass.VTable) !void {
+    if (ctx != null) return;
+
+    const pass = passMap.getPtr(u8pack.toStr(passName)) orelse return error.PassNotFound;
 
     pass.vtable = vtable;
 }
 
-pub fn setPushConstant(passName: []const u8, stage: vk.VkShaderStageFlags, size: u16) !void {
-    const pass = passMap.getPtr(passName) orelse return error.PassNotFound;
+pub fn setPushConstant(comptime ctx: ?*u8pack.CTX, comptime passName: []const u8, stage: vk.VkShaderStageFlags, size: u16) !void {
+    if (ctx != null) return;
+
+    const pass = passMap.getPtr(u8pack.toStr(passName)) orelse return error.PassNotFound;
 
     if (pass.pushConstant.len == 0) {
         pass.pushConstant = try allocator.allocator().alloc(Pass.PushConstantPack, 1);
@@ -149,8 +179,10 @@ pub fn setPushConstant(passName: []const u8, stage: vk.VkShaderStageFlags, size:
         .offset = 0,
     };
 }
-pub fn appendPass(passName: []const u8) !void {
-    const pass = passMap.get(passName) orelse return error.PassNotFound;
+pub fn appendPass(comptime ctx: ?*u8pack.CTX, comptime passName: []const u8) !void {
+    if (ctx != null) return;
+
+    const pass = passMap.get(u8pack.toStr(passName)) orelse return error.PassNotFound;
 
     try passArray.append(pass);
 }

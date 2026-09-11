@@ -9,6 +9,8 @@ const global = @import("global");
 const tracy = @import("tracy");
 const sdl = @import("sdl").sdl;
 
+const u8pack = @import("u8pack");
+
 const input = @import("input");
 const inputFunc = @import("input/inputFunc.zig");
 
@@ -211,7 +213,7 @@ pub fn update_thread_func(args: Args) !void {
     var accumulateTime: u64 = 0;
     // var testHandle: Handle = undefined;
 
-    _ = try resource.readResource(&resourceCtx, resourceCtx.mainSqlite, &.{}, "test.lMap");
+    _ = try resource.readResource(&resourceCtx, resourceCtx.mainSqlite, &.{}, u8pack.toStr("test.lMap"));
     try Io.sleep(io, .fromMilliseconds(200), .real);
 
     out: while (true) {

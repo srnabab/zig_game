@@ -20,7 +20,9 @@ const sqlite3 = ?*file.sqlite.sqlite3;
 const VkStruct = @import("video");
 const Buffer_t = VkStruct.Buffer_t;
 
-const u8pack = @import("u8pack").u8pack;
+const u8pack = @import("u8pack");
+const toStr2 = u8pack.toStr2;
+// const Str = u8pack.Str;
 
 const cglm = @import("cglm");
 const pass = @import("pass");
@@ -70,9 +72,9 @@ const Grid = struct {
 };
 
 const Item = struct {
-    name: u8pack([]u8),
+    name: []u8,
     isGpu: bool,
-    bufferName: []u8pack([]u8) = &.{},
+    bufferName: [][]u8 = &.{},
 };
 
 const Loading = struct {
@@ -326,7 +328,7 @@ pub fn loadResource(
 
             for (ptr.grid.passes) |value| {
                 const name = self.strs[value.start .. value.start + value.len];
-                ctx.passes.enablePass(name);
+                ctx.passes.enablePass(toStr2(name));
             }
             try self.loadedQueue.append(self.loadingQueue.get(item.index).*);
             self.loadingQueue.remove(item.index);
@@ -342,7 +344,7 @@ pub fn loadResource(
                 buffers = try self.allocator.alloc(Buffer_t, i.bufferName.len);
 
                 for (i.bufferName, buffers) |bi, *b| {
-                    b.* = ctx.vulkan.buffers.getBuffer(bi).?;
+                    b.* = ctx.vulkan.buffers.getBuffer(toStr2(bi)).?;
                 }
             }
             defer self.allocator.free(buffers);
@@ -351,7 +353,7 @@ pub fn loadResource(
                 ctx,
                 ctx.mainSqlite,
                 buffers,
-                i.name,
+                toStr2(i.name),
             );
             try self.loadingItems.append(.{ .handle = h, .progress = item.ptr.progress });
         }
@@ -373,7 +375,7 @@ pub fn loadResource(
 
             for (ptr.grid.passes) |value| {
                 const name = self.strs[value.start .. value.start + value.len];
-                ctx.passes.enablePass(name);
+                ctx.passes.enablePass(toStr2(name));
             }
         } else {
             try self.loadingQueue.append(self.loadingCacheQueue.get(item.index).*);

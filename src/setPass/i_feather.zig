@@ -16,6 +16,7 @@ const ExternalCommands = @import("processRender").externalCommands;
 const TextureSet = @import("textureSet");
 const renderFlow = @import("renderFlow");
 const vk = @import("vulkan");
+const u8pack = @import("u8pack");
 
 const twoU64 = extern struct {
     a: u64,
@@ -208,10 +209,11 @@ const vtableI_Feather = VTable{
     .addCommand = addI_FeatherCommand,
 };
 
-pub fn addI_FeatherPass() !void {
+pub fn addI_FeatherPass(comptime ctx: ?*u8pack.CTX) !void {
     const passName = "i_feather";
 
     const buffer0 = try renderFlow.createBuffer(
+        ctx,
         "indirectVertex_MeshDrawCommand",
         @sizeOf(vk.VkDrawIndirectCommand),
         @sizeOf(vk.VkDrawIndirectCommand),
@@ -229,6 +231,7 @@ pub fn addI_FeatherPass() !void {
     const totalSize = verticesSize + meshletSize + meshletVerticesSize + mehsletTrianglesSize;
 
     const buffer1 = try renderFlow.createBuffer(
+        ctx,
         "featherStorageBuffer",
         totalSize,
         0,
@@ -238,6 +241,7 @@ pub fn addI_FeatherPass() !void {
     );
 
     const buffer2 = try renderFlow.createBuffer(
+        ctx,
         "featherMeshlet",
         meshletSize,
         @sizeOf(vertexStruct.Meshlet),
@@ -247,6 +251,7 @@ pub fn addI_FeatherPass() !void {
     );
 
     const buffer3 = try renderFlow.createBuffer(
+        ctx,
         "featherVertices",
         verticesSize,
         @sizeOf(vertexStruct.Vertex_f3pf3nf4tf2u),
@@ -256,6 +261,7 @@ pub fn addI_FeatherPass() !void {
     );
 
     const buffer4 = try renderFlow.createBuffer(
+        ctx,
         "featherMeshletVertices",
         meshletVerticesSize,
         @sizeOf(u32),
@@ -265,6 +271,7 @@ pub fn addI_FeatherPass() !void {
     );
 
     const buffer5 = try renderFlow.createBuffer(
+        ctx,
         "featherMeshletTriangles",
         mehsletTrianglesSize,
         @sizeOf(u8),
@@ -274,6 +281,7 @@ pub fn addI_FeatherPass() !void {
     );
 
     const buffer6 = try renderFlow.createBuffer(
+        ctx,
         "iv_FeatherCommand",
         @sizeOf(vertexStruct.CustomDrawMeshTasksIndirectCommand) * 2,
         0,
@@ -283,6 +291,7 @@ pub fn addI_FeatherPass() !void {
     );
 
     const buffer7 = try renderFlow.createBuffer(
+        ctx,
         "indirectComputeCommand",
         @sizeOf(vk.VkDispatchIndirectCommand),
         0,
@@ -292,6 +301,7 @@ pub fn addI_FeatherPass() !void {
     );
 
     const buffer8 = try renderFlow.createBuffer(
+        ctx,
         "groupMappings",
         @sizeOf(vertexStruct.GroupMapping) * 4,
         @sizeOf(vertexStruct.GroupMapping),
@@ -301,6 +311,7 @@ pub fn addI_FeatherPass() !void {
     );
 
     const buffer9 = try renderFlow.createBuffer(
+        ctx,
         "instance3D",
         @sizeOf(vertexStruct.Instance3D) * 4,
         @sizeOf(vertexStruct.Instance3D),
@@ -310,6 +321,7 @@ pub fn addI_FeatherPass() !void {
     );
 
     const buffer10 = try renderFlow.createBuffer(
+        ctx,
         "meshes",
         @sizeOf(vertexStruct.Mesh) * 40,
         @sizeOf(vertexStruct.Mesh),
@@ -319,6 +331,7 @@ pub fn addI_FeatherPass() !void {
     );
 
     const buffer11 = try renderFlow.createBuffer(
+        ctx,
         "computeTaskPayload",
         @sizeOf(vertexStruct.ComputeTaskPayload) * 400,
         @sizeOf(vertexStruct.ComputeTaskPayload),
@@ -328,6 +341,7 @@ pub fn addI_FeatherPass() !void {
     );
 
     const buffer12 = try renderFlow.createBuffer(
+        ctx,
         "featherParameters",
         20000 * 192 * @sizeOf(f32),
         @sizeOf(f32),
@@ -336,33 +350,33 @@ pub fn addI_FeatherPass() !void {
         null,
     );
 
-    const pipeC = try renderFlow.addPipeline("c_commandPrefixSum.pipeb", false);
-    const pipeIc = try renderFlow.addPipeline("ic_task.pipeb", false);
-    const pipeIv = try renderFlow.addPipeline("iv_feather.pipeb", false);
+    const pipeC = try renderFlow.addPipeline(ctx, "c_commandPrefixSum.pipeb", false);
+    const pipeIc = try renderFlow.addPipeline(ctx, "ic_task.pipeb", false);
+    const pipeIv = try renderFlow.addPipeline(ctx, "iv_feather.pipeb", false);
 
-    try renderFlow.createPass(passName);
-    try renderFlow.addPipelineToPass(passName, pipeC);
-    try renderFlow.addPipelineToPass(passName, pipeIc);
-    try renderFlow.addPipelineToPass(passName, pipeIv);
-    try renderFlow.addBufferToPass(passName, buffer0);
-    try renderFlow.addBufferToPass(passName, buffer1);
-    try renderFlow.addBufferToPass(passName, buffer2);
-    try renderFlow.addBufferToPass(passName, buffer3);
-    try renderFlow.addBufferToPass(passName, buffer4);
-    try renderFlow.addBufferToPass(passName, buffer5);
-    try renderFlow.addBufferToPass(passName, buffer6);
-    try renderFlow.addBufferToPass(passName, buffer7);
-    try renderFlow.addBufferToPass(passName, buffer8);
-    try renderFlow.addBufferToPass(passName, buffer9);
-    try renderFlow.addBufferToPass(passName, buffer10);
-    try renderFlow.addBufferToPass(passName, buffer11);
-    try renderFlow.addBufferToPass(passName, buffer12);
+    try renderFlow.createPass(ctx, passName);
+    try renderFlow.addPipelineToPass(ctx, passName, pipeC);
+    try renderFlow.addPipelineToPass(ctx, passName, pipeIc);
+    try renderFlow.addPipelineToPass(ctx, passName, pipeIv);
+    try renderFlow.addBufferToPass(ctx, passName, buffer0);
+    try renderFlow.addBufferToPass(ctx, passName, buffer1);
+    try renderFlow.addBufferToPass(ctx, passName, buffer2);
+    try renderFlow.addBufferToPass(ctx, passName, buffer3);
+    try renderFlow.addBufferToPass(ctx, passName, buffer4);
+    try renderFlow.addBufferToPass(ctx, passName, buffer5);
+    try renderFlow.addBufferToPass(ctx, passName, buffer6);
+    try renderFlow.addBufferToPass(ctx, passName, buffer7);
+    try renderFlow.addBufferToPass(ctx, passName, buffer8);
+    try renderFlow.addBufferToPass(ctx, passName, buffer9);
+    try renderFlow.addBufferToPass(ctx, passName, buffer10);
+    try renderFlow.addBufferToPass(ctx, passName, buffer11);
+    try renderFlow.addBufferToPass(ctx, passName, buffer12);
 
-    try renderFlow.setPushConstant(passName, vk.VK_SHADER_STAGE_COMPUTE_BIT, 16);
-    try renderFlow.setPushConstant(passName, vk.VK_SHADER_STAGE_COMPUTE_BIT, 52);
-    try renderFlow.setPushConstant(passName, vk.VK_SHADER_STAGE_VERTEX_BIT, @sizeOf(Iv_feather_PushConstant));
+    try renderFlow.setPushConstant(ctx, passName, vk.VK_SHADER_STAGE_COMPUTE_BIT, 16);
+    try renderFlow.setPushConstant(ctx, passName, vk.VK_SHADER_STAGE_COMPUTE_BIT, 52);
+    try renderFlow.setPushConstant(ctx, passName, vk.VK_SHADER_STAGE_VERTEX_BIT, @sizeOf(Iv_feather_PushConstant));
 
-    try renderFlow.addVTableToPass(passName, &vtableI_Feather);
+    try renderFlow.addVTableToPass(ctx, passName, &vtableI_Feather);
 
-    try renderFlow.appendPass(passName);
+    try renderFlow.appendPass(ctx, passName);
 }

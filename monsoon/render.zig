@@ -283,7 +283,7 @@ pub fn render_thread_func(args: Args) !void {
                         &commands,
                         gpa,
                     ) catch |err| {
-                        std.log.err("pass {s} {s}", .{ value.name, @errorName(err) });
+                        std.log.err("pass {f} {s}", .{ value.name, @errorName(err) });
                         renderDebug.printToDot();
                         renderDebug.printPassInfo(vulkan, value);
 

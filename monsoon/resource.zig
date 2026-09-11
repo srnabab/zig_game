@@ -10,6 +10,9 @@ const VkStruct = @import("video");
 const Handles = @import("handle");
 const Handle = Handles.Handle;
 
+const u8pack = @import("u8pack");
+const Str = u8pack.Str;
+
 const Texture_t = @import("textureSet").Texture_t;
 const vertexStruct = @import("vertexStruct");
 const Mesh_t = @import("mesh").Mesh_t;
@@ -77,9 +80,9 @@ pub fn readResource(
     ctx: *const ResourceCtx,
     sqlite: sqlite3,
     buffers: []VkStruct.Buffer_t,
-    fileName: []const u8,
+    fileName: Str,
 ) !Handle {
-    const fileID = file.getID(fileName);
+    const fileID = fileName.id;
 
     if (idHandleCache.contains(fileID)) {
         return idHandleCache.get(fileID).?;

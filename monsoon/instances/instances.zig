@@ -11,6 +11,9 @@ const cglm = @import("cglm");
 const textureSet = @import("textureSet");
 const instances1 = @import("instance");
 const PassGroupMapping = @import("passGroupMapping");
+const u8pack = @import("u8pack");
+const toStr = u8pack.toStr;
+const toStr2 = u8pack.toStr2;
 
 const ViewBoundsAndTotalSpriteCount = @import("setPass").ViewBoundsAndTotalSpriteCount;
 
@@ -70,7 +73,7 @@ pub fn load(
         //     item.model,
         // });
 
-        if (std.mem.eql(u8, "indirect2D", item.pass.name)) {
+        if (u8pack.eql(toStr("indirect2D"), item.pass.name)) {
             const viewBoundsAndTotalSpriteCount: *ViewBoundsAndTotalSpriteCount = @ptrCast(@alignCast(item.pass.userdata));
 
             try item.pass.useTexture(@ptrCast(item.textures[0]), self.instances.allocator);
@@ -85,7 +88,7 @@ pub fn load(
                 pTextureSet.getDescriptorSetIndex(@ptrCast(item.textures[0])),
             );
             viewBoundsAndTotalSpriteCount.totalSpriteCount = vertices.getTotalCount();
-        } else if (std.mem.eql(u8, "i_feather", item.pass.name)) {
+        } else if (u8pack.eql(toStr("i_feather"), item.pass.name)) {
             const ins = try instances.add(
                 io,
                 null,

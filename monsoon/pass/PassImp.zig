@@ -15,10 +15,13 @@ const TextureSet = @import("textureSet");
 
 const renderFlow = @import("renderFlow");
 
+const u8pack = @import("u8pack");
+const Str = u8pack.Str;
+
 pub const VTable = renderFlow.Pass.VTable;
 
 pub const Pass = struct {
-    name: []const u8 = undefined,
+    name: Str = undefined,
     buffer: []Buffer_t = &.{},
     texture: []Texture_t = &.{},
     descriptorSet: []vk.VkDescriptorSet = &.{},
@@ -102,7 +105,7 @@ pub const Pass = struct {
 
 const Self = @This();
 
-passMap: std.StringHashMap(*Pass),
+passMap: u8pack.HashMap(*Pass),
 passes: []Pass,
 
 pub fn initFromRenderFlow(io: std.Io, gpa: std.mem.Allocator, vulkan: *VkStruct, sqlite: ?*file.sqlite.sqlite3) !Self {
@@ -110,13 +113,13 @@ pub fn initFromRenderFlow(io: std.Io, gpa: std.mem.Allocator, vulkan: *VkStruct,
 
     const passes = try gpa.alloc(Pass, passCount);
 
-    var bufferMap = std.StringHashMap(Buffer_t).init(gpa);
+    var bufferMap = u8pack.HashMap(Buffer_t).init(gpa);
     defer bufferMap.deinit();
 
     var pipelineMap = std.StringHashMap(Pipeline_t).init(gpa);
     defer pipelineMap.deinit();
 
-    var passMap = std.StringHashMap(*Pass).init(gpa);
+    var passMap = u8pack.HashMap(*Pass).init(gpa);
 
     var skipCount: usize = 0;
     for (0..passCount) |i| {
@@ -136,13 +139,13 @@ pub fn initFromRenderFlow(io: std.Io, gpa: std.mem.Allocator, vulkan: *VkStruct,
         for (pass.pipeline.?, 0..) |p, k| {
             passes[passedIndex].pipeline[k] = try vulkan.readPipelineFileAndAdd(
                 io,
-                file.getID(p.name),
+                file.getID(p.name.name),
                 sqlite,
                 p.isMesh,
             );
         }
 
-        passes[passedIndex].name = try gpa.dupe(u8, pass.name);
+        passes[passedIndex].name = try u8pack.dupe(gpa, pass.name);
         passes[passedIndex].pushConstant = try gpa.alloc(PushConstantPack, pass.pushConstant.len);
         for (pass.pushConstant, 0..) |pc, k| {
             passes[passedIndex].pushConstant[k] = pc;
@@ -215,7 +218,7 @@ pub fn deinit(self: *Self, gpa: std.mem.Allocator) void {
     self.passMap.deinit();
 
     for (self.passes) |pass| {
-        gpa.free(pass.name);
+        u8pack.free(gpa, pass.name);
         gpa.free(pass.buffer);
         gpa.free(pass.texture);
         gpa.free(pass.pipeline);
@@ -228,11 +231,11 @@ pub fn deinit(self: *Self, gpa: std.mem.Allocator) void {
     gpa.free(self.passes);
 }
 
-pub fn disablePass(self: Self, pass: []const u8) void {
+pub fn disablePass(self: Self, pass: Str) void {
     self.passMap.getPtr(pass).?.*.enabled -= 1;
 }
 
-pub fn enablePass(self: Self, pass: []const u8) void {
+pub fn enablePass(self: Self, pass: Str) void {
     // std.log.debug("11111111111111111111", .{});
     self.passMap.getPtr(pass).?.*.enabled += 1;
 }

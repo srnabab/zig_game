@@ -4,7 +4,7 @@ const std = @import("std");
 const assert = std.debug.assert;
 const tables = @import("tables");
 const vertexStruct = @import("vertexStruct");
-const fileNameID = @import("fileNameID.zig");
+pub const fileNameID = @import("fileNameID.zig");
 const resourceProcess = @import("resourceProcess");
 
 pub const comptimeGetID = fileNameID.comptimeGetID;

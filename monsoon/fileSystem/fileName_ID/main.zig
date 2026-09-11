@@ -99,7 +99,7 @@ pub fn main(init: std.process.Init) !void {
     var maxID: i32 = -1;
 
     var buffer = [_]u8{0} ** 102400;
-    const content = "const std = @import(\"std\");\n\nconst FileNameIdHashMap = map: {\nconst KV = struct {\n[]const u8,i64,\n};\nconst list = [_]KV{\n";
+    const content = "const std = @import(\"std\");\n\npub const FileNameIdHashMap = map: {\nconst KV = struct {\n[]const u8,i64,\n};\nconst list = [_]KV{\n";
     var writer = std.Io.Writer.fixed(&buffer);
     _ = try writer.write(content);
     for (kvs) |value| {

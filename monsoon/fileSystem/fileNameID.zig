@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const FileNameIdHashMap = map: {
+pub const FileNameIdHashMap = map: {
 const KV = struct {
 []const u8,i64,
 };

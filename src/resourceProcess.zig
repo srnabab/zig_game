@@ -27,6 +27,8 @@ const db = @import("db");
 // runtime
 const file = @import("fileSystem");
 const sqlite3 = ?*file.sqlite.sqlite3;
+const toStr2 = @import("u8pack").toStr2;
+
 const VkStruct = @import("video");
 const ExternalCommands = @import("processRender").externalCommands;
 const Handles = @import("handle");
@@ -63,8 +65,8 @@ pub const UserContext = struct {
         passes: *pass,
         externalCommands: *ExternalCommands,
     ) !UserContext {
-        const indirect2DBuffers = passes.passMap.get("indirect2D").?.buffer;
-        const iFeatherBuffers = passes.passMap.get("i_feather").?.buffer; // IF.instance3D = 9
+        const indirect2DBuffers = passes.passMap.get(toStr2("indirect2D")).?.buffer;
+        const iFeatherBuffers = passes.passMap.get(toStr2("i_feather")).?.buffer; // IF.instance3D = 9
 
         var uctx: UserContext = .{
             .meshes = .init(gpa, vulkan, handles),
@@ -75,7 +77,7 @@ pub const UserContext = struct {
             .instances1 = instance1.init(gpa, handles, iFeatherBuffers[9]),
             .pTextureSet = undefined,
         };
-        try uctx.passGroupMapping.addUploadTarget("i_feather", iFeatherBuffers[6], iFeatherBuffers[8]); // IF.featherCommands / IF.groupMappings
+        try uctx.passGroupMapping.addUploadTarget(toStr2("i_feather"), iFeatherBuffers[6], iFeatherBuffers[8]); // IF.featherCommands / IF.groupMappings
         return uctx;
     }
 

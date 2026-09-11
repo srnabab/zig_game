@@ -16,6 +16,8 @@ const TextureSet = @import("textureSet");
 const renderFlow = @import("renderFlow");
 const vk = @import("vulkan");
 
+const u8pack = @import("u8pack");
+
 const indirectPushConstant = extern struct {
     instanceBuffer: u64,
     instanceIDs: u64,
@@ -179,10 +181,11 @@ const vtableIndirect2D = VTable{
     .addCommand = addIndirect2DCommand,
 };
 
-pub fn addIndirect2DPass() !void {
+pub fn addIndirect2DPass(comptime ctx: ?*u8pack.CTX) !void {
     const passName = "indirect2D";
 
     const buffer = try renderFlow.createBuffer(
+        ctx,
         "indirectDrawCommand",
         @sizeOf(vk.VkDrawIndirectCommand),
         @sizeOf(vk.VkDrawIndirectCommand),
@@ -191,6 +194,7 @@ pub fn addIndirect2DPass() !void {
         null,
     );
     const buffer2 = try renderFlow.createBuffer(
+        ctx,
         "instance2D",
         1000 * @sizeOf(vertexStruct.Instance),
         @sizeOf(vertexStruct.Instance),
@@ -199,6 +203,7 @@ pub fn addIndirect2DPass() !void {
         null,
     );
     const buffer3 = try renderFlow.createBuffer(
+        ctx,
         "instanceID2D",
         1000 * @sizeOf(u32),
         @sizeOf(u32),
@@ -207,20 +212,20 @@ pub fn addIndirect2DPass() !void {
         null,
     );
 
-    const pipeCompute = try renderFlow.addPipeline("indirectDrawCompute.pipeb", false);
-    const pipeDraw = try renderFlow.addPipeline("indirectDraw.pipeb", false);
+    const pipeCompute = try renderFlow.addPipeline(ctx, "indirectDrawCompute.pipeb", false);
+    const pipeDraw = try renderFlow.addPipeline(ctx, "indirectDraw.pipeb", false);
 
-    try renderFlow.createPass(passName);
-    try renderFlow.addPipelineToPass(passName, pipeCompute);
-    try renderFlow.addPipelineToPass(passName, pipeDraw);
-    try renderFlow.addBufferToPass(passName, buffer);
-    try renderFlow.addBufferToPass(passName, buffer2);
-    try renderFlow.addBufferToPass(passName, buffer3);
+    try renderFlow.createPass(ctx, passName);
+    try renderFlow.addPipelineToPass(ctx, passName, pipeCompute);
+    try renderFlow.addPipelineToPass(ctx, passName, pipeDraw);
+    try renderFlow.addBufferToPass(ctx, passName, buffer);
+    try renderFlow.addBufferToPass(ctx, passName, buffer2);
+    try renderFlow.addBufferToPass(ctx, passName, buffer3);
 
-    try renderFlow.setPushConstant(passName, vk.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 48);
-    try renderFlow.setPushConstant(passName, vk.VK_SHADER_STAGE_VERTEX_BIT, 16);
+    try renderFlow.setPushConstant(ctx, passName, vk.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 48);
+    try renderFlow.setPushConstant(ctx, passName, vk.VK_SHADER_STAGE_VERTEX_BIT, 16);
 
-    try renderFlow.addVTableToPass(passName, &vtableIndirect2D);
+    try renderFlow.addVTableToPass(ctx, passName, &vtableIndirect2D);
 
-    try renderFlow.appendPass(passName);
+    try renderFlow.appendPass(ctx, passName);
 }

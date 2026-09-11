@@ -14,6 +14,7 @@ const ExternalCommands = @import("processRender").externalCommands;
 const TextureSet = @import("textureSet");
 const cglm = @import("cglm");
 const renderDebug = @import("renderDebug");
+const u8pack = @import("u8pack");
 
 const vec4 = cglm.vec4;
 
@@ -103,14 +104,14 @@ const vtablePresent = VTable{
     .addCommand = addPresentCommand,
 };
 
-fn addPresentPass() !void {
-    const pipe = try renderFlow.addPipeline("directOut.pipeb", false);
-    try renderFlow.createPass("present");
-    try renderFlow.addPipelineToPass("present", pipe);
-    try renderFlow.setPushConstant("present", vk.VK_SHADER_STAGE_VERTEX_BIT, 4);
-    try renderFlow.addVTableToPass("present", &vtablePresent);
+fn addPresentPass(comptime ctx: ?*u8pack.CTX) !void {
+    const pipe = try renderFlow.addPipeline(ctx, "directOut.pipeb", false);
+    try renderFlow.createPass(ctx, "present");
+    try renderFlow.addPipelineToPass(ctx, "present", pipe);
+    try renderFlow.setPushConstant(ctx, "present", vk.VK_SHADER_STAGE_VERTEX_BIT, 4);
+    try renderFlow.addVTableToPass(ctx, "present", &vtablePresent);
 
-    try renderFlow.appendPass("present");
+    try renderFlow.appendPass(ctx, "present");
 }
 
 pub const ViewBoundsAndTotalSpriteCount = extern struct {
@@ -318,11 +319,11 @@ fn addIm_FeatherPass() !void {
     try renderFlow.appendPass(passName);
 }
 
-pub fn setting() !void {
-    try indirect2D.addIndirect2DPass();
-    try i_feather.addI_FeatherPass();
+pub fn setting(comptime ctx: ?*u8pack.CTX) !void {
+    try indirect2D.addIndirect2DPass(ctx);
+    try i_feather.addI_FeatherPass(ctx);
     // try addIm_FeatherPass();
-    try addPresentPass();
+    try addPresentPass(ctx);
 }
 
 // pub fn userdataInit(passes: *renderFlow, gpa: std.mem.Allocator) !void {}

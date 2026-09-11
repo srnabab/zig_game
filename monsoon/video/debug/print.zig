@@ -306,7 +306,7 @@ pub fn printAllInfoToTxt() void {
 }
 
 pub fn printPassInfo(vulkan: *VkStruct, pass: *Pass) void {
-    std.log.debug("Pass: {s}", .{pass.name});
+    std.log.debug("Pass: {f}", .{pass.name});
 
     for (pass.buffer) |value| {
         const bufferContent = vulkan.buffers.getBufferContent(value);

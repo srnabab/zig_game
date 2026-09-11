@@ -7,6 +7,7 @@ const tables = @import("tables");
 const base = @import("fileSystemBase.zig");
 const vk = @import("vulkan");
 const tracy = @import("tracy");
+pub const fileNameID = base.fileNameID;
 
 pub const sqlite3 = ?*sqlite.sqlite3;
 

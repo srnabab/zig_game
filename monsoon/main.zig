@@ -158,7 +158,7 @@ pub fn main(init: std.process.Init) !void {
     renderFlow.init(allocator_t.*);
     defer renderFlow.deinit();
 
-    try setPass.setting();
+    try setPass.setting(null);
 
     var externalCommands = ExternalCommands.init(io, allocator_t.*);
     defer externalCommands.deinit();

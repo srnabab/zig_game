@@ -11,6 +11,9 @@ const Handle = Handles.Handle;
 const renderDebug = @import("renderDebug");
 const VulkanCapability = @import("capability");
 
+const u8pack = @import("u8pack");
+const Str = u8pack.Str;
+
 pub const vk = @import("vulkan");
 const sdl = @import("sdl").sdl;
 const SDL_CheckResult = @import("sdl").SDL_CheckResult;
@@ -1683,7 +1686,7 @@ pub fn createBufferByUsage(
     stride: vk.VkDeviceSize,
     usage: bufferStruct.Usage,
     bda: bool,
-    name: ?[]const u8,
+    name: ?Str,
 ) !Buffer_t {
     return self.buffers.createBufferByUsage(
         &self.vmaS,
@@ -1703,7 +1706,7 @@ pub fn createVirtualBlockBuffer(
     buffer: Buffer_t,
     offset: vk.VkDeviceSize,
     stride: vk.VkDeviceSize,
-    name: ?[]const u8,
+    name: ?Str,
 ) !Buffer_t {
     return self.buffers.createVirtualBlockBuffer(
         self.pAllocCallBacks,

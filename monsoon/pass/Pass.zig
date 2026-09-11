@@ -8,6 +8,8 @@ const vk = @import("vulkan");
 const PassImp = @import("passImp");
 const TextureSet = @import("textureSet");
 
+const Str = @import("u8pack").Str;
+
 const emptyVTable = VTable{
     .init = initEmpty,
     .addCommand = addCommandEmpty,
@@ -46,8 +48,8 @@ fn addCommandEmpty(
 }
 
 pub const Buffer = struct {
-    name: []const u8,
-    parentName: ?[]const u8,
+    name: Str,
+    parentName: ?Str,
     initSize: u64,
     usage: BufferUsage,
     stride: u64,
@@ -56,7 +58,7 @@ pub const Buffer = struct {
 };
 
 pub const Pipeline = struct {
-    name: []const u8,
+    name: Str,
     isMesh: bool,
 };
 
@@ -88,7 +90,7 @@ pub const VTable = struct {
 };
 
 pub const Pass = struct {
-    name: []const u8,
+    name: Str,
     buffers: []Buffer,
     pipeline: ?[]Pipeline = null,
     pushConstant: []PushConstantPack = &.{},

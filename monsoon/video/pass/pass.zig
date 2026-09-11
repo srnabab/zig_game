@@ -8,6 +8,9 @@ const vk = VkStruct.vk;
 const ProcessRender = @import("processRender");
 const Commands = ProcessRender.commands;
 
+const Str = @import("u8pack").Str;
+const HashMap = @import("u8pack").HashMap;
+
 const Self = @This();
 
 const Command = vertexStruct.CustomDrawMeshTasksIndirectCommand;
@@ -26,9 +29,9 @@ const Target = struct {
     mappingBuffer: VkStruct.Buffer_t,
 };
 
-updates: std.ArrayList([]const u8),
-passCommandsMap: std.StringHashMap(Records),
-uploadTargets: std.StringHashMap(Target),
+updates: std.ArrayList(Str),
+passCommandsMap: HashMap(Records),
+uploadTargets: HashMap(Target),
 mutex: std.Io.Mutex = .init,
 allocator: std.mem.Allocator,
 
@@ -59,7 +62,7 @@ pub fn deinit(self: *Self) void {
 /// 注册 passName 的上传目标 buffer, 在 initUserContext 中调用
 pub fn addUploadTarget(
     self: *Self,
-    passName: []const u8,
+    passName: Str,
     indirectBuffer: VkStruct.Buffer_t,
     mappingBuffer: VkStruct.Buffer_t,
 ) !void {
@@ -69,7 +72,7 @@ pub fn addUploadTarget(
     });
 }
 
-pub fn add(self: *Self, io: Io, passName: []const u8, mapping: vertexStruct.GroupMapping) !u32 {
+pub fn add(self: *Self, io: Io, passName: Str, mapping: vertexStruct.GroupMapping) !u32 {
     try self.mutex.lock(io);
     defer self.mutex.unlock(io);
 

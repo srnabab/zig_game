@@ -18,6 +18,18 @@
 - Default target ABI is forced to `.gnu` (`build.zig:7`)
 - `genFileNameIdHashMap` auto-runs as a build dep → regenerates `src/fileSystem/fileNameID.zig`. Do not edit by hand.
 
+## u8pack Str 迁移 (WIP)
+
+- **`monsoon/u8pack.zig`**(唯一引用方模块 `u8pack`): `Str` 已从泛型 `Str(comptime T)` 改为**固定结构体** `struct { id: u32, name: (Debug/ReleaseSafe 才保留的 []const u8, ReleaseFast 为 void) }`; `StrAutoHashMap(V)` = Debug 下 `std.StringHashMap(V)`(键=name 串)、ReleaseFast 下 `std.AutoHashMap(u32, V)`(键=id)。`ID()`/`toStr()` 仍为空壳(未接注册表/取 id 逻辑), `dupe(gpa, Str)`/`free(gpa, Str)` 已实现(按 debug 分支复制/释放 name)。
+- 本轮只做了**类型替换, 具体实现与调用未动**(函数体暂不编译通过属预期):
+  - `monsoon/pass/Pass.zig`: `Pass.Buffer.name/parentName`、`Pass.Pass.name` → `Str`(`Pass.Pipeline.name` 因属文件/pipeline 范畴暂保持 `[]const u8`)
+  - `monsoon/pass/renderFlow.zig`: `passMap/buffers` → `StrAutoHashMap`; `createBuffer(name, parentName)/createPass/addBufferToPass/addPipelineToPass/addVTableToPass/setPushConstant/appendPass` 的参数(pass/buffer 名) → `Str`; `pipelines` map 与 `addPipeline` 仍 string
+  - `monsoon/pass/PassImp.zig`: `Pass.name` → `Str`; `passMap`/局部 `bufferMap`(initFromRenderFlow) → `StrAutoHashMap`; `enablePass/disablePass(pass: Str)`
+  - `monsoon/video/pass/pass.zig`(PassGroupMapping): `updates: ArrayList(Str)`、`passCommandsMap/uploadTargets` → `StrAutoHashMap`、`add/addUploadTarget(passName: Str)`
+  - `monsoon/video/vkStruct/buffer.zig`: `bufferMap` → `StrAutoHashMap(Buffer_t)`
+  - build.zig: 给 `renderFlow_mod/pass_mod/passGroupMapping_mod/video_mod` 补 `addImport("u8pack")`
+- 后续待办(实现/调用层, 尚未做): 函数体里的 `dupe(u8, name)`、`map.get/put(name)`、`enablePass(name)` 等需改为 `.name`(debug)/`.id`(release) 分支; 调用方 setPass 字面量、instances/loadmap/resourceProcess 的字符串入参待换 `toStr()`/Str; `monsoon/loadmap/loadmap.zig:23` 的 `@import("u8pack").u8pack` 与 `Item.name/bufferName` 仍是旧泛型写法, **当前编译不通过**, 属 loadmap 专项 WIP
+
 ## Zig 0.16.0 使用笔记 (参考 src/loadmap/loadmap.zig)
 
 - `@ptrCast(slice)`：`std.mem.readInt` 参数是 `*const [4]u8`，把 `[]u8` 切片用 `@ptrCast` 转换：`std.mem.readInt(u32, @ptrCast(mem[offset .. offset + 4]), .native)`

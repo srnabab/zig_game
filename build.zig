@@ -331,12 +331,17 @@ pub fn build(b: *std.Build) void {
     customBuild.build(cfg);
 
     // aaa
+    u8pack_mod.addImport("setPass", setPass_mod);
+    u8pack_mod.addImport("ms_std", ms_mod);
+    u8pack_mod.addImport("fileSystem", fileSystem_mod);
+
     renderUpload_mod.addImport("processRender", processRender_mod);
     renderUpload_mod.addImport("textureSet", textureSet_mod);
     renderUpload_mod.addImport("video", video_mod);
     renderUpload_mod.addImport("pass", pass_mod);
     renderUpload_mod.addImport("resourceProcess", resourceProcess_mod);
 
+    instance_mod2.addImport("u8pack", u8pack_mod);
     instance_mod2.addImport("pass", pass_mod);
     instance_mod2.addImport("cglm", cglm_mod);
     instance_mod2.addImport("handle", handle_mod);
@@ -346,6 +351,7 @@ pub fn build(b: *std.Build) void {
     instance_mod2.addImport("processRender", processRender_mod);
     instance_mod2.addImport("video", video_mod);
 
+    resourceProcess_mod.addImport("u8pack", u8pack_mod);
     resourceProcess_mod.addImport("pass", pass_mod);
     resourceProcess_mod.addImport("passGroupMapping", passGroupMapping_mod);
     resourceProcess_mod.addImport("instance2", instance_mod2);
@@ -365,6 +371,7 @@ pub fn build(b: *std.Build) void {
     resourceProcess_mod.addImport("textureSet", textureSet_mod);
     resourceProcess_mod.addImport("loadmap", loadmap_mod);
 
+    setPass_mod.addImport("u8pack", u8pack_mod);
     setPass_mod.addImport("vertexStruct", vertexStruct_mod);
     setPass_mod.addImport("cglm", cglm_mod);
     setPass_mod.addImport("vulkan", vk_c_mod);
@@ -395,6 +402,7 @@ pub fn build(b: *std.Build) void {
     passGroupMapping_mod.addImport("vertexStruct", vertexStruct_mod);
     passGroupMapping_mod.addImport("video", video_mod);
     passGroupMapping_mod.addImport("processRender", processRender_mod);
+    passGroupMapping_mod.addImport("u8pack", u8pack_mod);
 
     renderDebug_mod.addImport("vulkanType", vulkanType_mod);
     renderDebug_mod.addImport("processRender", processRender_mod);
@@ -408,6 +416,7 @@ pub fn build(b: *std.Build) void {
     renderFlow_mod.addImport("vulkan", vk_c_mod);
     renderFlow_mod.addImport("passImp", pass_mod);
     renderFlow_mod.addImport("textureSet", textureSet_mod);
+    renderFlow_mod.addImport("u8pack", u8pack_mod);
 
     pass_mod.addImport("renderFlow", renderFlow_mod);
     pass_mod.addImport("textureSet", textureSet_mod);
@@ -415,7 +424,9 @@ pub fn build(b: *std.Build) void {
     pass_mod.addImport("processRender", processRender_mod);
     pass_mod.addImport("fileSystem", fileSystem_mod);
     pass_mod.addImport("vulkan", vk_c_mod);
+    pass_mod.addImport("u8pack", u8pack_mod);
 
+    resource_mod.addImport("u8pack", u8pack_mod);
     resource_mod.addImport("pass", pass_mod);
     resource_mod.addImport("processRender", processRender_mod);
     resource_mod.addImport("video", video_mod);
@@ -536,6 +547,7 @@ pub fn build(b: *std.Build) void {
     video_mod.addImport("debug", debug_mod);
     video_mod.addImport("renderDebug", renderDebug_mod);
     video_mod.addImport("capability", vulkanCapability_mod);
+    video_mod.addImport("u8pack", u8pack_mod);
 
     processRender_mod.addImport("video", video_mod);
     processRender_mod.addImport("vulkan", vk_c_mod);
@@ -565,6 +577,7 @@ pub fn build(b: *std.Build) void {
     fileSystem_mod.addImport("vertexStruct", vertexStruct_mod);
     fileSystem_mod.addIncludePath(b.path("include"));
 
+    exe_mod.addImport("u8pack", u8pack_mod);
     exe_mod.addImport("resourceProcess", resourceProcess_mod);
     exe_mod.addImport("setPass", setPass_mod);
     exe_mod.addImport("ms_std", ms_mod);

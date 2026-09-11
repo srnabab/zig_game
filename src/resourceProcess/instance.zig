@@ -24,6 +24,8 @@ const resource = @import("resource");
 
 const cglm = @import("cglm");
 
+const toStr2 = @import("u8pack").toStr2;
+
 const instance2 = @import("instance2");
 const textureSet = @import("textureSet");
 
@@ -168,7 +170,7 @@ pub const Instance_Reader = struct {
             ins.scale = .{ item.scale[0], item.scale[1], item.scale[2] };
             ins.rotation = .{ item.rotation[0], item.rotation[1], item.rotation[2] };
 
-            const pass = ctx.passes.passMap.get(item.pass) orelse return resource.ResourceError.Invalid;
+            const pass = ctx.passes.passMap.get(toStr2(item.pass)) orelse return resource.ResourceError.Invalid;
             ins.pass = pass;
 
             for (item.textures, ins.textures) |value, *t| {
