@@ -9,6 +9,7 @@ const Option = enum {
 const Context = opaque {};
 pub const Handle = *Context;
 pub const WaitFill = std.math.maxInt(u32);
+// pub const ValidFill = std.math.maxInt(u32) - 1;
 const InvalidVersion = std.math.maxInt(u16);
 
 pub const ResourceType = enum(u8) {

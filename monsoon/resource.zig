@@ -46,9 +46,21 @@ const ID_FileType_Handle = struct {
     handle: Handle,
 };
 
+const ReaderQueueEnum = enum(u8) { update, render };
+pub const ReaderReturnType = struct {
+    rType: ReaderQueueEnum,
+    pointer: resourceProcess.ReaderUnion,
+};
+
+pub const Pointer_Handle = struct {
+    handle: Handle,
+    pointer: resourceProcess.ReaderUnion,
+};
+
 // pub const ResourcesQueue = MutexArray(Resource);
 pub const NameQueue = MutexArray(ID_FileType_Handle);
 pub const DataBaseHandleArrayType = ringBuffer(sqlite3, 8);
+pub const ReaderQueue = mstd.Queue(Pointer_Handle);
 
 pub const ResourceCtx = struct {
     io: Io,
@@ -58,6 +70,8 @@ pub const ResourceCtx = struct {
     vulkan: *VkStruct,
     mainSqlite: sqlite3,
     passes: *pass,
+    render: *ReaderQueue,
+    update: *ReaderQueue,
 };
 
 pub const ResourceThreadArgs = struct {
@@ -152,43 +166,60 @@ pub fn processResource(args: *const ResourceThreadArgs) Io.Cancelable!void {
                     if (@hasDecl(resourceProcess, readerName)) {
                         const field = @field(resourceProcess, readerName);
 
-                        var uctx: field.Ctx = undefined;
-                        const ctxInfo = @typeInfo(field.Ctx);
-                        inline for (ctxInfo.@"struct".fields) |f| {
-                            @field(uctx, f.name) = &@field(args.uctx, f.name);
-                        }
-
-                        const index: u32 = field.processResource(
+                        const index: ReaderReturnType = field.read(
                             t,
                             args.ctx,
                             sqlite.?,
                             pack.id,
-                            pack.handle,
                             pack.buffers,
                             args.externalCommands,
-                            &uctx,
-                        ) catch |err| a: switch (err) {
-                            ResourceError.Invalid => {
-                                continue :r;
-                            },
-                            ResourceError.Unavaliable => {
-                                nameArray.append(io, pack) catch continue :r;
-                                break :a Handles.WaitFill;
-                            },
+                        ) catch |err| {
+                            std.log.err("{s} -> err: {s}", .{ readerName, @errorName(err) });
+                            switch (err) {
+                                ResourceError.Unavaliable => {
+                                    nameArray.append(io, pack) catch {};
+                                },
+                                else => {},
+                            }
+                            continue :r;
                         };
-
-                        handles.setIndex(pack.handle, index);
+                        switch (index.rType) {
+                            .update => {
+                                args.ctx.update.pushLast(.{
+                                    .pointer = index.pointer,
+                                    .handle = pack.handle,
+                                }) catch |err| {
+                                    switch (err) {
+                                        else => {
+                                            nameArray.append(io, pack) catch {};
+                                        },
+                                    }
+                                    continue :r;
+                                };
+                            },
+                            .render => {
+                                args.ctx.render.pushLast(.{
+                                    .pointer = index.pointer,
+                                    .handle = pack.handle,
+                                }) catch |err| {
+                                    switch (err) {
+                                        else => {
+                                            nameArray.append(io, pack) catch {};
+                                        },
+                                    }
+                                    continue :r;
+                                };
+                            },
+                        }
                     } else {
                         if (comptime resourceProcess.useExample(t)) {
-                            _ = resourceProcess.Example_Reader.processResource(
+                            _ = resourceProcess.Example_Reader.read(
                                 t,
                                 args.ctx,
                                 sqlite.?,
                                 pack.id,
-                                pack.handle,
                                 &.{},
                                 args.externalCommands,
-                                @constCast(&resourceProcess.Example_Reader.Ctx{}),
                             ) catch {};
                         } else {
                             @compileError(std.fmt.comptimePrint("no reader for {s}", .{@tagName(t)}));

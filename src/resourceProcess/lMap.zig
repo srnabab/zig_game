@@ -21,53 +21,76 @@ const Handle = Handles.Handle;
 const mstd = @import("ms_std");
 const MutexArray = mstd.MutexArray;
 const resource = @import("resource");
-const Resource = resource.Resource;
+const ResourceError = resource.ResourceError;
+
 const vertexStruct = @import("vertexStruct");
 const Buffer_t = VkStruct.Buffer_t;
 const ExternalCommands = @import("processRender").externalCommands;
+const Commands = @import("processRender").commands;
 
 const loadMap = @import("loadmap");
 
 pub const LMap = "lMap";
 
 pub const LMap_Reader = struct {
+    const Self = @This();
+
     pub const Ctx = struct {
         loadmaps: *loadMap,
     };
 
-    pub fn processResource(
+    pub const Child = struct {
+        pub const Parent = LMap_Reader;
+
+        load_map: loadMap.loadmap,
+    };
+
+    pub fn read(
         comptime fType: ProcessType,
         ctx: *const resource.ResourceCtx,
         sqlite: sqlite3,
         fileID: u32,
-        handle: Handle,
         buffers: ?[]VkStruct.Buffer_t,
         commands: *ExternalCommands,
-        uctx: *Ctx,
-    ) !u32 {
+    ) ResourceError!resource.ReaderReturnType {
         _ = fType;
-        _ = handle;
         _ = buffers;
         _ = commands;
         const io = ctx.io;
         const gpa = ctx.gpa;
-        const lmap = uctx.loadmaps;
+        // const lmap = uctx.loadmaps;
 
-        var mapFile = file.getFile(io, fileID, sqlite) catch return Handles.WaitFill;
+        var mapFile = file.getFile(io, fileID, sqlite) catch return ResourceError.Invalid;
         defer mapFile.close(io);
 
-        const stat = mapFile.stat(io) catch return Handles.WaitFill;
+        const stat = mapFile.stat(io) catch return ResourceError.Unavaliable;
 
         var buffer = [_]u8{0} ** 256;
         var fileReader = mapFile.reader(io, &buffer);
         const content = fileReader.interface.readAlloc(gpa, stat.size) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
-            return Handles.WaitFill;
+            return ResourceError.Unavaliable;
         };
         defer gpa.free(content);
 
-        const load_map = loadMap.loadmap.loadLoadmap(gpa, content) catch return Handles.WaitFill;
-        lmap.addMap(load_map, 0);
+        const ptr = gpa.create(Child) catch return ResourceError.Unavaliable;
+        ptr.load_map = loadMap.loadmap.loadLoadmap(gpa, content) catch return ResourceError.Unavaliable;
+
+        return .{
+            .rType = .update,
+            .pointer = resourceProcess.UnionInit(Self, ptr),
+        };
+    }
+
+    pub fn load(io: Io, gpa: Allocator, vulkan: *VkStruct, commands: *Commands, uctx: *Ctx, handle: Handle, pointer: *Child) !u32 {
+        _ = io;
+        _ = vulkan;
+        _ = commands;
+        _ = handle;
+
+        defer gpa.destroy(pointer);
+
+        uctx.loadmaps.addMap(pointer.load_map, 0);
 
         return Handles.WaitFill;
     }

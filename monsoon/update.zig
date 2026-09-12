@@ -54,6 +54,8 @@ pub const Args = struct {
     commands: *process.externalCommands,
     uctx: *resourceProcess.UserContext,
     passes: *pass,
+    renderQueue: *resource.ReaderQueue,
+    updateQueue: *resource.ReaderQueue,
 };
 
 const inputProcessInterval = std.time.ns_per_ms * 5;
@@ -95,14 +97,14 @@ pub fn update_thread_func(args: Args) !void {
         true,
     );
 
-    // const test_A = try inputFunc1.registerAction(
-    //     inputTrigger1,
-    //     "test_A",
-    //     sdl.SDL_SCANCODE_A,
-    //     null,
-    //     null,
-    //     false,
-    // );
+    const test_A = try inputFunc1.registerAction(
+        inputTrigger1,
+        "test_A",
+        sdl.SDL_SCANCODE_A,
+        null,
+        null,
+        false,
+    );
 
     // const test_B = try inputFunc1.registerAction(
     //     inputTrigger1,
@@ -176,6 +178,8 @@ pub fn update_thread_func(args: Args) !void {
         .mainSqlite = mainRoSqlite,
         .vulkan = args.vulkan,
         .passes = args.passes,
+        .render = args.renderQueue,
+        .update = args.updateQueue,
     };
 
     const resourceArg = ResourceThreadArgs{
@@ -213,6 +217,9 @@ pub fn update_thread_func(args: Args) !void {
     var accumulateTime: u64 = 0;
     // var testHandle: Handle = undefined;
 
+    var added = false;
+    // var pos: vec2 = vec2{ 0, 0 };/
+
     _ = try resource.readResource(&resourceCtx, resourceCtx.mainSqlite, &.{}, u8pack.toStr("test.lMap"));
     try Io.sleep(io, .fromMilliseconds(200), .real);
 
@@ -240,21 +247,25 @@ pub fn update_thread_func(args: Args) !void {
                 inputs = &.{};
             }
 
-            // if (test_A.downIsTrue()) {
-            //     // sceneChanged = true;
+            while (args.updateQueue.popFirst()) |v| {
+                switch (v.pointer) {
+                    inline else => |pt| {
+                        const field = @TypeOf(pt.*).Parent;
+                        if (@hasDecl(field, "load")) {
+                            var uctx: field.Ctx = undefined;
+                            const ctxInfo = @typeInfo(field.Ctx);
+                            inline for (ctxInfo.@"struct".fields) |f| {
+                                @field(uctx, f.name) = &@field(args.uctx, f.name);
+                            }
 
-            //     resourceArray.mutex.lockUncancelable(io);
-            //     defer resourceArray.mutex.unlock(io);
-            //     const ptr = try resourceArray.array.addOne();
-            //     ptr.* = .{ .position2D = .{
-            //         .x = @floatFromInt(rng.intRangeAtMost(i32, -400, 400)),
-            //         .y = @floatFromInt(rng.intRangeAtMost(i32, -300, 300)),
-            //         .width = 48,
-            //         .height = 32,
-            //         .depth = 0.1,
-            //         .texture = @ptrCast(testBoxPng),
-            //     } };
-            // }
+                            const index: u32 = try field.load(io, gpa, args.vulkan, undefined, &uctx, v.handle, pt);
+                            args.handles.setIndex(v.handle, index);
+                        } else {
+                            args.handles.setIndex(v.handle, Handles.WaitFill);
+                        }
+                    },
+                }
+            }
 
             try args.uctx.loadmaps.load(&resourceCtx, 0, vec2{ 0, 0 });
             try args.uctx.instances2.load(
@@ -268,6 +279,12 @@ pub fn update_thread_func(args: Args) !void {
 
             const infos = stateBuffering.getWriteBuffer();
             defer stateBuffering.returnWriteBuffer(infos);
+
+            if (test_A.downIsTrue()) {
+                if (!added) {
+                    added = true;
+                }
+            }
 
             // stateBufferValue += 1;
 

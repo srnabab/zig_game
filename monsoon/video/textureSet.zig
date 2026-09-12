@@ -18,6 +18,7 @@ const objectPool = mstd.ObjectPool;
 const Handles = @import("handle");
 const Handle = Handles.Handle;
 const processRender = @import("processRender");
+const Commands = processRender.commands;
 const ExternalCommands = processRender.externalCommands;
 const hash = std.hash;
 // const resource = @import("resource");
@@ -45,7 +46,7 @@ pub const ResourceTexture = struct {
     vkImageView: vk.VkImageView,
     allocation: vma.VmaAllocation,
     staginfBuffer: VkStruct.Buffer_t,
-    handle: Handles.Handle,
+    // handle: Handles.Handle,
 };
 
 pub const Texture = struct {
@@ -458,7 +459,8 @@ pub fn createTextureFromResource(
     gpa: Allocator,
     textureResource: ResourceTexture,
     vulkan: *VkStruct,
-    commands: *ExternalCommands,
+    commands: *Commands,
+    handle: Handle,
 ) !u32 {
     var texture: *Texture = undefined;
     var texture_t: Texture_t = undefined;
@@ -473,9 +475,9 @@ pub fn createTextureFromResource(
             return Handles.getIndex(@ptrCast(value)).?;
         }
 
-        if (!Handles.typeCompare(textureResource.handle, .texture)) return error.InvalidHandle;
+        if (!Handles.typeCompare(handle, .texture)) return error.InvalidHandle;
 
-        texture_t = @ptrCast(textureResource.handle);
+        texture_t = @ptrCast(handle);
 
         texture = try self.array.addOne();
         index = @intCast(self.array.items.len - 1);
@@ -532,7 +534,7 @@ pub fn createTextureFromResource(
 
     try self.imageViewToTexture.put(texture.imageView, texture_t);
 
-    try commands.externalCommand(
+    try commands.cacheCommand(
         .{ .copyBufferToImage = .{
             .pTexture = texture_t,
             .baseArrayLayer = textureResource.baseLayer,

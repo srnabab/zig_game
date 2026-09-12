@@ -15,4 +15,5 @@ pub fn upload(io: Io, vulkan: *VkStruct, passes: *pass, pTextureSet: *textureSet
     try uctx.vertices.uploadInstance(io, vulkan, commands);
     try uctx.instances1.upload(io, vulkan, commands);
     try uctx.passGroupMapping.upload(io, vulkan, commands);
+    try uctx.meshes.upload(commands);
 }

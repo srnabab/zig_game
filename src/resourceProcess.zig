@@ -47,6 +47,34 @@ const vertices2D = @import("vertices");
 const PassGroupMapping = @import("passGroupMapping");
 const meshInstance = @import("meshInstance");
 
+pub const ProcessType = enum {
+    DIR,
+    OBJ,
+    MTL,
+    PNG,
+    TSDI,
+    TSD,
+    TTF,
+    WAV,
+    SPV,
+    TXT,
+    GLTF,
+    VTX,
+    HASHTABLE,
+    Shader,
+    Pipeline,
+    PipeB,
+    Sampler,
+    SamplerB,
+    KTX2,
+    UNKNOWN,
+    // add here
+    LoadMap,
+    LMap,
+    Binary,
+    Instance,
+};
+
 pub const UserContext = struct {
     /// engine will use this
     pTextureSet: textureSet,
@@ -69,7 +97,13 @@ pub const UserContext = struct {
         const iFeatherBuffers = passes.passMap.get(toStr2("i_feather")).?.buffer; // IF.instance3D = 9
 
         var uctx: UserContext = .{
-            .meshes = .init(gpa, vulkan, handles),
+            .meshes = mesh.init(gpa, vulkan, handles, .{
+                iFeatherBuffers[2], // IF.meshlet (featherMeshlet)
+                iFeatherBuffers[3], // IF.vertices (featherVertices)
+                iFeatherBuffers[4], // IF.meshletVertices (featherMeshletVertices)
+                iFeatherBuffers[5], // IF.meshletTriangles (featherMeshletTriangles)
+                iFeatherBuffers[10], // IF.meshes
+            }),
             .loadmaps = try .init(gpa, 1),
             .instances2 = .init(gpa),
             .passGroupMapping = .init(gpa),
@@ -151,34 +185,6 @@ pub const PreProcessParm = struct {
     // mem: []const u8,
     // fileUUID: []const u8,
     // fileDbParamMap: *fileDbParamMapType,
-};
-
-pub const ProcessType = enum {
-    DIR,
-    OBJ,
-    MTL,
-    PNG,
-    TSDI,
-    TSD,
-    TTF,
-    WAV,
-    SPV,
-    TXT,
-    GLTF,
-    VTX,
-    HASHTABLE,
-    Shader,
-    Pipeline,
-    PipeB,
-    Sampler,
-    SamplerB,
-    KTX2,
-    UNKNOWN,
-    // add here
-    LoadMap,
-    LMap,
-    Binary,
-    Instance,
 };
 
 const KV = struct {
@@ -359,22 +365,22 @@ pub const Example_Cooker = struct {
 pub const Example_Reader = struct {
     pub const Ctx = struct {};
 
-    pub fn processResource(
+    pub const Child = struct {
+        pub const Parent = Example_Reader;
+    };
+
+    pub fn read(
         comptime fType: ProcessType,
         ctx: *const resource.ResourceCtx,
         sqlite: sqlite3,
         fileID: u32,
-        handle: Handle,
         buffers: ?[]VkStruct.Buffer_t,
         commands: *ExternalCommands,
-        uctx: *Ctx,
-    ) resource.ResourceError!u32 {
+    ) resource.ResourceError!resource.ReaderReturnType {
         _ = ctx;
         _ = sqlite;
-        _ = handle;
         _ = buffers;
         _ = commands;
-        _ = uctx;
 
         std.log.debug("unsupported type {s}, {d}", .{ @tagName(fType), fileID });
         unreachable;
@@ -428,4 +434,79 @@ pub fn useExample(comptime fType: ProcessType) bool {
 
         return false;
     }
+}
+
+const Type = std.builtin.Type;
+
+pub const ReaderUnion = e: {
+    const Self = @This();
+
+    const maxLen = 100;
+
+    const selfInfo = @typeInfo(Self);
+
+    var enum_field_names: []const []const u8 = &.{};
+
+    // var union_field_names: []const []const u8 = &.{};
+
+    var union_types: [maxLen]type = undefined;
+    var union_attrs: [maxLen]Type.UnionField.Attributes = undefined;
+    var count = 0;
+
+    for (selfInfo.@"struct".decls) |field| {
+        if (std.mem.endsWith(u8, field.name, "_Reader")) {
+            if (std.mem.eql(u8, field.name, "Example_Reader")) continue;
+
+            // @compileLog(field.name);
+
+            const enumName = std.fmt.comptimePrint("{s}_Child", .{field.name[0 .. field.name.len - 7]});
+            enum_field_names = enum_field_names ++ .{enumName};
+
+            // const unionName = std.fmt.comptimePrint("{s}_Child", .{field.name[0 .. field.name.len - 7]});
+            // union_field_names = union_field_names ++ .{unionName};
+
+            union_types[count] = *@field(Self, field.name).Child;
+            union_attrs[count] = .{ .@"align" = null };
+            count += 1;
+        }
+    }
+
+    var enum_values: [enum_field_names.len]u32 = undefined;
+    for (0..enum_field_names.len) |i| {
+        enum_values[i] = @intCast(i);
+    }
+
+    const reader_enum = @Enum(
+        u32,
+        .exhaustive,
+        enum_field_names,
+        &enum_values,
+    );
+
+    break :e @Union(
+        .auto,
+        reader_enum,
+        enum_field_names,
+        union_types[0..count],
+        union_attrs[0..count],
+    );
+};
+
+fn UnionName(comptime reader: type) [:0]const u8 {
+    const typeName = s: {
+        // comptime {
+        const name = @typeName(reader);
+        const start = std.mem.findLast(u8, name, ".") orelse 0;
+
+        // @compileLog(name[start + 1 ..]);
+
+        break :s name[start + 1 ..];
+        // }
+    };
+
+    return std.fmt.comptimePrint("{s}_Child", .{typeName[0 .. typeName.len - 7]});
+}
+
+pub inline fn UnionInit(comptime reader: type, pointer: anytype) ReaderUnion {
+    return @unionInit(ReaderUnion, UnionName(reader), pointer);
 }

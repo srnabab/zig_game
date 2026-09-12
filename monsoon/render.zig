@@ -11,6 +11,7 @@ const global = @import("global");
 const tracy = @import("tracy");
 
 const renderDebug = @import("renderDebug");
+const resource = @import("resource");
 
 const VkStruct = @import("video");
 const vk = VkStruct.vk;
@@ -56,6 +57,7 @@ pub const Args = struct {
     uctx: *resourceProcess.UserContext,
     instances: *meshInstance,
     externalCommands: *processRender.externalCommands,
+    renderQueue: *resource.ReaderQueue,
 };
 
 pub fn render_thread_func(args: Args) !void {
@@ -241,7 +243,27 @@ pub fn render_thread_func(args: Args) !void {
                 // global.storExecuteSequencePrint = false;
                 //     passes.enablePass("indirect2D");
                 //     passes.enablePass("present");
-                //     // testDraw = true;
+                // testDraw = true;
+            }
+
+            while (args.renderQueue.popFirst()) |v| {
+                switch (v.pointer) {
+                    inline else => |pt| {
+                        const field = @TypeOf(pt.*).Parent;
+                        if (@hasDecl(field, "load")) {
+                            var uctx: field.Ctx = undefined;
+                            const ctxInfo = @typeInfo(field.Ctx);
+                            inline for (ctxInfo.@"struct".fields) |f| {
+                                @field(uctx, f.name) = &@field(args.uctx, f.name);
+                            }
+
+                            const index: u32 = try field.load(io, gpa, args.vulkan, &commands, &uctx, v.handle, pt);
+                            args.handles.setIndex(v.handle, index);
+                        } else {
+                            args.handles.setIndex(v.handle, Handles.WaitFill);
+                        }
+                    },
+                }
             }
 
             const infos = stateBuffering.getReadyBuffer();

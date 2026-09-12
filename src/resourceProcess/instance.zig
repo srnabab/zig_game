@@ -17,6 +17,7 @@ const file = @import("fileSystem");
 const sqlite3 = ?*file.sqlite.sqlite3;
 const VkStruct = @import("video");
 const ExternalCommands = @import("processRender").externalCommands;
+const Commands = @import("processRender").commands;
 const Handles = @import("handle");
 const Handle = Handles.Handle;
 const mstd = @import("ms_std");
@@ -30,6 +31,8 @@ const instance2 = @import("instance2");
 const textureSet = @import("textureSet");
 
 const instance = instance2.instance;
+
+const ResourceError = resource.ResourceError;
 
 pub const Instance_Cooker = struct {
     pub const TableName = "ContentPathT";
@@ -90,23 +93,28 @@ pub const Instance_Cooker = struct {
 };
 
 pub const Instance_Reader = struct {
+    const Self = @This();
+
     pub const Ctx = struct {
         instances2: *instance2,
         pTextureSet: *textureSet,
     };
 
-    pub fn processResource(
+    pub const Child = struct {
+        pub const Parent = Instance_Reader;
+
+        instances: []instance,
+    };
+
+    pub fn read(
         comptime fType: ProcessType,
         ctx: *const resource.ResourceCtx,
         sqlite: sqlite3,
         fileID: u32,
-        handle: Handle,
         buffers: ?[]VkStruct.Buffer_t,
         commands: *ExternalCommands,
-        uctx: *Ctx,
-    ) resource.ResourceError!u32 {
+    ) resource.ResourceError!resource.ReaderReturnType {
         _ = fType;
-        _ = handle;
         _ = buffers;
         _ = commands;
 
@@ -128,37 +136,41 @@ pub const Instance_Reader = struct {
 
         var instanceFile = file.getFile(io, fileID, sqlite) catch |err| {
             std.log.err("instance getFile {s}", .{@errorName(err)});
-            return Handles.WaitFill;
+            return ResourceError.Unavaliable;
         };
         defer instanceFile.close(io);
 
         const stat = instanceFile.stat(io) catch |err| {
             std.log.err("instance stat {s}", .{@errorName(err)});
-            return Handles.WaitFill;
+            return ResourceError.Unavaliable;
         };
 
         var readBuffer = [_]u8{0} ** 256;
         var reader = instanceFile.reader(io, &readBuffer);
         const content = reader.interface.readAlloc(gpa, stat.size) catch |err| {
             std.log.err("instance readAlloc {s}", .{@errorName(err)});
-            return Handles.WaitFill;
+            return ResourceError.Unavaliable;
         };
         defer gpa.free(content);
 
         const parsed = std.json.parseFromSlice(File, gpa, content, .{}) catch |err| {
             std.log.err("instance parse {s}", .{@errorName(err)});
-            return Handles.WaitFill;
+            return ResourceError.Unavaliable;
         };
         defer parsed.deinit();
 
-        const instances = gpa.alloc(instance, parsed.value.items.len) catch return Handles.WaitFill;
-        defer gpa.free(instances);
+        const ptr = gpa.create(Child) catch return ResourceError.Unavaliable;
+        errdefer gpa.destroy(ptr);
+
+        ptr.instances = gpa.alloc(instance, parsed.value.items.len) catch return ResourceError.Unavaliable;
+        errdefer gpa.free(ptr.instances);
+        const instances = ptr.instances;
 
         for (parsed.value.items, instances) |item, *ins| {
-            ins.textures = uctx.instances2.instances.allocator.alloc(Handle, item.textures.len) catch return resource.ResourceError.Unavaliable;
+            ins.textures = gpa.alloc(Handle, item.textures.len) catch return resource.ResourceError.Unavaliable;
         }
         errdefer for (instances) |*ins| {
-            uctx.instances2.instances.allocator.free(ins.textures);
+            gpa.free(ins.textures);
         };
 
         for (parsed.value.items, instances, 0..) |item, *ins, i| {
@@ -174,7 +186,7 @@ pub const Instance_Reader = struct {
             ins.pass = pass;
 
             for (item.textures, ins.textures) |value, *t| {
-                const tex = uctx.pTextureSet.getTexture(file.getID(value)) orelse return resource.ResourceError.Unavaliable;
+                const tex = resource.getResourceHandle(file.getID(value)) orelse return resource.ResourceError.Unavaliable;
                 if (!Handles.handleIsValid(@ptrCast(tex))) return resource.ResourceError.Unavaliable;
 
                 t.* = @ptrCast(tex);
@@ -185,13 +197,26 @@ pub const Instance_Reader = struct {
             }
         }
 
-        for (instances) |ins| {
+        return .{
+            .rType = .update,
+            .pointer = resourceProcess.UnionInit(Self, ptr),
+        };
+    }
+
+    pub fn load(io: Io, gpa: Allocator, vulkan: *VkStruct, commands: *Commands, uctx: *Ctx, handle: Handle, pointer: *Child) !u32 {
+        _ = commands;
+        _ = vulkan;
+        _ = handle;
+
+        defer gpa.destroy(pointer);
+        defer gpa.free(pointer.instances);
+
+        for (pointer.instances) |ins| {
             uctx.instances2.add(io, ins) catch |err| {
                 std.log.err("instances2 add {s}", .{@errorName(err)});
                 return Handles.WaitFill;
             };
         }
-
         return Handles.WaitFill;
     }
 };

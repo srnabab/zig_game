@@ -1,6 +1,9 @@
 const std = @import("std");
 const process = std.process;
 
+const mstd = @import("ms_std");
+const Queue = mstd.Queue;
+
 const sdl = @import("sdl").sdl;
 const SDL_CheckResult = @import("sdl").SDL_CheckResult;
 
@@ -195,6 +198,12 @@ pub fn main(init: std.process.Init) !void {
 
     pTextureSet = undefined;
 
+    var renderQueue = try resource.ReaderQueue.init(allocator_t.*, io);
+    defer renderQueue.deinit();
+
+    var updateQueue = try resource.ReaderQueue.init(allocator_t.*, io);
+    defer updateQueue.deinit();
+
     var render_t = try Thread.spawn(
         .{},
         render.render_thread_func,
@@ -213,6 +222,7 @@ pub fn main(init: std.process.Init) !void {
             .uctx = &uctx,
             .instances = &uctx.instances1,
             .externalCommands = &externalCommands,
+            .renderQueue = &renderQueue,
         }},
     );
     defer render_t.join();
@@ -233,6 +243,8 @@ pub fn main(init: std.process.Init) !void {
             .uctx = &uctx,
             .commands = &externalCommands,
             .passes = &passes,
+            .renderQueue = &renderQueue,
+            .updateQueue = &updateQueue,
         }},
     );
     defer update_t.join();

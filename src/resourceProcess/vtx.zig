@@ -29,6 +29,7 @@ const Resource = resource.Resource;
 const vertexStruct = @import("vertexStruct");
 const Buffer_t = VkStruct.Buffer_t;
 const ExternalCommands = @import("processRender").externalCommands;
+const Commands = @import("processRender").commands;
 const mesh = @import("mesh");
 
 pub const VTX_Mem = struct {
@@ -113,29 +114,37 @@ pub const VTX_Cooker = struct {
 const ResourceError = resource.ResourceError;
 
 pub const VTX_Reader = struct {
+    const Self = @This();
+
     pub const Ctx = struct {
         meshes: *mesh,
     };
-    pub fn processResource(
+
+    pub const Child = struct {
+        pub const Parent = VTX_Reader;
+
+        sizes: [4]u64,
+        stride: u32,
+    };
+
+    pub fn read(
         comptime fType: ProcessType,
         ctx: *const resource.ResourceCtx,
         sqlite: sqlite3,
         fileID: u32,
-        handle: Handle,
         buffer_ts: ?[]Buffer_t,
         commands: *ExternalCommands,
-        uctx: *Ctx,
-    ) ResourceError!u32 {
+    ) ResourceError!resource.ReaderReturnType {
         _ = fType;
+
         const io = ctx.io;
         const gpa = ctx.gpa;
         const vulkan = ctx.vulkan;
         const handles = ctx.handles;
-        const meshes = uctx.meshes;
 
         const res = file.getMeshLoadParam(io, fileID, sqlite) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
-            return Handles.WaitFill;
+            return ResourceError.Unavaliable;
         };
         defer res.file.close(io);
 
@@ -145,7 +154,7 @@ pub const VTX_Reader = struct {
         var fileReader = res.file.reader(io, &buffer);
         var content = fileReader.interface.readAlloc(gpa, stat.size) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
-            return Handles.WaitFill;
+            return ResourceError.Unavaliable;
         };
         defer gpa.free(content);
 
@@ -185,7 +194,7 @@ pub const VTX_Reader = struct {
             null,
         ) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
-            return Handles.WaitFill;
+            return ResourceError.Unavaliable;
         };
         errdefer vulkan.destroyBuffer(verticesStagingBuffer);
         vulkan.buffers.copyDataToMapped(verticesStagingBuffer, 0, u8, vertices);
@@ -198,7 +207,7 @@ pub const VTX_Reader = struct {
             null,
         ) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
-            return Handles.WaitFill;
+            return ResourceError.Unavaliable;
         };
         errdefer vulkan.destroyBuffer(meshletStagingBuffer);
         vulkan.buffers.copyDataToMapped(meshletStagingBuffer, 0, u8, meshlets);
@@ -211,7 +220,7 @@ pub const VTX_Reader = struct {
             null,
         ) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
-            return Handles.WaitFill;
+            return ResourceError.Unavaliable;
         };
         errdefer vulkan.destroyBuffer(meshletVerticesStagingBuffer);
         vulkan.buffers.copyDataToMapped(meshletVerticesStagingBuffer, 0, u8, meshletVertices);
@@ -224,10 +233,12 @@ pub const VTX_Reader = struct {
             null,
         ) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
-            return Handles.WaitFill;
+            return ResourceError.Unavaliable;
         };
         errdefer vulkan.destroyBuffer(meshletTrianglesStagingBuffer);
         vulkan.buffers.copyDataToMapped(meshletTrianglesStagingBuffer, 0, u8, meshletTriangles);
+
+        const ptr = gpa.create(Child) catch return ResourceError.Unavaliable;
 
         const sizes = [_]u64{
             res.mesh.meshletsSize,
@@ -235,6 +246,9 @@ pub const VTX_Reader = struct {
             res.mesh.meshletVerticesSize,
             res.mesh.meshletTrianglesSize,
         };
+
+        ptr.sizes = sizes;
+        ptr.stride = @intCast(stride);
 
         var buffers = [_]VkStruct.Buffer_t{
             meshletStagingBuffer,
@@ -250,7 +264,7 @@ pub const VTX_Reader = struct {
                 sizes[i],
                 16,
                 handles,
-            ) catch return Handles.WaitFill;
+            ) catch return ResourceError.Unavaliable;
 
             var copyRegion = [1]vk.VkBufferCopy2{.{
                 .sType = vk.VK_STRUCTURE_TYPE_BUFFER_COPY_2,
@@ -266,25 +280,28 @@ pub const VTX_Reader = struct {
                     .dstBuffer = bufferAndOffset.buffer,
                     .regions = &copyRegion,
                 },
-            }) catch return Handles.WaitFill;
+            }) catch return ResourceError.Unavaliable;
             buffers[i] = bufferAndOffset.buffer;
         }
-        // global.game_end.store(1, .seq_cst);
 
-        const index = meshes.addMesh(
-            @intCast(fileID),
-            buffers[0],
-            sizes[0],
-            buffers[1],
-            sizes[1],
-            buffers[2],
-            sizes[2],
-            buffers[3],
-            sizes[3],
-            @intCast(stride),
-            handle,
-        ) catch return ResourceError.Unavaliable;
-        meshes.upload(commands, buffer_ts.?[4]) catch return Handles.WaitFill;
+        return .{ .rType = .render, .pointer = resourceProcess.UnionInit(Self, ptr) };
+    }
+
+    pub fn load(io: Io, gpa: Allocator, vulkan: *VkStruct, commands: *Commands, uctx: *Ctx, handle: Handle, pointer: *Child) !u32 {
+        _ = io;
+        _ = vulkan;
+        _ = handle;
+        _ = commands;
+
+        defer gpa.destroy(pointer);
+
+        const index = uctx.meshes.addMesh(
+            pointer.sizes[0],
+            pointer.sizes[1],
+            pointer.sizes[2],
+            pointer.sizes[3],
+            pointer.stride,
+        ) catch return Handles.WaitFill;
 
         return index;
     }

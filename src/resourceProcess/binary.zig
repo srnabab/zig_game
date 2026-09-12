@@ -26,36 +26,40 @@ const ExternalCommands = @import("processRender").externalCommands;
 
 const ResourceError = resource.ResourceError;
 
+var Empty = Binary_Reader.Child{};
+
 pub const Binary_Reader = struct {
+    const Self = @This();
+
     pub const Ctx = struct {};
 
-    pub fn processResource(
+    pub const Child = struct {
+        pub const Parent = Binary_Reader;
+    };
+
+    pub fn read(
         comptime fType: ProcessType,
         ctx: *const resource.ResourceCtx,
         sqlite: sqlite3,
         fileID: u32,
-        handle: Handle,
         buffers: ?[]VkStruct.Buffer_t,
         commands: *ExternalCommands,
-        uctx: *Ctx,
-    ) ResourceError!u32 {
+    ) ResourceError!resource.ReaderReturnType {
         _ = fType;
-        _ = handle;
-        _ = uctx;
         const io = ctx.io;
         const gpa = ctx.gpa;
         const vulkan = ctx.vulkan;
 
-        var bin_file = file.getFile(io, fileID, sqlite) catch return Handles.WaitFill;
+        var bin_file = file.getFile(io, fileID, sqlite) catch return ResourceError.Invalid;
         defer bin_file.close(io);
 
-        const stat = bin_file.stat(io) catch return Handles.WaitFill;
+        const stat = bin_file.stat(io) catch return ResourceError.Unavaliable;
 
         var buffer = [_]u8{0} ** 256;
         var fileReader = bin_file.reader(io, &buffer);
         const content = fileReader.interface.readAlloc(gpa, stat.size) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
-            return Handles.WaitFill;
+            return ResourceError.Unavaliable;
         };
         defer gpa.free(content);
 
@@ -68,7 +72,7 @@ pub const Binary_Reader = struct {
                 null,
             ) catch |err| {
                 std.log.err("{s}", .{@errorName(err)});
-                return Handles.WaitFill;
+                return ResourceError.Unavaliable;
             };
             errdefer vulkan.destroyBuffer(stagingBuffer);
             vulkan.buffers.copyDataToMapped(stagingBuffer, 0, u8, content);
@@ -89,12 +93,15 @@ pub const Binary_Reader = struct {
                 },
             }) catch |err| {
                 std.log.err("{s}", .{@errorName(err)});
-                return Handles.WaitFill;
+                return ResourceError.Unavaliable;
             };
         } else {
             std.debug.panic("not implemented", .{});
         }
 
-        return Handles.WaitFill;
+        return .{
+            .rType = .update,
+            .pointer = resourceProcess.UnionInit(Self, &Empty),
+        };
     }
 };

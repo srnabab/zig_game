@@ -26,6 +26,7 @@ const Resource = resource.Resource;
 const stb_image = @import("stb_image");
 const Buffer_t = VkStruct.Buffer_t;
 const ExternalCommands = @import("processRender").externalCommands;
+const Commands = @import("processRender").commands;
 const mesh = @import("mesh");
 const textureSet = @import("textureSet");
 
@@ -104,36 +105,42 @@ pub const PNG_Cooker = struct {
 const ResourceError = resource.ResourceError;
 
 pub const PNG_Reader = struct {
+    const Self = @This();
     pub const Ctx = struct {
         pTextureSet: *textureSet,
     };
 
-    pub fn processResource(
+    pub const Child = struct {
+        pub const Parent = PNG_Reader;
+
+        texture: textureSet.ResourceTexture,
+    };
+
+    pub fn read(
         comptime fType: ProcessType,
         ctx: *const resource.ResourceCtx,
         sqlite: sqlite3,
         fileID: u32,
-        handle: Handle,
         buffers: ?[]Buffer_t,
         commands: *ExternalCommands,
-        uctx: *Ctx,
-    ) ResourceError!u32 {
+    ) ResourceError!resource.ReaderReturnType {
         _ = fType;
         _ = buffers;
+        _ = commands;
         const io = ctx.io;
         const gpa = ctx.gpa;
         const vulkan = ctx.vulkan;
-        const pTextureSet = uctx.pTextureSet;
+        // const pTextureSet = uctx.pTextureSet;
 
         const img = file.getImageLoadParam(io, fileID, sqlite.?) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
-            return Handles.WaitFill;
+            return ResourceError.Unavaliable;
         };
         defer img.file.close(io);
 
         const imgStat = img.file.stat(io) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
-            return Handles.WaitFill;
+            return ResourceError.Unavaliable;
         };
 
         var buffer = [_]u8{0} ** 8;
@@ -142,7 +149,7 @@ pub const PNG_Reader = struct {
 
         const fileMem = reader.interface.readAlloc(gpa, imgStat.size) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
-            return Handles.WaitFill;
+            return ResourceError.Unavaliable;
         };
         defer gpa.free(fileMem);
 
@@ -162,7 +169,7 @@ pub const PNG_Reader = struct {
 
         const stagingBuffer = vulkan.createBufferByUsage(pixelSize, 0, .staging, false, null) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
-            return Handles.WaitFill;
+            return ResourceError.Unavaliable;
         };
         errdefer vulkan.destroyBuffer(stagingBuffer);
 
@@ -176,7 +183,7 @@ pub const PNG_Reader = struct {
             img.image.usage,
         ) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
-            return Handles.WaitFill;
+            return ResourceError.Unavaliable;
         };
         errdefer vulkan.destroyImage(image);
 
@@ -186,7 +193,7 @@ pub const PNG_Reader = struct {
             vk.VK_IMAGE_ASPECT_COLOR_BIT,
         ) catch |err| {
             std.log.err("{s}", .{@errorName(err)});
-            return Handles.WaitFill;
+            return ResourceError.Unavaliable;
         };
 
         var region = gpa.alloc(vk.VkBufferImageCopy, 1) catch return ResourceError.Unavaliable;
@@ -208,28 +215,37 @@ pub const PNG_Reader = struct {
             },
         };
 
-        return pTextureSet.createTextureFromResource(
+        const ptr = gpa.create(Child) catch return ResourceError.Unavaliable;
+        ptr.texture = .{
+            .width = @intCast(imgWidth),
+            .height = @intCast(imgHeight),
+            .fileID = @intCast(fileID),
+            .vkImage = @ptrFromInt(image.vkImage),
+            .vkImageView = imageView,
+            .allocation = @ptrFromInt(image.allocation),
+            .staginfBuffer = stagingBuffer,
+            .format = img.image.format,
+            // .handle = handle,
+            .baseLayer = 0,
+            .layerCount = 1,
+            .mipLevels = 0,
+            .depth = 1,
+            .regions = region,
+        };
+
+        return .{ .rType = .render, .pointer = resourceProcess.UnionInit(Self, ptr) };
+    }
+
+    pub fn load(io: Io, gpa: Allocator, vulkan: *VkStruct, commands: *Commands, uctx: *Ctx, handle: Handle, pointer: *Child) !u32 {
+        defer gpa.destroy(pointer);
+
+        return uctx.pTextureSet.createTextureFromResource(
             io,
             gpa,
-
-            .{
-                .width = @intCast(imgWidth),
-                .height = @intCast(imgHeight),
-                .fileID = @intCast(fileID),
-                .vkImage = @ptrFromInt(image.vkImage),
-                .vkImageView = imageView,
-                .allocation = @ptrFromInt(image.allocation),
-                .staginfBuffer = stagingBuffer,
-                .format = img.image.format,
-                .handle = handle,
-                .baseLayer = 0,
-                .layerCount = 1,
-                .mipLevels = 0,
-                .depth = 1,
-                .regions = region,
-            },
+            pointer.texture,
             vulkan,
             commands,
-        ) catch return Handles.WaitFill;
+            handle,
+        );
     }
 };

@@ -355,6 +355,8 @@ pub fn loadResource(
                 buffers,
                 toStr2(i.name),
             );
+            std.log.debug("{s}, handle: {*}", .{ i.name, h });
+
             try self.loadingItems.append(.{ .handle = h, .progress = item.ptr.progress });
         }
     }
@@ -362,6 +364,7 @@ pub fn loadResource(
     var it2 = self.loadingItems.iterate();
     while (it2.next()) |item| {
         if (Handles.handleIsValid(item.ptr.handle)) {
+            std.log.debug("handle: {*}", .{item.ptr.handle});
             _ = item.ptr.progress.fetchAdd(1, .seq_cst);
             self.loadingItems.remove(item.index);
         }

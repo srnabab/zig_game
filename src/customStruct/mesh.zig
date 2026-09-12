@@ -9,7 +9,7 @@ const vertexStruct = @import("vertexStruct");
 const VkStruct = @import("video");
 const processRender = @import("processRender");
 // const OneTimeCommand = processRender.oneTimeCommand;
-const Commands = processRender.externalCommands;
+const Commands = processRender.commands;
 const vk = VkStruct.vk;
 
 const Mesh = vertexStruct.Mesh;
@@ -22,7 +22,16 @@ const TotalAndCount = struct {
     count: u32,
 };
 
-buffer_countMap: std.AutoHashMap(VkStruct.Buffer_t, TotalAndCount),
+meshletBuffer: VkStruct.Buffer_t,
+meshlet: TotalAndCount,
+verticesBuffer: VkStruct.Buffer_t,
+vertices: TotalAndCount,
+meshletVerticesBuffer: VkStruct.Buffer_t,
+meshletVertices: TotalAndCount,
+meshletTrianglesBuffer: VkStruct.Buffer_t,
+meshletTriangles: TotalAndCount,
+meshesBuffer: VkStruct.Buffer_t,
+
 meshs: std.array_list.Managed(Mesh),
 meshMap: std.AutoHashMap(u32, Mesh_t),
 vulkan: *VkStruct,
@@ -33,9 +42,27 @@ updated: bool = false,
 updateStart: usize = 0,
 updateEnd: usize = 0,
 
-pub fn init(allocator: std.mem.Allocator, vulkan: *VkStruct, handles: *global.HandlesType) Self {
+pub fn init(
+    allocator: std.mem.Allocator,
+    vulkan: *VkStruct,
+    handles: *global.HandlesType,
+    buffers: [5]VkStruct.Buffer_t,
+) Self {
+    const meshletContent = vulkan.buffers.getBufferContent(buffers[0]);
+    const verticesContent = vulkan.buffers.getBufferContent(buffers[1]);
+    const meshletVerticesContent = vulkan.buffers.getBufferContent(buffers[2]);
+    const meshletTrianglesContent = vulkan.buffers.getBufferContent(buffers[3]);
+
     return Self{
-        .buffer_countMap = .init(allocator),
+        .meshletBuffer = buffers[0],
+        .meshlet = .{ .total = @intCast(meshletContent.size / meshletContent.stride), .count = 0 },
+        .verticesBuffer = buffers[1],
+        .vertices = .{ .total = @intCast(verticesContent.size / verticesContent.stride), .count = 0 },
+        .meshletVerticesBuffer = buffers[2],
+        .meshletVertices = .{ .total = @intCast(meshletVerticesContent.size / meshletVerticesContent.stride), .count = 0 },
+        .meshletTrianglesBuffer = buffers[3],
+        .meshletTriangles = .{ .total = @intCast(meshletTrianglesContent.size / meshletTrianglesContent.stride), .count = 0 },
+        .meshesBuffer = buffers[4],
         .meshMap = .init(allocator),
         .meshs = .init(allocator),
         .vulkan = vulkan,
@@ -44,79 +71,38 @@ pub fn init(allocator: std.mem.Allocator, vulkan: *VkStruct, handles: *global.Ha
 }
 
 pub fn deinit(self: *Self) void {
-    self.buffer_countMap.deinit();
     self.meshMap.deinit();
     self.meshs.deinit();
 }
 
 pub fn addMesh(
     self: *Self,
-    fileID: u32,
-    meshletBuffer: VkStruct.Buffer_t,
     meshletSize: u64,
-    verticesBuffer: VkStruct.Buffer_t,
     verticesSize: u64,
-    meshletVerticesBuffer: VkStruct.Buffer_t,
     meshletVerticesSize: u64,
-    meshletTrianglesBuffer: VkStruct.Buffer_t,
     meshletTrianglesSize: u64,
     verticeStride: u32,
-    handle: ?Handle,
 ) !u32 {
-    if (self.meshMap.get(fileID)) |mesh| {
-        return Handles.getIndex(@ptrCast(mesh)).?;
-    }
-
-    const meshletCount = meshletSize / @sizeOf(vertexStruct.Meshlet);
-    const verticesCount = verticesSize / verticeStride;
-    const meshletVerticesCount = meshletVerticesSize / @sizeOf(u32);
-    const meshletTrianglesCount = meshletTrianglesSize / @sizeOf(u8);
-
     // @breakpoint();
     const counts = [_]u64{
-        meshletCount,
-        verticesCount,
-        meshletVerticesCount,
-        meshletTrianglesCount,
-    };
-
-    const buffers = [_]VkStruct.Buffer_t{
-        meshletBuffer,
-        verticesBuffer,
-        meshletVerticesBuffer,
-        meshletTrianglesBuffer,
-    };
-
-    const strides = [_]u64{
-        @sizeOf(vertexStruct.Mesh),
-        verticeStride,
-        @sizeOf(u32),
-        @sizeOf(u8),
+        meshletSize / @sizeOf(vertexStruct.Meshlet),
+        verticesSize / verticeStride,
+        meshletVerticesSize / @sizeOf(u32),
+        meshletTrianglesSize / @sizeOf(u8),
     };
 
     var offsets = [_]u64{ 0, 0, 0, 0 };
 
+    const totalAndCounts = [_]*TotalAndCount{
+        &self.meshlet,
+        &self.vertices,
+        &self.meshletVertices,
+        &self.meshletTriangles,
+    };
+
     for (0..4) |i| {
-        var getOrPut = try self.buffer_countMap.getOrPut(buffers[i]);
-        if (!getOrPut.found_existing) {
-            const bufferContent = self.vulkan.buffers.getBufferContent(buffers[i]);
-            if (bufferContent.allocation == .virtual) {
-                const bufferContent2 = self.vulkan.buffers.getBufferContent(bufferContent.queue.ref);
-
-                getOrPut.value_ptr.* = .{
-                    .total = @intCast(bufferContent2.size / strides[i]),
-                    .count = 0,
-                };
-            } else {
-                getOrPut.value_ptr.* = .{
-                    .total = @intCast(bufferContent.size / strides[i]),
-                    .count = 0,
-                };
-            }
-        }
-
-        offsets[i] = getOrPut.value_ptr.count;
-        getOrPut.value_ptr.count += @intCast(counts[i]);
+        offsets[i] = totalAndCounts[i].count;
+        totalAndCounts[i].count += @intCast(counts[i]);
     }
 
     try self.meshs.append(.{
@@ -128,8 +114,6 @@ pub fn addMesh(
         .verticeStride = verticeStride,
     });
     const index = self.meshs.items.len - 1;
-
-    try self.meshMap.put(fileID, @ptrCast(handle));
 
     self.updated = true;
 
@@ -144,11 +128,7 @@ pub fn addMesh(
     return @intCast(index);
 }
 
-pub fn getMesh(self: *Self, fileID: u32) !Mesh_t {
-    return self.meshMap.get(fileID) orelse return error.notFound;
-}
-
-pub fn upload(self: *Self, commands: *Commands, buffer: VkStruct.Buffer_t) !void {
+pub fn upload(self: *Self, commands: *Commands) !void {
     if (!self.updated) {
         return;
     }
@@ -175,9 +155,9 @@ pub fn upload(self: *Self, commands: *Commands, buffer: VkStruct.Buffer_t) !void
         .size = meshs.len * @sizeOf(Mesh),
     }};
 
-    try commands.externalCommand(.{ .copyBuffer = .{
+    try commands.cacheCommand(.{ .copyBuffer = .{
         .srcBuffer = stagingBuffer,
-        .dstBuffer = buffer,
+        .dstBuffer = self.meshesBuffer,
         .regions = &copyRegion,
     } });
 }
