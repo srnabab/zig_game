@@ -104,6 +104,10 @@ pub const Instance_Reader = struct {
         pub const Parent = Instance_Reader;
 
         instances: []instance,
+
+        pub fn free(self: *Child, gpa: Allocator) void {
+            gpa.free(self.instances);
+        }
     };
 
     pub fn read(
@@ -113,6 +117,7 @@ pub const Instance_Reader = struct {
         fileID: u32,
         buffers: ?[]VkStruct.Buffer_t,
         commands: *ExternalCommands,
+        child: *Child,
     ) resource.ResourceError!resource.ReaderReturnType {
         _ = fType;
         _ = buffers;
@@ -159,12 +164,9 @@ pub const Instance_Reader = struct {
         };
         defer parsed.deinit();
 
-        const ptr = gpa.create(Child) catch return ResourceError.Unavaliable;
-        errdefer gpa.destroy(ptr);
-
-        ptr.instances = gpa.alloc(instance, parsed.value.items.len) catch return ResourceError.Unavaliable;
-        errdefer gpa.free(ptr.instances);
-        const instances = ptr.instances;
+        child.instances = gpa.alloc(instance, parsed.value.items.len) catch return ResourceError.Unavaliable;
+        errdefer gpa.free(child.instances);
+        const instances = child.instances;
 
         for (parsed.value.items, instances) |item, *ins| {
             ins.textures = gpa.alloc(Handle, item.textures.len) catch return resource.ResourceError.Unavaliable;
@@ -197,19 +199,14 @@ pub const Instance_Reader = struct {
             }
         }
 
-        return .{
-            .rType = .update,
-            .pointer = resourceProcess.UnionInit(Self, ptr),
-        };
+        return .{ .rType = .update };
     }
 
-    pub fn load(io: Io, gpa: Allocator, vulkan: *VkStruct, commands: *Commands, uctx: *Ctx, handle: Handle, pointer: *Child) !u32 {
+    pub fn updateLoad(io: Io, gpa: Allocator, vulkan: *VkStruct, commands: *Commands, uctx: *Ctx, handle: Handle, pointer: *Child) !u32 {
         _ = commands;
         _ = vulkan;
         _ = handle;
-
-        defer gpa.destroy(pointer);
-        defer gpa.free(pointer.instances);
+        _ = gpa;
 
         for (pointer.instances) |ins| {
             uctx.instances2.add(io, ins) catch |err| {

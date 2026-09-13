@@ -114,6 +114,11 @@ pub const PNG_Reader = struct {
         pub const Parent = PNG_Reader;
 
         texture: textureSet.ResourceTexture,
+
+        pub fn free(self: *Child, gpa: Allocator) void {
+            _ = self;
+            _ = gpa;
+        }
     };
 
     pub fn read(
@@ -123,6 +128,7 @@ pub const PNG_Reader = struct {
         fileID: u32,
         buffers: ?[]Buffer_t,
         commands: *ExternalCommands,
+        child: *Child,
     ) ResourceError!resource.ReaderReturnType {
         _ = fType;
         _ = buffers;
@@ -215,8 +221,7 @@ pub const PNG_Reader = struct {
             },
         };
 
-        const ptr = gpa.create(Child) catch return ResourceError.Unavaliable;
-        ptr.texture = .{
+        child.texture = .{
             .width = @intCast(imgWidth),
             .height = @intCast(imgHeight),
             .fileID = @intCast(fileID),
@@ -233,12 +238,10 @@ pub const PNG_Reader = struct {
             .regions = region,
         };
 
-        return .{ .rType = .render, .pointer = resourceProcess.UnionInit(Self, ptr) };
+        return .{ .rType = .render };
     }
 
-    pub fn load(io: Io, gpa: Allocator, vulkan: *VkStruct, commands: *Commands, uctx: *Ctx, handle: Handle, pointer: *Child) !u32 {
-        defer gpa.destroy(pointer);
-
+    pub fn renderLoad(io: Io, gpa: Allocator, vulkan: *VkStruct, commands: *Commands, uctx: *Ctx, handle: Handle, pointer: *Child) !u32 {
         return uctx.pTextureSet.createTextureFromResource(
             io,
             gpa,

@@ -125,6 +125,11 @@ pub const VTX_Reader = struct {
 
         sizes: [4]u64,
         stride: u32,
+
+        pub fn free(self: *Child, gpa: Allocator) void {
+            _ = self;
+            _ = gpa;
+        }
     };
 
     pub fn read(
@@ -134,6 +139,7 @@ pub const VTX_Reader = struct {
         fileID: u32,
         buffer_ts: ?[]Buffer_t,
         commands: *ExternalCommands,
+        child: *Child,
     ) ResourceError!resource.ReaderReturnType {
         _ = fType;
 
@@ -238,8 +244,6 @@ pub const VTX_Reader = struct {
         errdefer vulkan.destroyBuffer(meshletTrianglesStagingBuffer);
         vulkan.buffers.copyDataToMapped(meshletTrianglesStagingBuffer, 0, u8, meshletTriangles);
 
-        const ptr = gpa.create(Child) catch return ResourceError.Unavaliable;
-
         const sizes = [_]u64{
             res.mesh.meshletsSize,
             res.mesh.verticesSize,
@@ -247,8 +251,8 @@ pub const VTX_Reader = struct {
             res.mesh.meshletTrianglesSize,
         };
 
-        ptr.sizes = sizes;
-        ptr.stride = @intCast(stride);
+        child.sizes = sizes;
+        child.stride = @intCast(stride);
 
         var buffers = [_]VkStruct.Buffer_t{
             meshletStagingBuffer,
@@ -284,16 +288,15 @@ pub const VTX_Reader = struct {
             buffers[i] = bufferAndOffset.buffer;
         }
 
-        return .{ .rType = .render, .pointer = resourceProcess.UnionInit(Self, ptr) };
+        return .{ .rType = .render };
     }
 
-    pub fn load(io: Io, gpa: Allocator, vulkan: *VkStruct, commands: *Commands, uctx: *Ctx, handle: Handle, pointer: *Child) !u32 {
+    pub fn renderLoad(io: Io, gpa: Allocator, vulkan: *VkStruct, commands: *Commands, uctx: *Ctx, handle: Handle, pointer: *Child) !u32 {
         _ = io;
+        _ = gpa;
         _ = vulkan;
         _ = handle;
         _ = commands;
-
-        defer gpa.destroy(pointer);
 
         const index = uctx.meshes.addMesh(
             pointer.sizes[0],

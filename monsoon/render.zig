@@ -249,15 +249,20 @@ pub fn render_thread_func(args: Args) !void {
             while (args.renderQueue.popFirst()) |v| {
                 switch (v.pointer) {
                     inline else => |pt| {
-                        const field = @TypeOf(pt.*).Parent;
-                        if (@hasDecl(field, "load")) {
+                        defer if (pt.count.fetchSub(1, .seq_cst) == 1) {
+                            @TypeOf(pt.child).free(&pt.child, gpa);
+                            gpa.destroy(pt);
+                        };
+
+                        const field = @TypeOf(pt.child).Parent;
+                        if (@hasDecl(field, "renderLoad")) {
                             var uctx: field.Ctx = undefined;
                             const ctxInfo = @typeInfo(field.Ctx);
                             inline for (ctxInfo.@"struct".fields) |f| {
                                 @field(uctx, f.name) = &@field(args.uctx, f.name);
                             }
 
-                            const index: u32 = try field.load(io, gpa, args.vulkan, &commands, &uctx, v.handle, pt);
+                            const index: u32 = try field.renderLoad(io, gpa, args.vulkan, &commands, &uctx, v.handle, &pt.child);
                             args.handles.setIndex(v.handle, index);
                         } else {
                             args.handles.setIndex(v.handle, Handles.WaitFill);
@@ -265,6 +270,15 @@ pub fn render_thread_func(args: Args) !void {
                     },
                 }
             }
+
+            try args.uctx.instances2.load(
+                io,
+                args.passes,
+                pTextureSet,
+                &args.uctx.vertices,
+                &args.uctx.instances1,
+                &args.uctx.passGroupMapping,
+            );
 
             const infos = stateBuffering.getReadyBuffer();
             defer stateBuffering.returnReadyBuffer(infos);

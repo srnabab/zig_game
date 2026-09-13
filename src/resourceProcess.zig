@@ -367,6 +367,11 @@ pub const Example_Reader = struct {
 
     pub const Child = struct {
         pub const Parent = Example_Reader;
+
+        pub fn free(self: *Child, gpa: Allocator) void {
+            _ = self;
+            _ = gpa;
+        }
     };
 
     pub fn read(
@@ -376,11 +381,13 @@ pub const Example_Reader = struct {
         fileID: u32,
         buffers: ?[]VkStruct.Buffer_t,
         commands: *ExternalCommands,
+        child: *Child,
     ) resource.ResourceError!resource.ReaderReturnType {
         _ = ctx;
         _ = sqlite;
         _ = buffers;
         _ = commands;
+        _ = child;
 
         std.log.debug("unsupported type {s}, {d}", .{ @tagName(fType), fileID });
         unreachable;
@@ -465,7 +472,11 @@ pub const ReaderUnion = e: {
             // const unionName = std.fmt.comptimePrint("{s}_Child", .{field.name[0 .. field.name.len - 7]});
             // union_field_names = union_field_names ++ .{unionName};
 
-            union_types[count] = *@field(Self, field.name).Child;
+            union_types[count] =
+                *struct {
+                    count: std.atomic.Value(u32),
+                    child: @field(Self, field.name).Child,
+                };
             union_attrs[count] = .{ .@"align" = null };
             count += 1;
         }
@@ -492,21 +503,21 @@ pub const ReaderUnion = e: {
     );
 };
 
-fn UnionName(comptime reader: type) [:0]const u8 {
-    const typeName = s: {
-        // comptime {
-        const name = @typeName(reader);
-        const start = std.mem.findLast(u8, name, ".") orelse 0;
+// fn UnionName(comptime reader: type) [:0]const u8 {
+//     const typeName = s: {
+//         // comptime {
+//         const name = @typeName(reader);
+//         const start = std.mem.findLast(u8, name, ".") orelse 0;
 
-        // @compileLog(name[start + 1 ..]);
+//         // @compileLog(name[start + 1 ..]);
 
-        break :s name[start + 1 ..];
-        // }
-    };
+//         break :s name[start + 1 ..];
+//         // }
+//     };
 
-    return std.fmt.comptimePrint("{s}_Child", .{typeName[0 .. typeName.len - 7]});
-}
+//     return std.fmt.comptimePrint("{s}_Child", .{typeName[0 .. typeName.len - 7]});
+// }
 
-pub inline fn UnionInit(comptime reader: type, pointer: anytype) ReaderUnion {
-    return @unionInit(ReaderUnion, UnionName(reader), pointer);
+pub inline fn UnionInit(comptime name: []const u8, pointer: anytype) ReaderUnion {
+    return @unionInit(ReaderUnion, name, pointer);
 }

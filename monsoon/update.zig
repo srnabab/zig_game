@@ -69,7 +69,7 @@ pub fn update_thread_func(args: Args) !void {
     const handles = args.handles;
     // const vulkan = args.vulkan;
     // const meshes = &args.uctx.meshes;
-    const pTextureSet = &args.uctx.pTextureSet;
+    // const pTextureSet = &args.uctx.pTextureSet;
 
     var tracyAllocator = tracy.TracingAllocator.initNamed("pool", gpa);
     defer tracyAllocator.deinit();
@@ -250,15 +250,20 @@ pub fn update_thread_func(args: Args) !void {
             while (args.updateQueue.popFirst()) |v| {
                 switch (v.pointer) {
                     inline else => |pt| {
-                        const field = @TypeOf(pt.*).Parent;
-                        if (@hasDecl(field, "load")) {
+                        defer if (pt.count.fetchSub(1, .seq_cst) == 1) {
+                            @TypeOf(pt.child).free(&pt.child, gpa);
+                            gpa.destroy(pt);
+                        };
+
+                        const field = @TypeOf(pt.child).Parent;
+                        if (@hasDecl(field, "updateLoad")) {
                             var uctx: field.Ctx = undefined;
                             const ctxInfo = @typeInfo(field.Ctx);
                             inline for (ctxInfo.@"struct".fields) |f| {
                                 @field(uctx, f.name) = &@field(args.uctx, f.name);
                             }
 
-                            const index: u32 = try field.load(io, gpa, args.vulkan, undefined, &uctx, v.handle, pt);
+                            const index: u32 = try field.updateLoad(io, gpa, args.vulkan, undefined, &uctx, v.handle, &pt.child);
                             args.handles.setIndex(v.handle, index);
                         } else {
                             args.handles.setIndex(v.handle, Handles.WaitFill);
@@ -268,14 +273,6 @@ pub fn update_thread_func(args: Args) !void {
             }
 
             try args.uctx.loadmaps.load(&resourceCtx, 0, vec2{ 0, 0 });
-            try args.uctx.instances2.load(
-                io,
-                args.passes,
-                pTextureSet,
-                &args.uctx.vertices,
-                &args.uctx.instances1,
-                &args.uctx.passGroupMapping,
-            );
 
             const infos = stateBuffering.getWriteBuffer();
             defer stateBuffering.returnWriteBuffer(infos);

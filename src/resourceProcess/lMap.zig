@@ -43,6 +43,11 @@ pub const LMap_Reader = struct {
         pub const Parent = LMap_Reader;
 
         load_map: loadMap.loadmap,
+
+        pub fn free(self: *Child, gpa: Allocator) void {
+            _ = self;
+            _ = gpa;
+        }
     };
 
     pub fn read(
@@ -52,6 +57,7 @@ pub const LMap_Reader = struct {
         fileID: u32,
         buffers: ?[]VkStruct.Buffer_t,
         commands: *ExternalCommands,
+        child: *Child,
     ) ResourceError!resource.ReaderReturnType {
         _ = fType;
         _ = buffers;
@@ -73,22 +79,17 @@ pub const LMap_Reader = struct {
         };
         defer gpa.free(content);
 
-        const ptr = gpa.create(Child) catch return ResourceError.Unavaliable;
-        ptr.load_map = loadMap.loadmap.loadLoadmap(gpa, content) catch return ResourceError.Unavaliable;
+        child.load_map = loadMap.loadmap.loadLoadmap(gpa, content) catch return ResourceError.Unavaliable;
 
-        return .{
-            .rType = .update,
-            .pointer = resourceProcess.UnionInit(Self, ptr),
-        };
+        return .{ .rType = .update };
     }
 
-    pub fn load(io: Io, gpa: Allocator, vulkan: *VkStruct, commands: *Commands, uctx: *Ctx, handle: Handle, pointer: *Child) !u32 {
+    pub fn updateLoad(io: Io, gpa: Allocator, vulkan: *VkStruct, commands: *Commands, uctx: *Ctx, handle: Handle, pointer: *Child) !u32 {
         _ = io;
+        _ = gpa;
         _ = vulkan;
         _ = commands;
         _ = handle;
-
-        defer gpa.destroy(pointer);
 
         uctx.loadmaps.addMap(pointer.load_map, 0);
 

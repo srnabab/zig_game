@@ -1,6 +1,7 @@
 const std = @import("std");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
+const atomic = std.atomic;
 const assert = std.debug.assert;
 
 const global = @import("global");
@@ -41,6 +42,11 @@ pub const KTX2_Reader = struct {
         pub const Parent = KTX2_Reader;
 
         texture: textureSet.ResourceTexture,
+
+        pub fn free(self: *Child, gpa: Allocator) void {
+            _ = self;
+            _ = gpa;
+        }
     };
 
     pub fn read(
@@ -50,6 +56,7 @@ pub const KTX2_Reader = struct {
         fileID: u32,
         buffers: ?[]Buffer_t,
         commands: *ExternalCommands,
+        child: *Child,
     ) ResourceError!resource.ReaderReturnType {
         _ = fType;
         _ = buffers;
@@ -200,8 +207,7 @@ pub const KTX2_Reader = struct {
             }
         }
 
-        const ptr = gpa.create(Child) catch return ResourceError.Unavaliable;
-        ptr.texture = .{
+        child.texture = .{
             .regions = regions,
             .width = @intCast(imgWidth),
             .height = @intCast(imgHeight),
@@ -218,12 +224,10 @@ pub const KTX2_Reader = struct {
             // .handle = handle,
         };
 
-        return .{ .rType = .render, .pointer = resourceProcess.UnionInit(Self, ptr) };
+        return .{ .rType = .render };
     }
 
-    pub fn load(io: Io, gpa: Allocator, vulkan: *VkStruct, commands: *Commands, uctx: *Ctx, handle: Handle, pointer: *Child) !u32 {
-        defer gpa.destroy(pointer);
-
+    pub fn renderLoad(io: Io, gpa: Allocator, vulkan: *VkStruct, commands: *Commands, uctx: *Ctx, handle: Handle, pointer: *Child) !u32 {
         return uctx.pTextureSet.createTextureFromResource(
             io,
             gpa,

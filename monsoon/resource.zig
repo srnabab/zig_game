@@ -49,7 +49,6 @@ const ID_FileType_Handle = struct {
 const ReaderQueueEnum = enum(u8) { update, render };
 pub const ReaderReturnType = struct {
     rType: ReaderQueueEnum,
-    pointer: resourceProcess.ReaderUnion,
 };
 
 pub const Pointer_Handle = struct {
@@ -87,6 +86,7 @@ pub const ResourceThreadArgs = struct {
 var idHandleCache: std.AutoHashMapUnmanaged(u32, Handle) = .empty;
 
 pub fn deinit(gpa: Allocator) void {
+    // @compileLog(std.fmt.comptimePrint("size {d}", .{@sizeOf(Pointer_Handle)}));
     idHandleCache.deinit(gpa);
 }
 
@@ -161,10 +161,15 @@ pub fn processResource(args: *const ResourceThreadArgs) Io.Cancelable!void {
 
             switch (pack.fileType) {
                 inline else => |t| {
-                    const readerName = std.fmt.comptimePrint("{s}{s}", .{ @tagName(t), "_Reader" });
+                    const readerName = std.fmt.comptimePrint("{s}_Reader", .{@tagName(t)});
+                    const childName = std.fmt.comptimePrint("{s}_Child", .{@tagName(t)});
 
                     if (@hasDecl(resourceProcess, readerName)) {
                         const field = @field(resourceProcess, readerName);
+
+                        const ptr = gpa.create(@typeInfo(@FieldType(resourceProcess.ReaderUnion, childName)).pointer.child) catch continue :r;
+
+                        ptr.* = undefined;
 
                         const index: ReaderReturnType = field.read(
                             t,
@@ -173,8 +178,10 @@ pub fn processResource(args: *const ResourceThreadArgs) Io.Cancelable!void {
                             pack.id,
                             pack.buffers,
                             args.externalCommands,
+                            &ptr.child,
                         ) catch |err| {
                             std.log.err("{s} -> err: {s}", .{ readerName, @errorName(err) });
+                            gpa.destroy(ptr);
                             switch (err) {
                                 ResourceError.Unavaliable => {
                                     nameArray.append(io, pack) catch {};
@@ -185,8 +192,9 @@ pub fn processResource(args: *const ResourceThreadArgs) Io.Cancelable!void {
                         };
                         switch (index.rType) {
                             .update => {
+                                ptr.count = .init(1);
                                 args.ctx.update.pushLast(.{
-                                    .pointer = index.pointer,
+                                    .pointer = resourceProcess.UnionInit(childName, ptr),
                                     .handle = pack.handle,
                                 }) catch |err| {
                                     switch (err) {
@@ -198,8 +206,9 @@ pub fn processResource(args: *const ResourceThreadArgs) Io.Cancelable!void {
                                 };
                             },
                             .render => {
+                                ptr.count = .init(1);
                                 args.ctx.render.pushLast(.{
-                                    .pointer = index.pointer,
+                                    .pointer = resourceProcess.UnionInit(childName, ptr),
                                     .handle = pack.handle,
                                 }) catch |err| {
                                     switch (err) {
@@ -220,6 +229,7 @@ pub fn processResource(args: *const ResourceThreadArgs) Io.Cancelable!void {
                                 pack.id,
                                 &.{},
                                 args.externalCommands,
+                                undefined,
                             ) catch {};
                         } else {
                             @compileError(std.fmt.comptimePrint("no reader for {s}", .{@tagName(t)}));

@@ -26,8 +26,6 @@ const ExternalCommands = @import("processRender").externalCommands;
 
 const ResourceError = resource.ResourceError;
 
-var Empty = Binary_Reader.Child{};
-
 pub const Binary_Reader = struct {
     const Self = @This();
 
@@ -35,6 +33,11 @@ pub const Binary_Reader = struct {
 
     pub const Child = struct {
         pub const Parent = Binary_Reader;
+
+        pub fn free(self: *Child, gpa: Allocator) void {
+            _ = self;
+            _ = gpa;
+        }
     };
 
     pub fn read(
@@ -44,8 +47,10 @@ pub const Binary_Reader = struct {
         fileID: u32,
         buffers: ?[]VkStruct.Buffer_t,
         commands: *ExternalCommands,
+        child: *Child,
     ) ResourceError!resource.ReaderReturnType {
         _ = fType;
+        _ = child;
         const io = ctx.io;
         const gpa = ctx.gpa;
         const vulkan = ctx.vulkan;
@@ -99,9 +104,6 @@ pub const Binary_Reader = struct {
             std.debug.panic("not implemented", .{});
         }
 
-        return .{
-            .rType = .update,
-            .pointer = resourceProcess.UnionInit(Self, &Empty),
-        };
+        return .{ .rType = .update };
     }
 };
