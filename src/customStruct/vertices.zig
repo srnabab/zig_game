@@ -77,6 +77,23 @@ pub fn addInstance(
     return @intCast(self.instances2D.items.len - 1);
 }
 
+pub fn updateInstance(
+    self: *Self,
+    io: Io,
+    x: f32,
+    y: f32,
+    index: u32,
+) !void {
+    try self.mutex.lock(io);
+    defer self.mutex.unlock(io);
+
+    self.instances2D.items[index].position[0] = x;
+    self.instances2D.items[index].position[1] = y;
+
+    self.updateEnd = index + 1;
+    self.instanceUpdated = true;
+}
+
 pub fn uploadInstance(self: *Self, io: Io, vulkan: *VkStruct, commands: *Commands) !void {
     if (!self.instanceUpdated) return;
     try self.mutex.lock(io);

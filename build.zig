@@ -337,6 +337,7 @@ pub fn build(b: *std.Build) void {
     renderUpload_mod.addImport("pass", pass_mod);
     renderUpload_mod.addImport("resourceProcess", resourceProcess_mod);
 
+    instance_mod2.addImport("global", global_mod);
     instance_mod2.addImport("u8pack", u8pack_mod);
     instance_mod2.addImport("pass", pass_mod);
     instance_mod2.addImport("cglm", cglm_mod);

@@ -2,6 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 
+const global = @import("global");
 const Handles = @import("handle");
 const Handle = Handles.Handle;
 
@@ -11,6 +12,7 @@ const cglm = @import("cglm");
 const textureSet = @import("textureSet");
 const meshInstance = @import("meshInstance");
 const PassGroupMapping = @import("passGroupMapping");
+
 const u8pack = @import("u8pack");
 const toStr = u8pack.toStr;
 const toStr2 = u8pack.toStr2;
@@ -26,6 +28,7 @@ pub const instance = struct {
     rotation: vec3,
     textures: []Handle,
     model: ?Handle = null,
+    handle: Handle,
 };
 
 const Self = @This();
@@ -58,6 +61,7 @@ pub fn load(
     vertices: *vertices2D,
     instances: *meshInstance,
     passGroupMapping: *PassGroupMapping,
+    handles: *global.HandlesType,
 ) !void {
     try self.mutex.lock(io);
     defer self.mutex.unlock(io);
@@ -78,7 +82,7 @@ pub fn load(
 
             try item.pass.useTexture(@ptrCast(item.textures[0]), self.instances.allocator);
             const textureContent = pTextureSet.getTextureCotent(@ptrCast(item.textures[0]));
-            _ = try vertices.addInstance(
+            const index = try vertices.addInstance(
                 io,
                 item.pos[0],
                 item.pos[1],
@@ -88,6 +92,7 @@ pub fn load(
                 pTextureSet.getDescriptorSetIndex(@ptrCast(item.textures[0])),
             );
             viewBoundsAndTotalSpriteCount.totalSpriteCount = vertices.getTotalCount();
+            handles.setIndex(item.handle, index);
         } else if (u8pack.eql(toStr("i_feather"), item.pass.name)) {
             const ins = try instances.add(
                 io,

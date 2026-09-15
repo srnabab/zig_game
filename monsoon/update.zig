@@ -216,15 +216,19 @@ pub fn update_thread_func(args: Args) !void {
     var lastTimestamp = sdl.SDL_GetTicksNS();
 
     var accumulateTime: u64 = 0;
+    var deltaTime: u64 = 0;
     // var testHandle: Handle = undefined;
 
     var added = false;
-    // var pos: vec2 = vec2{ 0, 0 };/
+    var pos: vec2 = vec2{ 0, 0 };
+    var vel: vec2 = vec2{ 0.1, 0.1 };
+    var testHandle: Handle = undefined;
 
     _ = try resource.readResource(&resourceCtx, resourceCtx.mainSqlite, &.{}, u8pack.toStr("test.lMap"));
     try Io.sleep(io, .fromMilliseconds(200), .real);
 
     out: while (true) {
+        const delta_time = @as(f32, @floatFromInt(deltaTime)) / std.time.ns_per_ms;
         {
             if (accumulateTime > inputProcessInterval) {
                 defer accumulateTime -= inputProcessInterval;
@@ -281,15 +285,40 @@ pub fn update_thread_func(args: Args) !void {
             if (test_A.downIsTrue()) {
                 if (!added) {
                     added = true;
+                    pos = vec2{ 100, 100 };
+                    testHandle = handles.createHandle(Handles.WaitFill, .others);
                     try eventQueue.pushLast(.{ .createTest2d = .{
-                        .pos = vec3{ 100, 100, 0.1 },
+                        .pos = vec3{ pos[0], pos[1], 0.1 },
                         .rotation = vec3{ 0, 0, 0 },
                         .scale = vec3{ 1.0, 1, 1 },
+                        .handle = testHandle,
                     } });
                 }
             }
 
-            // stateBufferValue += 1;
+            if (added) {
+                pos[0] += vel[0] * delta_time;
+                pos[1] += vel[1] * delta_time;
+
+                if (pos[0] <= -400) {
+                    pos[0] = -400.0; // 修正位置，防止穿墙/卡墙
+                    vel[0] = -vel[0]; // 水平速度反向
+                } else if (pos[0] >= 400.0) {
+                    pos[0] = 400.0;
+                    vel[0] = -vel[0];
+                }
+
+                // 上下边缘反射
+                if (pos[1] <= -300.0) {
+                    pos[1] = -300.0; // 修正位置
+                    vel[1] = -vel[1]; // 垂直速度反向
+                } else if (pos[1] >= 300.0) {
+                    pos[1] = 300.0;
+                    vel[1] = -vel[1];
+                }
+
+                try infos.append(.{ ._2d = .{ .handle = testHandle, .pos = pos } });
+            }
 
             if (test_Q.downIsTrue()) {
                 stateBufferValue -= 1;
@@ -302,9 +331,10 @@ pub fn update_thread_func(args: Args) !void {
                 stateBufferValue += 1;
             }
 
-            try infos.append(stateBufferValue);
+            try infos.append(.{ ._u32 = stateBufferValue });
 
-            accumulateTime += sdl.SDL_GetTicksNS() - lastTimestamp;
+            deltaTime = sdl.SDL_GetTicksNS() - lastTimestamp;
+            accumulateTime += deltaTime;
 
             lastTimestamp = sdl.SDL_GetTicksNS();
 

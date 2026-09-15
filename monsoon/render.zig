@@ -289,6 +289,7 @@ pub fn render_thread_func(args: Args) !void {
                             .rotation = c.rotation,
                             .scale = c.scale,
                             .textures = textures,
+                            .handle = c.handle,
                         });
                     },
                     .createStaticInteractableStub => {},
@@ -302,27 +303,36 @@ pub fn render_thread_func(args: Args) !void {
                 &args.uctx.vertices,
                 &args.uctx.instances1,
                 &args.uctx.passGroupMapping,
+                args.handles,
             );
 
             const infos = stateBuffering.getReadyBuffer();
             defer stateBuffering.returnReadyBuffer(infos);
 
             for (infos.items) |value| {
-                var f_v: f32 = @floatFromInt(value);
-                f_v *= 0.1;
-                eye2 = cglm.vec3{ 0.0, -f_v, 0.0 };
-                pUIUbo2.cameraPos = eye2;
+                switch (value) {
+                    ._u32 => {
+                        var f_v: f32 = @floatFromInt(value._u32);
+                        f_v *= 0.1;
+                        eye2 = cglm.vec3{ 0.0, -f_v, 0.0 };
+                        pUIUbo2.cameraPos = eye2;
 
-                cglm.glmc_lookat(
-                    &eye2,
-                    &center2,
-                    &up2,
-                    &pUIUbo2.view,
-                );
-                // _ = value;
-                // std.log.debug("info {d}", .{value});
-                const pData3 = @as(*shaderStruct.UniformBufferObjectCamera, @ptrCast(@alignCast(ubo2.pMappedData)));
-                pData3.* = pUIUbo2;
+                        cglm.glmc_lookat(
+                            &eye2,
+                            &center2,
+                            &up2,
+                            &pUIUbo2.view,
+                        );
+                        // _ = value;
+                        // std.log.debug("info {d}", .{value});
+                        const pData3 = @as(*shaderStruct.UniformBufferObjectCamera, @ptrCast(@alignCast(ubo2.pMappedData)));
+                        pData3.* = pUIUbo2;
+                    },
+                    ._2d => |v| {
+                        // std.log.debug("({d}, {d})", .{ v.pos[0], v.pos[1] });
+                        try args.uctx.vertices.updateInstance(io, v.pos[0], v.pos[1], Handles.getIndex(v.handle) orelse unreachable);
+                    },
+                }
             }
 
             try upload(io, vulkan, passes, pTextureSet, args.uctx, &commands);

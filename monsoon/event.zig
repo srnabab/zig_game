@@ -21,4 +21,5 @@ const test2d = struct {
     pos: vec3,
     scale: vec3,
     rotation: vec3,
+    handle: Handles.Handle,
 };

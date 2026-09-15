@@ -13,6 +13,7 @@ const twoChannel = mstd.TwoChannel;
 const stateBuffering = mstd.StateBuffering;
 const resource = @import("resource");
 const event = @import("event.zig");
+const cglm = @import("cglm");
 
 pub const databaseName = "Content.db";
 
@@ -26,7 +27,20 @@ pub const LOGICAL_WEIGHT = 800;
 pub const HandlesType = Handles.Handles(10240, .Once);
 
 pub const EventQueueType = mstd.Queue(event.Event);
-pub const StateBufferingType = stateBuffering(3, u32);
+
+const StateType = enum {
+    _u32,
+    _2d,
+};
+const State = union(StateType) {
+    _u32: u32,
+    _2d: struct {
+        handle: Handles.Handle,
+        pos: cglm.vec2,
+    },
+};
+
+pub const StateBufferingType = stateBuffering(3, State);
 
 pub const Name = "Game";
 pub const AppVersionMajor = 0;

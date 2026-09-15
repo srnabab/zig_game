@@ -197,6 +197,8 @@ pub const Instance_Reader = struct {
             if (item.model) |modelName| {
                 ins.model = resource.getResourceHandle(file.getID(modelName)) orelse return resource.ResourceError.Unavaliable;
             }
+
+            ins.handle = ctx.handles.createHandle(Handles.WaitFill, .others);
         }
 
         return .{ .rType = .update };
