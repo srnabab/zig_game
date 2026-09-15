@@ -8,10 +8,11 @@ const OneTimeCommand = @import("processRender").oneTimeCommand;
 const TextureSet = @import("textureSet");
 pub const Handles = @import("handle");
 const vertexStruct = @import("vertexStruct");
-const math = @import("math");
+const math = mstd.Math;
 const twoChannel = mstd.TwoChannel;
 const stateBuffering = mstd.StateBuffering;
 const resource = @import("resource");
+const event = @import("event.zig");
 
 pub const databaseName = "Content.db";
 
@@ -23,17 +24,18 @@ pub const LOGICAL_HEIGHT = 600;
 pub const LOGICAL_WEIGHT = 800;
 
 pub const HandlesType = Handles.Handles(10240, .Once);
-pub const ResourceArrayType = twoChannel(*std.array_list.Managed(resource.Resource), 4);
+
+pub const EventQueueType = mstd.Queue(event.Event);
 pub const StateBufferingType = stateBuffering(3, u32);
 
 pub const Name = "Game";
 pub const AppVersionMajor = 0;
-pub const AppVersionMinor = 1;
+pub const AppVersionMinor = 2;
 pub const AppVersionPatch = 125;
 
 pub const EngineName = "Engine";
 pub const EngineVersionMajor = 0;
-pub const EngineVersionMinor = 1;
+pub const EngineVersionMinor = 2;
 pub const EngineVersionPatch = 125;
 
 pub const MaxFrameInFlight = 3;

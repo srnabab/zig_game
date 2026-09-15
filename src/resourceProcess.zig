@@ -47,7 +47,7 @@ const vertices2D = @import("vertices");
 const PassGroupMapping = @import("passGroupMapping");
 const meshInstance = @import("meshInstance");
 
-pub const ProcessType = enum {
+pub const ProcessType = enum(u16) {
     DIR,
     OBJ,
     MTL,

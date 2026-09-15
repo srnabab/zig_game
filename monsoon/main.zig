@@ -133,6 +133,12 @@ pub fn main(init: std.process.Init) !void {
     var stateBuffering: global.StateBufferingType = .init(allocator_t.*);
     defer stateBuffering.deinit();
 
+    var updateEventQueue: global.EventQueueType = try .init(allocator_t.*, io);
+    defer updateEventQueue.deinit();
+
+    var renderEventQueue: global.EventQueueType = try .init(allocator_t.*, io);
+    defer renderEventQueue.deinit();
+
     var endSemaphore: std.Io.Semaphore = .{};
 
     var width: u32 = 0;
@@ -223,6 +229,8 @@ pub fn main(init: std.process.Init) !void {
             .instances = &uctx.instances1,
             .externalCommands = &externalCommands,
             .renderQueue = &renderQueue,
+            .renderEventQueue = &renderEventQueue,
+            .updateEventQueue = &updateEventQueue,
         }},
     );
     defer render_t.join();
@@ -245,6 +253,8 @@ pub fn main(init: std.process.Init) !void {
             .passes = &passes,
             .renderQueue = &renderQueue,
             .updateQueue = &updateQueue,
+            .renderEventQueue = &renderEventQueue,
+            .updateEventQueue = &updateEventQueue,
         }},
     );
     defer update_t.join();

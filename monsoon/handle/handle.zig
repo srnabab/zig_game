@@ -9,7 +9,7 @@ const Option = enum {
 const Context = opaque {};
 pub const Handle = *Context;
 pub const WaitFill = std.math.maxInt(u32);
-// pub const ValidFill = std.math.maxInt(u32) - 1;
+pub const Skip = std.math.maxInt(u32) - 1;
 const InvalidVersion = std.math.maxInt(u16);
 
 pub const ResourceType = enum(u8) {
@@ -137,6 +137,8 @@ pub fn Handles(comptime capacity: u32, comptime option: Option) type {
 
         pub fn setIndex(self: *Self, handle: Handle, index: u32) void {
             _ = self;
+            if (index == Skip) return;
+
             const ptr: *Content = @ptrCast(@alignCast(handle));
 
             ptr.version.store(0, .monotonic);

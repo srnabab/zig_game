@@ -32,3 +32,4 @@ config/
 zig-pkg/
 # .watching
 !steam_api64.dll
+*.rdc

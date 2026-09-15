@@ -56,6 +56,8 @@ pub const Args = struct {
     passes: *pass,
     renderQueue: *resource.ReaderQueue,
     updateQueue: *resource.ReaderQueue,
+    updateEventQueue: *global.EventQueueType,
+    renderEventQueue: *global.EventQueueType,
 };
 
 const inputProcessInterval = std.time.ns_per_ms * 5;
@@ -67,9 +69,8 @@ pub fn update_thread_func(args: Args) !void {
     const pInput = args.pInput;
     const stateBuffering = args.stateBuffering;
     const handles = args.handles;
-    // const vulkan = args.vulkan;
-    // const meshes = &args.uctx.meshes;
-    // const pTextureSet = &args.uctx.pTextureSet;
+
+    const eventQueue = args.updateEventQueue;
 
     var tracyAllocator = tracy.TracingAllocator.initNamed("pool", gpa);
     defer tracyAllocator.deinit();
@@ -280,6 +281,11 @@ pub fn update_thread_func(args: Args) !void {
             if (test_A.downIsTrue()) {
                 if (!added) {
                     added = true;
+                    try eventQueue.pushLast(.{ .createTest2d = .{
+                        .pos = vec3{ 100, 100, 0.1 },
+                        .rotation = vec3{ 0, 0, 0 },
+                        .scale = vec3{ 1.0, 1, 1 },
+                    } });
                 }
             }
 

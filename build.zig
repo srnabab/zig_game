@@ -548,6 +548,7 @@ pub fn build(b: *std.Build) void {
     processRender_mod.addImport("renderDebug", renderDebug_mod);
     processRender_mod.addImport("capability", vulkanCapability_mod);
 
+    global_mod.addImport("cglm", cglm_mod);
     global_mod.addImport("video", video_mod);
     global_mod.addImport("resource", resource_mod);
     global_mod.addImport("processRender", processRender_mod);

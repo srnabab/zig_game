@@ -13,6 +13,10 @@ const tracy = @import("tracy");
 const renderDebug = @import("renderDebug");
 const resource = @import("resource");
 
+const u8pack = @import("u8pack");
+const toStr = u8pack.toStr;
+const toStr2 = u8pack.toStr2;
+
 const VkStruct = @import("video");
 const vk = VkStruct.vk;
 const processRender = @import("processRender");
@@ -58,6 +62,8 @@ pub const Args = struct {
     instances: *meshInstance,
     externalCommands: *processRender.externalCommands,
     renderQueue: *resource.ReaderQueue,
+    updateEventQueue: *global.EventQueueType,
+    renderEventQueue: *global.EventQueueType,
 };
 
 pub fn render_thread_func(args: Args) !void {
@@ -268,6 +274,24 @@ pub fn render_thread_func(args: Args) !void {
                             args.handles.setIndex(v.handle, Handles.WaitFill);
                         }
                     },
+                }
+            }
+
+            while (args.updateEventQueue.popFirst()) |event| {
+                switch (event) {
+                    .createTest2d => |c| {
+                        const textures = try args.uctx.instances2.instances.allocator.alloc(Handles.Handle, 1);
+                        textures[0] = resource.getResourceHandle(file.getID("box.png")) orelse unreachable;
+
+                        try args.uctx.instances2.add(io, .{
+                            .pass = passes.passMap.get(toStr("indirect2D")).?,
+                            .pos = c.pos,
+                            .rotation = c.rotation,
+                            .scale = c.scale,
+                            .textures = textures,
+                        });
+                    },
+                    .createStaticInteractableStub => {},
                 }
             }
 
