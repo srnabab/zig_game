@@ -304,7 +304,7 @@ pub const VTX_Reader = struct {
             pointer.sizes[2],
             pointer.sizes[3],
             pointer.stride,
-        ) catch return Handles.WaitFill;
+        ) catch return Handles.Invalid;
 
         return index;
     }

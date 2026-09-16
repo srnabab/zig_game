@@ -24,7 +24,7 @@ pub const indexCount = 6;
 pub const LOGICAL_HEIGHT = 600;
 pub const LOGICAL_WEIGHT = 800;
 
-pub const HandlesType = Handles.Handles(10240, .Once);
+pub const HandlesType = Handles.Handles(1024, .Once);
 
 pub const EventQueueType = mstd.Queue(event.Event);
 

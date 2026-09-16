@@ -1508,7 +1508,7 @@ pub fn readPipelineFileAndAdd(self: *Self, io: std.Io, fileID: u32, sqlite: ?*fi
 
     try self.addPipelineCreateInfo(pipelineInfo);
 
-    const handle = self.handles.createHandle(Handles.WaitFill, .pipeline);
+    const handle = self.handles.createHandle(Handles.Invalid, .pipeline);
 
     const len = std.mem.len(@as([*c]u8, @ptrCast(&pipelineInfo.name)));
     const name = try self.allocator.dupe(u8, pipelineInfo.name[0..len]);

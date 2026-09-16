@@ -286,7 +286,7 @@ pub fn update_thread_func(args: Args) !void {
                 if (!added) {
                     added = true;
                     pos = vec2{ 100, 100 };
-                    testHandle = handles.createHandle(Handles.WaitFill, .others);
+                    testHandle = handles.createHandle(Handles.Invalid, .others);
                     try eventQueue.pushLast(.{ .createTest2d = .{
                         .pos = vec3{ pos[0], pos[1], 0.1 },
                         .rotation = vec3{ 0, 0, 0 },

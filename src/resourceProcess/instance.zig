@@ -198,7 +198,7 @@ pub const Instance_Reader = struct {
                 ins.model = resource.getResourceHandle(file.getID(modelName)) orelse return resource.ResourceError.Unavaliable;
             }
 
-            ins.handle = ctx.handles.createHandle(Handles.WaitFill, .others);
+            ins.handle = ctx.handles.createHandle(Handles.Invalid, .others);
         }
 
         return .{ .rType = .update };
@@ -213,7 +213,7 @@ pub const Instance_Reader = struct {
         for (pointer.instances) |ins| {
             uctx.instances2.add(io, ins) catch |err| {
                 std.log.err("instances2 add {s}", .{@errorName(err)});
-                return Handles.WaitFill;
+                return Handles.Invalid;
             };
         }
         return Handles.WaitFill;

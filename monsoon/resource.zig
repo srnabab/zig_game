@@ -119,7 +119,7 @@ pub fn readResource(
         },
     };
 
-    const handle_ = ctx.handles.createHandle(Handles.WaitFill, handleType);
+    const handle_ = ctx.handles.createHandle(Handles.Invalid, handleType);
 
     const buffers_dupe = try ctx.gpa.dupe(VkStruct.Buffer_t, buffers);
     try ctx.nameArray.append(ctx.io, .{
