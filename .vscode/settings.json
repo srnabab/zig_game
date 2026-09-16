@@ -1,0 +1,30 @@
+{
+    "files.associations": {
+        "*.vert": "glsl",
+        "Path": "plaintext",
+        "*.asm": "asm-intel-x86-generic",
+        "*.pipe": "json",
+        "*.mesh": "glsl",
+        "locale": "cpp",
+        "thread": "cpp",
+        "xlocale": "cpp",
+        "xlocmes": "cpp",
+        "xlocmon": "cpp",
+        "xlocnum": "cpp",
+        "xloctime": "cpp",
+        "content_manager.h": "c",
+        "spirv_reflect.h": "c",
+        "stdlib.h": "c",
+        "common.h": "c",
+        "intrin.h": "c",
+        "quat.h": "c",
+        "spirv.h": "c",
+        "chrono": "cpp",
+        "system_error": "cpp",
+        "filesystem": "cpp"
+    },
+    "files.exclude": {
+        "build.zig": false
+    },
+    "python-envs.defaultEnvManager": "ms-python.python:system"
+}

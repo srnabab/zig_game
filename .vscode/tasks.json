@@ -1,0 +1,41 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "git bug",
+            "type": "shell",
+            "command": "git bug webui -p 7818",
+            "isBackground": true,
+            "presentation": {
+                "panel": "new",
+                "reveal": "always"
+            },
+            "runOptions": {
+                "runOn": "folderOpen"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "watcher",
+            "type": "shell",
+            "command": "cd tools\\srcs\\watcher ; zig build run",
+            // "command": "powershell.exe",
+            "args": [
+                // "-Command",
+                // "Start-Process",
+                // "powershell.exe",
+                // "-ArgumentList",
+                // "'cd', 'tools\\srcs\\watcher', ';', 'zig', 'build', 'run'"
+            ],
+            "isBackground": true,
+            "presentation": {
+                "panel": "new",
+                "reveal": "always"
+            },
+            "runOptions": {
+                "runOn": "folderOpen"
+            },
+            "problemMatcher": []
+        },
+    ]
+}
