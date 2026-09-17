@@ -4,14 +4,12 @@ const Allocator = std.mem.Allocator;
 
 const mstd = @import("ms_std");
 
-const OneTimeCommand = @import("processRender").oneTimeCommand;
-const TextureSet = @import("textureSet");
 pub const Handles = @import("handle");
 const vertexStruct = @import("vertexStruct");
 const math = mstd.Math;
-const twoChannel = mstd.TwoChannel;
+
 const stateBuffering = mstd.StateBuffering;
-const resource = @import("resource");
+
 const event = @import("event.zig");
 const cglm = @import("cglm");
 
@@ -53,22 +51,6 @@ pub const EngineVersionMinor = 2;
 pub const EngineVersionPatch = 125;
 
 pub const MaxFrameInFlight = 3;
-
-pub const StorageBufferVerticesSize = math.round(16, @sizeOf(vertexStruct.Vertex_f3pf3nf2u) * 4000);
-pub const StorageBufferMeshletsSize = math.round(16, @sizeOf(vertexStruct.Meshlet) * 4000);
-pub const StorageBufferMeshletVerticesSize = math.round(16, @sizeOf(u32) * 4000);
-pub const StorageBufferMeshletTrianglesSize = math.round(16, @sizeOf(u8) * 4000);
-
-pub const StorageBufferMeshletsEnd = StorageBufferMeshletsSize;
-pub const StorageBufferVerticesEnd = StorageBufferVerticesSize + StorageBufferMeshletsEnd;
-pub const StorageBufferMeshletVerticesEnd = StorageBufferMeshletVerticesSize + StorageBufferVerticesEnd;
-pub const StorageBufferMeshletTrianglesEnd = StorageBufferMeshletTrianglesSize + StorageBufferMeshletVerticesEnd;
-
-pub const MeshletStorageBufferSize = StorageBufferMeshletTrianglesEnd;
-
-pub var SamplerNames = [_][]const u8{"pixel2dSampler.sampler"};
-pub const TotalSamplerCount = SamplerNames.len;
-
 pub var FrameInFlight: u32 = 2;
 
 pub var stopNodeDagPrint = true;
@@ -82,3 +64,6 @@ pub var resourceQueueIndex: std.atomic.Value(u8) = .init(0);
 pub var resourceQueueMutexs: [2]std.Io.Mutex = .{ .init, .init };
 
 pub var nodeChildrenAppendBreakPoint = false;
+
+pub var SamplerNames = @import("samplerNames").names;
+pub const TotalSamplerCount = SamplerNames.len;

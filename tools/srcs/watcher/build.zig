@@ -74,9 +74,28 @@ pub fn build(b: *std.Build) void {
         },
     } });
 
+    // cooker / loadmapConverter are sibling packages (`../cooker`, `../loadmapConverter`).
+    // Build their executables and install them next to `watcher.exe` in `tools/`
+    // so that `run_cmd` always sees an up-to-date cooker.exe.
+    const cooker_dep = b.dependency("cooker", .{});
+    const loadmapConverter_dep = b.dependency("loadmapConverter", .{});
+    const install_cooker = b.addInstallArtifact(cooker_dep.artifact("cooker"), .{ .dest_dir = .{
+        .override = .{
+            .custom = "../../../",
+        },
+    } });
+    const install_loadmapConverter = b.addInstallArtifact(loadmapConverter_dep.artifact("loadmapConverter"), .{ .dest_dir = .{
+        .override = .{
+            .custom = "../../../",
+        },
+    } });
+
     b.getInstallStep().dependOn(&install.step);
 
     b.getInstallStep().dependOn(&preKillGameProcessCmd.step);
+
+    b.getInstallStep().dependOn(&install_cooker.step);
+    b.getInstallStep().dependOn(&install_loadmapConverter.step);
 
     run_cmd.step.dependOn(b.getInstallStep());
     run_step.dependOn(&run_cmd.step);

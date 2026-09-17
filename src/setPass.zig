@@ -13,7 +13,6 @@ const Commands = @import("processRender").commands;
 const ExternalCommands = @import("processRender").externalCommands;
 const TextureSet = @import("textureSet");
 const cglm = @import("cglm");
-const renderDebug = @import("renderDebug");
 const u8pack = @import("u8pack");
 
 const vec4 = cglm.vec4;
@@ -69,6 +68,7 @@ fn addPresentCommand(
     try pass.useTexture(texture, gpa);
 
     var index = textureSet.getDescriptorSetIndex(texture);
+    pass.setPushConstants(0, @ptrCast(@alignCast(&index)), 0);
     pass.setPushConstants(0, @ptrCast(@alignCast(&index)), 0);
 
     try commands.setRenderingColorAttachment(0, .{

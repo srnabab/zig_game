@@ -20,6 +20,7 @@ trace/
 windbg/
 build/
 !src/build/
+!src/examples/build/
 *.rdi
 *.pdb
 *.exe

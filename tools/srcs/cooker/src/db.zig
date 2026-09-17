@@ -192,7 +192,7 @@ pub fn processFolder(self: *Self, content: std.Io.Dir, io: std.Io, allocator: st
     self.beginTransaction();
     errdefer self.rollback();
     defer self.commit();
-    try iterateFolder.processContentFolder(
+    iterateFolder.processContentFolder(
         content,
         io,
         // .{
@@ -205,7 +205,7 @@ pub fn processFolder(self: *Self, content: std.Io.Dir, io: std.Io, allocator: st
         //     .contentPathExist = self.contentPathExist,
         // },
         allocator,
-    );
+    ) catch return;
 }
 
 pub fn saveToDrive(self: *Self) void {

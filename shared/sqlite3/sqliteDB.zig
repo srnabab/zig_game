@@ -313,7 +313,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
 
             if (sqlite.sqlite3_step(stmt) != sqlite.SQLITE_DONE) {
                 std.log.err("insert {s}", .{sqlite.sqlite3_errmsg(self.db)});
-                @breakpoint();
+                // @breakpoint();
 
                 return sqliteError.StepError;
             }
@@ -362,7 +362,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                 // std.log.info("cast c_int {d}", .{ii});
 
                 switch (fields_info[i].type) {
-                    i32, u32, u5, c_uint => {
+                    i32, u32, u16, u5, c_uint => {
                         _ = sqlite.sqlite3_bind_int(stmt, ii, @intCast(@field(values, fields_info[i].name)));
                     },
                     i64, u64, usize => {
@@ -703,6 +703,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
                     }
                 }
             } else {
+                std.log.err("code: {d}", .{res});
                 return sqliteError.StepError;
             }
         }
@@ -718,6 +719,8 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
             getCount: *u32,
         ) sqliteError!void {
             if (getValues != null and types != null) {
+                if (getValues.?.len == 0 or types.?.len == 0) return;
+
                 if (getValues.?[0].len != types.?.len) {
                     return sqliteError.SQLError;
                 }

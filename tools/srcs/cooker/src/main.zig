@@ -183,15 +183,19 @@ pub fn main(init: std.process.Init) !void {
                                 );
                                 defer allocator.free(parentPathZ);
 
-                                try database.ContentPathT.get(
+                                database.ContentPathT.get(
                                     "UUID",
                                     null,
                                     "RelativePath = ?",
                                     .{parentPathZ},
                                     &getValues,
                                     &types,
-                                );
-                                // std.log.debug("{s}", .{parentPathZ});
+                                ) catch |err| {
+                                    std.log.err("get failed {s}", .{@errorName(err)});
+                                    std.log.debug("parent path Z: {s}", .{parentPathZ});
+                                    continue;
+                                };
+
                                 fType = db.iterateFolder.processFile(
                                     io,
                                     dir,
@@ -297,14 +301,17 @@ pub fn main(init: std.process.Init) !void {
                                     );
                                     defer allocator.free(parentPathZ);
 
-                                    try database.ContentPathT.get(
+                                    database.ContentPathT.get(
                                         "UUID",
                                         null,
                                         "RelativePath = ?",
                                         .{parentPathZ},
                                         &getValues,
                                         &types,
-                                    );
+                                    ) catch |err| {
+                                        std.log.err("get failed {s}", .{@errorName(err)});
+                                        continue;
+                                    };
                                     // std.log.debug("{s}", .{parentPathZ});
 
                                     try db.iterateFolder.processDirectory(

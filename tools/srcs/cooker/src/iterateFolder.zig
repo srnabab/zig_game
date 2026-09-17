@@ -538,9 +538,26 @@ pub fn init(tablePack: AllTable, io: Io, allocator: std.mem.Allocator, content: 
     try resourceProcess.preProcessInit(io, allocator, content);
 }
 
+fn checkContent() bool {
+    var id: u32 = 0;
+    var gets = [_]*anyopaque{&id};
+    var types = [_]sqlDB.innerType{.INTEGER32};
+
+    ContentPathT.get(
+        "ID",
+        null,
+        "FileName = ?",
+        .{"Content"},
+        &gets,
+        &types,
+    ) catch return false;
+
+    return true;
+}
+
 pub fn processContentFolder(content: std.Io.Dir, io: std.Io, allocator: std.mem.Allocator) !void {
     _ = allocator;
-    const exist = true;
+    const exist = checkContent();
 
     var buffer = [_]u8{0} ** UUID.len;
     const time: i64 = @truncate(std.Io.Timestamp.now(io, .real).toNanoseconds());
@@ -555,6 +572,7 @@ pub fn processContentFolder(content: std.Io.Dir, io: std.Io, allocator: std.mem.
         var types = [_]sqlDB.innerType{ .TEXT, .INTEGER };
 
         try ContentPathT.get("UUID,ModifiedTime", null, "RelativePath = ?", .{"Content"}, &getValues, &types);
+
         // std.log.info("{s}", .{buffer});
 
         if (cc.mtime.toNanoseconds() != @as(i96, @intCast(modifiedTime))) {

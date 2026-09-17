@@ -24,3 +24,5 @@ src/setPass.zig
 
 src/build/config.zig
 src/build/out.zig
+
+src/examples
