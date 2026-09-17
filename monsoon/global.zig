@@ -24,7 +24,8 @@ pub const LOGICAL_WEIGHT = 800;
 
 pub const HandlesType = Handles.Handles(1024, .Once);
 
-pub const EventQueueType = mstd.Queue(event.Event);
+pub const UpdateEventQueueType = mstd.Queue(event.UpdateEvent);
+pub const RenderEventQueueType = mstd.Queue(event.RenderEvent);
 
 const StateType = enum {
     _u32,

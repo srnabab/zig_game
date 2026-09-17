@@ -277,6 +277,7 @@ pub fn update_thread_func(args: Args) !void {
                 }
             }
 
+            // ----------------------------------------------------------------------------------------------------------------------------------------
             try args.uctx.loadmaps.load(&resourceCtx, 0, vec2{ 0, 0 });
 
             const infos = stateBuffering.getWriteBuffer();
@@ -301,17 +302,16 @@ pub fn update_thread_func(args: Args) !void {
                 pos[1] += vel[1] * delta_time;
 
                 if (pos[0] <= -400) {
-                    pos[0] = -400.0; // 修正位置，防止穿墙/卡墙
-                    vel[0] = -vel[0]; // 水平速度反向
+                    pos[0] = -400.0;
+                    vel[0] = -vel[0];
                 } else if (pos[0] >= 400.0) {
                     pos[0] = 400.0;
                     vel[0] = -vel[0];
                 }
 
-                // 上下边缘反射
                 if (pos[1] <= -300.0) {
-                    pos[1] = -300.0; // 修正位置
-                    vel[1] = -vel[1]; // 垂直速度反向
+                    pos[1] = -300.0;
+                    vel[1] = -vel[1];
                 } else if (pos[1] >= 300.0) {
                     pos[1] = 300.0;
                     vel[1] = -vel[1];
@@ -332,6 +332,7 @@ pub fn update_thread_func(args: Args) !void {
             }
 
             try infos.append(.{ ._u32 = stateBufferValue });
+            // ----------------------------------------------------------------------------------------------------------------------------------------
 
             deltaTime = sdl.SDL_GetTicksNS() - lastTimestamp;
             accumulateTime += deltaTime;

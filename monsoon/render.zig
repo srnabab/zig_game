@@ -62,8 +62,8 @@ pub const Args = struct {
     instances: *meshInstance,
     externalCommands: *processRender.externalCommands,
     renderQueue: *resource.ReaderQueue,
-    updateEventQueue: *global.EventQueueType,
-    renderEventQueue: *global.EventQueueType,
+    updateEventQueue: *global.UpdateEventQueueType,
+    renderEventQueue: *global.RenderEventQueueType,
 };
 
 pub fn render_thread_func(args: Args) !void {
@@ -235,22 +235,7 @@ pub fn render_thread_func(args: Args) !void {
     while (true) {
         // if (tests) @breakpoint();
         {
-            const frame = vulkan.totalFrame.load(.seq_cst);
-            // @breakpoint();
-            // std.log.debug("frame {d}", .{frame});
-            // _ = frame;
-
-            if (frame == 0) {
-                // global.nodeChildrenAppendBreakPoint = true;
-                // global.stopNodeDagPrint = false;
-                // global.printDagToDot = true;
-                // global.game_end.store(1, .seq_cst);
-                // global.stopNodeDagDetailPrint = false;
-                // global.storExecuteSequencePrint = false;
-                //     passes.enablePass("indirect2D");
-                //     passes.enablePass("present");
-                // testDraw = true;
-            }
+            // const frame = vulkan.totalFrame.load(.seq_cst);
 
             while (args.renderQueue.popFirst()) |v| {
                 switch (v.pointer) {
@@ -277,6 +262,7 @@ pub fn render_thread_func(args: Args) !void {
                 }
             }
 
+            // ----------------------------------------------------------------------------------------------------------------------------------------
             while (args.updateEventQueue.popFirst()) |event| {
                 switch (event) {
                     .createTest2d => |c| {
@@ -292,7 +278,6 @@ pub fn render_thread_func(args: Args) !void {
                             .handle = c.handle,
                         });
                     },
-                    .createStaticInteractableStub => {},
                 }
             }
 
@@ -334,6 +319,7 @@ pub fn render_thread_func(args: Args) !void {
                     },
                 }
             }
+            // ----------------------------------------------------------------------------------------------------------------------------------------
 
             try upload(io, vulkan, passes, pTextureSet, args.uctx, &commands);
 
@@ -346,7 +332,6 @@ pub fn render_thread_func(args: Args) !void {
             const zone2 = tracy.initZone(@src(), .{ .name = "pass add" });
             for (args.passes.passes) |*value| {
                 if (value.enabled > 0) {
-                    // renderDebug.printPassInfo(vulkan, value);
                     value.addCommand(
                         vulkan,
                         pTextureSet,
@@ -359,28 +344,11 @@ pub fn render_thread_func(args: Args) !void {
 
                         return err;
                     };
-
-                    // std.log.debug("pass {s}", .{value.name});
                 }
             }
             zone2.deinit();
 
             try commands.addCommandEnd();
-
-            if (global.nodeChildrenAppendBreakPoint) {
-                // renderDebug.printToDot();
-                // renderDebug.printAllInfoToTxt();
-                // global.game_end.store(1, .seq_cst);
-                global.nodeChildrenAppendBreakPoint = false;
-            }
-
-            if (frame == 0) {
-                // renderDebug.printToDot();
-                // renderDebug.printAllInfoToTxt();
-                // global.game_end.store(1, .seq_cst);
-                // break;
-                // global.nodeChildrenAppendBreakPoint = false;
-            }
 
             vulkan.writeCachedDescriptorSetResources();
 

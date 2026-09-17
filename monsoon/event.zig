@@ -3,13 +3,20 @@ const cglm = @import("cglm");
 
 const vec3 = cglm.vec3;
 
-const EventType = enum(u32) {
-    createStaticInteractableStub,
+const UpdateEventType = enum(u32) {
     createTest2d,
 };
-pub const Event = union(EventType) {
-    createStaticInteractableStub: staticInteractableStub,
+
+pub const UpdateEvent = union(UpdateEventType) {
     createTest2d: test2d,
+};
+
+const RenderEventType = enum(u32) {
+    createStaticInteractableStub,
+};
+
+pub const RenderEvent = union(RenderEventType) {
+    createStaticInteractableStub: staticInteractableStub,
 };
 
 const staticInteractableStub = struct {
