@@ -1,8 +1,8 @@
 {
-    "$schema": "../schema/instance.schema.json",
+    "$schema": "../schema/layout.schema.json",
     "items": [
         {
-            "pass": "indirect2D",
+            "name": "sprite",
             "pos": [
                 0,
                 0,
@@ -17,14 +17,10 @@
                 1,
                 1,
                 1
-            ],
-            "textures": [
-                "box.png"
             ]
         },
         {
-            "pass": "i_feather",
-            "model": "Plane.001_0.vtx",
+            "name": "feather",
             "pos": [
                 0,
                 0,
@@ -39,9 +35,6 @@
                 1,
                 1,
                 1
-            ],
-            "textures": [
-                "feather_lut.ktx2"
             ]
         }
     ]

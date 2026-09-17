@@ -4,6 +4,8 @@
         "Path": "plaintext",
         "*.asm": "asm-intel-x86-generic",
         "*.pipe": "json",
+        "*.layout": "json",
+        "*.rdata": "json",
         "*.mesh": "glsl",
         "locale": "cpp",
         "thread": "cpp",

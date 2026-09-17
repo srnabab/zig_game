@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "rdata.schema.json",
+  "title": "RData Config",
+  "type": "object",
+  "additionalProperties": false,
+  "description": "A list of render data entries. Each entry has a unique name, the render pass it targets, its texture list, and an optional model. Placement (pos/scale/rotation) lives in the matching layout file.",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "pass": {
+            "type": "string"
+          },
+          "textures": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "model": {
+            "type": "string"
+          }
+        },
+        "required": ["name", "pass", "textures"]
+      }
+    }
+  },
+  "required": ["items"]
+}

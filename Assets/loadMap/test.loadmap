@@ -23,7 +23,11 @@
             "bufferName": ["featherParameters"]
         },
         {
-            "name": "test.instance",
+            "name": "test.rdata",
+            "isGpu": false
+        },
+        {
+            "name": "test.layout",
             "isGpu": false
         }
     ],
