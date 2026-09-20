@@ -58,15 +58,10 @@ const totalMaps = l: {
     break :l names;
 };
 
-// 注意: id 是“各表内部下标”, **不跨表唯一**。ReleaseFast 下 HashMapContext/eql 只比 id,
-// 所以 Str 只能在同一张表内比较/作 HashMap key(renderData.map 只装 rdatas 表的 Str);
-// 另外 belongMap 是把各表 key 拼成一张 StaticStringMap 且不查重, 名字跨表重名
-// (pass/buffer/file/rdata 同名)时会静默命中先排序的那张表 → ID 编译期报错 / ID2 运行期 unknownName。
 const StrMap = std.StaticStringMap(u32);
 
 const KV = struct { []const u8, u32 };
 
-// 用 totalMaps 的字符串 + belongMap 拼出结构体; 以后改 strConstruct.maps 不用动这里
 const StrMaps = l: {
     const f_names = a: {
         var names: []const []const u8 = &.{};

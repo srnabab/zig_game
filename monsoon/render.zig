@@ -254,7 +254,7 @@ pub fn render_thread_func(args: Args) !void {
                                 @field(uctx, f.name) = &@field(args.uctx, f.name);
                             }
 
-                            const index: u32 = try field.renderLoad(io, gpa, args.vulkan, &commands, &uctx, v.handle, &pt.child, args.updateEventQueue);
+                            const index: u32 = try field.renderLoad(io, gpa, args.vulkan, &commands, &uctx, v.handle, &pt.child);
                             args.handles.setIndex(v.handle, index);
                         } else {
                             args.handles.setIndex(v.handle, Handles.WaitFill);

@@ -191,7 +191,7 @@ pub const RData_Reader = struct {
         }
 
         for (parsed.value.items, items) |jsonItem, *item| {
-            std.log.debug("rdata item: name {s}, pass {s}, textures {any}, model {any}", .{ jsonItem.name, jsonItem.pass, jsonItem.textures, jsonItem.model });
+            // std.log.debug("rdata item: name {s}, pass {s}, textures {any}, model {any}", .{ jsonItem.name, jsonItem.pass, jsonItem.textures, jsonItem.model });
 
             item.pass = ctx.passes.passMap.get(u8pack.toStr2(jsonItem.pass)) orelse return ResourceError.Invalid;
 
@@ -210,16 +210,21 @@ pub const RData_Reader = struct {
         return .{ .rType = .render };
     }
 
-    pub fn renderLoad(io: Io, gpa: Allocator, vulkan: *VkStruct, commands: *Commands, uctx: *Ctx, handle: Handle, pointer: *Child, updateEventQueue: *global.UpdateEventQueueType) !u32 {
+    pub fn renderLoad(
+        io: Io,
+        gpa: Allocator,
+        vulkan: *VkStruct,
+        commands: *Commands,
+        uctx: *Ctx,
+        handle: Handle,
+        pointer: *Child,
+    ) !u32 {
         _ = io;
         _ = vulkan;
         _ = commands;
         _ = handle;
-        _ = updateEventQueue;
 
         for (pointer.items) |item| {
-            // rdata item 名走 strConstruct.rdatas 静态表, 查不到时 id = maxInt
-            // TODO(release): ReleaseFast 下 Str2 是 u32
             const name = u8pack.toStr2(item.name);
 
             uctx.renderData.add(gpa, name, .{

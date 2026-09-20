@@ -241,9 +241,15 @@ pub const PNG_Reader = struct {
         return .{ .rType = .render };
     }
 
-    pub fn renderLoad(io: Io, gpa: Allocator, vulkan: *VkStruct, commands: *Commands, uctx: *Ctx, handle: Handle, pointer: *Child, updateEventQueue: *global.UpdateEventQueueType) !u32 {
-        _ = updateEventQueue;
-
+    pub fn renderLoad(
+        io: Io,
+        gpa: Allocator,
+        vulkan: *VkStruct,
+        commands: *Commands,
+        uctx: *Ctx,
+        handle: Handle,
+        pointer: *Child,
+    ) !u32 {
         return uctx.pTextureSet.createTextureFromResource(
             io,
             gpa,

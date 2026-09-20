@@ -193,7 +193,6 @@ pub const Layout_Reader = struct {
         uctx: *Ctx,
         handle: Handle,
         pointer: *Child,
-        updateEventQueue: *global.UpdateEventQueueType,
     ) !u32 {
         _ = io;
         _ = gpa;
@@ -202,38 +201,7 @@ pub const Layout_Reader = struct {
         _ = handle;
 
         for (pointer.items) |item| {
-            // item.name 走 strConstruct.rdatas 静态表, 查不到时 id = maxInt
-            // TODO(release): ReleaseFast 下 Str2 是 u32
-            const name = item.name;
-
-            const rdata = uctx.renderData.get(name) orelse {
-                try uctx.layoutQueue.append(item);
-                continue;
-            };
-
-            if (u8pack.eql(toStr("indirect2D"), rdata.pass.name)) {
-                updateEventQueue.pushLastC(.{ .createTest2d = .{
-                    .pos = item.pos,
-                    .scale = item.scale,
-                    .rotation = item.rotation,
-                    .rdata = name,
-                    .handle = item.handle,
-                } }) catch |err| {
-                    std.log.err("layout push createTest2d {s}", .{@errorName(err)});
-                    return Handles.Invalid;
-                };
-            } else if (u8pack.eql(toStr("i_feather"), rdata.pass.name)) {
-                updateEventQueue.pushLastC(.{ .createTest3d = .{
-                    .pos = item.pos,
-                    .scale = item.scale,
-                    .rotation = item.rotation,
-                    .rdata = name,
-                    .handle = item.handle,
-                } }) catch |err| {
-                    std.log.err("layout push createTest3d {s}", .{@errorName(err)});
-                    return Handles.Invalid;
-                };
-            }
+            try uctx.layoutQueue.append(item);
         }
 
         return Handles.WaitFill;
