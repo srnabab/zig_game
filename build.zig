@@ -310,6 +310,11 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const event_mod = b.createModule(.{
+        .root_source_file = b.path("src/event.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     //
     const customConfig = @import("src/build/config.zig");
@@ -332,6 +337,10 @@ pub fn build(b: *std.Build) void {
     customBuild.build(cfg);
 
     // aaa
+    event_mod.addImport("u8pack", u8pack_mod);
+    event_mod.addImport("handle", handle_mod);
+    event_mod.addImport("cglm", cglm_mod);
+
     u8pack_mod.addImport("strConstruct", strConstruct_mod);
     u8pack_mod.addImport("setPass", setPass_mod);
     u8pack_mod.addImport("ms_std", ms_mod);
@@ -545,6 +554,7 @@ pub fn build(b: *std.Build) void {
     processRender_mod.addImport("renderDebug", renderDebug_mod);
     processRender_mod.addImport("capability", vulkanCapability_mod);
 
+    global_mod.addImport("event", event_mod);
     global_mod.addImport("u8pack", u8pack_mod);
     global_mod.addImport("samplerNames", samplerNames_mod);
     global_mod.addImport("cglm", cglm_mod);

@@ -10,7 +10,7 @@ const math = mstd.Math;
 
 const stateBuffering = mstd.StateBuffering;
 
-const event = @import("event.zig");
+const event = @import("event");
 const cglm = @import("cglm");
 
 pub const databaseName = "Content.db";
