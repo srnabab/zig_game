@@ -256,45 +256,14 @@ pub fn getResourceHandle(id: u32) ?Handle {
     return idHandleCache.get(id);
 }
 
-// fn processResource_Unknown(
-//     io: Io,
-//     gpa: Allocator,
-//     sqlite: sqlite3,
-//     fileID: i32,
-//     handle: Handle,
-//     resourceArray: *MutexArray(Resource),
-// ) !void {
-//     const f = file.getFile(io, fileID, sqlite) catch |err| {
-//         std.log.err("{s}", .{@errorName(err)});
-//         return err;
-//     };
-//     defer f.close(io);
+const AllowedHooks = [_][]const u8{
+    "updateLoad", "renderLoad",
+};
 
-//     const stat = f.stat(io) catch |err| {
-//         std.log.err("{s}", .{@errorName(err)});
-//         return err;
-//     };
+pub fn validLoadName(comptime declName: []const u8) bool {
+    for (AllowedHooks) |name| {
+        if (std.mem.eql(u8, name, declName)) return comptime true;
+    }
 
-//     var buffer = [_]u8{0} ** 8;
-//     var reader = f.reader(io, &buffer);
-//     try reader.seekTo(0);
-
-//     const content = reader.interface.readAlloc(gpa, stat.size) catch |err| {
-//         std.log.err("{s}", .{@errorName(err)});
-//         return err;
-//     };
-
-//     {
-//         try resourceArray.mutex.lock(io);
-//         defer resourceArray.mutex.unlock(io);
-//         const ptr = resourceArray.array.addOne() catch |err| {
-//             std.log.err("{s}", .{@errorName(err)});
-//             return err;
-//         };
-//         ptr.* = .{ .others = .{
-//             .fileID = @intCast(fileID),
-//             .mem = content,
-//             .handle = handle,
-//         } };
-//     }
-// }
+    return comptime false;
+}

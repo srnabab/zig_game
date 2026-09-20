@@ -102,10 +102,12 @@ const list = [_]KV{
 .{ "iv_feather.pipeb", 94 },
 .{ "large_bilied_crow1Blue-violet.binary", 95 },
 .{ "feather_lut.ktx2", 96 },
-.{ "test.instance", 97 },
+.{ "test.rdata", 97 },
 .{ "test.lMap", 98 },
 .{ "dragon_0.vtx", 99 },
-.{ "Instance", 101 },
+.{ "Rdata", 100 },
+.{ "test.layout", 101 },
+.{ "Layout", 102 },
 };
 
 break: map std.StaticStringMap(u32).initComptime(list);
@@ -120,4 +122,4 @@ return FileNameIdHashMap.get(fileName) orelse @compileError("not found");
 }
 
 pub fn getID(fileName: []const u8) u32 {    return FileNameIdHashMap.get(fileName) orelse std.debug.panic("ilegal name {s}", .{fileName}); }
-pub const MaxID = 101;
+pub const MaxID = 102;

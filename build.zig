@@ -295,11 +295,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    const instance_mod2 = b.createModule(.{
-        .root_source_file = b.path("monsoon/instances/instances.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
     const renderUpload_mod = b.createModule(.{
         .root_source_file = b.path("src/renderUpload.zig"),
         .target = target,
@@ -307,6 +302,11 @@ pub fn build(b: *std.Build) void {
     });
     const samplerNames_mod = b.createModule(.{
         .root_source_file = b.path("src/samplerNames.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const strConstruct_mod = b.createModule(.{
+        .root_source_file = b.path("src/strConstruct.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -324,14 +324,15 @@ pub fn build(b: *std.Build) void {
         .global = global_mod,
         .handle = handle_mod,
         .u8pack = u8pack_mod,
+        .pass = pass_mod,
         .exe = exe_mod,
         .resource = resource_mod,
         .resourceProcess = resourceProcess_mod,
-        .instances2 = instance_mod2,
     };
     customBuild.build(cfg);
 
     // aaa
+    u8pack_mod.addImport("strConstruct", strConstruct_mod);
     u8pack_mod.addImport("setPass", setPass_mod);
     u8pack_mod.addImport("ms_std", ms_mod);
     u8pack_mod.addImport("fileSystem", fileSystem_mod);
@@ -342,19 +343,8 @@ pub fn build(b: *std.Build) void {
     renderUpload_mod.addImport("pass", pass_mod);
     renderUpload_mod.addImport("resourceProcess", resourceProcess_mod);
 
-    instance_mod2.addImport("global", global_mod);
-    instance_mod2.addImport("u8pack", u8pack_mod);
-    instance_mod2.addImport("pass", pass_mod);
-    instance_mod2.addImport("cglm", cglm_mod);
-    instance_mod2.addImport("handle", handle_mod);
-    instance_mod2.addImport("textureSet", textureSet_mod);
-    instance_mod2.addImport("setPass", setPass_mod);
-    instance_mod2.addImport("processRender", processRender_mod);
-    instance_mod2.addImport("video", video_mod);
-
     resourceProcess_mod.addImport("u8pack", u8pack_mod);
     resourceProcess_mod.addImport("pass", pass_mod);
-    resourceProcess_mod.addImport("instance2", instance_mod2);
     resourceProcess_mod.addImport("handle", handle_mod);
     resourceProcess_mod.addImport("vulkan", vk_c_mod);
     resourceProcess_mod.addImport("tables", tables_mod);
@@ -369,6 +359,7 @@ pub fn build(b: *std.Build) void {
     resourceProcess_mod.addImport("processRender", processRender_mod);
     resourceProcess_mod.addImport("global", global_mod);
     resourceProcess_mod.addImport("textureSet", textureSet_mod);
+    resourceProcess_mod.addImport("cglm", cglm_mod);
     resourceProcess_mod.addImport("loadmap", loadmap_mod);
 
     setPass_mod.addImport("u8pack", u8pack_mod);
@@ -554,6 +545,7 @@ pub fn build(b: *std.Build) void {
     processRender_mod.addImport("renderDebug", renderDebug_mod);
     processRender_mod.addImport("capability", vulkanCapability_mod);
 
+    global_mod.addImport("u8pack", u8pack_mod);
     global_mod.addImport("samplerNames", samplerNames_mod);
     global_mod.addImport("cglm", cglm_mod);
     global_mod.addImport("video", video_mod);
@@ -601,7 +593,6 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("sdl", sdl_mod);
     exe_mod.addImport("vulkan", vk_c_mod);
     exe_mod.addImport("resource", resource_mod);
-    exe_mod.addImport("instances2", instance_mod2);
     exe_mod.addImport("renderUpload", renderUpload_mod);
     exe_mod.addIncludePath(b.path("include/"));
 

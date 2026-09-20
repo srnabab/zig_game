@@ -291,12 +291,13 @@ pub const VTX_Reader = struct {
         return .{ .rType = .render };
     }
 
-    pub fn renderLoad(io: Io, gpa: Allocator, vulkan: *VkStruct, commands: *Commands, uctx: *Ctx, handle: Handle, pointer: *Child) !u32 {
+    pub fn renderLoad(io: Io, gpa: Allocator, vulkan: *VkStruct, commands: *Commands, uctx: *Ctx, handle: Handle, pointer: *Child, updateEventQueue: *global.UpdateEventQueueType) !u32 {
         _ = io;
         _ = gpa;
         _ = vulkan;
         _ = handle;
         _ = commands;
+        _ = updateEventQueue;
 
         const index = uctx.meshes.addMesh(
             pointer.sizes[0],

@@ -2,6 +2,7 @@ Assets\Shaders
 Assets\Sampler
 Assets\pipeline
 Assets\loadMap
-Assets\instance
+Assets\rdata
+Assets\layout
 zig-out\bin\Content
 tools\srcs\cooker

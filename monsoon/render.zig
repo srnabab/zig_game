@@ -45,6 +45,7 @@ const pass = @import("pass");
 const meshInstance = @import("meshInstance");
 
 const resourceProcess = @import("resourceProcess");
+const ViewBoundsAndTotalSpriteCount = @import("setPass").ViewBoundsAndTotalSpriteCount;
 
 pub const Args = struct {
     io: std.Io,
@@ -253,7 +254,7 @@ pub fn render_thread_func(args: Args) !void {
                                 @field(uctx, f.name) = &@field(args.uctx, f.name);
                             }
 
-                            const index: u32 = try field.renderLoad(io, gpa, args.vulkan, &commands, &uctx, v.handle, &pt.child);
+                            const index: u32 = try field.renderLoad(io, gpa, args.vulkan, &commands, &uctx, v.handle, &pt.child, args.updateEventQueue);
                             args.handles.setIndex(v.handle, index);
                         } else {
                             args.handles.setIndex(v.handle, Handles.WaitFill);
@@ -263,33 +264,88 @@ pub fn render_thread_func(args: Args) !void {
             }
 
             // ----------------------------------------------------------------------------------------------------------------------------------------
-            while (args.updateEventQueue.popFirst()) |event| {
-                switch (event) {
-                    .createTest2d => |c| {
-                        const textures = try args.uctx.instances2.instances.allocator.alloc(Handles.Handle, 1);
-                        textures[0] = resource.getResourceHandle(file.getID("box.png")) orelse unreachable;
+            {
+                var it = args.uctx.layoutQueue.iterate();
+                while (it.next()) |p| {
+                    const item = p.ptr;
+                    const name = item.name;
+                    const rdata = args.uctx.renderData.get(name) orelse continue;
 
-                        try args.uctx.instances2.add(io, .{
-                            .pass = passes.passMap.get(toStr("indirect2D")).?,
-                            .pos = c.pos,
-                            .rotation = c.rotation,
-                            .scale = c.scale,
-                            .textures = textures,
-                            .handle = c.handle,
-                        });
-                    },
+                    if (u8pack.eql(toStr("indirect2D"), rdata.pass.name)) {
+                        args.updateEventQueue.pushLastC(.{ .createTest2d = .{
+                            .pos = item.pos,
+                            .scale = item.scale,
+                            .rotation = item.rotation,
+                            .rdata = name,
+                            .handle = item.handle,
+                        } }) catch |err| {
+                            std.log.err("layout push createTest2d {s}", .{@errorName(err)});
+                            continue;
+                        };
+                    } else if (u8pack.eql(toStr("i_feather"), rdata.pass.name)) {
+                        args.updateEventQueue.pushLastC(.{ .createTest3d = .{
+                            .pos = item.pos,
+                            .scale = item.scale,
+                            .rotation = item.rotation,
+                            .rdata = name,
+                            .handle = item.handle,
+                        } }) catch |err| {
+                            std.log.err("layout push createTest3d {s}", .{@errorName(err)});
+                            continue;
+                        };
+                    }
+                    args.uctx.layoutQueue.remove(p.index);
                 }
             }
 
-            try args.uctx.instances2.load(
-                io,
-                args.passes,
-                pTextureSet,
-                &args.uctx.vertices,
-                &args.uctx.instances1,
-                &args.uctx.passGroupMapping,
-                args.handles,
-            );
+            while (args.updateEventQueue.popFirst()) |event| {
+                switch (event) {
+                    .createTest2d => |c| {
+                        const rdata = args.uctx.renderData.get(c.rdata) orelse continue;
+                        const viewBoundsAndTotalSpriteCount: *ViewBoundsAndTotalSpriteCount = @ptrCast(@alignCast(rdata.pass.userdata));
+
+                        try rdata.pass.useTexture(@ptrCast(rdata.textures[0]), gpa);
+                        const textureContent = pTextureSet.getTextureCotent(@ptrCast(rdata.textures[0]));
+                        const index = try args.uctx.vertices.addInstance(
+                            io,
+                            c.pos[0],
+                            c.pos[1],
+                            c.scale[0] * @as(f32, @floatFromInt(textureContent.source_width)),
+                            c.scale[1] * @as(f32, @floatFromInt(textureContent.source_height)),
+                            c.pos[2],
+                            pTextureSet.getDescriptorSetIndex(@ptrCast(rdata.textures[0])),
+                        );
+                        viewBoundsAndTotalSpriteCount.totalSpriteCount = args.uctx.vertices.getTotalCount();
+                        args.handles.setIndex(c.handle, index);
+                    },
+                    .createTest3d => |c| {
+                        const rdata = args.uctx.renderData.get(c.rdata) orelse unreachable;
+
+                        const ins = try args.uctx.instances1.add(
+                            io,
+                            null,
+                            c.pos,
+                            c.scale,
+                            c.rotation,
+                            c.handle,
+                        );
+                        const idx1 = Handles.getIndex(@ptrCast(ins)) orelse unreachable;
+                        const idx2 = Handles.getIndex(rdata.model.?) orelse unreachable;
+
+                        const tidx = pTextureSet.getDescriptorSetIndex(@ptrCast(rdata.textures[0]));
+
+                        const cs_mesh_drawCount = try args.uctx.passGroupMapping.add(io, rdata.pass.name, .{
+                            .instanceID = idx1,
+                            .meshID = idx2,
+                        });
+                        const pU32 = @as(*u32, @ptrCast(@alignCast(rdata.pass.userdata.?)));
+                        pU32.* = cs_mesh_drawCount;
+
+                        rdata.pass.setPushConstants(2, @constCast(&std.mem.toBytes(tidx)), 64);
+                    },
+                }
+            }
+            args.updateEventQueue.swap();
 
             const infos = stateBuffering.getReadyBuffer();
             defer stateBuffering.returnReadyBuffer(infos);
@@ -315,7 +371,7 @@ pub fn render_thread_func(args: Args) !void {
                     },
                     ._2d => |v| {
                         // std.log.debug("({d}, {d})", .{ v.pos[0], v.pos[1] });
-                        try args.uctx.vertices.updateInstance(io, v.pos[0], v.pos[1], Handles.getIndex(v.handle) orelse unreachable);
+                        try args.uctx.vertices.updateInstance(io, v.pos[0], v.pos[1], Handles.getIndex(v.handle) orelse continue);
                     },
                 }
             }

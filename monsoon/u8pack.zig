@@ -13,6 +13,8 @@ const ComptimeAllocator = mstd.ComptimeAllocator;
 const setPass = @import("setPass");
 const file = @import("fileSystem");
 
+const construct = @import("strConstruct");
+
 pub const HashMapContext = if (debug) struct {
     pub fn hash(self: @This(), s: Str) u64 {
         _ = self;
@@ -36,26 +38,71 @@ pub fn HashMap(comptime V: type) type {
     return std.HashMap(Str, V, HashMapContext, 80);
 }
 
-const mapType = enum {
-    passes,
-    buffers,
-};
-const pass_buffer_map = struct {
-    belongMap: std.StaticStringMap(mapType),
+// 参与查名的表清单: ctx 驱动的 buffers/passes + 生成文件表 files + strConstruct 里手写的表(目前只有 rdatas)
+const ctxMaps = [_][]const u8{ "buffers", "passes" };
+const constructMaps = construct.maps;
 
-    passes: std.StaticStringMap(u32),
-    buffers: std.StaticStringMap(u32),
+const totalMaps = l: {
+    var names: []const []const u8 = &.{};
 
-    files: std.StaticStringMap(u32),
+    for (ctxMaps) |value| {
+        names = names ++ .{value};
+    }
+
+    names = names ++ .{"files"};
+
+    for (constructMaps) |value| {
+        names = names ++ .{value};
+    }
+
+    break :l names;
 };
-const maps = [_][]const u8{ "buffers", "passes" };
+
+// 注意: id 是“各表内部下标”, **不跨表唯一**。ReleaseFast 下 HashMapContext/eql 只比 id,
+// 所以 Str 只能在同一张表内比较/作 HashMap key(renderData.map 只装 rdatas 表的 Str);
+// 另外 belongMap 是把各表 key 拼成一张 StaticStringMap 且不查重, 名字跨表重名
+// (pass/buffer/file/rdata 同名)时会静默命中先排序的那张表 → ID 编译期报错 / ID2 运行期 unknownName。
+const StrMap = std.StaticStringMap(u32);
+
+const KV = struct { []const u8, u32 };
+
+// 用 totalMaps 的字符串 + belongMap 拼出结构体; 以后改 strConstruct.maps 不用动这里
+const StrMaps = l: {
+    const f_names = a: {
+        var names: []const []const u8 = &.{};
+        names = names ++ .{"belongMap"};
+
+        for (totalMaps) |name| {
+            names = names ++ .{name};
+        }
+
+        break :a names;
+    };
+
+    break :l @Struct(
+        .auto,
+        null,
+        f_names,
+        a: {
+            var types: [f_names.len]type = undefined;
+
+            for (0..f_names.len) |i| {
+                types[i] = StrMap;
+            }
+
+            break :a &types;
+        },
+        &@splat(.{}),
+    );
+};
 
 pub const CTX = struct {
     passes: []const []const u8,
     buffers: []const []const u8,
 };
-const str_maps: pass_buffer_map = l: {
-    var res: pass_buffer_map = undefined;
+
+const str_maps: StrMaps = l: {
+    var res: StrMaps = undefined;
 
     var ctx = CTX{
         .buffers = &.{},
@@ -66,50 +113,53 @@ const str_maps: pass_buffer_map = l: {
         @compileError("error");
     };
 
-    const Items = struct {
-        buffers: []const []const u8,
-        passes: []const []const u8,
-    };
-
-    const KV = struct { []const u8, u32 };
-    const KV2 = struct { []const u8, mapType };
-
-    var items: Items = undefined;
-
-    var totalLen = 0;
-    for (maps) |mapName| {
-        totalLen += @field(ctx, mapName).len;
-    }
-    var belongs: [totalLen]KV2 = undefined;
-    totalLen = 0;
-
     @setEvalBranchQuota(10000);
 
-    for (maps, 0..) |mapName, mi| {
+    // ctx 驱动的表(buffers/passes): 去重后按去重数组下标当 id
+    for (ctxMaps) |mapName| {
         var mut_buf: [@field(ctx, mapName).len][]const u8 = undefined;
         @memcpy(&mut_buf, @field(ctx, mapName));
 
-        @field(items, mapName) = deduplicateStrings(&mut_buf);
-        var KVs: [@field(items, mapName).len]KV = undefined;
-        // var id: u32 = 0;
+        const items = deduplicateStrings(&mut_buf);
+        var KVs: [items.len]KV = undefined;
 
-        for (@field(items, mapName), 0..) |name, i| {
+        for (items, 0..) |name, i| {
             KVs[i] = KV{
                 .@"0" = name,
                 .@"1" = @intCast(i),
             };
-            belongs[totalLen] = KV2{
-                .@"0" = name,
-                .@"1" = @enumFromInt(mi),
-            };
-            totalLen += 1;
         }
 
         @field(res, mapName) = .initComptime(KVs);
     }
 
-    res.belongMap = .initComptime(belongs);
+    // 生成文件表(fileNameID.zig)
     res.files = file.fileNameID.FileNameIdHashMap;
+
+    // strConstruct 里手写的表(每个表提供一个 <name>() std.StaticStringMap(u32))
+    for (constructMaps) |mapName| {
+        @field(res, mapName) = @field(construct, mapName)();
+    }
+
+    var totalLen = 0;
+    for (totalMaps) |mapName| {
+        totalLen += @field(res, mapName).kvs.len;
+    }
+    var belongs: [totalLen]KV = undefined;
+
+    var count = 0;
+
+    for (totalMaps, 0..) |mapName, mi| {
+        for (@field(res, mapName).keys()) |value| {
+            belongs[count] = KV{
+                .@"0" = value,
+                .@"1" = @intCast(mi),
+            };
+            count += 1;
+        }
+    }
+    res.belongMap = .initComptime(belongs);
+
     break :l res;
 };
 
@@ -128,10 +178,8 @@ pub const Str = struct {
 
 pub fn ID(comptime str: []const u8) u32 {
     comptime {
-        const mapT = str_maps.belongMap.get(str) orelse {
-            return str_maps.files.get(str) orelse @compileError(std.fmt.comptimePrint("{s}", .{str}));
-        };
-        return @field(str_maps, maps[@intFromEnum(mapT)]).get(str) orelse @compileError(std.fmt.comptimePrint("{s}", .{str}));
+        const mapT = str_maps.belongMap.get(str) orelse @compileError(std.fmt.comptimePrint("{s}", .{str}));
+        return @field(str_maps, totalMaps[mapT]).get(str) orelse @compileError(std.fmt.comptimePrint("{s}", .{str}));
     }
 }
 
@@ -146,26 +194,43 @@ const Error = error{unknownName};
 const Str2 = if (debug) []const u8 else u32;
 
 pub fn ID2(str: []const u8) Error!u32 {
-    const mapT = str_maps.belongMap.get(str) orelse {
-        return str_maps.files.get(str) orelse return Error.unknownName;
-    };
+    const mapT = str_maps.belongMap.get(str) orelse return Error.unknownName;
+
     switch (mapT) {
-        inline else => |t| {
-            return @field(str_maps, maps[@intFromEnum(t)]).get(str) orelse return Error.unknownName;
+        inline 0...totalMaps.len - 1 => |t| {
+            return @field(str_maps, totalMaps[t]).get(str) orelse return Error.unknownName;
+        },
+        else => {
+            return Error.unknownName;
+        },
+    }
+}
+
+fn replaceName(str: []const u8) ![]const u8 {
+    const mapT = str_maps.belongMap.get(str) orelse return Error.unknownName;
+
+    switch (mapT) {
+        inline 0...totalMaps.len - 1 => |t| {
+            return @field(str_maps, totalMaps[t]).keys()[@field(str_maps, totalMaps[t]).getIndex(str) orelse return Error.unknownName];
+        },
+        else => {
+            return Error.unknownName;
         },
     }
 }
 
 pub fn toStr2(str: Str2) Str {
     if (debug) {
+        const id = ID2(str) catch {
+            std.debug.panic("unknow name {s}", .{str});
+        };
+
         return .{
-            .name = str,
-            .id = ID2(str) catch id: {
-                std.log.err("unknow name {s}", .{str});
-                break :id std.math.maxInt(u32);
-            },
+            .name = replaceName(str) catch unreachable,
+            .id = id,
         };
     } else {
+        // ReleaseFast 下 Str2 就是 id, 不存在字符串
         return .{
             .name = void{},
             .id = str,

@@ -10,6 +10,7 @@ pub const MemoryPoolSlice = @import("memoryPool.zig").MemoryPoolSlice;
 pub const ObjectPool = @import("objectPool.zig").ObjectPool;
 pub const Queue = @import("queue.zig").Queue;
 pub const MutexArray = @import("mutexArray.zig").MutexArray;
+pub const DoubleBufferQueue = @import("doubleBufferQueue.zig").doubleBufferQueue;
 
 pub const Math = @import("math.zig");
 

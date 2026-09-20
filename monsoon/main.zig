@@ -133,10 +133,10 @@ pub fn main(init: std.process.Init) !void {
     var stateBuffering: global.StateBufferingType = .init(allocator_t.*);
     defer stateBuffering.deinit();
 
-    var updateEventQueue: global.EventQueueType = try .init(allocator_t.*, io);
+    var updateEventQueue: global.UpdateEventQueueType = try .init(allocator_t.*, io);
     defer updateEventQueue.deinit();
 
-    var renderEventQueue: global.EventQueueType = try .init(allocator_t.*, io);
+    var renderEventQueue: global.RenderEventQueueType = try .init(allocator_t.*, io);
     defer renderEventQueue.deinit();
 
     var endSemaphore: std.Io.Semaphore = .{};

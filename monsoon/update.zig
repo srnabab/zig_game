@@ -56,8 +56,8 @@ pub const Args = struct {
     passes: *pass,
     renderQueue: *resource.ReaderQueue,
     updateQueue: *resource.ReaderQueue,
-    updateEventQueue: *global.EventQueueType,
-    renderEventQueue: *global.EventQueueType,
+    updateEventQueue: *global.UpdateEventQueueType,
+    renderEventQueue: *global.RenderEventQueueType,
 };
 
 const inputProcessInterval = std.time.ns_per_ms * 5;
@@ -271,6 +271,15 @@ pub fn update_thread_func(args: Args) !void {
                             const index: u32 = try field.updateLoad(io, gpa, args.vulkan, undefined, &uctx, v.handle, &pt.child);
                             args.handles.setIndex(v.handle, index);
                         } else {
+                            // const fInfo = @typeInfo(field);
+                            // comptime {
+                            //     var valid = false;
+                            //     for (fInfo.@"struct".decls) |value| {
+                            //         valid |= resource.validLoadName(value.name);
+                            //     }
+                            //     if (!valid) @compileError(std.fmt.comptimePrint("please check load function name in {s}", .{@typeName(field)}));
+                            // }
+
                             args.handles.setIndex(v.handle, Handles.WaitFill);
                         }
                     },
@@ -288,7 +297,8 @@ pub fn update_thread_func(args: Args) !void {
                     added = true;
                     pos = vec2{ 100, 100 };
                     testHandle = handles.createHandle(Handles.Invalid, .others);
-                    try eventQueue.pushLast(.{ .createTest2d = .{
+                    try eventQueue.pushLastP(.{ .createTest2d = .{
+                        .rdata = u8pack.toStr("sprite"),
                         .pos = vec3{ pos[0], pos[1], 0.1 },
                         .rotation = vec3{ 0, 0, 0 },
                         .scale = vec3{ 1.0, 1, 1 },

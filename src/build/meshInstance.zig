@@ -23,7 +23,6 @@ pub fn build(cfg: Config) *std.Build.Module {
     cfg.exe.addImport("meshInstance", m);
     cfg.resource.addImport("meshInstance", m);
     cfg.resourceProcess.addImport("meshInstance", m);
-    cfg.instances2.addImport("meshInstance", m);
 
     return m;
 }

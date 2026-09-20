@@ -15,7 +15,8 @@ const ktx2 = @import("resourceProcess/ktx2.zig");
 const loadmap = @import("resourceProcess/loadmap.zig");
 const lMap = @import("resourceProcess/lMap.zig");
 const binary = @import("resourceProcess/binary.zig");
-const Instance = @import("resourceProcess/instance.zig");
+const rdata = @import("resourceProcess/rdata.zig");
+const layout = @import("resourceProcess/layout.zig");
 
 // shared
 const tables = @import("tables");
@@ -42,7 +43,7 @@ const MutexArray = mstd.MutexArray;
 const mesh = @import("mesh");
 const textureSet = @import("textureSet");
 const loadMap = @import("loadmap");
-const instance2 = @import("instance2");
+const renderData = @import("renderData");
 const vertices2D = @import("vertices");
 const PassGroupMapping = @import("passGroupMapping");
 const meshInstance = @import("meshInstance");
@@ -72,7 +73,8 @@ pub const ProcessType = enum(u16) {
     LoadMap,
     LMap,
     Binary,
-    Instance,
+    RData,
+    Layout,
 };
 
 pub const UserContext = struct {
@@ -80,9 +82,10 @@ pub const UserContext = struct {
     pTextureSet: textureSet,
     loadmaps: loadMap,
     instances1: meshInstance,
-    instances2: instance2,
+    renderData: renderData,
     vertices: vertices2D,
     passGroupMapping: PassGroupMapping,
+    layoutQueue: mstd.FixedIndexArray(layout.Item),
 
     meshes: mesh,
 
@@ -105,11 +108,12 @@ pub const UserContext = struct {
                 iFeatherBuffers[10], // IF.meshes
             }),
             .loadmaps = try .init(gpa, 1),
-            .instances2 = .init(gpa),
+            .renderData = .init(gpa),
             .passGroupMapping = .init(gpa),
             .vertices = try vertices2D.init(indirect2DBuffers[2], indirect2DBuffers[0], indirect2DBuffers[1], gpa, externalCommands),
             .instances1 = meshInstance.init(gpa, handles, iFeatherBuffers[9]),
             .pTextureSet = undefined,
+            .layoutQueue = .init(gpa),
         };
         try uctx.passGroupMapping.addUploadTarget(toStr2("i_feather"), iFeatherBuffers[6], iFeatherBuffers[8]); // IF.featherCommands / IF.groupMappings
         return uctx;
@@ -118,10 +122,11 @@ pub const UserContext = struct {
     pub fn deinitUserContext(self: *UserContext, gpa: Allocator) void {
         self.meshes.deinit();
         self.loadmaps.deinit(gpa);
-        self.instances2.deinit();
+        self.renderData.deinit();
         self.vertices.deinit();
         self.passGroupMapping.deinit();
         self.instances1.deinit();
+        self.layoutQueue.deinit();
     }
 };
 
@@ -218,7 +223,8 @@ pub const list = [_]KV{
     .{ ".loadmap", ProcessType.LoadMap },
     .{ ".lMap", ProcessType.LMap },
     .{ ".binary", ProcessType.Binary },
-    .{ ".instance", ProcessType.Instance },
+    .{ ".rdata", ProcessType.RData },
+    .{ ".layout", ProcessType.Layout },
 };
 
 const HandleType = @import("handle").ResourceType;
@@ -401,14 +407,16 @@ pub const Sampler_Cooker = sampler.Sampler_Cooker;
 pub const Shader_Cooker = shader.Shader_Cooker;
 pub const Pipeline_Cooker = pipeline.Pipeline_Cooker;
 pub const LoadMap_Cooker = loadmap.LoadMap_Cooker;
-pub const Instance_Cooker = Instance.Instance_Cooker;
+pub const RData_Cooker = rdata.RData_Cooker;
+pub const Layout_Cooker = layout.Layout_Cooker;
 
 pub const KTX2_Reader = ktx2.KTX2_Reader;
 pub const VTX_Reader = vtx.VTX_Reader;
 pub const PNG_Reader = png.PNG_Reader;
 pub const LMap_Reader = lMap.LMap_Reader;
 pub const Binary_Reader = binary.Binary_Reader;
-pub const Instance_Reader = Instance.Instance_Reader;
+pub const RData_Reader = rdata.RData_Reader;
+pub const Layout_Reader = layout.Layout_Reader;
 
 pub const TypeUseExample = [_]ProcessType{
     .DIR,

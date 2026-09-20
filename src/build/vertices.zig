@@ -20,7 +20,6 @@ pub fn build(cfg: Config) *std.Build.Module {
     // 下游: 引擎中需要 @import("vertices") 的消费者模块
     cfg.exe.addImport("vertices", m);
     cfg.resourceProcess.addImport("vertices", m);
-    cfg.instances2.addImport("vertices", m);
 
     return m;
 }

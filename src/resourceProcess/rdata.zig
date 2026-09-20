@@ -25,16 +25,15 @@ const resource = @import("resource");
 
 const cglm = @import("cglm");
 
-const toStr2 = @import("u8pack").toStr2;
+const u8pack = @import("u8pack");
 
-const instance2 = @import("instance2");
+const pass = @import("pass");
 const textureSet = @import("textureSet");
-
-const instance = instance2.instance;
+const renderData = @import("renderData");
 
 const ResourceError = resource.ResourceError;
 
-pub const Instance_Cooker = struct {
+pub const RData_Cooker = struct {
     pub const TableName = "ContentPathT";
     pub const Enable = true;
     const TableType = tables.ContentPath;
@@ -65,7 +64,7 @@ pub const Instance_Cooker = struct {
         _ = content;
         _ = database;
         std.log.debug("{s}", .{contentFolderPath});
-        const dstPath = try std.fmt.allocPrint(gpa, "{s}\\Instance\\{s}", .{ contentFolderPath, fileName });
+        const dstPath = try std.fmt.allocPrint(gpa, "{s}\\Rdata\\{s}", .{ contentFolderPath, fileName });
         defer gpa.free(dstPath);
         std.log.debug("{s}", .{dstPath});
 
@@ -92,21 +91,30 @@ pub const Instance_Cooker = struct {
     }
 };
 
-pub const Instance_Reader = struct {
-    const Self = @This();
-
+pub const RData_Reader = struct {
     pub const Ctx = struct {
-        instances2: *instance2,
+        renderData: *renderData,
         pTextureSet: *textureSet,
     };
 
-    pub const Child = struct {
-        pub const Parent = Instance_Reader;
+    pub const Item = struct {
+        name: []u8,
+        model: ?Handle = null,
+        textures: []Handle,
+        pass: *pass.Pass,
+    };
 
-        instances: []instance,
+    pub const Child = struct {
+        pub const Parent = RData_Reader;
+
+        items: []Item,
 
         pub fn free(self: *Child, gpa: Allocator) void {
-            gpa.free(self.instances);
+            for (self.items) |item| {
+                gpa.free(item.name);
+                gpa.free(item.textures);
+            }
+            gpa.free(self.items);
         }
     };
 
@@ -126,93 +134,100 @@ pub const Instance_Reader = struct {
         const io = ctx.io;
         const gpa = ctx.gpa;
 
-        const Item = struct {
+        const JsonItem = struct {
+            name: []const u8,
             pass: []const u8,
-            pos: []f32,
-            scale: []f32,
-            rotation: []f32,
             textures: [][]const u8,
             model: ?[]const u8 = null,
         };
-        const File = struct {
+        const JsonFile = struct {
             @"$schema": ?[]const u8 = null,
-            items: []Item = &.{},
+            items: []JsonItem = &.{},
         };
 
-        var instanceFile = file.getFile(io, fileID, sqlite) catch |err| {
-            std.log.err("instance getFile {s}", .{@errorName(err)});
+        var rdataFile = file.getFile(io, fileID, sqlite) catch |err| {
+            std.log.err("rdata getFile {s}", .{@errorName(err)});
             return ResourceError.Unavaliable;
         };
-        defer instanceFile.close(io);
+        defer rdataFile.close(io);
 
-        const stat = instanceFile.stat(io) catch |err| {
-            std.log.err("instance stat {s}", .{@errorName(err)});
+        const stat = rdataFile.stat(io) catch |err| {
+            std.log.err("rdata stat {s}", .{@errorName(err)});
             return ResourceError.Unavaliable;
         };
 
         var readBuffer = [_]u8{0} ** 256;
-        var reader = instanceFile.reader(io, &readBuffer);
+        var reader = rdataFile.reader(io, &readBuffer);
         const content = reader.interface.readAlloc(gpa, stat.size) catch |err| {
-            std.log.err("instance readAlloc {s}", .{@errorName(err)});
+            std.log.err("rdata readAlloc {s}", .{@errorName(err)});
             return ResourceError.Unavaliable;
         };
         defer gpa.free(content);
 
-        const parsed = std.json.parseFromSlice(File, gpa, content, .{}) catch |err| {
-            std.log.err("instance parse {s}", .{@errorName(err)});
+        const parsed = std.json.parseFromSlice(JsonFile, gpa, content, .{}) catch |err| {
+            std.log.err("rdata parse {s}", .{@errorName(err)});
             return ResourceError.Unavaliable;
         };
         defer parsed.deinit();
 
-        child.instances = gpa.alloc(instance, parsed.value.items.len) catch return ResourceError.Unavaliable;
-        errdefer gpa.free(child.instances);
-        const instances = child.instances;
+        child.items = gpa.alloc(Item, parsed.value.items.len) catch return ResourceError.Unavaliable;
+        errdefer gpa.free(child.items);
+        const items = child.items;
 
-        for (parsed.value.items, instances) |item, *ins| {
-            ins.textures = gpa.alloc(Handle, item.textures.len) catch return resource.ResourceError.Unavaliable;
-        }
-        errdefer for (instances) |*ins| {
-            gpa.free(ins.textures);
+        var filled: usize = 0;
+        errdefer for (items[0..filled]) |item| {
+            gpa.free(item.name);
+            gpa.free(item.textures);
         };
 
-        for (parsed.value.items, instances, 0..) |item, *ins, i| {
-            _ = i;
-            // std.log.debug("item {d}: pass {s}, pos {any}, scale {any}, rotation {any}, textures {any}, model {any}", .{ i, item.pass, item.pos, item.scale, item.rotation, item.textures, item.model });
+        for (parsed.value.items, items) |jsonItem, *item| {
+            item.textures = gpa.alloc(Handle, jsonItem.textures.len) catch return ResourceError.Unavaliable;
+            item.name = gpa.dupe(u8, jsonItem.name) catch {
+                gpa.free(item.textures);
+                return ResourceError.Unavaliable;
+            };
+            item.model = null;
+            filled += 1;
+        }
 
-            if (item.pos.len != 3 or item.scale.len != 3 or item.rotation.len != 3) return resource.ResourceError.Invalid;
-            ins.pos = .{ item.pos[0], item.pos[1], item.pos[2] };
-            ins.scale = .{ item.scale[0], item.scale[1], item.scale[2] };
-            ins.rotation = .{ item.rotation[0], item.rotation[1], item.rotation[2] };
+        for (parsed.value.items, items) |jsonItem, *item| {
+            std.log.debug("rdata item: name {s}, pass {s}, textures {any}, model {any}", .{ jsonItem.name, jsonItem.pass, jsonItem.textures, jsonItem.model });
 
-            const pass = ctx.passes.passMap.get(toStr2(item.pass)) orelse return resource.ResourceError.Invalid;
-            ins.pass = pass;
+            item.pass = ctx.passes.passMap.get(u8pack.toStr2(jsonItem.pass)) orelse return ResourceError.Invalid;
 
-            for (item.textures, ins.textures) |value, *t| {
-                const tex = resource.getResourceHandle(file.getID(value)) orelse return resource.ResourceError.Unavaliable;
-                if (!Handles.handleIsValid(@ptrCast(tex))) return resource.ResourceError.Unavaliable;
+            for (jsonItem.textures, item.textures) |value, *t| {
+                const tex = resource.getResourceHandle(file.getID(value)) orelse return ResourceError.Unavaliable;
+                if (!Handles.handleIsValid(@ptrCast(tex))) return ResourceError.Unavaliable;
 
                 t.* = @ptrCast(tex);
             }
 
-            if (item.model) |modelName| {
-                ins.model = resource.getResourceHandle(file.getID(modelName)) orelse return resource.ResourceError.Unavaliable;
+            if (jsonItem.model) |modelName| {
+                item.model = resource.getResourceHandle(file.getID(modelName)) orelse return ResourceError.Unavaliable;
             }
-
-            ins.handle = ctx.handles.createHandle(Handles.Invalid, .others);
         }
 
-        return .{ .rType = .update };
+        return .{ .rType = .render };
     }
 
-    pub fn updateLoad(io: Io, gpa: Allocator, vulkan: *VkStruct, commands: *Commands, uctx: *Ctx, handle: Handle, pointer: *Child) !u32 {
-        _ = commands;
+    pub fn renderLoad(io: Io, gpa: Allocator, vulkan: *VkStruct, commands: *Commands, uctx: *Ctx, handle: Handle, pointer: *Child, updateEventQueue: *global.UpdateEventQueueType) !u32 {
+        _ = io;
         _ = vulkan;
+        _ = commands;
         _ = handle;
-        _ = gpa;
+        _ = updateEventQueue;
 
-        for (pointer.instances) |ins| {
-            uctx.instances2.add(io, ins) catch |err| {
-                std.log.err("instances2 add {s}", .{@errorName(err)});
+        for (pointer.items) |item| {
+            // rdata item 名走 strConstruct.rdatas 静态表, 查不到时 id = maxInt
+            // TODO(release): ReleaseFast 下 Str2 是 u32
+            const name = u8pack.toStr2(item.name);
+
+            uctx.renderData.add(gpa, name, .{
+                .model = item.model,
+                .textures = item.textures,
+                .pass = item.pass,
+            }) catch |err| {
+                std.log.err("renderData add {s}", .{@errorName(err)});
                 return Handles.Invalid;
             };
         }

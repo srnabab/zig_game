@@ -1,0 +1,20 @@
+{
+    "$schema": "../schema/rdata.schema.json",
+    "items": [
+        {
+            "name": "sprite",
+            "pass": "indirect2D",
+            "textures": [
+                "box.png"
+            ]
+        },
+        {
+            "name": "feather",
+            "pass": "i_feather",
+            "model": "Plane.001_0.vtx",
+            "textures": [
+                "feather_lut.ktx2"
+            ]
+        }
+    ]
+}

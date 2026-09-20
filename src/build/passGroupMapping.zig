@@ -22,7 +22,6 @@ pub fn build(cfg: Config) *std.Build.Module {
     cfg.exe.addImport("passGroupMapping", m);
     cfg.resource.addImport("passGroupMapping", m);
     cfg.resourceProcess.addImport("passGroupMapping", m);
-    cfg.instances2.addImport("passGroupMapping", m);
 
     return m;
 }
