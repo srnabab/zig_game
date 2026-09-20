@@ -300,6 +300,11 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const renderEventAdd_mod = b.createModule(.{
+        .root_source_file = b.path("src/renderEventAdd.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
     const samplerNames_mod = b.createModule(.{
         .root_source_file = b.path("src/samplerNames.zig"),
         .target = target,
@@ -337,6 +342,10 @@ pub fn build(b: *std.Build) void {
     customBuild.build(cfg);
 
     // aaa
+    renderEventAdd_mod.addImport("resourceProcess", resourceProcess_mod);
+    renderEventAdd_mod.addImport("u8pack", u8pack_mod);
+    renderEventAdd_mod.addImport("global", global_mod);
+
     event_mod.addImport("u8pack", u8pack_mod);
     event_mod.addImport("handle", handle_mod);
     event_mod.addImport("cglm", cglm_mod);
@@ -606,6 +615,7 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("sdl", sdl_mod);
     exe_mod.addImport("vulkan", vk_c_mod);
     exe_mod.addImport("resource", resource_mod);
+    exe_mod.addImport("renderEventAdd", renderEventAdd_mod);
     exe_mod.addImport("renderUpload", renderUpload_mod);
     exe_mod.addIncludePath(b.path("include/"));
 

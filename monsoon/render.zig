@@ -6,6 +6,7 @@ const sdl = @import("sdl").sdl;
 const mstd = @import("ms_std");
 
 const upload = @import("renderUpload").upload;
+const addEvent = @import("renderEventAdd").addEvent;
 
 const global = @import("global");
 const tracy = @import("tracy");
@@ -262,40 +263,7 @@ pub fn render_thread_func(args: Args) !void {
                 }
             }
 
-            // ----------------------------------------------------------------------------------------------------------------------------------------
-            {
-                var it = args.uctx.layoutQueue.iterate();
-                while (it.next()) |p| {
-                    const item = p.ptr;
-                    const name = item.name;
-                    const rdata = args.uctx.renderData.get(name) orelse continue;
-
-                    if (u8pack.eql(toStr("indirect2D"), rdata.pass.name)) {
-                        args.updateEventQueue.appendC(.{ .createTest2d = .{
-                            .pos = item.pos,
-                            .scale = item.scale,
-                            .rotation = item.rotation,
-                            .rdata = name,
-                            .handle = item.handle,
-                        } }) catch |err| {
-                            std.log.err("layout push createTest2d {s}", .{@errorName(err)});
-                            continue;
-                        };
-                    } else if (u8pack.eql(toStr("i_feather"), rdata.pass.name)) {
-                        args.updateEventQueue.appendC(.{ .createTest3d = .{
-                            .pos = item.pos,
-                            .scale = item.scale,
-                            .rotation = item.rotation,
-                            .rdata = name,
-                            .handle = item.handle,
-                        } }) catch |err| {
-                            std.log.err("layout push createTest3d {s}", .{@errorName(err)});
-                            continue;
-                        };
-                    }
-                    args.uctx.layoutQueue.remove(p.index);
-                }
-            }
+            try addEvent(args.uctx, args.updateEventQueue);
 
             var u_it = args.updateEventQueue.iterateC();
             while (u_it.next()) |event| {
@@ -313,6 +281,7 @@ pub fn render_thread_func(args: Args) !void {
             const infos = stateBuffering.getReadyBuffer();
             defer stateBuffering.returnReadyBuffer(infos);
 
+            // ----------------------------------------------------------------------------------------------------------------------------------------
             for (infos.items) |value| {
                 switch (value) {
                     ._u32 => {
