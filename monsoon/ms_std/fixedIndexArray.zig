@@ -20,7 +20,7 @@ pub fn FixedIndexArray(T: type) type {
             ptr: *T,
         };
 
-        const Iterator = struct {
+        pub const Iterator = struct {
             array: []Item,
             index: usize = 0,
 

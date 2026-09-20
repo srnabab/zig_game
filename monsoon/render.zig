@@ -45,7 +45,6 @@ const pass = @import("pass");
 const meshInstance = @import("meshInstance");
 
 const resourceProcess = @import("resourceProcess");
-const ViewBoundsAndTotalSpriteCount = @import("setPass").ViewBoundsAndTotalSpriteCount;
 
 pub const Args = struct {
     io: std.Io,
@@ -272,7 +271,7 @@ pub fn render_thread_func(args: Args) !void {
                     const rdata = args.uctx.renderData.get(name) orelse continue;
 
                     if (u8pack.eql(toStr("indirect2D"), rdata.pass.name)) {
-                        args.updateEventQueue.pushLastC(.{ .createTest2d = .{
+                        args.updateEventQueue.appendC(.{ .createTest2d = .{
                             .pos = item.pos,
                             .scale = item.scale,
                             .rotation = item.rotation,
@@ -283,7 +282,7 @@ pub fn render_thread_func(args: Args) !void {
                             continue;
                         };
                     } else if (u8pack.eql(toStr("i_feather"), rdata.pass.name)) {
-                        args.updateEventQueue.pushLastC(.{ .createTest3d = .{
+                        args.updateEventQueue.appendC(.{ .createTest3d = .{
                             .pos = item.pos,
                             .scale = item.scale,
                             .rotation = item.rotation,
@@ -298,52 +297,16 @@ pub fn render_thread_func(args: Args) !void {
                 }
             }
 
-            while (args.updateEventQueue.popFirst()) |event| {
-                switch (event) {
-                    .createTest2d => |c| {
-                        const rdata = args.uctx.renderData.get(c.rdata) orelse continue;
-                        const viewBoundsAndTotalSpriteCount: *ViewBoundsAndTotalSpriteCount = @ptrCast(@alignCast(rdata.pass.userdata));
-
-                        try rdata.pass.useTexture(@ptrCast(rdata.textures[0]), gpa);
-                        const textureContent = pTextureSet.getTextureCotent(@ptrCast(rdata.textures[0]));
-                        const index = try args.uctx.vertices.addInstance(
-                            io,
-                            c.pos[0],
-                            c.pos[1],
-                            c.scale[0] * @as(f32, @floatFromInt(textureContent.source_width)),
-                            c.scale[1] * @as(f32, @floatFromInt(textureContent.source_height)),
-                            c.pos[2],
-                            pTextureSet.getDescriptorSetIndex(@ptrCast(rdata.textures[0])),
-                        );
-                        viewBoundsAndTotalSpriteCount.totalSpriteCount = args.uctx.vertices.getTotalCount();
-                        args.handles.setIndex(c.handle, index);
-                    },
-                    .createTest3d => |c| {
-                        const rdata = args.uctx.renderData.get(c.rdata) orelse unreachable;
-
-                        const ins = try args.uctx.instances1.add(
-                            io,
-                            null,
-                            c.pos,
-                            c.scale,
-                            c.rotation,
-                            c.handle,
-                        );
-                        const idx1 = Handles.getIndex(@ptrCast(ins)) orelse unreachable;
-                        const idx2 = Handles.getIndex(rdata.model.?) orelse unreachable;
-
-                        const tidx = pTextureSet.getDescriptorSetIndex(@ptrCast(rdata.textures[0]));
-
-                        const cs_mesh_drawCount = try args.uctx.passGroupMapping.add(io, rdata.pass.name, .{
-                            .instanceID = idx1,
-                            .meshID = idx2,
-                        });
-                        const pU32 = @as(*u32, @ptrCast(@alignCast(rdata.pass.userdata.?)));
-                        pU32.* = cs_mesh_drawCount;
-
-                        rdata.pass.setPushConstants(2, @constCast(&std.mem.toBytes(tidx)), 64);
+            var u_it = args.updateEventQueue.iterateC();
+            while (u_it.next()) |event| {
+                switch (event.ptr.*) {
+                    inline else => |c| {
+                        c.process(io, gpa, args.handles, args.uctx) catch {
+                            continue;
+                        };
                     },
                 }
+                args.updateEventQueue.removeAt(event.index);
             }
             args.updateEventQueue.swap();
 

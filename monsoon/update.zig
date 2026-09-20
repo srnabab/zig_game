@@ -297,7 +297,7 @@ pub fn update_thread_func(args: Args) !void {
                     added = true;
                     pos = vec2{ 100, 100 };
                     testHandle = handles.createHandle(Handles.Invalid, .others);
-                    try eventQueue.pushLastP(.{ .createTest2d = .{
+                    try eventQueue.appendP(.{ .createTest2d = .{
                         .rdata = u8pack.toStr("sprite"),
                         .pos = vec3{ pos[0], pos[1], 0.1 },
                         .rotation = vec3{ 0, 0, 0 },

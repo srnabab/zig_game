@@ -2,6 +2,8 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 
+const mstd = @import("std.zig");
+
 const tracy = @import("tracy");
 
 /// 双缓冲队列(无锁, 单生产者 + 单消费者, FIFO)
@@ -27,7 +29,7 @@ const tracy = @import("tracy");
 pub fn doubleBufferQueue(T: type) type {
     return struct {
         const Self = @This();
-        const Deque = std.Deque(T);
+        const Deque = mstd.FixedIndexArray(T);
 
         allocator: Allocator,
         queues: [2]Deque,
@@ -44,18 +46,18 @@ pub fn doubleBufferQueue(T: type) type {
 
             return .{
                 .allocator = allocator,
-                .queues = .{ Deque.empty, Deque.empty },
+                .queues = .{ .init(allocator), .init(allocator) },
             };
         }
 
         pub fn deinit(self: *Self) void {
             for (&self.queues) |*queue| {
-                queue.deinit(self.allocator);
+                queue.deinit();
             }
         }
 
         /// 生产者: 推入生产者拥有的队列尾部
-        pub fn pushLastP(self: *Self, data: T) !void {
+        pub fn appendP(self: *Self, data: T) !void {
             const zone = tracy.initZone(@src(), .{ .name = "doubleBufferQueue pushLastP" });
             defer zone.deinit();
 
@@ -75,7 +77,7 @@ pub fn doubleBufferQueue(T: type) type {
                 }
 
                 const idx = (s0 >> 1) & 1;
-                self.queues[idx].pushBack(self.allocator, data) catch |err| {
+                self.queues[idx].append(data) catch |err| {
                     _ = self.writers.fetchSub(1, .seq_cst);
                     return err;
                 };
@@ -85,16 +87,16 @@ pub fn doubleBufferQueue(T: type) type {
         }
 
         /// 消费者: 推入消费者拥有的队列尾部(与 popFirst 同一块, 单线程无原子)
-        pub fn pushLastC(self: *Self, data: T) !void {
-            try self.queues[self.consumerIdx].pushBack(self.allocator, data);
+        pub fn appendC(self: *Self, data: T) !void {
+            try self.queues[self.consumerIdx].append(data);
         }
 
-        /// 消费者: 从消费者拥有的队列头部消费(FIFO)
-        pub fn popFirst(self: *Self) ?T {
-            const zone = tracy.initZone(@src(), .{ .name = "doubleBufferQueue popFirst" });
-            defer zone.deinit();
+        pub fn iterateC(self: *Self) Deque.Iterator {
+            return self.queues[self.consumerIdx].iterate();
+        }
 
-            return self.queues[self.consumerIdx].popFront();
+        pub fn removeAt(self: *Self, index: usize) void {
+            self.queues[self.consumerIdx].remove(index);
         }
 
         /// 消费者: 交换两块队列的归属(调用时消费者不得操作队列)
@@ -110,11 +112,6 @@ pub fn doubleBufferQueue(T: type) type {
             self.consumerIdx = 1 - self.consumerIdx;
 
             _ = self.state.fetchAdd(1, .seq_cst); // even: generation + 1, 归属翻转
-        }
-
-        /// 消费者当前待消费的条目数
-        pub fn len(self: *Self) usize {
-            return self.queues[self.consumerIdx].len;
         }
     };
 }

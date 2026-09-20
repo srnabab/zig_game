@@ -340,6 +340,9 @@ pub fn build(b: *std.Build) void {
     event_mod.addImport("u8pack", u8pack_mod);
     event_mod.addImport("handle", handle_mod);
     event_mod.addImport("cglm", cglm_mod);
+    event_mod.addImport("resourceProcess", resourceProcess_mod);
+    event_mod.addImport("setPass", setPass_mod);
+    event_mod.addImport("global", global_mod);
 
     u8pack_mod.addImport("strConstruct", strConstruct_mod);
     u8pack_mod.addImport("setPass", setPass_mod);
