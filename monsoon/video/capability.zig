@@ -5,3 +5,5 @@ pub var maintenance9 = true;
 pub var swapchain_maintenance1 = true;
 
 pub var is_integrated_gpu = false;
+
+pub var minUniformBufferOffsetAlignment: u32 = 256;

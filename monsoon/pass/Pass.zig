@@ -57,6 +57,18 @@ pub const Buffer = struct {
     offset: u64 = 0,
 };
 
+pub const uboSlot = enum(u8) {
+    ui,
+    @"2d",
+    @"3d",
+};
+
+pub const UBO = struct {
+    name: Str,
+    slot: uboSlot,
+    size: u64,
+};
+
 pub const Pipeline = struct {
     name: Str,
     isMesh: bool,

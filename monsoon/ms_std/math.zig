@@ -19,6 +19,7 @@ pub fn szudzikPairing(a: anytype, b: @TypeOf(a)) doubleWidthIntType(@TypeOf(b)) 
     return if (a >= b) doubleA * doubleA + doubleA + doubleB else doubleB * doubleB + doubleA;
 }
 
+/// round value to integer which is 2^n
 pub inline fn round(integer: usize, value: usize) usize {
     std.debug.assert(integer % 2 == 0);
 

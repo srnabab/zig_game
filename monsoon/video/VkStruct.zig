@@ -9,7 +9,7 @@ const global = @import("global");
 const Handles = @import("handle");
 const Handle = Handles.Handle;
 const renderDebug = @import("renderDebug");
-const VulkanCapability = @import("capability");
+pub const VulkanCapability = @import("capability");
 
 const u8pack = @import("u8pack");
 const Str = u8pack.Str;
@@ -203,7 +203,7 @@ const AllocationCount = struct {
 };
 const Self = @This();
 
-const dynamicFuncNeeded = [_][]const u8{
+const dynamicFuncNeeded = [_][:0]const u8{
     "vkCmdDrawMeshTasksEXT",
     "vkCmdDrawMeshTasksIndirectEXT",
     "vkCmdDrawMeshTasksIndirect2EXT",
@@ -279,7 +279,7 @@ globalTimelineValue: std.atomic.Value(u64) = .init(0),
 
 endFence: [global.MaxFrameInFlight]vk.VkFence = undefined,
 
-// textureSets: textureSet,
+uboDynamicOffsets: []u32 = undefined,
 
 globalDescriptorPool: vk.VkDescriptorPool = null,
 
@@ -696,6 +696,15 @@ pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet, db: file.sq
         @intFromPtr(self.globalTextureDescriptorSet),
         "texture set 0",
     );
+
+    std.log.debug("--------------------------------------", .{});
+    {
+        const capabilityInfo = @typeInfo(VulkanCapability);
+        inline for (capabilityInfo.@"struct".decls) |field| {
+            std.log.debug("{s}: {}", .{ field.name, @field(VulkanCapability, field.name) });
+        }
+    }
+    std.log.debug("--------------------------------------", .{});
 
     // try self.samplers.initSamplers(io, self.device, self.pAllocCallBacks, self.allocator);
 }

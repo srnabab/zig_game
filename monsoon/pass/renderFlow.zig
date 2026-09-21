@@ -1,6 +1,8 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+const mstd = @import("ms_std");
+
 pub const Pass = @import("pass.zig");
 const vk = @import("vulkan");
 
@@ -11,14 +13,28 @@ var passMap: u8pack.HashMap(Pass.Pass) = undefined;
 var passArray: std.array_list.Managed(Pass.Pass) = undefined;
 var buffers: u8pack.HashMap(Pass.Buffer) = undefined;
 var pipelines: u8pack.HashMap(Pass.Pipeline) = undefined;
+
+var uboMap: u8pack.HashMap(Pass.UBO) = undefined;
+
+var ubo_ui_count: u32 = 0;
+var ubo_2d_count: u32 = 0;
+var ubo_3d_count: u32 = 0;
+
+var minUniformBufferOffsetAlignment: u32 = 256;
+
 var allocator: std.heap.ArenaAllocator = undefined;
 
-pub fn init(gpa: Allocator) void {
+pub fn init(gpa: Allocator, uniformBufferOffsetAlignment: u32) void {
     passMap = .init(gpa);
     passArray = .init(gpa);
     buffers = .init(gpa);
     pipelines = .init(gpa);
+
+    uboMap = .init(gpa);
+
     allocator = .init(gpa);
+
+    minUniformBufferOffsetAlignment = uniformBufferOffsetAlignment;
 }
 
 pub fn deinit() void {
@@ -26,6 +42,9 @@ pub fn deinit() void {
     passArray.deinit();
     buffers.deinit();
     pipelines.deinit();
+
+    uboMap.deinit();
+
     allocator.deinit();
 }
 
@@ -193,4 +212,64 @@ pub fn getPassCount() usize {
 
 pub fn getPass(index: usize) Pass.Pass {
     return passArray.items[index];
+}
+
+pub fn addUbo(comptime ctx: ?*u8pack.CTX, comptime name: []const u8, size: u64, slot: Pass.uboSlot) !void {
+    if (ctx != null) {
+        ctx.?.ubos = ctx.?.ubos ++ .{name};
+        return;
+    }
+
+    const str = u8pack.toStr(name);
+    const gop = try uboMap.getOrPut(str);
+
+    if (gop.found_existing) return;
+
+    gop.value_ptr.* = .{
+        .name = str,
+        .size = mstd.Math.round(minUniformBufferOffsetAlignment, size),
+        .slot = slot,
+    };
+}
+
+pub fn createUboBuffer(comptime ctx: ?*u8pack.CTX) !void {
+    if (ctx != null) {
+        _ = try createBuffer(ctx, "ubo_ui", 0, 0, .uniform, false, null);
+        _ = try createBuffer(ctx, "ubo_2d", 0, 0, .uniform, false, null);
+        _ = try createBuffer(ctx, "ubo_3d", 0, 0, .uniform, false, null);
+    } else {
+        var totalLen_ui: u64 = 0;
+        var totalLen_2d: u64 = 0;
+        var totalLen_3d: u64 = 0;
+
+        var it = uboMap.iterator();
+        while (it.next()) |e| {
+            switch (e.value_ptr.slot) {
+                .ui => {
+                    totalLen_ui += e.value_ptr.size;
+                    ubo_ui_count += 1;
+                },
+                .@"2d" => {
+                    totalLen_2d += e.value_ptr.size;
+                    ubo_2d_count += 1;
+                },
+                .@"3d" => {
+                    totalLen_3d += e.value_ptr.size;
+                    ubo_3d_count += 1;
+                },
+            }
+        }
+
+        _ = try createBuffer(ctx, "ubo_ui", totalLen_ui, 0, .uniform, false, null);
+        _ = try createBuffer(ctx, "ubo_2d", totalLen_2d, 0, .uniform, false, null);
+        _ = try createBuffer(ctx, "ubo_3d", totalLen_3d, 0, .uniform, false, null);
+    }
+}
+
+pub fn iterateUbos() u8pack.HashMap(Pass.UBO).Iterator {
+    return uboMap.iterator();
+}
+
+pub fn getUboCounts() [3]u32 {
+    return [3]u32{ ubo_ui_count, ubo_2d_count, ubo_3d_count };
 }

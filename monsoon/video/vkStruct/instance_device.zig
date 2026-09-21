@@ -159,6 +159,7 @@ fn featureNeededCheck(featurePack: anytype) bool {
             fType = true;
             len = value.names.len;
             inline for (value.names) |feature| {
+                // vulkan use vkBool32, convert to u32 by zig
                 count += @field(featurePack, feature);
             }
         }
@@ -491,7 +492,7 @@ pub fn pickPhysicalDevice(instance: vk.VkInstance, allocator: std.mem.Allocator,
     std.log.debug("device group count: {d}", .{deviceGroupCount});
     try checkVkResult(vk.vkEnumeratePhysicalDeviceGroups(instance, @ptrCast(&deviceGroupCount), @ptrCast(physicalDeviceGroups.ptr)));
 
-    var originalIndexes = [_]u32{0} ** featureOptional.len;
+    var originalIndexes_ = [_]u32{0} ** featureOptional.len;
     var originalCount: u32 = 0;
 
     var unsupportedList = try allocator.alloc(u32, featureTypeAndNames.len);
@@ -501,6 +502,8 @@ pub fn pickPhysicalDevice(instance: vk.VkInstance, allocator: std.mem.Allocator,
     var resIndex: u32 = 0;
     var gpuType: vk.VkPhysicalDeviceType = vk.VK_PHYSICAL_DEVICE_TYPE_OTHER;
     for (physicalDeviceGroups, 0..) |deviceGroup, i| {
+        var originalIndexes = [_]u32{0} ** featureOptional.len;
+
         const array = try chooseEnabledLayers(
             vk.VkExtensionProperties,
             "extensionName",
@@ -560,14 +563,14 @@ pub fn pickPhysicalDevice(instance: vk.VkInstance, allocator: std.mem.Allocator,
                 var fff = featureNeededCheck(@field(features, field.name));
 
                 if (!fff) {
-                    inline for (featureOptional, 0..) |feature, k| {
+                    a: inline for (featureOptional, 0..) |feature, k| {
                         if (@TypeOf(@field(features, field.name)) == feature) {
                             fff = true;
 
                             originalIndexes[innerOriginalCount] = @intCast(k);
                             innerOriginalCount += 1;
 
-                            break;
+                            break :a;
                         }
                     }
 
@@ -584,15 +587,20 @@ pub fn pickPhysicalDevice(instance: vk.VkInstance, allocator: std.mem.Allocator,
         if (supported) {
             switch (deviceProperty2.properties.deviceType) {
                 vk.VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU => {
-                    resIndex = @intCast(i + 1);
-                    biggestMemory = @max(biggestMemory, memoryCount);
+                    if (memoryCount > biggestMemory) {
+                        resIndex = @intCast(i + 1);
+                        biggestMemory = @max(biggestMemory, memoryCount);
 
-                    gpuType = deviceProperty2.properties.deviceType;
+                        gpuType = deviceProperty2.properties.deviceType;
 
-                    unsupportedCount = innerUnsupportedCount;
-                    originalCount = innerOriginalCount;
+                        unsupportedCount = innerUnsupportedCount;
+                        originalCount = innerOriginalCount;
 
-                    std.log.debug("device: choosed {s}", .{@tagName(@as(VkPhysicalType, @enumFromInt(deviceProperty2.properties.deviceType)))});
+                        originalIndexes_ = originalIndexes;
+                        Capability.minUniformBufferOffsetAlignment = @intCast(deviceProperty2.properties.limits.minUniformBufferOffsetAlignment);
+
+                        std.log.debug("device: choosed {s}", .{@tagName(@as(VkPhysicalType, @enumFromInt(deviceProperty2.properties.deviceType)))});
+                    }
                 },
                 vk.VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU => {
                     if (resIndex == 0) {
@@ -603,6 +611,9 @@ pub fn pickPhysicalDevice(instance: vk.VkInstance, allocator: std.mem.Allocator,
 
                         unsupportedCount = innerUnsupportedCount;
                         originalCount = innerOriginalCount;
+
+                        originalIndexes_ = originalIndexes;
+                        Capability.minUniformBufferOffsetAlignment = @intCast(deviceProperty2.properties.limits.minUniformBufferOffsetAlignment);
 
                         std.log.debug("device: choosed {s}", .{@tagName(@as(VkPhysicalType, @enumFromInt(deviceProperty2.properties.deviceType)))});
                     }
@@ -635,7 +646,7 @@ pub fn pickPhysicalDevice(instance: vk.VkInstance, allocator: std.mem.Allocator,
 
     unsupportedList = try allocator.realloc(unsupportedList, unsupportedCount);
 
-    setCapability(originalIndexes, originalCount);
+    setCapability(originalIndexes_, originalCount);
 
     return .{
         .count = physicalDeviceGroups[resIndex - 1].physicalDeviceCount,

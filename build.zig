@@ -320,6 +320,11 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const setUbo_mod = b.createModule(.{
+        .root_source_file = b.path("src/setUbo.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     //
     const customConfig = @import("src/build/config.zig");
@@ -353,6 +358,8 @@ pub fn build(b: *std.Build) void {
     event_mod.addImport("setPass", setPass_mod);
     event_mod.addImport("global", global_mod);
 
+    u8pack_mod.addImport("renderFlow", renderFlow_mod);
+    u8pack_mod.addImport("setUbo", setUbo_mod);
     u8pack_mod.addImport("strConstruct", strConstruct_mod);
     u8pack_mod.addImport("setPass", setPass_mod);
     u8pack_mod.addImport("ms_std", ms_mod);
@@ -382,6 +389,10 @@ pub fn build(b: *std.Build) void {
     resourceProcess_mod.addImport("textureSet", textureSet_mod);
     resourceProcess_mod.addImport("cglm", cglm_mod);
     resourceProcess_mod.addImport("loadmap", loadmap_mod);
+
+    setUbo_mod.addImport("renderFlow", renderFlow_mod);
+    setUbo_mod.addImport("cglm", cglm_mod);
+    setUbo_mod.addImport("u8pack", u8pack_mod);
 
     setPass_mod.addImport("u8pack", u8pack_mod);
     setPass_mod.addImport("vertexStruct", vertexStruct_mod);
@@ -424,6 +435,7 @@ pub fn build(b: *std.Build) void {
     renderFlow_mod.addImport("passImp", pass_mod);
     renderFlow_mod.addImport("textureSet", textureSet_mod);
     renderFlow_mod.addImport("u8pack", u8pack_mod);
+    renderFlow_mod.addImport("ms_std", ms_mod);
 
     pass_mod.addImport("renderFlow", renderFlow_mod);
     pass_mod.addImport("textureSet", textureSet_mod);
@@ -590,6 +602,7 @@ pub fn build(b: *std.Build) void {
 
     exe_mod.addImport("u8pack", u8pack_mod);
     exe_mod.addImport("resourceProcess", resourceProcess_mod);
+    exe_mod.addImport("setUbo", setUbo_mod);
     exe_mod.addImport("setPass", setPass_mod);
     exe_mod.addImport("ms_std", ms_mod);
     exe_mod.addImport("loadmap", loadmap_mod);

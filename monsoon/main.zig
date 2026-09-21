@@ -29,11 +29,13 @@ const global = @import("global");
 const input = @import("input");
 
 const VkStruct = @import("video");
+const VulkanCapability = VkStruct.VulkanCapability;
 const textureSet = @import("textureSet");
 const resource = @import("resource");
 const file = @import("fileSystem");
 const pass = @import("pass");
 const renderFlow = @import("renderFlow");
+const setUbo = @import("setUbo");
 const setPass = @import("setPass");
 const ExternalCommands = @import("processRender").externalCommands;
 
@@ -164,9 +166,11 @@ pub fn main(init: std.process.Init) !void {
     defer vulkan.deinit();
     errdefer pTextureSet.deinit(&vulkan);
 
-    renderFlow.init(allocator_t.*);
+    renderFlow.init(allocator_t.*, VulkanCapability.minUniformBufferOffsetAlignment);
     defer renderFlow.deinit();
 
+    try setUbo.setUbo(null);
+    try renderFlow.createUboBuffer(null);
     try setPass.setting(null);
 
     var externalCommands = ExternalCommands.init(io, allocator_t.*);
@@ -196,6 +200,10 @@ pub fn main(init: std.process.Init) !void {
     for (passes.passes) |*value| {
         try value.init(&vulkan, &externalCommands, passAllocator);
     }
+
+    // for (vulkan.uboDynamicOffsets) |value| {
+    //     std.log.debug("offset {d}", .{value});
+    // }
 
     var uctx = try resourceProcess.UserContext.initUserContext(allocator_t.*, &vulkan, &handles, &passes, &externalCommands);
     defer uctx.deinitUserContext(allocator_t.*);

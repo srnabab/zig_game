@@ -208,6 +208,38 @@ pub fn initFromRenderFlow(io: std.Io, gpa: std.mem.Allocator, vulkan: *VkStruct,
         }
     }
 
+    const uboCounts = renderFlow.getUboCounts();
+    const totalCount = uboCounts[0] + uboCounts[1] + uboCounts[2];
+
+    vulkan.uboDynamicOffsets = try gpa.alloc(u32, totalCount);
+
+    var count: u32 = 0;
+
+    var offset_ui: u32 = 0;
+    var offset_2d: u32 = 0;
+    var offset_3d: u32 = 0;
+
+    var uboIt = renderFlow.iterateUbos();
+    while (uboIt.next()) |e| {
+        switch (e.value_ptr.slot) {
+            .ui => {
+                vulkan.uboDynamicOffsets[count] = offset_ui;
+                offset_ui += @intCast(e.value_ptr.size);
+                count += 1;
+            },
+            .@"2d" => {
+                vulkan.uboDynamicOffsets[count] = offset_2d;
+                offset_2d += @intCast(e.value_ptr.size);
+                count += 1;
+            },
+            .@"3d" => {
+                vulkan.uboDynamicOffsets[count] = offset_3d;
+                offset_3d += @intCast(e.value_ptr.size);
+                count += 1;
+            },
+        }
+    }
+
     return .{
         .passes = try gpa.realloc(passes, actualPassCount),
         .passMap = passMap,

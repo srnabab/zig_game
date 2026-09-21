@@ -11,6 +11,8 @@ const mstd = @import("ms_std");
 const ComptimeAllocator = mstd.ComptimeAllocator;
 
 const setPass = @import("setPass");
+const setUbo = @import("setUbo");
+const renderFlow = @import("renderFlow");
 const file = @import("fileSystem");
 
 const construct = @import("strConstruct");
@@ -38,8 +40,7 @@ pub fn HashMap(comptime V: type) type {
     return std.HashMap(Str, V, HashMapContext, 80);
 }
 
-// 参与查名的表清单: ctx 驱动的 buffers/passes + 生成文件表 files + strConstruct 里手写的表(目前只有 rdatas)
-const ctxMaps = [_][]const u8{ "buffers", "passes" };
+const ctxMaps = [_][]const u8{ "buffers", "passes", "ubos" };
 const constructMaps = construct.maps;
 
 const totalMaps = l: {
@@ -94,6 +95,7 @@ const StrMaps = l: {
 pub const CTX = struct {
     passes: []const []const u8,
     buffers: []const []const u8,
+    ubos: []const []const u8,
 };
 
 const str_maps: StrMaps = l: {
@@ -102,8 +104,15 @@ const str_maps: StrMaps = l: {
     var ctx = CTX{
         .buffers = &.{},
         .passes = &.{},
+        .ubos = &.{},
     };
 
+    setUbo.setUbo(&ctx) catch {
+        @compileError("error");
+    };
+    renderFlow.createUboBuffer(&ctx) catch {
+        @compileError("error");
+    };
     setPass.setting(&ctx) catch {
         @compileError("error");
     };
