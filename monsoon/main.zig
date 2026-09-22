@@ -237,7 +237,6 @@ pub fn main(init: std.process.Init) !void {
             };
         }
     }
-    setUbo.initUbo(&vulkan);
 
     // for (vulkan.uboDynamicOffsets) |value| {
     //     std.log.debug("offset {d}", .{value});

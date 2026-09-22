@@ -4,6 +4,7 @@ const Io = std.Io;
 const builtin = @import("builtin");
 const sdl = @import("sdl").sdl;
 const mstd = @import("ms_std");
+const Queue = mstd.Queue;
 
 const upload = @import("renderUpload").upload;
 const addEvent = @import("renderEventAdd").addEvent;
@@ -26,9 +27,8 @@ const Commands = processRender.commands;
 const textureSet = @import("textureSet");
 const shaderStruct = @import("video/shaderStruct.zig");
 const vertexStruct = @import("vertexStruct");
-const Queue = mstd.Queue;
 const Handles = @import("handle");
-const vertices2D = @import("vertices");
+const setUbo = @import("setUbo");
 
 const PassGroupMapping = @import("passGroupMapping");
 
@@ -97,6 +97,8 @@ pub fn render_thread_func(args: Args) !void {
     defer tracyAllocator.deinit();
     var taa = tracyAllocator.allocator();
     const allocator_t = &taa;
+
+    setUbo.initUbo(&vulkan);
 
     var commands = try Commands.init(
         io,
