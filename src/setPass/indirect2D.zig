@@ -104,6 +104,7 @@ fn addIndirect2DCommand(
         .usedBuffers = pass.buffer,
         .pushConstants = pass.pushConstant[0],
         .groupCount = groupCount,
+        .uboOffset = null,
     } });
 
     vulkan.buffers.writeBuffer(pass.buffer[0]);
@@ -170,6 +171,7 @@ fn addIndirect2DCommand(
             .pTextures = pass.texture,
             .descriptorSets = pass.descriptorSet,
             .pushConstants = pass.pushConstant[1],
+            .uboOffset = vulkan.getUboOffset(u8pack.toStr("fixed2d")),
         },
     });
 

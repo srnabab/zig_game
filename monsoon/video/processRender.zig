@@ -3452,6 +3452,7 @@ pub const commands = struct {
         pScissor: ?VkStruct.Scissor_t,
         pipeline: VkStruct.Pipeline_t,
         pushConstants: ?drawC.PushConstantPack,
+        uboOffset: ?*u32,
         commandType: drawC.CommandType,
         commandID: u32,
         allocator: std.mem.Allocator,
@@ -3500,18 +3501,19 @@ pub const commands = struct {
                         // std.log.debug("start {d}, end {d}", .{ descriptorSetIndex, descriptorSetIndex + descriptorSetCount });
                         // @breakpoint();
                         const descriptorSets = pDescriptorSets.?[descriptorSetIndex .. descriptorSetIndex + descriptorSetCount];
+                        const stageFlags = self.getDescriptorSetsShaderStage(descriptorSets);
                         const tempNode = try self.addCommand2(.{
                             .bindDescriptorSets = .{
                                 .bindDescriptorSetsInfo = .{
                                     .sType = vk.VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO,
                                     .pNext = null,
-                                    .stageFlags = self.getDescriptorSetsShaderStage(descriptorSets),
+                                    .stageFlags = stageFlags,
                                     .layout = self.vulkan.getPipelineContent(pipeline).pipelineLayout,
                                     .firstSet = descriptorSetIndex,
                                     .descriptorSetCount = @intCast(descriptorSets.len),
                                     .pDescriptorSets = @ptrCast(descriptorSets.ptr),
-                                    .dynamicOffsetCount = 0,
-                                    .pDynamicOffsets = null,
+                                    .dynamicOffsetCount = if ((stageFlags & (vk.VK_SHADER_STAGE_COMPUTE_BIT | vk.VK_SHADER_STAGE_VERTEX_BIT | vk.VK_SHADER_STAGE_MESH_BIT_EXT)) != 0) 1 else 0,
+                                    .pDynamicOffsets = uboOffset,
                                 },
                             },
                         }, commandType, commandID);
@@ -3580,18 +3582,19 @@ pub const commands = struct {
                         // @breakpoint();
 
                         const descriptorSets = pDescriptorSets.?[descriptorSetIndex .. descriptorSetIndex + descriptorSetCount];
+                        const stageFlags = self.getDescriptorSetsShaderStage(descriptorSets);
                         const tempNode = try self.addCommand2(.{
                             .bindDescriptorSets = .{
                                 .bindDescriptorSetsInfo = .{
                                     .sType = vk.VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO,
                                     .pNext = null,
-                                    .stageFlags = self.getDescriptorSetsShaderStage(descriptorSets),
+                                    .stageFlags = stageFlags,
                                     .layout = self.vulkan.getPipelineContent(pipeline).pipelineLayout,
                                     .firstSet = descriptorSetIndex,
                                     .descriptorSetCount = @intCast(descriptorSets.len),
                                     .pDescriptorSets = @ptrCast(descriptorSets.ptr),
-                                    .dynamicOffsetCount = 0,
-                                    .pDynamicOffsets = null,
+                                    .dynamicOffsetCount = if ((stageFlags & (vk.VK_SHADER_STAGE_COMPUTE_BIT | vk.VK_SHADER_STAGE_VERTEX_BIT | vk.VK_SHADER_STAGE_MESH_BIT_EXT)) != 0) 1 else 0,
+                                    .pDynamicOffsets = uboOffset,
                                 },
                             },
                         }, commandType, commandID);
@@ -3729,18 +3732,19 @@ pub const commands = struct {
             // @breakpoint();
 
             const descriptorSets = pDescriptorSets.?[descriptorSetIndex .. descriptorSetIndex + descriptorSetCount];
+            const stageFlags = self.getDescriptorSetsShaderStage(descriptorSets);
             const tempNode = try self.addCommand2(.{
                 .bindDescriptorSets = .{
                     .bindDescriptorSetsInfo = .{
                         .sType = vk.VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO,
                         .pNext = null,
-                        .stageFlags = self.getDescriptorSetsShaderStage(descriptorSets),
+                        .stageFlags = stageFlags,
                         .layout = self.vulkan.getPipelineContent(pipeline).pipelineLayout,
                         .firstSet = descriptorSetIndex,
                         .descriptorSetCount = @intCast(descriptorSets.len),
                         .pDescriptorSets = descriptorSets.ptr,
-                        .dynamicOffsetCount = 0,
-                        .pDynamicOffsets = null,
+                        .dynamicOffsetCount = if ((stageFlags & (vk.VK_SHADER_STAGE_COMPUTE_BIT | vk.VK_SHADER_STAGE_VERTEX_BIT | vk.VK_SHADER_STAGE_MESH_BIT_EXT)) != 0) 1 else 0,
+                        .pDynamicOffsets = uboOffset,
                     },
                 },
             }, commandType, commandID);
@@ -4008,6 +4012,7 @@ pub const commands = struct {
                 var descriptorSets: []vk.VkDescriptorSet = undefined;
                 var pushConstants: drawC.PushConstantPack = undefined;
                 var indirectBuffer: ?VkStruct.Buffer_t = null;
+                var uboOffset: ?*u32 = null;
 
                 if (command == .computeIndirect) {
                     const computeIndirect = command.computeIndirect;
@@ -4018,6 +4023,7 @@ pub const commands = struct {
                     descriptorSets = computeIndirect.descriptorSets;
                     pushConstants = computeIndirect.pushConstants;
                     indirectBuffer = computeIndirect.indirectBuffer;
+                    uboOffset = computeIndirect.uboOffset;
 
                     const bufferContent = self.vulkan.buffers.getBufferContent(computeIndirect.indirectBuffer);
 
@@ -4033,6 +4039,7 @@ pub const commands = struct {
                     usedBuffers = compute.usedBuffers;
                     descriptorSets = compute.descriptorSets;
                     pushConstants = compute.pushConstants;
+                    uboOffset = compute.uboOffset;
 
                     ptr.value_ptr.command = .{ .computeRecord = .{
                         .groupCount = compute.groupCount,
@@ -4170,8 +4177,8 @@ pub const commands = struct {
                             .firstSet = 0,
                             .descriptorSetCount = @intCast(descriptorSets.len),
                             .pDescriptorSets = descriptorSets.ptr,
-                            .dynamicOffsetCount = 0,
-                            .pDynamicOffsets = null,
+                            .dynamicOffsetCount = if (uboOffset != null) 1 else 0,
+                            .pDynamicOffsets = uboOffset,
                         },
                     } }, commandType, ID);
 
@@ -4240,6 +4247,7 @@ pub const commands = struct {
                 var pRendering: *Rendering = undefined;
                 var indirectBuffer: ?VkStruct.Buffer_t = null;
                 var isPresent = false;
+                var uboOffset: ?*u32 = null;
 
                 if (command == .drawIndirect) {
                     const drawIndirect = command.drawIndirect;
@@ -4269,6 +4277,7 @@ pub const commands = struct {
                     pushConstants = drawIndirect.pushConstants;
                     pRendering = &self.rendering;
                     indirectBuffer = drawIndirect.indirectBuffer;
+                    uboOffset = drawIndirect.uboOffset;
 
                     buffers = try allocator.alloc(
                         VkStruct.Buffer_t,
@@ -4314,6 +4323,7 @@ pub const commands = struct {
                     pushConstants = drawMesh.pushConstants;
                     buffers = drawMesh.usedBuffers;
                     pRendering = &self.rendering;
+                    uboOffset = drawMesh.uboOffset;
 
                     ptr.value_ptr.command = .{
                         .drawMeshRecord = .{ .meshletCount = drawMesh.meshletCount },
@@ -4345,6 +4355,7 @@ pub const commands = struct {
                     pRendering = &self.presentRendering;
                     isPresent = true;
                     pushConstants = present.pushConstants;
+                    uboOffset = present.uboOffset;
 
                     ptr.value_ptr.command = .{
                         .presentRecord = .{ .empty = void{} },
@@ -4383,6 +4394,7 @@ pub const commands = struct {
                     pushConstants = draw2D.pushConstants;
                     indexBuffer = draw2D.indexBuffer;
                     pRendering = &self.rendering;
+                    uboOffset = draw2D.uboOffset;
 
                     // var textures = [_]texture.Texture_t{draw2D.pTexture};
                     pTextures = try allocator.alloc(texture.Texture_t, 1);
@@ -4429,6 +4441,7 @@ pub const commands = struct {
                     pushConstants = drawMeshIndirect.pushConstants;
                     buffers = drawMeshIndirect.usedBuffers;
                     pRendering = &self.rendering;
+                    uboOffset = drawMeshIndirect.uboOffset;
 
                     buffers = try allocator.alloc(
                         VkStruct.Buffer_t,
@@ -4513,6 +4526,7 @@ pub const commands = struct {
                     self.pScissor,
                     pipeline,
                     pushConstants,
+                    uboOffset,
                     std.meta.activeTag(command),
                     ID,
                     allocator,
@@ -5473,8 +5487,8 @@ pub const oneTimeCommand = struct {
                     bindDescriptorSets.bindDescriptorSetsInfo.firstSet,
                     bindDescriptorSets.bindDescriptorSetsInfo.descriptorSetCount,
                     bindDescriptorSets.bindDescriptorSetsInfo.pDescriptorSets,
-                    0,
-                    null,
+                    bindDescriptorSets.bindDescriptorSetsInfo.dynamicOffsetCount,
+                    bindDescriptorSets.bindDescriptorSetsInfo.pDynamicOffsets,
                 );
 
                 // vk.vkCmdBindDescriptorSets2(commandBuffer, &bindDescriptorSets.bindDescriptorSetsInfo);

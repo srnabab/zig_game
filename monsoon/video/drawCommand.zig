@@ -226,6 +226,7 @@ pub const Draw2D = struct {
     descriptorSets: []vk.VkDescriptorSet,
     pTexture: texture.Texture_t,
     pushConstants: PushConstantPack,
+    uboOffset: ?*u32,
 };
 
 pub const Draw2DRecord = struct {
@@ -287,6 +288,7 @@ pub const Present = struct {
     descriptorSets: []vk.VkDescriptorSet,
     pTextures: []texture.Texture_t,
     pushConstants: PushConstantPack,
+    uboOffset: ?*u32,
 };
 
 pub const PresentRecord = struct {
@@ -308,6 +310,7 @@ pub const DrawMesh = struct {
     usedBuffers: []VkStruct.Buffer_t,
     pushConstants: PushConstantPack,
     meshletCount: u32,
+    uboOffset: ?*u32,
 };
 
 pub const DrawMeshRecord = struct {
@@ -322,6 +325,7 @@ pub const DrawMeshIndirect = struct {
     indirectBuffer: VkStruct.Buffer_t,
     pushConstants: PushConstantPack,
     drawCount: u32,
+    uboOffset: ?*u32,
 };
 
 pub const DrawMeshIndirectRecord2 = struct {
@@ -338,6 +342,7 @@ pub const DrawIndirect = struct {
     usedBuffers: []VkStruct.Buffer_t,
     indirectBuffer: VkStruct.Buffer_t,
     pushConstants: PushConstantPack,
+    uboOffset: ?*u32,
 };
 
 pub const DrawIndirectRecord = struct {
@@ -352,6 +357,7 @@ pub const Compute = struct {
     usedBuffers: []VkStruct.Buffer_t,
     pushConstants: PushConstantPack,
     groupCount: u32,
+    uboOffset: ?*u32,
 };
 
 pub const ComputeRecord = struct {
@@ -365,6 +371,7 @@ pub const ComputeIndirect = struct {
     usedBuffers: []VkStruct.Buffer_t,
     indirectBuffer: VkStruct.Buffer_t,
     pushConstants: PushConstantPack,
+    uboOffset: ?*u32,
 };
 
 pub const ComputeIndirectRecord = struct {

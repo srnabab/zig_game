@@ -93,6 +93,7 @@ fn addPresentCommand(
             .pTextures = pass.texture,
             .descriptorSets = pass.descriptorSet,
             .pushConstants = pass.pushConstant[0],
+            .uboOffset = vulkan.getUboOffset(u8pack.toStr("fixed2d")),
         },
     });
 

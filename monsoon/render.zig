@@ -122,24 +122,12 @@ pub fn render_thread_func(args: Args) !void {
 
     try vulkan.createAllPipelinesAdded();
 
-    const ubo_test = try vulkan.createBufferByUsage(
-        @sizeOf(shaderStruct.UniformBufferObject),
-        0,
-        .uniform,
-        false,
-        null,
-    );
-    var pUIUbo: shaderStruct.UniformBufferObject = undefined;
+    const ubo_test = vulkan.buffers.getBuffer(toStr("ubo_ui")) orelse unreachable;
+    var pUIUbo: shaderStruct.UniformBufferObject align(16) = undefined;
     const ubo = vulkan.buffers.getBufferContent(ubo_test);
 
-    const ubo_test2 = try vulkan.createBufferByUsage(
-        @sizeOf(shaderStruct.UniformBufferObjectCamera),
-        0,
-        .uniform,
-        false,
-        null,
-    );
-    var pUIUbo2: shaderStruct.UniformBufferObjectCamera = undefined;
+    const ubo_test2 = vulkan.buffers.getBuffer(toStr("ubo_3d")) orelse unreachable;
+    var pUIUbo2: shaderStruct.UniformBufferObjectCamera align(16) = undefined;
     const ubo2 = vulkan.buffers.getBufferContent(ubo_test2);
 
     const aspect2: f32 = 1.0 * (@as(f32, @floatFromInt(vulkan.windowHeight))) / 2;
@@ -188,19 +176,19 @@ pub fn render_thread_func(args: Args) !void {
         0,
         vulkan.buffers.getVkBuffer(ubo_test),
         0,
-        vulkan.buffers.getBufferSize(ubo_test),
+        vk.VK_WHOLE_SIZE,
         vulkan.globalFixed2dMVPMatrixDescriptorSet,
         0,
-        vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
     );
     try vulkan.addWriteDescriptorSetBuffer(
         0,
         vulkan.buffers.getVkBuffer(ubo_test2),
         0,
-        vulkan.buffers.getBufferSize(ubo_test2),
+        vk.VK_WHOLE_SIZE,
         vulkan.global3dMVPMatrixDescriptorSet,
         0,
-        vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
     );
 
     std.log.debug("f3pf3nf2u size {d}", .{@sizeOf(vertexStruct.Vertex_f3pf3nf2u)});

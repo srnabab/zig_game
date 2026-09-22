@@ -164,6 +164,7 @@ fn addI_FeatherCommand(
         .usedBuffers = pass.buffer[IF.featherCommands .. IF.dispatchCommands + 1],
         .pushConstants = pass.pushConstant[0],
         .groupCount = groupCount,
+        .uboOffset = null,
     } });
 
     vulkan.buffers.writeBuffer(pass.buffer[IF.featherCommands]);
@@ -186,6 +187,7 @@ fn addI_FeatherCommand(
         .usedBuffers = pass.buffer,
         .pushConstants = pass.pushConstant[1],
         .indirectBuffer = pass.buffer[IF.dispatchCommands],
+        .uboOffset = null,
     } });
 
     vulkan.buffers.writeBuffer(pass.buffer[IF.payloads]);
@@ -199,6 +201,7 @@ fn addI_FeatherCommand(
         .pushConstants = pass.pushConstant[2],
         .indirectBuffer = pass.buffer[IF.drawCommands],
         .pTextures = pass.texture,
+        .uboOffset = vulkan.getUboOffset(u8pack.toStr("camera3d")),
     } });
 
     pass.clearTexture(gpa);

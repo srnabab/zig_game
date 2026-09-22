@@ -244,6 +244,7 @@ pub fn createUboBuffer(comptime ctx: ?*u8pack.CTX) !void {
 
         var it = uboMap.iterator();
         while (it.next()) |e| {
+            std.log.debug("{s} ({d})", .{ e.key_ptr.name, e.key_ptr.id });
             switch (e.value_ptr.slot) {
                 .ui => {
                     totalLen_ui += e.value_ptr.size;
@@ -272,4 +273,12 @@ pub fn iterateUbos() u8pack.HashMap(Pass.UBO).Iterator {
 
 pub fn getUboCounts() [3]u32 {
     return [3]u32{ ubo_ui_count, ubo_2d_count, ubo_3d_count };
+}
+
+pub fn getUboBuffers() [3]Pass.Buffer {
+    return [3]Pass.Buffer{
+        buffers.get(u8pack.toStr("ubo_ui")) orelse std.debug.panic("incorrect position to call this function", .{}),
+        buffers.get(u8pack.toStr("ubo_2d")) orelse std.debug.panic("incorrect position to call this function", .{}),
+        buffers.get(u8pack.toStr("ubo_3d")) orelse std.debug.panic("incorrect position to call this function", .{}),
+    };
 }

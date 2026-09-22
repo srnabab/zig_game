@@ -208,6 +208,19 @@ pub fn initFromRenderFlow(io: std.Io, gpa: std.mem.Allocator, vulkan: *VkStruct,
         }
     }
 
+    const uboBuffers = renderFlow.getUboBuffers();
+    for (0..3) |i| {
+        if (uboBuffers[i].initSize == 0) continue;
+
+        _ = try vulkan.createBufferByUsage(
+            uboBuffers[i].initSize,
+            uboBuffers[i].stride,
+            uboBuffers[i].usage,
+            false,
+            uboBuffers[i].name,
+        );
+    }
+
     const uboCounts = renderFlow.getUboCounts();
     const totalCount = uboCounts[0] + uboCounts[1] + uboCounts[2];
 

@@ -213,6 +213,8 @@ pub fn _createBuffer(
         const dName = try u8pack.dupe(self.names.allocator, nn);
         try self.names.append(dName);
 
+        std.log.debug("{f}", .{dName});
+
         try self.bufferMap.put(dName, @ptrCast(handle));
     }
 

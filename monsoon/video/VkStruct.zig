@@ -51,7 +51,7 @@ pub const WritedType = bufferStruct.WritedType;
 const globalDescriptorPoolSizes = [_]vk.VkDescriptorPoolSize{
     .{ .type = vk.VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, .descriptorCount = 2048 },
     .{ .type = vk.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .descriptorCount = 128 },
-    .{ .type = vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = 128 },
+    .{ .type = vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, .descriptorCount = 4 },
     .{ .type = vk.VK_DESCRIPTOR_TYPE_SAMPLER, .descriptorCount = 128 },
 };
 const globalDescriptorMaxSets = 10;
@@ -69,7 +69,7 @@ const vertexSet1SetLayoutCreateInfos = descriptorSetLayoutCreateInfo{
         .{
             .binding = 0,
             .stageFlags = vk.VK_SHADER_STAGE_VERTEX_BIT | vk.VK_SHADER_STAGE_FRAGMENT_BIT,
-            .descriptorType = vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .descriptorType = vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
             .descriptorCount = 1,
         },
         .{},
@@ -92,7 +92,7 @@ const meshSet1SetLayoutCreateInfos = descriptorSetLayoutCreateInfo{
         .{
             .binding = 0,
             .stageFlags = vk.VK_SHADER_STAGE_MESH_BIT_EXT,
-            .descriptorType = vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .descriptorType = vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
             .descriptorCount = 1,
         },
         .{},
@@ -1878,4 +1878,8 @@ pub fn getRenderTarget(
     }
 
     return res.value_ptr.*;
+}
+
+pub fn getUboOffset(self: *Self, name: Str) *u32 {
+    return &self.uboDynamicOffsets[name.id];
 }
