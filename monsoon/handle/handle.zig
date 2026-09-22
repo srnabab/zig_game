@@ -26,8 +26,6 @@ pub const ResourceType = enum(u8) {
     mesh,
     instance,
     pipeline,
-    viewport,
-    scissor,
     others,
 };
 

@@ -98,7 +98,7 @@ pub fn render_thread_func(args: Args) !void {
     var taa = tracyAllocator.allocator();
     const allocator_t = &taa;
 
-    setUbo.initUbo(&vulkan);
+    setUbo.initUbo(vulkan);
 
     var commands = try Commands.init(
         io,
@@ -145,26 +145,6 @@ pub fn render_thread_func(args: Args) !void {
 
     std.log.debug("f3pf3nf2u size {d}", .{@sizeOf(vertexStruct.Vertex_f3pf3nf2u)});
     std.log.debug("f3pf3nf4tf2u size {d}", .{@sizeOf(vertexStruct.Vertex_f3pf3nf4tf2u)});
-
-    const viewport_test = try vulkan.viewports.createViewport(io, .{
-        .x = 0,
-        .y = 0,
-        .width = @floatFromInt(vulkan.windowWidth),
-        .height = @floatFromInt(vulkan.windowHeight),
-        .maxDepth = 1.0,
-        .minDepth = 0.0,
-    });
-
-    const scissor_test = try vulkan.scissors.createScissor(io, .{
-        .extent = .{
-            .width = vulkan.windowWidth,
-            .height = vulkan.windowHeight,
-        },
-        .offset = .{ .x = 0, .y = 0 },
-    });
-
-    commands.setViewport(viewport_test);
-    commands.setScissor(scissor_test);
 
     // vulkan.logBufferPtr();
     // vulkan.logPipeline();

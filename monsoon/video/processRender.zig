@@ -1183,10 +1183,10 @@ pub const commands = struct {
     vulkan: *VkStruct,
     pTextureSet: *texture,
 
-    pViewport: ?VkStruct.Viewport_t = null,
-    bindViewport: bool = false,
-    pScissor: ?VkStruct.Scissor_t = null,
-    bindScissor: bool = false,
+    viewports: [2]vk.VkViewport = undefined,
+    currentViewportIndex: u32 = 0,
+    scissors: [2]vk.VkRect2D = undefined,
+    currentScissorIndex: u32 = 0,
     rendering: Rendering = .{},
     renderingChanged: bool = false,
     presentRendering: Rendering = .{},
@@ -1376,14 +1376,12 @@ pub const commands = struct {
         };
     }
 
-    pub fn setViewport(self: *Self, viewPort: ?VkStruct.Viewport_t) void {
-        self.pViewport = viewPort;
-        self.bindViewport = true;
+    pub fn setViewport(self: *Self, viewport: vk.VkViewport) void {
+        self.viewports[self.currentViewportIndex] = viewport;
     }
 
-    pub fn setScissor(self: *Self, scissor: ?VkStruct.Scissor_t) void {
-        self.pScissor = scissor;
-        self.bindScissor = true;
+    pub fn setScissor(self: *Self, scissor: vk.VkRect2D) void {
+        self.scissors[self.currentScissorIndex] = scissor;
     }
 
     pub fn setRendering(
@@ -3311,8 +3309,6 @@ pub const commands = struct {
         vertexBuffers: ?[]VkStruct.Buffer_t,
         indexBuffer: ?VkStruct.Buffer_t,
         descriptorSets: ?[]vk.VkDescriptorSet,
-        pViewport: ?VkStruct.Viewport_t,
-        pScissor: ?VkStruct.Scissor_t,
         pipeline: VkStruct.Pipeline_t,
         allocator: std.mem.Allocator,
         node: *QueueNode,
@@ -3348,14 +3344,6 @@ pub const commands = struct {
                 vAndDeLen += @intCast(descriptorSets.?.len);
             }
 
-            if (pViewport != null) {
-                count += 1;
-            }
-
-            if (pScissor != null) {
-                count += 1;
-            }
-
             count += 1;
 
             break :ll count;
@@ -3383,22 +3371,10 @@ pub const commands = struct {
             }
         }
 
-        var tempCount: u32 = 0;
         resPack[vAndDeLen] = try rendering_drawResourceMap.getOrPut(pipeline);
-        tempCount += 1;
-
-        if (pScissor) |value| {
-            resPack[vAndDeLen + tempCount] = try rendering_drawResourceMap.getOrPut(value);
-            tempCount += 1;
-        }
-
-        if (pViewport) |value| {
-            resPack[vAndDeLen + tempCount] = try rendering_drawResourceMap.getOrPut(value);
-            tempCount += 1;
-        }
 
         if (indexBuffer) |value| {
-            resPack[vAndDeLen + tempCount] = try rendering_drawResourceMap.getOrPut(value);
+            resPack[vAndDeLen + 1] = try rendering_drawResourceMap.getOrPut(value);
         }
 
         var hasher = std.hash.XxHash3.init(0);
@@ -3448,8 +3424,6 @@ pub const commands = struct {
         vertexBuffers: ?[]VkStruct.Buffer_t,
         indexBuffer: ?VkStruct.Buffer_t,
         pDescriptorSets: ?[]vk.VkDescriptorSet,
-        pViewport: ?VkStruct.Viewport_t,
-        pScissor: ?VkStruct.Scissor_t,
         pipeline: VkStruct.Pipeline_t,
         pushConstants: ?drawC.PushConstantPack,
         uboOffset: ?*u32,
@@ -3474,8 +3448,6 @@ pub const commands = struct {
 
         var indexBufferBinded = false;
         var pipelineBinded = false;
-        var viewportBinded = false;
-        var scissorBinded = false;
 
         for (resPack, 0..) |value, i| {
             // std.log.debug("key {*}", .{@as(Handle, @ptrCast(value.key_ptr.*))});
@@ -3611,11 +3583,8 @@ pub const commands = struct {
                             linkNodeEnd = tempNode.a.?;
                         }
                     }
-                } else if (i < vAndDeLen + 4) {
-                    var tempNode: *QueueNode = undefined;
-
-                    // std.log.debug("{*}\n{*}\n{*}\n{*}\n", .{ draw2D.indexBuffer, draw2D.pipeline, draw2D.pViewport, draw2D.pScissor });
-                    // std.log.debug("i {d} {*}", .{ i, value.key_ptr.* });
+                } else if (i < vAndDeLen + 2) {
+                    var tempNode: ?*QueueNode = null;
 
                     if (!indexBufferBinded) {
                         if (indexBuffer) |bufer| {
@@ -3657,52 +3626,16 @@ pub const commands = struct {
                         }
                     }
 
-                    if (!scissorBinded) {
-                        if (pScissor) |v| {
-                            if (v == @as(VkStruct.Scissor_t, @ptrCast(value.key_ptr.*))) {
-                                // std.log.debug("xxx 1", .{});
-
-                                const scissor = self.vulkan.scissors.getScissorContent(self.io, v);
-
-                                const tempTwoNode = try self.addCommand2(.{
-                                    .setScissor = scissor,
-                                }, commandType, commandID);
-
-                                tempNode = tempTwoNode.a.?;
-
-                                // std.log.debug("xxx 2", .{});
-
-                                scissorBinded = true;
-                            }
-                        }
-                    }
-
-                    if (!viewportBinded) {
-                        if (pViewport) |v| {
-                            if (v == @as(VkStruct.Viewport_t, @ptrCast(value.key_ptr.*))) {
-                                // std.log.debug("xxx 3", .{});
-
-                                const viewport = self.vulkan.viewports.getViewportContent(self.io, v);
-
-                                const tempTwoNode = try self.addCommand2(.{
-                                    .setViewport = viewport,
-                                }, commandType, commandID);
-
-                                tempNode = tempTwoNode.a.?;
-
-                                viewportBinded = true;
-                            }
-                        }
-                    }
-
                     // std.log.debug("xxx 7", .{});
-                    if (linkNodeEnd == null) {
-                        linkNodeEnd = tempNode;
-                        linkNodeStart = linkNodeEnd;
-                    } else {
-                        try self.nodeConnect(tempNode, linkNodeEnd.?);
+                    if (tempNode) |t| {
+                        if (linkNodeEnd == null) {
+                            linkNodeEnd = t;
+                            linkNodeStart = linkNodeEnd;
+                        } else {
+                            try self.nodeConnect(t, linkNodeEnd.?);
 
-                        linkNodeEnd = tempNode;
+                            linkNodeEnd = t;
+                        }
                     }
                 }
             }
@@ -3808,6 +3741,7 @@ pub const commands = struct {
         const linkNodeStart = linkNode.a;
         const linkNodeEnd = linkNode.b;
 
+        // when have lastNode, the rendering was began
         if (lastNode) |a| {
             const a_children = a.children;
 
@@ -4507,8 +4441,6 @@ pub const commands = struct {
                     null,
                     indexBuffer,
                     descriptorSets,
-                    self.pViewport,
-                    self.pScissor,
                     pipeline,
                     allocator,
                     node,
@@ -4517,13 +4449,11 @@ pub const commands = struct {
 
                 try cacheAttachementImageView(pRendering, node, &needToCacheArray);
 
-                const linkNode = try self.resPackNodeProcess(
+                var linkNode = try self.resPackNodeProcess(
                     resPack,
                     null,
                     indexBuffer,
                     descriptorSets,
-                    self.pViewport,
-                    self.pScissor,
                     pipeline,
                     pushConstants,
                     uboOffset,
@@ -4531,12 +4461,33 @@ pub const commands = struct {
                     ID,
                     allocator,
                 );
-                // self.lastInMesh = self.inMesh;
+
+                const viewportNode = try self.addCommand2(.{
+                    .setViewport = self.viewports[self.currentViewportIndex],
+                }, std.meta.activeTag(command), ID);
+
+                const scissorNode = try self.addCommand2(.{
+                    .setScissor = self.scissors[self.currentScissorIndex],
+                }, std.meta.activeTag(command), ID);
+
+                if (linkNode.b) |a| {
+                    const head = if (linkNode.a != null) linkNode.a.? else a;
+                    try self.nodeConnect(head, viewportNode.a.?);
+                    try self.nodeConnect(viewportNode.a.?, scissorNode.a.?);
+
+                    linkNode.a = viewportNode.a.?;
+                } else {
+                    try self.nodeConnect(viewportNode.a.?, scissorNode.a.?);
+
+                    linkNode = .{
+                        .b = viewportNode.a.?,
+                        .a = scissorNode.a.?,
+                    };
+                }
 
                 try self.lastNodeLinkNodeRenderingNodeConnect(lastNode, linkNode, node, renderingNode);
 
                 if (command == .present) {
-                    // @breakpoint();
                     const transNode = try self.transLayoutHelper(
                         self.pTextureSet,
                         pRendering.colorTextures[0],
@@ -4547,8 +4498,6 @@ pub const commands = struct {
                         std.meta.activeTag(command),
                         ID,
                     );
-                    // renderDebug.printToDot();
-                    // std.log.debug("", .{});
 
                     try self.nodeConnect(node, transNode.a.?);
                 }

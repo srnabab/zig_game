@@ -87,6 +87,23 @@ fn addPresentCommand(
 
     // renderDebug.printToDot();
 
+    commands.setViewport(.{
+        .x = 0,
+        .y = 0,
+        .width = @floatFromInt(vulkan.windowWidth),
+        .height = @floatFromInt(vulkan.windowHeight),
+        .maxDepth = 1.0,
+        .minDepth = 0.0,
+    });
+
+    commands.setScissor(.{
+        .extent = .{
+            .width = vulkan.windowWidth,
+            .height = vulkan.windowHeight,
+        },
+        .offset = .{ .x = 0, .y = 0 },
+    });
+
     try commands.addCommand(.present, .{
         .present = .{
             .pipeline = pass.pipeline[0],

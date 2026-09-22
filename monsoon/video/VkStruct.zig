@@ -38,14 +38,10 @@ const InstanceDevice = @import("vkStruct/instance_device.zig");
 const Semaphore = @import("vkStruct/semaphore.zig");
 const Swapchain = @import("vkStruct/swapchain.zig");
 const Types = @import("types");
-const viewportStruct = @import("vkStruct/viewport.zig");
-const scissorStruct = @import("vkStruct/scissor.zig");
 
 const bufferStruct = @import("vkStruct/buffer.zig");
 pub const Buffer_t = bufferStruct.Buffer_t;
 pub const Pipeline_t = *opaque {};
-pub const Viewport_t = viewportStruct.Viewport_t;
-pub const Scissor_t = scissorStruct.Scissor_t;
 pub const WritedType = bufferStruct.WritedType;
 
 const globalDescriptorPoolSizes = [_]vk.VkDescriptorPoolSize{
@@ -305,8 +301,6 @@ descriptorBufferViewInfos: std.array_list.Managed(vk.VkBufferView) = undefined,
 samplers: Samplers = .{},
 
 buffers: bufferStruct,
-viewports: viewportStruct,
-scissors: scissorStruct,
 
 gpuType: vk.VkPhysicalDeviceType = vk.VK_PHYSICAL_DEVICE_TYPE_OTHER,
 queueTypeCount: u32 = 0,
@@ -328,8 +322,6 @@ pub fn init(io: std.Io, allocator: Allocator, handles: *global.HandlesType, wind
         .descriptorBufferInfos = .init(allocator),
         .descriptorBufferViewInfos = .init(allocator),
         .buffers = .init(io, allocator),
-        .viewports = .init(allocator, handles),
-        .scissors = .init(allocator, handles),
         .handles = handles,
         .window = window,
         .windowWidth = width,
@@ -731,8 +723,6 @@ pub fn deinit(self: *Self) void {
 
     self.samplers.destroySamplers(self.device, self.pAllocCallBacks);
     self.buffers.deinit(&self.vmaS);
-    self.viewports.deinit();
-    self.scissors.deinit();
 
     self.writeDescriptorSets.deinit();
     self.descriptorImageInfos.deinit();
@@ -1778,30 +1768,6 @@ pub fn getQueueType(self: *Self, index: u32) CommandPoolType {
     } else {
         return .init;
     }
-}
-
-pub fn createViewport(self: *Self, viewport: vk.VkViewport) !Viewport_t {
-    return self.viewports.createViewport(viewport);
-}
-
-pub fn getViewportContent(self: *Self, viewport: Viewport_t) vk.VkViewport {
-    return self.viewports.getViewportContent(viewport);
-}
-
-pub fn destroyViewport(self: *Self, viewport: Viewport_t) void {
-    self.viewports.destroyViewport(viewport);
-}
-
-pub fn createScissor(self: *Self, scissor: vk.VkRect2D) !Scissor_t {
-    return self.scissors.createScissor(scissor);
-}
-
-pub fn getScissorContent(self: *Self, scissor: Scissor_t) vk.VkRect2D {
-    return self.scissors.getScissorContent(scissor);
-}
-
-pub fn destroyScissor(self: *Self, scissor: Scissor_t) void {
-    self.scissors.destroyScissor(scissor);
 }
 
 pub fn logBufferPtr(self: *Self) void {
