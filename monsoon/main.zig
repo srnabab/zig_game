@@ -40,7 +40,8 @@ const setPass = @import("setPass");
 const ExternalCommands = @import("processRender").externalCommands;
 
 const resourceProcess = @import("resourceProcess");
-const vertices2D = @import("vertices");
+const u8pack = @import("u8pack");
+const toStr = u8pack.toStr;
 
 // const cgltf = @import("cgltf");
 
@@ -200,6 +201,43 @@ pub fn main(init: std.process.Init) !void {
     for (passes.passes) |*value| {
         try value.init(&vulkan, &externalCommands, passAllocator);
     }
+
+    {
+        const ubo_ui = vulkan.buffers.getBuffer(toStr("ubo_ui"));
+        const ubo_2d = vulkan.buffers.getBuffer(toStr("ubo_2d"));
+        const ubo_3d = vulkan.buffers.getBuffer(toStr("ubo_3d"));
+
+        if (ubo_ui) |b| {
+            const ptr = vulkan.buffers.getBufferContent(b).pMappedData;
+            const size = vulkan.buffers.getBufferSize(b);
+
+            vulkan.uboPack[0] = .{
+                .pMappedData = ptr,
+                .totalSize = size,
+            };
+        }
+
+        if (ubo_2d) |b| {
+            const ptr = vulkan.buffers.getBufferContent(b).pMappedData;
+            const size = vulkan.buffers.getBufferSize(b);
+
+            vulkan.uboPack[1] = .{
+                .pMappedData = ptr,
+                .totalSize = size,
+            };
+        }
+
+        if (ubo_3d) |b| {
+            const ptr = vulkan.buffers.getBufferContent(b).pMappedData;
+            const size = vulkan.buffers.getBufferSize(b);
+
+            vulkan.uboPack[2] = .{
+                .pMappedData = ptr,
+                .totalSize = size,
+            };
+        }
+    }
+    setUbo.initUbo(&vulkan);
 
     // for (vulkan.uboDynamicOffsets) |value| {
     //     std.log.debug("offset {d}", .{value});

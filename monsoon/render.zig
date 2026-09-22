@@ -122,39 +122,11 @@ pub fn render_thread_func(args: Args) !void {
 
     try vulkan.createAllPipelinesAdded();
 
-    const ubo_test = vulkan.buffers.getBuffer(toStr("ubo_ui")) orelse unreachable;
-    var pUIUbo: shaderStruct.UniformBufferObject align(16) = undefined;
-    const ubo = vulkan.buffers.getBufferContent(ubo_test);
-
-    const ubo_test2 = vulkan.buffers.getBuffer(toStr("ubo_3d")) orelse unreachable;
     var pUIUbo2: shaderStruct.UniformBufferObjectCamera align(16) = undefined;
-    const ubo2 = vulkan.buffers.getBufferContent(ubo_test2);
 
     const aspect2: f32 = 1.0 * (@as(f32, @floatFromInt(vulkan.windowHeight))) / 2;
     const aspect: f32 = (@as(f32, @floatFromInt(vulkan.windowWidth)) / @as(f32, @floatFromInt(vulkan.windowHeight))) * aspect2;
     const VIEW_SCALE = 1.0;
-
-    var eye = cglm.vec3{ 0.0, 0.0, 100.0 };
-    var center = cglm.vec3{ 0.0, 0.0, 0.0 };
-    var up = cglm.vec3{ 0.0, 1.0, 0.0 };
-    cglm.glmc_lookat(
-        &eye,
-        &center,
-        &up,
-        &pUIUbo.view,
-    );
-    math.glm_ortho_vulkan(
-        -aspect * VIEW_SCALE,
-        aspect * VIEW_SCALE,
-        -aspect2 * VIEW_SCALE,
-        aspect2 * VIEW_SCALE,
-        -0.001,
-        -100.0,
-        &pUIUbo.proj,
-    );
-    const pData = @as(*shaderStruct.UniformBufferObject, @ptrCast(@alignCast(ubo.pMappedData)));
-    pData.* = pUIUbo;
-
     var eye2 = cglm.vec3{ 1.0, 1.0, 1.0 };
     var center2 = cglm.vec3{ 0.0, 0.0, 0.0 };
     var up2 = cglm.vec3{ 0.0, 0.0, 1.0 };
@@ -169,32 +141,8 @@ pub fn render_thread_func(args: Args) !void {
     pUIUbo2.cameraPos = eye2;
     pUIUbo2.lightDirection = cglm.vec3{ 0.0, 0.5, 1.5 };
 
-    const pData2 = @as(*shaderStruct.UniformBufferObjectCamera, @ptrCast(@alignCast(ubo2.pMappedData)));
-    pData2.* = pUIUbo2;
-
-    try vulkan.addWriteDescriptorSetBuffer(
-        0,
-        vulkan.buffers.getVkBuffer(ubo_test),
-        0,
-        vk.VK_WHOLE_SIZE,
-        vulkan.globalFixed2dMVPMatrixDescriptorSet,
-        0,
-        vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-    );
-    try vulkan.addWriteDescriptorSetBuffer(
-        0,
-        vulkan.buffers.getVkBuffer(ubo_test2),
-        0,
-        vk.VK_WHOLE_SIZE,
-        vulkan.global3dMVPMatrixDescriptorSet,
-        0,
-        vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-    );
-
     std.log.debug("f3pf3nf2u size {d}", .{@sizeOf(vertexStruct.Vertex_f3pf3nf2u)});
     std.log.debug("f3pf3nf4tf2u size {d}", .{@sizeOf(vertexStruct.Vertex_f3pf3nf4tf2u)});
-
-    vulkan.writeCachedDescriptorSetResources();
 
     const viewport_test = try vulkan.viewports.createViewport(io, .{
         .x = 0,
@@ -218,124 +166,122 @@ pub fn render_thread_func(args: Args) !void {
 
     // vulkan.logBufferPtr();
     // vulkan.logPipeline();
+    try initWriteDescriptorSetUbos(vulkan);
 
     const renderStart = std.Io.Timestamp.now(io, .real).toNanoseconds();
 
     while (true) {
         // if (tests) @breakpoint();
-        {
-            // const frame = vulkan.totalFrame.load(.seq_cst);
 
-            while (args.renderQueue.popFirst()) |v| {
-                switch (v.pointer) {
-                    inline else => |pt| {
-                        defer if (pt.count.fetchSub(1, .seq_cst) == 1) {
-                            @TypeOf(pt.child).free(&pt.child, gpa);
-                            gpa.destroy(pt);
-                        };
+        // const frame = vulkan.totalFrame.load(.seq_cst);
 
-                        const field = @TypeOf(pt.child).Parent;
-                        if (@hasDecl(field, "renderLoad")) {
-                            var uctx: field.Ctx = undefined;
-                            const ctxInfo = @typeInfo(field.Ctx);
-                            inline for (ctxInfo.@"struct".fields) |f| {
-                                @field(uctx, f.name) = &@field(args.uctx, f.name);
-                            }
-
-                            const index: u32 = try field.renderLoad(io, gpa, args.vulkan, &commands, &uctx, v.handle, &pt.child);
-                            args.handles.setIndex(v.handle, index);
-                        } else {
-                            args.handles.setIndex(v.handle, Handles.WaitFill);
-                        }
-                    },
-                }
-            }
-
-            try addEvent(args.uctx, args.updateEventQueue);
-
-            var u_it = args.updateEventQueue.iterateC();
-            while (u_it.next()) |event| {
-                switch (event.ptr.*) {
-                    inline else => |c| {
-                        c.process(io, gpa, args.handles, args.uctx) catch {
-                            continue;
-                        };
-                    },
-                }
-                args.updateEventQueue.removeAt(event.index);
-            }
-            args.updateEventQueue.swap();
-
-            const infos = stateBuffering.getReadyBuffer();
-            defer stateBuffering.returnReadyBuffer(infos);
-
-            // ----------------------------------------------------------------------------------------------------------------------------------------
-            for (infos.items) |value| {
-                switch (value) {
-                    ._u32 => {
-                        var f_v: f32 = @floatFromInt(value._u32);
-                        f_v *= 0.1;
-                        eye2 = cglm.vec3{ 0.0, -f_v, 0.0 };
-                        pUIUbo2.cameraPos = eye2;
-
-                        cglm.glmc_lookat(
-                            &eye2,
-                            &center2,
-                            &up2,
-                            &pUIUbo2.view,
-                        );
-                        // _ = value;
-                        // std.log.debug("info {d}", .{value});
-                        const pData3 = @as(*shaderStruct.UniformBufferObjectCamera, @ptrCast(@alignCast(ubo2.pMappedData)));
-                        pData3.* = pUIUbo2;
-                    },
-                    ._2d => |v| {
-                        // std.log.debug("({d}, {d})", .{ v.pos[0], v.pos[1] });
-                        try args.uctx.vertices.updateInstance(io, v.pos[0], v.pos[1], Handles.getIndex(v.handle) orelse continue);
-                    },
-                }
-            }
-            // ----------------------------------------------------------------------------------------------------------------------------------------
-
-            try upload(io, vulkan, passes, pTextureSet, args.uctx, &commands);
-
-            try vulkan.waitEndFence();
-
-            try commands.startCommand();
-            try externalCommands.addExternalCommand(&commands);
-            try commands.addCachedCommand();
-
-            const zone2 = tracy.initZone(@src(), .{ .name = "pass add" });
-            for (args.passes.passes) |*value| {
-                if (value.enabled > 0) {
-                    value.addCommand(
-                        vulkan,
-                        pTextureSet,
-                        &commands,
-                        gpa,
-                    ) catch |err| {
-                        std.log.err("pass {f} {s}", .{ value.name, @errorName(err) });
-                        renderDebug.printToDot();
-                        renderDebug.printPassInfo(vulkan, value);
-
-                        return err;
+        while (args.renderQueue.popFirst()) |v| {
+            switch (v.pointer) {
+                inline else => |pt| {
+                    defer if (pt.count.fetchSub(1, .seq_cst) == 1) {
+                        @TypeOf(pt.child).free(&pt.child, gpa);
+                        gpa.destroy(pt);
                     };
-                }
+
+                    const field = @TypeOf(pt.child).Parent;
+                    if (@hasDecl(field, "renderLoad")) {
+                        var uctx: field.Ctx = undefined;
+                        const ctxInfo = @typeInfo(field.Ctx);
+                        inline for (ctxInfo.@"struct".fields) |f| {
+                            @field(uctx, f.name) = &@field(args.uctx, f.name);
+                        }
+
+                        const index: u32 = try field.renderLoad(io, gpa, args.vulkan, &commands, &uctx, v.handle, &pt.child);
+                        args.handles.setIndex(v.handle, index);
+                    } else {
+                        args.handles.setIndex(v.handle, Handles.WaitFill);
+                    }
+                },
             }
-            zone2.deinit();
+        }
 
-            try commands.addCommandEnd();
+        try addEvent(args.uctx, args.updateEventQueue);
 
-            vulkan.writeCachedDescriptorSetResources();
-
-            try graphic.executeCommands(&commands);
-
-            vulkan.nextFrame();
-
-            if (global.game_end.load(.seq_cst) == 1) {
-                _ = renderStart;
-                break;
+        var u_it = args.updateEventQueue.iterateC();
+        while (u_it.next()) |event| {
+            switch (event.ptr.*) {
+                inline else => |c| {
+                    c.process(io, gpa, args.handles, args.uctx) catch {
+                        continue;
+                    };
+                },
             }
+            args.updateEventQueue.removeAt(event.index);
+        }
+        args.updateEventQueue.swap();
+
+        const infos = stateBuffering.getReadyBuffer();
+        defer stateBuffering.returnReadyBuffer(infos);
+
+        // ----------------------------------------------------------------------------------------------------------------------------------------
+        for (infos.items) |value| {
+            switch (value) {
+                ._u32 => {
+                    var f_v: f32 = @floatFromInt(value._u32);
+                    f_v *= 0.1;
+                    eye2 = cglm.vec3{ 0.0, -f_v, 0.0 };
+                    pUIUbo2.cameraPos = eye2;
+
+                    cglm.glmc_lookat(
+                        &eye2,
+                        &center2,
+                        &up2,
+                        &pUIUbo2.view,
+                    );
+
+                    vulkan.copyToUbo(&pUIUbo2, toStr("camera3d"), ._3d);
+                },
+                ._2d => |v| {
+                    // std.log.debug("({d}, {d})", .{ v.pos[0], v.pos[1] });
+                    try args.uctx.vertices.updateInstance(io, v.pos[0], v.pos[1], Handles.getIndex(v.handle) orelse continue);
+                },
+            }
+        }
+        // ----------------------------------------------------------------------------------------------------------------------------------------
+
+        try upload(io, vulkan, passes, pTextureSet, args.uctx, &commands);
+
+        try vulkan.waitEndFence();
+
+        try commands.startCommand();
+        try externalCommands.addExternalCommand(&commands);
+        try commands.addCachedCommand();
+
+        const zone2 = tracy.initZone(@src(), .{ .name = "pass add" });
+        for (args.passes.passes) |*value| {
+            if (value.enabled > 0) {
+                value.addCommand(
+                    vulkan,
+                    pTextureSet,
+                    &commands,
+                    gpa,
+                ) catch |err| {
+                    std.log.err("pass {f} {s}", .{ value.name, @errorName(err) });
+                    renderDebug.printToDot();
+                    renderDebug.printPassInfo(vulkan, value);
+
+                    return err;
+                };
+            }
+        }
+        zone2.deinit();
+
+        try commands.addCommandEnd();
+
+        vulkan.writeCachedDescriptorSetResources();
+
+        try graphic.executeCommands(&commands);
+
+        vulkan.nextFrame();
+
+        if (global.game_end.load(.seq_cst) == 1) {
+            _ = renderStart;
+            break;
         }
     }
 
@@ -345,4 +291,48 @@ pub fn render_thread_func(args: Args) !void {
 
     _ = endSemaphore;
     _ = thread_count;
+}
+
+fn initWriteDescriptorSetUbos(vulkan: *VkStruct) !void {
+    const ubo_ui = vulkan.buffers.getBuffer(toStr("ubo_ui"));
+    const ubo_2d = vulkan.buffers.getBuffer(toStr("ubo_2d"));
+    const ubo_3d = vulkan.buffers.getBuffer(toStr("ubo_3d"));
+
+    if (ubo_ui) |b| {
+        try vulkan.addWriteDescriptorSetBuffer(
+            0,
+            vulkan.buffers.getVkBuffer(b),
+            0,
+            vk.VK_WHOLE_SIZE,
+            vulkan.globalFixed2dMVPMatrixDescriptorSet,
+            0,
+            vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
+        );
+    }
+
+    if (ubo_2d) |b| {
+        try vulkan.addWriteDescriptorSetBuffer(
+            0,
+            vulkan.buffers.getVkBuffer(b),
+            0,
+            vk.VK_WHOLE_SIZE,
+            vulkan.global2dMVPMatrixDescriptorSet,
+            0,
+            vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
+        );
+    }
+
+    if (ubo_3d) |b| {
+        try vulkan.addWriteDescriptorSetBuffer(
+            0,
+            vulkan.buffers.getVkBuffer(b),
+            0,
+            vk.VK_WHOLE_SIZE,
+            vulkan.global3dMVPMatrixDescriptorSet,
+            0,
+            vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
+        );
+    }
+
+    vulkan.writeCachedDescriptorSetResources();
 }

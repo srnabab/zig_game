@@ -180,6 +180,11 @@ const descriptorSetsType = enum {
     compute,
 };
 
+const UboPack = struct {
+    pMappedData: ?*anyopaque,
+    totalSize: u64,
+};
+
 const AllocationCount = struct {
     const Count = @This();
 
@@ -280,6 +285,7 @@ globalTimelineValue: std.atomic.Value(u64) = .init(0),
 endFence: [global.MaxFrameInFlight]vk.VkFence = undefined,
 
 uboDynamicOffsets: []u32 = undefined,
+uboPack: [3]UboPack = undefined,
 
 globalDescriptorPool: vk.VkDescriptorPool = null,
 
@@ -1882,4 +1888,38 @@ pub fn getRenderTarget(
 
 pub fn getUboOffset(self: *Self, name: Str) *u32 {
     return &self.uboDynamicOffsets[name.id];
+}
+
+const slot = enum(u32) {
+    ui,
+    _2d,
+    _3d,
+};
+
+/// use std.mem.asBytes, mem must be single item pointer
+pub fn copyToUbo(self: *Self, mem: anytype, name: Str, target: slot) void {
+    const src: []u8 = @alignCast(std.mem.asBytes(mem));
+
+    var start: [*]u8 = undefined;
+    const offset = self.uboDynamicOffsets[name.id];
+
+    switch (target) {
+        .ui => {
+            start = @ptrCast(@alignCast(self.uboPack[0].pMappedData));
+            std.debug.assert(offset + src.len <= self.uboPack[0].totalSize);
+        },
+        ._2d => {
+            start = @ptrCast(@alignCast(self.uboPack[1].pMappedData));
+            std.debug.assert(offset + src.len <= self.uboPack[1].totalSize);
+        },
+        ._3d => {
+            start = @ptrCast(@alignCast(self.uboPack[2].pMappedData));
+            std.debug.assert(offset + src.len <= self.uboPack[2].totalSize);
+        },
+    }
+
+    const dst_ptr = start + offset;
+    const dst = dst_ptr[0..src.len];
+
+    @memcpy(dst, src);
 }

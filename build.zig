@@ -393,6 +393,8 @@ pub fn build(b: *std.Build) void {
     setUbo_mod.addImport("renderFlow", renderFlow_mod);
     setUbo_mod.addImport("cglm", cglm_mod);
     setUbo_mod.addImport("u8pack", u8pack_mod);
+    setUbo_mod.addImport("video", video_mod);
+    setUbo_mod.addImport("ms_std", ms_mod);
 
     setPass_mod.addImport("u8pack", u8pack_mod);
     setPass_mod.addImport("vertexStruct", vertexStruct_mod);
