@@ -2,6 +2,7 @@ const std = @import("std");
 const Io = std.Io;
 
 const db = @import("db");
+const resourceProcess = @import("resourceProcess");
 const windows = std.os.windows;
 
 var database: *db = undefined;
@@ -476,15 +477,14 @@ fn renameNew(
 
             fType = db.judgeFileType(fileName[dotIndex..], content);
 
-            switch (fType) {
-                .Shader => {
+            if (@hasDecl(resourceProcess.ProcessType, "Shader")) {
+                if (fType == .Shader) {
                     try database.ShaderPipelineGraphNodeT.update(
                         "Path, Name",
                         "Name = ?",
                         .{ fullPath, name_utf8, old },
                     );
-                },
-                else => {},
+                }
             }
         }
 
