@@ -289,6 +289,19 @@ pub fn update_thread_func(args: Args) !void {
             // ----------------------------------------------------------------------------------------------------------------------------------------
             try args.uctx.loadmaps.load(&resourceCtx, 0, vec2{ 0, 0 });
 
+            var u_it = args.renderEventQueue.iterateC();
+            while (u_it.next()) |event| {
+                switch (event.ptr.*) {
+                    inline else => |c| {
+                        c.process(io, gpa, args.handles, args.uctx) catch {
+                            continue;
+                        };
+                    },
+                }
+                args.renderEventQueue.removeAt(event.index);
+            }
+            args.renderEventQueue.swap();
+
             const infos = stateBuffering.getWriteBuffer();
             defer stateBuffering.returnWriteBuffer(infos);
 

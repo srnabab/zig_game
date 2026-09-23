@@ -36,6 +36,14 @@ pub const RenderEvent = union(RenderEventType) {
 const staticInteractableStub = struct {
     handle: Handles.Handle,
     pos: vec3,
+
+    pub fn process(self: *const staticInteractableStub, io: Io, gpa: Allocator, handles: *global.HandlesType, uctx: *UserContext) !void {
+        _ = self;
+        _ = io;
+        _ = gpa;
+        _ = handles;
+        _ = uctx;
+    }
 };
 
 pub const test2d = struct {
