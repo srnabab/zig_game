@@ -149,7 +149,7 @@ fn addI_FeatherCommand(
 
     const groupCount = @as(*u32, @ptrCast(@alignCast(userdata.?))).*;
 
-    // ---- c_command_prefix_sum: 清零 dispatch + 前缀和 compute ----
+    // ---- c_command_prefix_sum
     try commands.addCommand(.fillBuffer, .{ .fillBuffer = .{
         .buffer = pass.buffer[IF.dispatchCommands],
         .offset = 0,
@@ -170,7 +170,7 @@ fn addI_FeatherCommand(
     vulkan.buffers.writeBuffer(pass.buffer[IF.featherCommands]);
     vulkan.buffers.writeBuffer(pass.buffer[IF.dispatchCommands]);
 
-    // ---- ic_task: 清零 draw 命令 + computeIndirect ----
+    // ---- ic_task
     pass.setPushConstants(1, @as([*]u8, @ptrCast(@alignCast(userdata)))[0..@sizeOf(u32)], 48);
 
     try commands.addCommand(.fillBuffer, .{ .fillBuffer = .{

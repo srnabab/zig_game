@@ -53,7 +53,6 @@ pub const AutoCommitter = struct {
         // std.log.debug("poke", .{});
     }
 
-    // 后台异步监控任务
     pub fn runMonitor(self: *AutoCommitter) !void {
         errdefer self.db_conn.rollback();
         while (self.is_active) {
@@ -63,7 +62,7 @@ pub const AutoCommitter = struct {
             if (diff >= self.wait) {
                 // std.log.debug("run commit", .{});
                 self.db_conn.commit();
-                self.is_active = false; // 提交后关闭监控
+                self.is_active = false;
                 break;
             } else {
                 const sleepTime = @min(500, self.wait - diff);

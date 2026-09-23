@@ -119,7 +119,6 @@ const str_maps: StrMaps = l: {
 
     @setEvalBranchQuota(10000);
 
-    // ctx 驱动的表(buffers/passes): 去重后按去重数组下标当 id
     for (ctxMaps) |mapName| {
         var mut_buf: [@field(ctx, mapName).len][]const u8 = undefined;
         @memcpy(&mut_buf, @field(ctx, mapName));
@@ -137,10 +136,8 @@ const str_maps: StrMaps = l: {
         @field(res, mapName) = .initComptime(KVs);
     }
 
-    // 生成文件表(fileNameID.zig)
     res.files = file.fileNameID.FileNameIdHashMap;
 
-    // strConstruct 里手写的表(每个表提供一个 <name>() std.StaticStringMap(u32))
     for (constructMaps) |mapName| {
         @field(res, mapName) = @field(construct, mapName)();
     }
@@ -234,7 +231,6 @@ pub fn toStr2(str: Str2) Str {
             .id = id,
         };
     } else {
-        // ReleaseFast 下 Str2 就是 id, 不存在字符串
         return .{
             .name = void{},
             .id = str,

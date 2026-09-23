@@ -28,12 +28,10 @@ fn vkValueName(
     const EnumInfo = @typeInfo(E).@"enum";
     const Tag = EnumInfo.tag_type;
 
-    // val == 0(无单 bit) -> 输出 0 值成员名(VK_*_NONE)
     if (val == 0) {
         return @tagName(@as(E, @enumFromInt(0)));
     }
 
-    // 步骤1 把 val 拆成多个单 bit 为 1 的值, 存入数组
     var bitArr: [64]Tag = undefined;
     var count: usize = 0;
     var bits: Tag = val;
@@ -44,7 +42,6 @@ fn vkValueName(
         count += 1;
     }
 
-    // 步骤2 遍历数组, 逐个转枚举名字符串并拼接; 转不出来 -> 不处理, 先崩溃
     var len: usize = 0;
     for (bitArr[0..count]) |b| {
         const name = @tagName(@as(E, @enumFromInt(b)));
@@ -61,7 +58,6 @@ fn vkValueName(
         len += name.len;
     }
 
-    // 步骤3 返回完整字符串
     return scratch[0..len];
 }
 

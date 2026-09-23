@@ -1,10 +1,12 @@
 .vscode
+Assets
 build_script
 dependencies
 include
 lib
 monsoon
 shared
+src
 tools
 .gitattributes
 .gitignore

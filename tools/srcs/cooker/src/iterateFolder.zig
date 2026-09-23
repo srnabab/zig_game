@@ -173,7 +173,6 @@ fn getDbModifiedTime(comptime where_clause: []const u8, params: anytype) !i64 {
 
     ContentPathT.get("ModifiedTime", null, where_clause, params, &getValues, &types) catch |err| switch (err) {
         sqlDB.sqliteError.SQLError => return err,
-        // 如果没找到，就返回 -1
         sqlDB.sqliteError.StepError, sqlDB.sqliteError.Empty => return -1,
     };
     return modifiedTime;
@@ -320,7 +319,6 @@ pub fn processFile(
                 );
             }
         } else {
-            // 已存在的文件：只更新时间和内容哈希（如果需要）
             if (isModified) {
                 // std.log.debug("4", .{});
                 var fileReader = tempFile.reader(io, &fileBuffer);
@@ -411,7 +409,6 @@ pub fn processDirectory(
     const pathModifiedTime = try getDbModifiedTime("RelativePath = ?", .{rPZ});
 
     if (fileModifiedTime == -1) {
-        // 新目录：插入记录并获取新ID
         try UUID.createNewUUID(&currentID);
         try ContentPathT.insert(.{
             .ID = @intCast(getInsertID()),
@@ -494,7 +491,6 @@ fn getInsertID() u32 {
     var stmt: ?*sqlite.sqlite3_stmt = null;
     var missing_id: c_int = 0;
 
-    // 准备
     _ = sqlite.sqlite3_prepare_v2(db, sql, -1, &stmt, null);
 
     if (sqlite.sqlite3_step(stmt) == sqlite.SQLITE_ROW) {

@@ -2066,7 +2066,7 @@ pub const commands = struct {
                             // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                             .command = .{
                                 .pipelineBarrier = .{
-                                    .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
+                                    .barriers = &[_]drawC.Barrier{},
                                     .lastSrcStageMask = releaseFlags.sourceStage,
                                 },
                             },
@@ -2158,7 +2158,7 @@ pub const commands = struct {
                             // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                             .command = .{
                                 .pipelineBarrier = .{
-                                    .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
+                                    .barriers = &[_]drawC.Barrier{},
                                     .lastSrcStageMask = acquireFlags.sourceStage,
                                 },
                             },
@@ -2254,14 +2254,13 @@ pub const commands = struct {
                             .command = .{
                                 .pipelineBarrier = .{
                                     .lastSrcStageMask = flags.sourceStage,
-                                    .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
+                                    .barriers = &[_]drawC.Barrier{},
                                 },
                             },
                         };
                         break :blk node;
                     };
 
-                    // 3. 统一的 Barrier 添加逻辑 (利用 realloc 自动处理空切片情况)
                     var pipelineBarrier = &self.queue.getPtr(rootNode.ID).?.command.pipelineBarrier;
                     const new_len = pipelineBarrier.barriers.len + 1;
                     pipelineBarrier.barriers = try allocator.realloc(pipelineBarrier.barriers, new_len);
@@ -2361,7 +2360,7 @@ pub const commands = struct {
                             // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                             .command = .{
                                 .pipelineBarrier = .{
-                                    .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
+                                    .barriers = &[_]drawC.Barrier{},
                                     .lastSrcStageMask = releaseFlags.sourceStage,
                                 },
                             },
@@ -2558,7 +2557,7 @@ pub const commands = struct {
                             // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
                             .command = .{
                                 .pipelineBarrier = .{
-                                    .barriers = &[_]drawC.Barrier{}, // 初始化为空切片，统一在下面做 append
+                                    .barriers = &[_]drawC.Barrier{},
                                     .lastSrcStageMask = flags.sourceStage,
                                 },
                             },

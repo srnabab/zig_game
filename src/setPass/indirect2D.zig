@@ -67,7 +67,6 @@ fn initIndirect2D(
     };
     pass.setPushConstants(1, @ptrCast(@alignCast(&valuesDraw)), 0);
 
-    // 描述符超集: slot0 纹理, slot1 2d mvp(compute 命令只取 [0..1])
     var descriptorSets = [_]vk.VkDescriptorSet{
         vulkan.globalTextureDescriptorSet,
         vulkan.globalFixed2dMVPMatrixDescriptorSet,

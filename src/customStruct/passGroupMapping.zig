@@ -58,7 +58,6 @@ pub fn deinit(self: *Self) void {
     self.updates.deinit(self.allocator);
 }
 
-/// 注册 passName 的上传目标 buffer, 在 initUserContext 中调用
 pub fn addUploadTarget(
     self: *Self,
     passName: Str,

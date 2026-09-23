@@ -231,7 +231,7 @@ fn getSType(comptime T: type) vk.VkStructureType {
         vk.VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR => vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR,
         vk.VkPhysicalDevice16BitStorageFeatures => vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES,
         vk.VkPhysicalDeviceShaderDrawParameterFeatures => vk.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETER_FEATURES,
-        // ... 在这里添加新类型的映射
+
         else => @compileError(std.fmt.comptimePrint("Unsupported feature type {s}", .{@typeName(T)})),
     };
 }
@@ -240,22 +240,19 @@ fn initFeatures(allocator: std.mem.Allocator, skips: ?[]u32) !*Features {
     const self = try allocator.create(Features);
     const fields = @typeInfo(Features).@"struct".fields;
 
-    // 假设最后一个字段是 features2 (入口)，之前的字段按顺序链接
+    // assume features2 is last feature
     inline for (fields, 0..) |field, i| {
         const current_ptr = &@field(self.*, field.name);
 
         current_ptr.* = std.mem.zeroes(field.type);
 
-        // 设置 sType
         current_ptr.sType = getSType(field.type);
         current_ptr.pNext = null;
 
         if (std.mem.eql(u8, field.name, "_Features2")) {
-            // features2 作为头，它的 pNext 指向字段列表的第一个
+            // features2 is head, pNext to the first feature
             current_ptr.pNext = &@field(self.*, fields[0].name);
         } else if (i + 1 < fields.len and !std.mem.eql(u8, fields[i + 1].name, "_Features2")) el: {
-            // 中间节点指向下一个字段
-
             if (skips) |skip| {
                 for (skip) |s| {
                     if (s == i + 1) {
@@ -266,7 +263,7 @@ fn initFeatures(allocator: std.mem.Allocator, skips: ?[]u32) !*Features {
 
             current_ptr.pNext = &@field(self.*, fields[i + 1].name);
         } else {
-            // 最后一个节点 (在 features2 之前的那个) 指向 null
+            // last node
             current_ptr.pNext = null;
         }
     }

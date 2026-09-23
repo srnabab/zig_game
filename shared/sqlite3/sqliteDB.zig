@@ -56,35 +56,21 @@ fn isFixedLengthSlice(comptime T: type) bool {
 fn isCompileTimeString(comptime T: type) bool {
     const info = @typeInfo(T);
 
-    // 1. 必须是一个指针
-    // @compileLog("1");
     if (info != .pointer) return false;
 
-    // 2. 指针必须是 const
-    // @compileLog("2");
     if (info.pointer.is_const == false) return false;
 
-    // 获取指针指向的类型
     const ArrayType = info.pointer.child;
     const array_info = @typeInfo(ArrayType);
 
-    // 3. 指针指向的必须是一个数组
-    // @compileLog("3");
     if (array_info != .array) return false;
 
-    // 4. 数组的元素类型必须是 u8
-    // @compileLog("4");
     if (array_info.array.child != u8) return false;
 
-    // 5. 数组必须有一个哨兵
-    // @compileLog("5");
     const sentinel = array_info.array.sentinel();
 
-    // 6. 哨兵的值必须是 0
-    // @compileLog("6");
     if (sentinel != 0) return false;
 
-    // @compileLog("7");
     return true;
 }
 
