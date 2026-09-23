@@ -99,52 +99,6 @@ fn updateLoadParameter(
     }
 }
 
-fn checkGltfMeshProcess(allocator: Allocator, content: []const u8) !bool {
-    const data = try cgltf.getGltfFileInfo(content);
-    defer cgltf.cgltf.cgltf_free(data);
-
-    const scenes = data.*.scenes;
-    const scenes_count = data.*.scenes_count;
-
-    for (0..scenes_count) |i| {
-        const scene = scenes[i];
-
-        const nodes = scene.nodes;
-        const nodes_count = scene.nodes_count;
-
-        for (0..nodes_count) |j| {
-            const node = nodes[j];
-
-            const mesh = node.*.mesh;
-
-            const mesh_name = mesh.*.name;
-            const mesh_name_len = std.mem.len(mesh_name);
-
-            const primitives_count = mesh.*.primitives_count;
-            for (0..primitives_count) |l| {
-                const primitive_name_mem = try allocator.alloc(u8, mesh_name_len + 4 + 5);
-                defer allocator.free(primitive_name_mem);
-
-                const primitive_name = try std.fmt.bufPrintZ(
-                    primitive_name_mem,
-                    "{s}_{d}.vtx",
-                    .{ mesh_name, l },
-                );
-
-                const have = try ContentPathT.have(
-                    "FileName",
-                    "FileName = ?",
-                    .{primitive_name},
-                );
-
-                if (!have) return false;
-            }
-        }
-    }
-
-    return true;
-}
-
 pub fn judgeFileType(suffix: []const u8, content: []u8) FileType {
     const fType = FileTypeHashTable.get(suffix) orelse FileType.UNKNOWN;
 
@@ -247,14 +201,20 @@ pub fn processFile(
         var isModified = (currentModifiedTime != fileModifiedTime);
 
         switch (fType) {
-            .GLTF => {
-                var fileReader = tempFile.reader(io, &fileBuffer);
-                const content = try fileReader.interface.readAlloc(gpa, metadata.size);
-                defer gpa.free(content);
+            inline else => |ft| {
+                const cookerName = std.fmt.comptimePrint("{s}_Cooker", .{@tagName(ft)});
 
-                isModified = try checkGltfMeshProcess(gpa, content);
+                if (@hasDecl(resourceProcess, cookerName)) {
+                    const field = @field(resourceProcess, cookerName);
+                    if (@hasDecl(field, "isModified")) {
+                        var fileReader = tempFile.reader(io, &fileBuffer);
+                        const content = try fileReader.interface.readAlloc(gpa, metadata.size);
+                        defer gpa.free(content);
+
+                        isModified = try field.isModified(gpa, content, &ContentPathT);
+                    }
+                }
             },
-            else => {},
         }
 
         if (forceUpdata) isModified = true;

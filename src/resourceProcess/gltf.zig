@@ -269,6 +269,56 @@ pub const GLTF_Cooker = struct {
         try saveSceneJson(io, resourceProcess.contentFolder);
     }
 
+    pub fn isModified(gpa: Allocator, content: []const u8, ContentPathT: *tables.ContentPath) !bool {
+        return try checkGltfMeshProcess(gpa, content, ContentPathT);
+    }
+
+    fn checkGltfMeshProcess(allocator: Allocator, content: []const u8, ContentPathT: *tables.ContentPath) !bool {
+        const data = try cgltf.getGltfFileInfo(content);
+        defer cgltf.cgltf.cgltf_free(data);
+
+        const scenes = data.*.scenes;
+        const scenes_count = data.*.scenes_count;
+
+        for (0..scenes_count) |i| {
+            const scene = scenes[i];
+
+            const nodes = scene.nodes;
+            const nodes_count = scene.nodes_count;
+
+            for (0..nodes_count) |j| {
+                const node = nodes[j];
+
+                const mesh_ = node.*.mesh;
+
+                const mesh_name = mesh_.*.name;
+                const mesh_name_len = std.mem.len(mesh_name);
+
+                const primitives_count = mesh_.*.primitives_count;
+                for (0..primitives_count) |l| {
+                    const primitive_name_mem = try allocator.alloc(u8, mesh_name_len + 4 + 5);
+                    defer allocator.free(primitive_name_mem);
+
+                    const primitive_name = try std.fmt.bufPrintZ(
+                        primitive_name_mem,
+                        "{s}_{d}.vtx",
+                        .{ mesh_name, l },
+                    );
+
+                    const have = try ContentPathT.have(
+                        "FileName",
+                        "FileName = ?",
+                        .{primitive_name},
+                    );
+
+                    if (!have) return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
     pub fn preProcess2(
         io: Io,
         gpa: Allocator,
