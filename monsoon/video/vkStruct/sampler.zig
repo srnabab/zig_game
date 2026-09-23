@@ -15,7 +15,8 @@ pub const SamplerType = enum {
 
 const Self = @This();
 
-samplers: [global.TotalSamplerCount]vk.VkSampler = undefined,
+/// len = global.TotalSamplerCount + 1 for compile, do not use it
+samplers: [global.TotalSamplerCount + 1]vk.VkSampler = undefined,
 
 pub fn _createSampler(
     io: std.Io,

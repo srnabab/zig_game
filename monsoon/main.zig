@@ -177,6 +177,11 @@ pub fn main(init: std.process.Init) !void {
     var externalCommands = ExternalCommands.init(io, allocator_t.*);
     defer externalCommands.deinit();
 
+    try pTextureSet.createMissingTexture(
+        &vulkan,
+        &externalCommands,
+    );
+
     var passes: pass = undefined;
     var passArena = std.heap.ArenaAllocator.init(allocator_t.*);
     defer passArena.deinit();
@@ -187,14 +192,6 @@ pub fn main(init: std.process.Init) !void {
         defer file.deinit(tempDb);
 
         passes = try pass.initFromRenderFlow(init.io, passAllocator, &vulkan, tempDb);
-
-        _ = try pTextureSet.createImageTexture(
-            io,
-            comptime file.comptimeGetID("non_exist.png"),
-            &vulkan,
-            &externalCommands,
-            tempDb,
-        );
     }
     defer passes.deinit(passAllocator);
 
@@ -271,7 +268,6 @@ pub fn main(init: std.process.Init) !void {
             .vulkan = &vulkan,
             .passes = &passes,
             .uctx = &uctx,
-            .instances = &uctx.instances1,
             .externalCommands = &externalCommands,
             .renderQueue = &renderQueue,
             .renderEventQueue = &renderEventQueue,

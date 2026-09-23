@@ -60,7 +60,6 @@ pub const Args = struct {
     vulkan: *VkStruct,
     passes: *pass,
     uctx: *resourceProcess.UserContext,
-    instances: *meshInstance,
     externalCommands: *processRender.externalCommands,
     renderQueue: *resource.ReaderQueue,
     updateEventQueue: *global.UpdateEventQueueType,
@@ -85,7 +84,6 @@ pub fn render_thread_func(args: Args) !void {
     // const handles = args.handles;
     const passes = args.passes;
     // const meshes = &args.uctx.meshes;
-    // const instances = args.instances;
     const externalCommands = args.externalCommands;
 
     const zone = tracy.initZone(@src(), .{ .name = "render" });

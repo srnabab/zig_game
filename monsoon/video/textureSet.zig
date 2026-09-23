@@ -157,6 +157,119 @@ pub fn deinit(self: *Self, vulkan: *VkStruct) void {
     self.imageViewToTexture.deinit();
 }
 
+pub fn createMissingTexture(self: *Self, vulkan: *VkStruct, commands: *ExternalCommands) !void {
+    const pixels = [_]u8{ 255, 0, 255, 255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 0, 255, 255 };
+    const ID = self.nextID.fetchAdd(1, .seq_cst);
+
+    var texture_t: Texture_t = undefined;
+    var texture: *Texture = undefined;
+    var stagingBuffer: VkStruct.Buffer_t = undefined;
+    const imgWidth: u32 = 2;
+    const imgHeight: u32 = 2;
+    const channel: u32 = 4;
+    var index: u32 = 0;
+    {
+        try self.mutex.lock(self.io);
+        defer self.mutex.unlock(self.io);
+
+        const pixelSize: u64 = @intCast(@sizeOf(u8) * imgWidth * imgHeight * channel);
+
+        stagingBuffer = try vulkan.createBufferByUsage(pixelSize, 0, .staging, false, null);
+        errdefer vulkan.destroyBuffer(stagingBuffer);
+
+        vulkan.buffers.copyDataToMapped(stagingBuffer, 0, u8, pixels[0..pixelSize]);
+
+        const image = try vulkan.createImage2D(
+            imgWidth,
+            imgHeight,
+            vk.VK_FORMAT_R8G8B8A8_SRGB,
+            vk.VK_IMAGE_TILING_OPTIMAL,
+            vk.VK_IMAGE_USAGE_SAMPLED_BIT | vk.VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        );
+        errdefer vulkan.destroyImage(image);
+
+        // lock
+        texture = try self.array.addOne();
+        index = @intCast(self.array.items.len - 1);
+        // unlock
+
+        const layouts = try self.layoutMemory.create(1);
+        texture.* = .{
+            .image = image,
+            .ID = ID,
+            .source_width = imgWidth,
+            .source_height = imgHeight,
+            .source_depth = 1,
+            .layouts = layouts.ptr,
+            .layoutCount = @intCast(layouts.len),
+            .imageView = null,
+            .format = vk.VK_FORMAT_R8G8B8_SRGB,
+            .extra_imageViewCount = 0,
+            .extra_imageViews = undefined,
+            .mipLevels = 0,
+            // .usage = .shader,
+        };
+        for (0..layouts.len) |i| {
+            texture.layouts[i] = vk.VK_IMAGE_LAYOUT_UNDEFINED;
+        }
+
+        texture_t = @ptrCast(self.handles.createHandle(index, .texture));
+
+        try self.map.put(ID, texture_t);
+    }
+    // errdefer self.array.giveBack(texture);
+
+    var region = [_]vk.VkBufferImageCopy{.{
+        .bufferOffset = 0,
+        .bufferRowLength = 0,
+        .bufferImageHeight = 0,
+        .imageSubresource = vk.VkImageSubresourceLayers{
+            .aspectMask = vk.VK_IMAGE_ASPECT_COLOR_BIT,
+            .mipLevel = 0,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+        .imageOffset = vk.VkOffset3D{ .x = 0, .y = 0, .z = 0 },
+        .imageExtent = vk.VkExtent3D{
+            .width = imgWidth,
+            .height = imgHeight,
+            .depth = 1,
+        },
+    }};
+
+    try commands.externalCommand(
+        .{ .copyBufferToImage = .{
+            .pTexture = texture_t,
+            .buffer = stagingBuffer,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+            .regions = &region,
+        } },
+    );
+
+    texture.imageView = try vulkan.createImageView2D(
+        @ptrFromInt(texture.image.vkImage),
+        texture.format,
+        vk.VK_IMAGE_ASPECT_COLOR_BIT,
+    );
+
+    const dstArrayElement = try self.acquireDescriptorSetIndex(ID);
+
+    try self.mutex.lock(self.io);
+    defer self.mutex.unlock(self.io);
+
+    try vulkan.addWriteDescriptorSetImage(
+        dstArrayElement,
+        texture.imageView,
+        vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        vulkan.globalTextureDescriptorSet,
+        0,
+        vk.VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+    );
+
+    try self.imageViewToTexture.put(texture.imageView, texture_t);
+}
+
 pub fn createImageTexture(
     self: *Self,
     io: std.Io,
@@ -337,10 +450,6 @@ pub fn create2DTexture(
     {
         try self.mutex.lock(self.io);
         defer self.mutex.unlock(self.io);
-
-        if (self.map.get(ID)) |value| {
-            return value;
-        }
 
         const image = try vulkan.createImage2D(width, height, format, tiling, usage);
         errdefer vulkan.destroyImage(image);
