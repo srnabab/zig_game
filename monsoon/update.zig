@@ -31,10 +31,8 @@ const vk = VkStruct.vk;
 
 const pass = @import("pass");
 const sqlite3 = ?*file.sqlite.sqlite3;
-const DrawableC = ECS.CompentPool(process.Drawable);
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
-const ResourcesQueue = resource.ResourcesQueue;
 
 const NameQueue = resource.NameQueue;
 const DataBaseHandleArrayType = resource.DataBaseHandleArrayType;
@@ -42,6 +40,7 @@ const DataBaseHandleArrayType = resource.DataBaseHandleArrayType;
 const ResourceThreadArgs = resource.ResourceThreadArgs;
 
 const resourceProcess = @import("resourceProcess");
+const updateProcess = @import("updateProcess");
 
 pub const Args = struct {
     io: std.Io,
@@ -287,7 +286,7 @@ pub fn update_thread_func(args: Args) !void {
             }
 
             // ----------------------------------------------------------------------------------------------------------------------------------------
-            try args.uctx.loadmaps.load(&resourceCtx, 0, vec2{ 0, 0 });
+            try updateProcess.process(&resourceCtx, args.uctx);
 
             var u_it = args.renderEventQueue.iterateC();
             while (u_it.next()) |event| {
