@@ -52,7 +52,7 @@ pub fn build(b: *std.Build) void {
     const cmake_configure_cmd = b.addSystemCommand(&.{
         "cmake",
         "-S",
-        mesh_dep.path(".\\").getPath(mesh_dep.builder),
+        mesh_dep.path("./").getPath(mesh_dep.builder),
         b.fmt("-B{s}", .{mesh_build_path_full}),
         b.fmt("-DCMAKE_INSTALL_PREFIX={s}", .{mesh_install_path_full}),
         "-DCMAKE_BUILD_TYPE=Release",

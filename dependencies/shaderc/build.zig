@@ -61,7 +61,7 @@ pub fn build(b: *std.Build) void {
     const cmake_configure_cmd = b.addSystemCommand(&.{
         "cmake",
         "-S",
-        shaderc_dep.path(".\\").getPath(shaderc_dep.builder),
+        shaderc_dep.path("./").getPath(shaderc_dep.builder),
         b.fmt("-B{s}", .{shaderc_build_path_full}),
         b.fmt("-DCMAKE_INSTALL_PREFIX={s}", .{shaderc_install_path_full}),
         "-DCMAKE_BUILD_TYPE=Release",

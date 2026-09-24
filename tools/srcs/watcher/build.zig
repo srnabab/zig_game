@@ -45,11 +45,11 @@ pub fn build(b: *std.Build) void {
         "0",
     } else unreachable);
 
-    const root_path = b.pathFromRoot("..\\..\\..\\");
-    const contentDbPath = b.pathResolve(&[_][]const u8{ root_path, "zig-out\\bin\\Content.db" });
-    const contentPath = b.pathResolve(&[_][]const u8{ root_path, "zig-out\\bin\\Content" });
-    const cookerPath = b.pathResolve(&[_][]const u8{ root_path, "tools\\cooker.exe" });
-    const cookerRootPath = b.pathResolve(&[_][]const u8{ root_path, "tools\\srcs\\cooker\\" });
+    const root_path = b.pathFromRoot("../../../");
+    const contentDbPath = b.pathResolve(&[_][]const u8{ root_path, "zig-out/bin/Content.db" });
+    const contentPath = b.pathResolve(&[_][]const u8{ root_path, "zig-out/bin/Content" });
+    const cookerPath = b.pathResolve(&[_][]const u8{ root_path, "tools/cooker.exe" });
+    const cookerRootPath = b.pathResolve(&[_][]const u8{ root_path, "tools/srcs/cooker/" });
     const run_cmd = b.addRunArtifact(exe);
     if (b.args) |args| {
         run_cmd.addArgs(args);

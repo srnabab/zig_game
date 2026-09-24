@@ -1,8 +1,12 @@
-Assets\Shaders
-Assets\Sampler
+zig-out/bin/Content
+tools/srcs/cooker
+Assets/Shaders
+Assets/pipeline
+Assets/Shaders
+Assets/Sampler
 Assets\pipeline
 Assets\loadMap
 Assets\rdata
 Assets\layout
-zig-out\bin\Content
-tools\srcs\cooker
+zig-out/bin/Content
+tools/srcs/cooker

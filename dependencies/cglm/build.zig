@@ -52,7 +52,7 @@ pub fn build(b: *std.Build) void {
     const cmake_configure_cmd = b.addSystemCommand(&.{
         "cmake",
         "-S",
-        cglm_dep.path(".\\").getPath(cglm_dep.builder),
+        cglm_dep.path("./").getPath(cglm_dep.builder),
         b.fmt("-B{s}", .{cglm_build_path_full}),
         b.fmt("-DCMAKE_INSTALL_PREFIX={s}", .{cglm_install_path_full}),
         "-DCMAKE_BUILD_TYPE=Release",

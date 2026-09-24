@@ -64,7 +64,7 @@ pub const RData_Cooker = struct {
         _ = content;
         _ = database;
         std.log.debug("{s}", .{contentFolderPath});
-        const dstPath = try std.fmt.allocPrint(gpa, "{s}\\Rdata\\{s}", .{ contentFolderPath, fileName });
+        const dstPath = try std.fmt.allocPrint(gpa, "{s}/Rdata/{s}", .{ contentFolderPath, fileName });
         defer gpa.free(dstPath);
         std.log.debug("{s}", .{dstPath});
 

@@ -68,7 +68,7 @@
   - 先 build 自身 + 依赖包 cooker/loadmapConverter，把 `watcher.exe`/`cooker.exe`/`loadmapConverter.exe` 安装到 `tools/`（`dest_dir.override.custom = "../../../"`，相对包目录），再启动 watcher。
   - watcher 的参数(由 build.zig 固定注入)：`--f <root> --d <Content.db 绝对路径> <Content 目录绝对路径> --c <cooker.exe> <tools/srcs/cooker/> -force`。**默认始终带 `-force`**，即启动时 cooker 会 `processFolder` 全量重扫。
 - `.watching`（watcher 启动目录下）逐行列出要监听的目录；当前内容：
-  `Assets\Shaders`、`Assets\Sampler`、`Assets\pipeline`、`Assets\loadMap`、`Assets\rdata`、`Assets\layout`、`zig-out\bin\Content`、`tools\srcs\cooker`。改动 `.watching` 本身会热更新监听集合。
+  `zig-out/bin/Content`、`tools/srcs/cooker`、`Assets/Shaders`、`Assets/pipeline`。改动 `.watching` 本身会热更新监听集合。
 - watcher 把文件事件按 `<action>?<name>?<fullPath>?<type>\n` 协议写给 cooker；`action>1000` 表示"该文件在 Content/ 内"。cooker 侧按 `ProcessType` 分派到 `src/resourceProcess/*.zig` 里对应的 `*_Cooker`（`Enable` 为 true 才执行）：
   - `.comp/.vert/.frag/.mesh/.task` → `Shader_Cooker.preProcess2`：**外部调用 `glslc --target-env=vulkan1.4 -g -o <spv> <src>`**（不再用内嵌 shaderc），并写 `ShaderPipelineGraphNode/Edge` 表。
   - `.pipe` → `Pipeline_Cooker.preProcess2`：解析 JSON 写 `Content/Pipeline/<name>.pipeb`，回填 shader-pipeline 图。
