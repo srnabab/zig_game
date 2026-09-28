@@ -1,4 +1,5 @@
 const std = @import("std");
+const Io = std.Io;
 const Thread = std.Thread;
 const Allocator = std.mem.Allocator;
 const builtin = @import("builtin");
@@ -43,6 +44,8 @@ const bufferStruct = @import("vkStruct/buffer.zig");
 pub const Buffer_t = bufferStruct.Buffer_t;
 pub const Pipeline_t = *opaque {};
 pub const WritedType = bufferStruct.WritedType;
+
+const windowInfo = @import("windowInfo");
 
 const globalDescriptorPoolSizes = [_]vk.VkDescriptorPoolSize{
     .{ .type = vk.VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, .descriptorCount = 2048 },
@@ -330,7 +333,7 @@ pub fn init(io: std.Io, allocator: Allocator, handles: *global.HandlesType, wind
     };
 }
 
-pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet, db: file.sqlite3) !void {
+pub fn initVulkan(self: *Self, io: std.Io, db: file.sqlite3) !void {
     const zone = tracy.initZone(@src(), .{ .name = "init vulkan resources" });
     defer zone.deinit();
 
@@ -429,60 +432,60 @@ pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet, db: file.sq
         self.allocator,
     );
 
-    self.swapchain = try Swapchain.createSwapchain(
-        self.physicalDevice,
-        self.device,
-        self.surface,
-        self.surfaceFormats.formats[@intCast(self.surfaceFormats.sdr)],
-        self.presentModes.modes[@intCast(self.presentModes.immediate)],
-        self.windowWidth,
-        self.windowHeight,
-        null,
-        self.pAllocCallBacks,
-    );
+    // self.swapchain = try Swapchain.createSwapchain(
+    //     self.physicalDevice,
+    //     self.device,
+    //     self.surface,
+    //     self.surfaceFormats.formats[@intCast(self.surfaceFormats.sdr)],
+    //     self.presentModes.modes[@intCast(self.presentModes.immediate)],
+    //     self.windowWidth,
+    //     self.windowHeight,
+    //     null,
+    //     self.pAllocCallBacks,
+    // );
 
-    const swapchainImages = try Swapchain.createSwapchainImages(
-        self.device,
-        self.swapchain,
-        self.allocator,
-    );
-    defer self.allocator.free(swapchainImages);
+    // const swapchainImages = try Swapchain.createSwapchainImages(
+    //     self.device,
+    //     self.swapchain,
+    //     self.allocator,
+    // );
+    // defer self.allocator.free(swapchainImages);
 
-    self.swapchainTextures = try self.allocator.alloc(textureSet.Texture_t, swapchainImages.len);
+    // self.swapchainTextures = try self.allocator.alloc(textureSet.Texture_t, swapchainImages.len);
 
-    for (swapchainImages, self.swapchainTextures) |
-        image,
-        *texture,
-    | {
-        const imageView = try self._createImageView(
-            null,
-            0,
-            image,
-            vk.VK_IMAGE_VIEW_TYPE_2D,
-            self.surfaceFormats.formats[@intCast(self.surfaceFormats.sdr)].format,
-            .{
-                .r = vk.VK_COMPONENT_SWIZZLE_IDENTITY,
-                .g = vk.VK_COMPONENT_SWIZZLE_IDENTITY,
-                .b = vk.VK_COMPONENT_SWIZZLE_IDENTITY,
-                .a = vk.VK_COMPONENT_SWIZZLE_IDENTITY,
-            },
-            vk.VK_IMAGE_ASPECT_COLOR_BIT,
-            0,
-            1,
-            0,
-            1,
-        );
+    // for (swapchainImages, self.swapchainTextures) |
+    //     image,
+    //     *texture,
+    // | {
+    //     const imageView = try self._createImageView(
+    //         null,
+    //         0,
+    //         image,
+    //         vk.VK_IMAGE_VIEW_TYPE_2D,
+    //         self.surfaceFormats.formats[@intCast(self.surfaceFormats.sdr)].format,
+    //         .{
+    //             .r = vk.VK_COMPONENT_SWIZZLE_IDENTITY,
+    //             .g = vk.VK_COMPONENT_SWIZZLE_IDENTITY,
+    //             .b = vk.VK_COMPONENT_SWIZZLE_IDENTITY,
+    //             .a = vk.VK_COMPONENT_SWIZZLE_IDENTITY,
+    //         },
+    //         vk.VK_IMAGE_ASPECT_COLOR_BIT,
+    //         0,
+    //         1,
+    //         0,
+    //         1,
+    //     );
 
-        texture.* = try textureSets.createTexturePackVkImage2D(
-            io,
-            0,
-            0,
-            self.surfaceFormats.formats[@intCast(self.surfaceFormats.sdr)].format,
-            image,
-            imageView,
-        );
-        textureSets.changeTextureLayout(texture.*, 0, 1, vk.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-    }
+    //     texture.* = try textureSets.createTexturePackVkImage2D(
+    //         io,
+    //         0,
+    //         0,
+    //         self.surfaceFormats.formats[@intCast(self.surfaceFormats.sdr)].format,
+    //         image,
+    //         imageView,
+    //     );
+    //     textureSets.changeTextureLayout(texture.*, 0, 1, vk.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+    // }
 
     var semaphores: [global.MaxFrameInFlight * 2]vk.VkSemaphore = undefined;
     try Semaphore.createBinarySemaphore(self.device, self.pAllocCallBacks, 0, &semaphores);
@@ -500,8 +503,7 @@ pub fn initVulkan(self: *Self, io: std.Io, textureSets: *textureSet, db: file.sq
     if (VulkanCapability.swapchain_maintenance1) {
         self.renderFinishSemaphores = self.renderFinishSemaphore[0..];
     } else {
-        self.renderFinishSemaphores = try self.allocator.alloc(vk.VkSemaphore, swapchainImages.len);
-        try Semaphore.createBinarySemaphore(self.device, self.pAllocCallBacks, 0, self.renderFinishSemaphores);
+        self.renderFinishSemaphores = &.{};
     }
 
     var semaphores2: [1]vk.VkSemaphore = undefined;
@@ -1888,4 +1890,66 @@ pub fn copyToUbo(self: *Self, mem: anytype, name: Str, target: slot) void {
     const dst = dst_ptr[0..src.len];
 
     @memcpy(dst, src);
+}
+
+pub fn reCreateSwapchain(self: *Self, io: Io, textureSets: *textureSet) !void {
+    self.swapchain = try Swapchain.createSwapchain(
+        self.physicalDevice,
+        self.device,
+        self.surface,
+        self.surfaceFormats.formats[@intCast(self.surfaceFormats.sdr)],
+        self.presentModes.modes[@intCast(self.presentModes.immediate)],
+        self.windowWidth,
+        self.windowHeight,
+        null,
+        self.pAllocCallBacks,
+    );
+
+    const swapchainImages = try Swapchain.createSwapchainImages(
+        self.device,
+        self.swapchain,
+        self.allocator,
+    );
+    defer self.allocator.free(swapchainImages);
+
+    self.swapchainTextures = try self.allocator.alloc(textureSet.Texture_t, swapchainImages.len);
+
+    for (swapchainImages, self.swapchainTextures) |
+        image,
+        *texture,
+    | {
+        const imageView = try self._createImageView(
+            null,
+            0,
+            image,
+            vk.VK_IMAGE_VIEW_TYPE_2D,
+            self.surfaceFormats.formats[@intCast(self.surfaceFormats.sdr)].format,
+            .{
+                .r = vk.VK_COMPONENT_SWIZZLE_IDENTITY,
+                .g = vk.VK_COMPONENT_SWIZZLE_IDENTITY,
+                .b = vk.VK_COMPONENT_SWIZZLE_IDENTITY,
+                .a = vk.VK_COMPONENT_SWIZZLE_IDENTITY,
+            },
+            vk.VK_IMAGE_ASPECT_COLOR_BIT,
+            0,
+            1,
+            0,
+            1,
+        );
+
+        texture.* = try textureSets.createTexturePackVkImage2D(
+            io,
+            0,
+            0,
+            self.surfaceFormats.formats[@intCast(self.surfaceFormats.sdr)].format,
+            image,
+            imageView,
+        );
+        textureSets.changeTextureLayout(texture.*, 0, 1, vk.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+    }
+
+    if (!VulkanCapability.swapchain_maintenance1 and self.renderFinishSemaphores.len < swapchainImages.len) {
+        self.renderFinishSemaphores = try self.allocator.realloc(self.renderFinishSemaphores, swapchainImages.len);
+        try Semaphore.createBinarySemaphore(self.device, self.pAllocCallBacks, 0, self.renderFinishSemaphores);
+    }
 }

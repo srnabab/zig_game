@@ -330,6 +330,11 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const windowInfo_mod = b.createModule(.{
+        .root_source_file = b.path("monsoon/windowInfo.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     //
     const customConfig = @import("src/build/config.zig");
@@ -346,14 +351,16 @@ pub fn build(b: *std.Build) void {
         .u8pack = u8pack_mod,
         .pass = pass_mod,
         .exe = exe_mod,
+        .mstd = ms_mod,
         .resource = resource_mod,
         .resourceProcess = resourceProcess_mod,
     };
-    customBuild.build(cfg);
+    const tests = customBuild.build(cfg);
 
     // aaa
     updateProcess_mod.addImport("resourceProcess", resourceProcess_mod);
     updateProcess_mod.addImport("resource", resource_mod);
+    updateProcess_mod.addImport("global", global_mod);
 
     renderEventAdd_mod.addImport("resourceProcess", resourceProcess_mod);
     renderEventAdd_mod.addImport("u8pack", u8pack_mod);
@@ -476,6 +483,7 @@ pub fn build(b: *std.Build) void {
 
     // meshopt_mod.addIncludePath(b.path("include"));
 
+    input_mod.addImport("ms_std", ms_mod);
     input_mod.addImport("sdl", sdl_mod);
 
     error_mod.addImport("sdl", sdl_mod);
@@ -557,6 +565,7 @@ pub fn build(b: *std.Build) void {
 
     vk_types_mod.addImport("vulkan", vk_c_mod);
 
+    video_mod.addImport("windowInfo", windowInfo_mod);
     video_mod.addImport("ms_std", ms_mod);
     video_mod.addImport("sdl", sdl_mod);
     video_mod.addImport("vma", vma_mod);
@@ -610,6 +619,7 @@ pub fn build(b: *std.Build) void {
     fileSystem_mod.addImport("vertexStruct", vertexStruct_mod);
     fileSystem_mod.addIncludePath(b.path("include"));
 
+    exe_mod.addImport("windowInfo", windowInfo_mod);
     exe_mod.addImport("u8pack", u8pack_mod);
     exe_mod.addImport("resourceProcess", resourceProcess_mod);
     exe_mod.addImport("setUbo", setUbo_mod);
@@ -710,13 +720,6 @@ pub fn build(b: *std.Build) void {
     }
     const run_step = b.step("run", "Run the app");
 
-    const test_step = b.step("test", "Run unit tests");
-
-    const exe_unit_tests = b.addTest(.{
-        .root_module = exe_mod,
-    });
-    const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
-
     // run task dependency
 
     runGenFileNameIdExe.dependOn(&runGenFileNameIdExe_cmd.step);
@@ -734,5 +737,36 @@ pub fn build(b: *std.Build) void {
     run_cmd.step.dependOn(&pre_run_message_cmd.step);
     run_step.dependOn(&run_cmd.step);
 
-    test_step.dependOn(&run_exe_unit_tests.step);
+    // test
+    const test_step = b.step("test", "Run unit tests");
+
+    // const test_filters = b.option([]const []const u8, "test-filter", "Skip tests not matching filter") orelse &.{};
+
+    const testsInfo = @typeInfo(@TypeOf(tests));
+
+    inline for (testsInfo.@"struct".fields) |value| {
+        const test_name = std.fmt.comptimePrint("test-{s}", .{value.name});
+        const inner_test_step = b.step(test_name, test_name);
+
+        const mod: *std.Build.Module = @field(tests, value.name);
+
+        const exe_unit_tests = b.addTest(.{
+            .root_module = mod,
+            .name = test_name,
+        });
+
+        mod.addLibraryPath(b.path("lib/"));
+        mod.addLibraryPath(sdl3Module.path("install/lib"));
+        mod.addLibraryPath(cglm_dep.path("install/lib"));
+        mod.linkSystemLibrary("vulkan-1", .{});
+
+        const unit_test_install = b.addInstallArtifact(exe_unit_tests, .{});
+        const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
+
+        run_exe_unit_tests.has_side_effects = true;
+        // run_exe_unit_tests.setCwd(b.path("zig-out/bin/"));
+        run_exe_unit_tests.step.dependOn(&unit_test_install.step);
+        inner_test_step.dependOn(&run_exe_unit_tests.step);
+        test_step.dependOn(inner_test_step);
+    }
 }

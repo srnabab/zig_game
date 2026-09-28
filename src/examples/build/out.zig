@@ -7,12 +7,11 @@ const meshInstance = @import("meshInstance.zig");
 const mesh = @import("mesh.zig");
 const passGroupMapping = @import("passGroupMapping.zig");
 const renderData = @import("renderData.zig");
+
 const Entry = struct {
     name: []const u8,
-    build: *const fn (Config) *std.Build.Module,
+    build: fn (Config) *std.Build.Module,
 };
-
-const ModuleNeedTest = struct {};
 
 /// add all customStruct to here\
 /// pub fn build(cfg: Config) *std.Build.Module {}
@@ -25,19 +24,8 @@ pub const list = [_]Entry{
 };
 
 /// engine will use this
-pub fn build(cfg: Config) ModuleNeedTest {
-    var res: ModuleNeedTest = undefined;
-
-    for (list) |l| {
+pub fn build(cfg: Config) void {
+    inline for (list) |l| {
         _ = l.build(cfg);
     }
-
-    inline for (list) |l| {
-        const m = l.build(cfg);
-
-        if (@hasField(ModuleNeedTest, l.name))
-            @field(res, l.name) = m;
-    }
-
-    return res;
 }

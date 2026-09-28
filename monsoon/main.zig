@@ -1,10 +1,13 @@
 const std = @import("std");
 const process = std.process;
 
+const assert = std.debug.assert;
+
 const mstd = @import("ms_std");
 const Queue = mstd.Queue;
 
 const sdl = @import("sdl").sdl;
+const SDL_EventType = @import("sdl").SDL_EventType;
 const SDL_CheckResult = @import("sdl").SDL_CheckResult;
 
 const Thread = std.Thread;
@@ -14,6 +17,7 @@ const log = std.log;
 const steam = @import("steam");
 const steamInner = steam.steamInner;
 
+const windowInfo = @import("windowInfo");
 const Window = @import("window.zig");
 const update = @import("update.zig");
 const render = @import("render.zig");
@@ -84,15 +88,9 @@ pub fn main(init: std.process.Init) !void {
     handles = try .init(allocator_t.*);
     defer handles.deinit(allocator_t.*);
 
-    var input1 = try input.init(allocator_t.*);
-    defer input1.deinit(allocator_t.*);
+    assert(sdl.SDL_SetHint(sdl.SDL_HINT_WINDOWS_RAW_KEYBOARD, "1"));
+    try SDL_CheckResult(sdl.SDL_Init(sdl.SDL_INIT_EVENTS | sdl.SDL_INIT_VIDEO | sdl.SDL_INIT_AUDIO | sdl.SDL_INIT_GAMEPAD));
 
-    {
-        const zone = tracy.initZone(@src(), .{ .name = "init SDL" });
-        defer zone.deinit();
-
-        try SDL_CheckResult(sdl.SDL_Init(sdl.SDL_INIT_EVENTS | sdl.SDL_INIT_VIDEO | sdl.SDL_INIT_AUDIO | sdl.SDL_INIT_GAMEPAD));
-    }
     defer sdl.SDL_Quit();
     std.log.debug("SDL Version: {d}.{d}.{d}", .{
         sdl.SDL_MAJOR_VERSION,
@@ -149,6 +147,10 @@ pub fn main(init: std.process.Init) !void {
     const window = try Window.createWindow(&width, &height);
     defer Window.destroyWindow(window);
 
+    var input1 = try input.init(allocator_t.*, window);
+    defer input1.deinit();
+    // assert(sdl.SDL_SetWindowRelativeMouseMode(window, true));
+
     var pTextureSet = textureSet.init(init.io, allocator_t.*, &handles);
     var vulkan = VkStruct.init(
         init.io,
@@ -162,7 +164,7 @@ pub fn main(init: std.process.Init) !void {
         var tempDb: ?*file.sqlite.sqlite3 = null;
         file.init(init.io, &tempDb);
         defer file.deinit(tempDb);
-        try vulkan.initVulkan(init.io, &pTextureSet, tempDb);
+        try vulkan.initVulkan(init.io, tempDb);
     }
     defer vulkan.deinit();
     errdefer pTextureSet.deinit(&vulkan);
@@ -238,9 +240,12 @@ pub fn main(init: std.process.Init) !void {
     // for (vulkan.uboDynamicOffsets) |value| {
     //     std.log.debug("offset {d}", .{value});
     // }
+    const uctx = try allocator_t.create(resourceProcess.UserContext);
+    defer allocator_t.destroy(uctx);
 
-    var uctx = try resourceProcess.UserContext.initUserContext(allocator_t.*, &vulkan, &handles, &passes, &externalCommands);
+    uctx.* = try resourceProcess.UserContext.initUserContext(io, allocator_t.*, &vulkan, &handles, &passes, &externalCommands);
     defer uctx.deinitUserContext(allocator_t.*);
+
     uctx.pTextureSet = pTextureSet;
     defer uctx.pTextureSet.deinit(&vulkan);
 
@@ -267,7 +272,7 @@ pub fn main(init: std.process.Init) !void {
             .stateBuffering = &stateBuffering,
             .vulkan = &vulkan,
             .passes = &passes,
-            .uctx = &uctx,
+            .uctx = uctx,
             .externalCommands = &externalCommands,
             .renderQueue = &renderQueue,
             .renderEventQueue = &renderEventQueue,
@@ -285,11 +290,11 @@ pub fn main(init: std.process.Init) !void {
             .io = init.io,
             .gpa = allocator_t.*,
             .thread_count = update_thread,
-            .pInput = input1,
+            .pInput = &input1,
             .stateBuffering = &stateBuffering,
             .handles = &handles,
             .vulkan = &vulkan,
-            .uctx = &uctx,
+            .uctx = uctx,
             .commands = &externalCommands,
             .passes = &passes,
             .renderQueue = &renderQueue,
@@ -301,7 +306,72 @@ pub fn main(init: std.process.Init) !void {
     defer update_t.join();
 
     while (true) {
-        try processInput(init.io, input1);
+        var e: sdl.SDL_Event = undefined;
+        while (sdl.SDL_Event.SDL_PollEvent(&e)) {
+            const eventType: SDL_EventType = @enumFromInt(e.type);
+
+            switch (eventType) {
+                // be careful with there, should be sync with setInput
+                .SDL_EVENT_KEY_DOWN, .SDL_EVENT_KEY_UP, .SDL_EVENT_MOUSE_MOTION, .SDL_EVENT_MOUSE_BUTTON_DOWN, .SDL_EVENT_MOUSE_BUTTON_UP => {
+                    try input1.setInput(io, &e);
+                },
+                .SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED => {
+                    windowInfo.setWidth(@intCast(e.window.data1));
+                    windowInfo.setHeight(@intCast(e.window.data2));
+
+                    global.pause.store(1, .release);
+                    global.render.store(0, .release);
+
+                    std.log.info("SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED occured {d}", .{e.window.timestamp});
+                },
+                .SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED => {
+                    std.log.info("SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED occured {d}", .{e.window.timestamp});
+                },
+                .SDL_EVENT_WINDOW_SHOWN => {
+                    std.log.info("SDL_EVENT_WINDOW_SHOWN occured {d}", .{e.window.timestamp});
+                },
+                .SDL_EVENT_WINDOW_FOCUS_GAINED => {
+                    std.log.info("SDL_EVENT_WINDOW_FOCUS_GAINED occured {d}", .{e.window.timestamp});
+                },
+                .SDL_EVENT_WINDOW_FOCUS_LOST => {
+                    std.log.info("SDL_EVENT_WINDOW_FOCUS_LOST occured {d}", .{e.window.timestamp});
+                },
+                .SDL_EVENT_WINDOW_EXPOSED => {
+                    std.log.info("SDL_EVENT_WINDOW_EXPOSED occured {d}", .{e.window.timestamp});
+                },
+                .SDL_EVENT_WINDOW_MOUSE_ENTER => {
+                    std.log.info("SDL_EVENT_WINDOW_MOUSE_ENTER occured {d}", .{e.window.timestamp});
+                },
+                .SDL_EVENT_WINDOW_MOUSE_LEAVE => {
+                    std.log.info("SDL_EVENT_WINDOW_MOUSE_LEAVE occured {d}", .{e.window.timestamp});
+                },
+                .SDL_EVENT_WINDOW_MINIMIZED => {
+                    std.log.info("SDL_EVENT_WINDOW_MINIMIZED occured {d}", .{e.adevice.timestamp});
+                },
+                .SDL_EVENT_WINDOW_RESTORED => {
+                    std.log.info("SDL_EVENT_WINDOW_RESTORED occured {d}", .{e.adevice.timestamp});
+                },
+                .SDL_EVENT_WINDOW_MOVED => {
+                    std.log.info("SDL_EVENT_WINDOW_MOVED occured {d}", .{e.adevice.timestamp});
+                },
+                .SDL_EVENT_WINDOW_CLOSE_REQUESTED => {
+                    std.log.info("SDL_EVENT_WINDOW_CLOSE_REQUESTED occured {d}", .{e.adevice.timestamp});
+                },
+                .SDL_EVENT_QUIT => {
+                    // std.log.info("SDL_EVENT_QUIT occured {d}", .{e.adevice.timestamp});
+                    global.game_end.store(1, .monotonic);
+                },
+                .SDL_EVENT_CLIPBOARD_UPDATE => {
+                    std.log.info("SDL_EVENT_CLIPBOARD_UPDATE occured {d}", .{e.clipboard.timestamp});
+                },
+                .SDL_EVENT_AUDIO_DEVICE_ADDED => {
+                    std.log.info("SDL_EVENT_AUDIO_DEVICE_ADDED occured {d}", .{e.adevice.timestamp});
+                },
+                inline else => |t| {
+                    std.log.info("unsupported sdl event {s}", .{@tagName(t)});
+                },
+            }
+        }
 
         if (global.game_end.load(.seq_cst) == 1) break;
     }
@@ -309,9 +379,4 @@ pub fn main(init: std.process.Init) !void {
     endSemaphore.post(init.io);
 }
 
-fn processInput(io: std.Io, in: *input) !void {
-    var e: sdl.SDL_Event = undefined;
-    while (sdl.SDL_PollEvent(&e)) {
-        try in.setInput(io, &e);
-    }
-}
+// fn processInput(io: std.Io, in: *input) !void {}

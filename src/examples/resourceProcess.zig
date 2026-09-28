@@ -90,14 +90,12 @@ pub const UserContext = struct {
     meshes: mesh,
 
     pub fn initUserContext(
-        io: Io,
         gpa: Allocator,
         vulkan: *VkStruct,
         handles: *global.HandlesType,
         passes: *pass,
         externalCommands: *ExternalCommands,
     ) !UserContext {
-        _ = io;
         const indirect2DBuffers = passes.passMap.get(toStr2("indirect2D")).?.buffer;
         const iFeatherBuffers = passes.passMap.get(toStr2("i_feather")).?.buffer; // IF.instance3D = 9
 

@@ -1,5 +1,5 @@
 const std = @import("std");
-const cglm = @import("cglm");
+pub const cglm = @import("cglm");
 
 fn doubleWidthCast(value: anytype) doubleWidthIntType(@TypeOf(value)) {
     return @intCast(value);

@@ -10,7 +10,7 @@ const State = enum(u32) {
 pub fn stateBuffering(bufferCount: usize, T: type) type {
     return struct {
         const Self = @This();
-        const ArrayType = std.array_list.Managed(T);
+        pub const ArrayType = std.array_list.Managed(T);
 
         states: [bufferCount]std.atomic.Value(State),
         arrays: [bufferCount]ArrayType,

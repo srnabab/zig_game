@@ -45,7 +45,7 @@ pub fn build(b: *std.Build) void {
     }
 
     if (haveLib) {
-        std.log.info("have libcglmoptimizer.a, skipped", .{});
+        std.log.info("have libcglmoptimizer.a, skipped\n", .{});
         return;
     }
 

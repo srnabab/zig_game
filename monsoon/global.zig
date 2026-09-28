@@ -60,6 +60,9 @@ pub var stopNodeDagDetailPrint = true;
 pub var stopExecuteNodePrint = true;
 pub var storExecuteSequencePrint = true;
 
+pub var pause: std.atomic.Value(u8) = .init(0);
+pub var render: std.atomic.Value(u8) = .init(0);
+
 pub var game_end: std.atomic.Value(u8) = .init(0);
 pub var resourceQueueIndex: std.atomic.Value(u8) = .init(0);
 pub var resourceQueueMutexs: [2]std.Io.Mutex = .{ .init, .init };

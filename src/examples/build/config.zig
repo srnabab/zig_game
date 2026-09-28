@@ -14,7 +14,6 @@ pub const Config = struct {
     handle: *std.Build.Module,
     u8pack: *std.Build.Module,
     pass: *std.Build.Module,
-    mstd: *std.Build.Module,
 
     // ---- used in engine ----
     exe: *std.Build.Module,

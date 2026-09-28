@@ -226,29 +226,32 @@ pub fn update_thread_func(args: Args) !void {
     _ = try resource.readResource(&resourceCtx, resourceCtx.mainSqlite, &.{}, u8pack.toStr("test.lMap"));
     try Io.sleep(io, .fromMilliseconds(200), .real);
 
+    _ = pInput;
+
     out: while (true) {
         const delta_time = @as(f32, @floatFromInt(deltaTime)) / std.time.ns_per_ms;
         {
-            if (accumulateTime > inputProcessInterval) {
-                defer accumulateTime -= inputProcessInterval;
+            // inputs = try pInput.getCurrentInput(io);
 
-                inputs = try pInput.getCurrentInput(io);
+            for (inputs) |*value| {
+                const r = inputTrigger1.set(value);
+                if (r) continue;
 
-                for (inputs) |*value| {
-                    const r = inputTrigger1.set(value);
-                    if (r) continue;
-
-                    switch (value.*) {
-                        .mouse => |mouse| {
-                            lastMouseX = mouse.x;
-                            lastMouseY = mouse.y;
-                        },
-                        else => {},
-                    }
+                switch (value.*) {
+                    .mouseMotion => |mouse| {
+                        lastMouseX = mouse.x;
+                        lastMouseY = mouse.y;
+                    },
+                    else => {},
                 }
+            }
 
-                try pInput.releaseCurrentInput(io, inputs);
-                inputs = &.{};
+            // try pInput.releaseCurrentInput(io, inputs);
+            inputs = &.{};
+
+            if (global.pause.load(.monotonic) == 1) {
+                std.atomic.spinLoopHint();
+                continue;
             }
 
             while (args.updateQueue.popFirst()) |v| {
@@ -284,9 +287,6 @@ pub fn update_thread_func(args: Args) !void {
                     },
                 }
             }
-
-            // ----------------------------------------------------------------------------------------------------------------------------------------
-            try updateProcess.process(&resourceCtx, args.uctx);
 
             var u_it = args.renderEventQueue.iterateC();
             while (u_it.next()) |event| {
@@ -354,6 +354,10 @@ pub fn update_thread_func(args: Args) !void {
             }
 
             try infos.append(.{ ._u32 = stateBufferValue });
+            try updateProcess.process(&resourceCtx, args.uctx, eventQueue, infos);
+
+            // _ = delta_time;
+
             // ----------------------------------------------------------------------------------------------------------------------------------------
 
             deltaTime = sdl.SDL_GetTicksNS() - lastTimestamp;

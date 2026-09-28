@@ -66,13 +66,13 @@ const inputTrigger = struct {
         allocator.destroy(self);
     }
 
-    pub fn getID(self: *inputTrigger) u32 {
+    fn getID(self: *inputTrigger) u32 {
         defer self.ID += 1;
 
         return self.ID;
     }
 
-    pub fn bindKey(
+    fn bindKey(
         self: *inputTrigger,
         ID: u32,
         key: sdl.SDL_Keycode,
@@ -104,7 +104,7 @@ const inputTrigger = struct {
         }
     }
 
-    pub fn bindMouseButton(
+    fn bindMouseButton(
         self: *inputTrigger,
         ID: u32,
         button: u32,
@@ -129,7 +129,7 @@ const inputTrigger = struct {
         }
     }
 
-    pub fn bindGamepadButton(
+    fn bindGamepadButton(
         self: *inputTrigger,
         ID: u32,
         button: u32,

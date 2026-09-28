@@ -9,6 +9,8 @@ const Queue = mstd.Queue;
 const upload = @import("renderUpload").upload;
 const addEvent = @import("renderEventAdd").addEvent;
 
+const windowInfo = @import("windowInfo");
+
 const global = @import("global");
 const tracy = @import("tracy");
 
@@ -42,8 +44,6 @@ const file = @import("fileSystem");
 
 const mesh = @import("mesh");
 const pass = @import("pass");
-
-const meshInstance = @import("meshInstance");
 
 const resourceProcess = @import("resourceProcess");
 
@@ -81,9 +81,7 @@ pub fn render_thread_func(args: Args) !void {
     const stateBuffering = args.stateBuffering;
     const pTextureSet = &args.uctx.pTextureSet;
     const vulkan = args.vulkan;
-    // const handles = args.handles;
     const passes = args.passes;
-    // const meshes = &args.uctx.meshes;
     const externalCommands = args.externalCommands;
 
     const zone = tracy.initZone(@src(), .{ .name = "render" });
@@ -151,6 +149,17 @@ pub fn render_thread_func(args: Args) !void {
     const renderStart = std.Io.Timestamp.now(io, .real).toNanoseconds();
 
     while (true) {
+        while (global.pause.load(.acquire) == 1) {
+            std.atomic.spinLoopHint();
+
+            vulkan.windowWidth = windowInfo.getWidth();
+            vulkan.windowHeight = windowInfo.getHeight();
+
+            try reCreateSwapchain(vulkan, io, pTextureSet);
+
+            global.pause.store(0, .release);
+            global.render.store(1, .release);
+        }
         // if (tests) @breakpoint();
 
         // const frame = vulkan.totalFrame.load(.seq_cst);
@@ -226,6 +235,8 @@ pub fn render_thread_func(args: Args) !void {
 
         try upload(io, vulkan, passes, pTextureSet, args.uctx, &commands);
 
+        if (global.render.load(.acquire) == 0) continue;
+
         try vulkan.waitEndFence();
 
         try commands.startCommand();
@@ -259,7 +270,7 @@ pub fn render_thread_func(args: Args) !void {
 
         vulkan.nextFrame();
 
-        if (global.game_end.load(.seq_cst) == 1) {
+        if (global.game_end.load(.acquire) == 1) {
             _ = renderStart;
             break;
         }
@@ -315,4 +326,9 @@ fn initWriteDescriptorSetUbos(vulkan: *VkStruct) !void {
     }
 
     vulkan.writeCachedDescriptorSetResources();
+}
+
+pub fn reCreateSwapchain(self: *VkStruct, io: Io, textureSets: *textureSet) !void {
+    try self.reCreateSwapchain(io, textureSets);
+    std.log.debug("recreate swapchain", .{});
 }

@@ -1,5 +1,3 @@
-/// UpdateEventType, UpdateEvent, RenderEventType, RenderEvent will used by engine\
-/// only modify the content, not the name
 const std = @import("std");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;

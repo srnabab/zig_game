@@ -1,11 +1,18 @@
 const std = @import("std");
+const Type = std.builtin.Type;
 
 fn comptime_print(comptime format: []const u8, comptime args: anytype) void {
     @compileLog(std.fmt.comptimePrint(format, args));
 }
 
 /// depend on enum sequence
-pub fn generateEnumFromC(comptime import: anytype, comptime tag_type: anytype, comptime startEnumMember: [:0]const u8, comptime endEnumMember: [:0]const u8) type {
+pub fn generateEnumFromC(
+    comptime import: anytype,
+    comptime tag_type: anytype,
+    comptime startEnumMember: [:0]const u8,
+    comptime endEnumMember: [:0]const u8,
+    comptime exhaustive: Type.Enum.Mode,
+) type {
     comptime var enum_fields_names: [1024][]const u8 = undefined;
     comptime var enum_fields_values: [1024]tag_type = undefined;
     comptime var count: u32 = 0;
@@ -60,7 +67,7 @@ pub fn generateEnumFromC(comptime import: anytype, comptime tag_type: anytype, c
 
     return @Enum(
         tag_type,
-        .nonexhaustive,
+        exhaustive,
         enum_fields_names[0..count],
         enum_fields_values[0..count],
     );
