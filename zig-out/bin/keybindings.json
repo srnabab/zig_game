@@ -1,0 +1,61 @@
+{
+    "Using": "Default",
+    "Default": {
+        "actions": [
+            {
+                "id": "exit",
+                "inputs": [
+                    {
+                        "key": "Escape",
+                        "gamepad": null,
+                        "mouse": null,
+                        "exceptDown": true,
+                        "deadzone": null,
+                        "wheelDirectionUp": null
+                    }
+                ]
+            },
+            {
+                "id": "Add",
+                "inputs": [
+                    {
+                        "key": "A",
+                        "gamepad": null,
+                        "mouse": null,
+                        "exceptDown": true,
+                        "deadzone": null,
+                        "wheelDirectionUp": null
+                    }
+                ]
+            },
+            {
+                "id": "press_Q",
+                "inputs": [
+                    {
+                        "key": "Q",
+                        "gamepad": null,
+                        "mouse": null,
+                        "exceptDown": true,
+                        "deadzone": null,
+                        "wheelDirectionUp": null
+                    }
+                ]
+            },
+            {
+                "id": "press_E",
+                "inputs": [
+                    {
+                        "key": "E",
+                        "gamepad": null,
+                        "mouse": null,
+                        "exceptDown": true,
+                        "deadzone": null,
+                        "wheelDirectionUp": null
+                    }
+                ]
+            }
+        ]
+    },
+    "Custom": [
+    ]
+}

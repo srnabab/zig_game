@@ -10,9 +10,11 @@ const tracy = @import("tracy");
 const sdl = @import("sdl").sdl;
 
 const u8pack = @import("u8pack");
+const toStr = u8pack.toStr;
 
 const input = @import("input");
-const inputFunc = @import("input/inputFunc.zig");
+const inputRouter = @import("inputRouter");
+const inputUser = @import("inputUser");
 
 const textureSet = @import("textureSet");
 const VkStruct = @import("video");
@@ -46,6 +48,7 @@ pub const Args = struct {
     io: std.Io,
     gpa: std.mem.Allocator,
     thread_count: usize,
+    pInputRouter: *inputRouter,
     pInput: *input,
     stateBuffering: *global.StateBufferingType,
     handles: *global.HandlesType,
@@ -65,7 +68,6 @@ pub fn update_thread_func(args: Args) !void {
     const io = args.io;
     const gpa = args.gpa;
     const thread_count = args.thread_count;
-    const pInput = args.pInput;
     const stateBuffering = args.stateBuffering;
     const handles = args.handles;
 
@@ -75,6 +77,7 @@ pub fn update_thread_func(args: Args) !void {
     defer tracyAllocator.deinit();
     var taa = tracyAllocator.allocator();
     const allocator_t = &taa;
+    _ = allocator_t;
 
     tracy.setThreadName("update");
     defer tracy.message("update exit");
@@ -82,74 +85,6 @@ pub fn update_thread_func(args: Args) !void {
     const zone = tracy.initZone(@src(), .{ .name = "update" });
     defer zone.deinit();
 
-    var inputFunc1 = try inputFunc.init(allocator_t.*);
-    defer inputFunc1.deinit();
-
-    var inputTrigger1 = try inputFunc1.createInputTrigger();
-    defer inputTrigger1.deinit();
-
-    const exit = try inputFunc1.registerAction(
-        inputTrigger1,
-        "exit",
-        sdl.SDL_SCANCODE_ESCAPE,
-        null,
-        null,
-        true,
-    );
-
-    const test_A = try inputFunc1.registerAction(
-        inputTrigger1,
-        "test_A",
-        sdl.SDL_SCANCODE_A,
-        null,
-        null,
-        false,
-    );
-
-    // const test_B = try inputFunc1.registerAction(
-    //     inputTrigger1,
-    //     "test_B",
-    //     sdl.SDL_SCANCODE_B,
-    //     null,
-    //     null,
-    //     false,
-    // );
-
-    // const test_C = try inputFunc1.registerAction(
-    //     inputTrigger1,
-    //     "test_C",
-    //     sdl.SDL_SCANCODE_C,
-    //     null,
-    //     null,
-    //     false,
-    // );
-
-    // const test_D = try inputFunc1.registerAction(
-    //     inputTrigger1,
-    //     "test_D",
-    //     sdl.SDL_SCANCODE_D,
-    //     null,
-    //     null,
-    //     false,
-    // );
-
-    const test_Q = try inputFunc1.registerAction(
-        inputTrigger1,
-        "test_Q",
-        sdl.SDL_SCANCODE_Q,
-        null,
-        null,
-        false,
-    );
-
-    const test_E = try inputFunc1.registerAction(
-        inputTrigger1,
-        "test_E",
-        sdl.SDL_SCANCODE_E,
-        null,
-        null,
-        false,
-    );
     // const lmap = try loadmap.loadLoadmap(gpa, &.{});
     // _ = lmap;
 
@@ -200,18 +135,17 @@ pub fn update_thread_func(args: Args) !void {
     defer resource.deinit(gpa);
 
     // var resourceValue: u32 = 0;
-
     var stateBufferValue: u32 = 0;
-
-    var lastMouseX: f32 = 0;
-    var lastMouseY: f32 = 0;
 
     // const rng_impl: std.Random.IoSource = .{ .io = io };
     // const rng = rng_impl.interface();
 
     // var testBoxPng: ?Handle = null;
 
-    var inputs: []input.Input = &.{};
+    var inputUsers = inputUser{
+        .pInput = args.pInput,
+    };
+
     var lastTimestamp = sdl.SDL_GetTicksNS();
 
     var accumulateTime: u64 = 0;
@@ -226,33 +160,15 @@ pub fn update_thread_func(args: Args) !void {
     _ = try resource.readResource(&resourceCtx, resourceCtx.mainSqlite, &.{}, u8pack.toStr("test.lMap"));
     try Io.sleep(io, .fromMilliseconds(200), .real);
 
-    _ = pInput;
-
     out: while (true) {
         const delta_time = @as(f32, @floatFromInt(deltaTime)) / std.time.ns_per_ms;
         {
-            // inputs = try pInput.getCurrentInput(io);
-
-            for (inputs) |*value| {
-                const r = inputTrigger1.set(value);
-                if (r) continue;
-
-                switch (value.*) {
-                    .mouseMotion => |mouse| {
-                        lastMouseX = mouse.x;
-                        lastMouseY = mouse.y;
-                    },
-                    else => {},
-                }
-            }
-
-            // try pInput.releaseCurrentInput(io, inputs);
-            inputs = &.{};
-
             if (global.pause.load(.monotonic) == 1) {
                 std.atomic.spinLoopHint();
                 continue;
             }
+
+            inputUsers.update();
 
             while (args.updateQueue.popFirst()) |v| {
                 switch (v.pointer) {
@@ -304,7 +220,7 @@ pub fn update_thread_func(args: Args) !void {
             const infos = stateBuffering.getWriteBuffer();
             defer stateBuffering.returnWriteBuffer(infos);
 
-            if (test_A.downIsTrue()) {
+            if (inputUsers.getSingleUser().using(args.pInputRouter.getAction(toStr("Add"))).wasTriggered(0.1)) {
                 if (!added) {
                     added = true;
                     pos = vec2{ 100, 100 };
@@ -342,11 +258,11 @@ pub fn update_thread_func(args: Args) !void {
                 try infos.append(.{ ._2d = .{ .handle = testHandle, .pos = pos } });
             }
 
-            if (test_Q.downIsTrue()) {
+            if (inputUsers.getSingleUser().using(args.pInputRouter.getAction(toStr("press_Q"))).wasTriggered(0.1)) {
                 stateBufferValue -= 1;
             }
 
-            if (test_E.downIsTrue()) {
+            if (inputUsers.getSingleUser().using(args.pInputRouter.getAction(toStr("press_E"))).wasTriggered(0.1)) {
                 // global.stopNodeDagPrint = false;
                 global.nodeChildrenAppendBreakPoint = true;
                 // global.printDagToDot = true;
@@ -356,7 +272,21 @@ pub fn update_thread_func(args: Args) !void {
             try infos.append(.{ ._u32 = stateBufferValue });
             try updateProcess.process(&resourceCtx, args.uctx, eventQueue, infos);
 
-            // _ = delta_time;
+            // const user = inputUsers.getSingleUser();
+
+            // const test_A = args.pInputRouter.getAction(toStr("test_A"));
+
+            // if (user.using(test_A).wasTriggered(0.05)) {
+            //     // std.log.debug("a down", .{});
+            //     inputUsers.setWindowRelativeMouseMode(true);
+            // }
+            // if (user.using(test_A).getHoldDuration()) |time| {
+            //     // std.log.debug("a hold {d}s", .{time});
+
+            //     if (time > 2.0) {
+            //         // user.using(test_A).consume();
+            //     }
+            // }
 
             // ----------------------------------------------------------------------------------------------------------------------------------------
 
@@ -365,8 +295,9 @@ pub fn update_thread_func(args: Args) !void {
 
             lastTimestamp = sdl.SDL_GetTicksNS();
 
-            if (exit.down) {
-                endGame();
+            if (inputUsers.getSingleUser().using(args.pInputRouter.getAction(toStr("exit"))).getHoldDuration()) |t| {
+                if (t > 0.3)
+                    endGame();
             }
 
             if (global.game_end.load(.seq_cst) == 1) {

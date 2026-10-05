@@ -335,6 +335,26 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const inputRouter_mod = b.createModule(.{
+        .root_source_file = b.path("monsoon/input/inputRouter.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const inputUser_mod = b.createModule(.{
+        .root_source_file = b.path("monsoon/input/inputUser.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const inputRegister_mod = b.createModule(.{
+        .root_source_file = b.path("monsoon/input/inputRegister.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const setInput_mod = b.createModule(.{
+        .root_source_file = b.path("src/setInput.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     //
     const customConfig = @import("src/build/config.zig");
@@ -358,6 +378,23 @@ pub fn build(b: *std.Build) void {
     const tests = customBuild.build(cfg);
 
     // aaa
+    setInput_mod.addImport("inputRegister", inputRegister_mod);
+    setInput_mod.addImport("u8pack", u8pack_mod);
+
+    // inputRegister_mod.addImport("inputRouter", inputRouter_mod);
+    inputRegister_mod.addImport("u8pack", u8pack_mod);
+
+    inputUser_mod.addImport("global", global_mod);
+    inputUser_mod.addImport("inputRouter", inputRouter_mod);
+    inputUser_mod.addImport("u8pack", u8pack_mod);
+    inputUser_mod.addImport("input", input_mod);
+
+    inputRouter_mod.addImport("windowInfo", windowInfo_mod);
+    inputRouter_mod.addImport("inputRegister", inputRegister_mod);
+    inputRouter_mod.addImport("u8pack", u8pack_mod);
+    inputRouter_mod.addImport("sdl", sdl_mod);
+    inputRouter_mod.addImport("input", input_mod);
+
     updateProcess_mod.addImport("resourceProcess", resourceProcess_mod);
     updateProcess_mod.addImport("resource", resource_mod);
     updateProcess_mod.addImport("global", global_mod);
@@ -373,6 +410,7 @@ pub fn build(b: *std.Build) void {
     event_mod.addImport("setPass", setPass_mod);
     event_mod.addImport("global", global_mod);
 
+    u8pack_mod.addImport("setInput", setInput_mod);
     u8pack_mod.addImport("renderFlow", renderFlow_mod);
     u8pack_mod.addImport("setUbo", setUbo_mod);
     u8pack_mod.addImport("strConstruct", strConstruct_mod);
@@ -483,8 +521,10 @@ pub fn build(b: *std.Build) void {
 
     // meshopt_mod.addIncludePath(b.path("include"));
 
+    input_mod.addImport("global", global_mod);
     input_mod.addImport("ms_std", ms_mod);
     input_mod.addImport("sdl", sdl_mod);
+    input_mod.addImport("tracy", tracy.module("tracy"));
 
     error_mod.addImport("sdl", sdl_mod);
 
@@ -619,6 +659,11 @@ pub fn build(b: *std.Build) void {
     fileSystem_mod.addImport("vertexStruct", vertexStruct_mod);
     fileSystem_mod.addIncludePath(b.path("include"));
 
+    exe_mod.addImport("setInput", setInput_mod);
+    exe_mod.addImport("inputRegister", inputRegister_mod);
+    exe_mod.addImport("inputUser", inputUser_mod);
+    exe_mod.addImport("inputRouter", inputRouter_mod);
+    exe_mod.addImport("resultToError", resultToError_mod);
     exe_mod.addImport("windowInfo", windowInfo_mod);
     exe_mod.addImport("u8pack", u8pack_mod);
     exe_mod.addImport("resourceProcess", resourceProcess_mod);

@@ -22,6 +22,7 @@ src/renderUpload.zig
 src/resourceProcess.zig
 src/samplerNames.zig
 src/setPass.zig
+src/setInput.zig
 src/setUbo.zig
 src/strConstruct.zig
 src/tables.zig

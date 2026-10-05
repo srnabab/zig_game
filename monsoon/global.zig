@@ -60,14 +60,20 @@ pub var stopNodeDagDetailPrint = true;
 pub var stopExecuteNodePrint = true;
 pub var storExecuteSequencePrint = true;
 
-pub var pause: std.atomic.Value(u8) = .init(0);
-pub var render: std.atomic.Value(u8) = .init(0);
+pub var pause: std.atomic.Value(u8) align(64) = .init(0);
+pub var render: std.atomic.Value(u8) align(64) = .init(0);
 
-pub var game_end: std.atomic.Value(u8) = .init(0);
-pub var resourceQueueIndex: std.atomic.Value(u8) = .init(0);
-pub var resourceQueueMutexs: [2]std.Io.Mutex = .{ .init, .init };
+pub var game_end: std.atomic.Value(u8) align(64) = .init(0);
 
 pub var nodeChildrenAppendBreakPoint = false;
 
 pub var SamplerNames = @import("samplerNames").names;
 pub const TotalSamplerCount = SamplerNames.len;
+
+pub var firstKeyboardID: std.atomic.Value(u32) = .init(std.math.maxInt(u32));
+pub var firstMouseID: std.atomic.Value(u32) = .init(std.math.maxInt(u32));
+pub var firstGamepadID: std.atomic.Value(u32) = .init(std.math.maxInt(u32));
+
+pub var usingGamepad: std.atomic.Value(u32) align(64) = .init(0);
+
+pub var textInput: std.atomic.Value(u8) align(64) = .init(0);

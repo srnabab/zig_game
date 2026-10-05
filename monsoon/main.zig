@@ -9,6 +9,7 @@ const Queue = mstd.Queue;
 const sdl = @import("sdl").sdl;
 const SDL_EventType = @import("sdl").SDL_EventType;
 const SDL_CheckResult = @import("sdl").SDL_CheckResult;
+const SDL_GetWindowDisplayScale = sdl.SDL_GetWindowDisplayScale;
 
 const Thread = std.Thread;
 const builtin = @import("builtin");
@@ -22,8 +23,6 @@ const Window = @import("window.zig");
 const update = @import("update.zig");
 const render = @import("render.zig");
 
-const mesh = @import("mesh");
-
 const tracy = @import("tracy");
 
 const Allocator = std.mem.Allocator;
@@ -31,6 +30,10 @@ const Allocator = std.mem.Allocator;
 const global = @import("global");
 
 const input = @import("input");
+const inputRouter = @import("inputRouter");
+const inputRegister = @import("inputRegister");
+const inputUser = @import("inputUser");
+const setInput = @import("setInput");
 
 const VkStruct = @import("video");
 const VulkanCapability = VkStruct.VulkanCapability;
@@ -88,6 +91,8 @@ pub fn main(init: std.process.Init) !void {
     handles = try .init(allocator_t.*);
     defer handles.deinit(allocator_t.*);
 
+    assert(sdl.SDL_SetHint(sdl.SDL_HINT_JOYSTICK_HIDAPI_STEAM, "0"));
+    assert(sdl.SDL_SetHint(sdl.SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1"));
     assert(sdl.SDL_SetHint(sdl.SDL_HINT_WINDOWS_RAW_KEYBOARD, "1"));
     try SDL_CheckResult(sdl.SDL_Init(sdl.SDL_INIT_EVENTS | sdl.SDL_INIT_VIDEO | sdl.SDL_INIT_AUDIO | sdl.SDL_INIT_GAMEPAD));
 
@@ -116,21 +121,6 @@ pub fn main(init: std.process.Init) !void {
     log.info("render thread count {d}", .{render_thread});
     std.log.info("cache line {d}", .{std.atomic.cache_line});
 
-    // if (steamInner.SteamAPI_RestartAppIfNecessary_C(@as(u32, steamInner.k_uAppIdInvalid_C))) {
-    //     return error.SteamError;
-    // }
-    // if (!steamInner.SteamAPI_Init_C()) {
-    //     return error.SteamError;
-    // }
-    // defer steamInner.SteamAPI_Shutdown_C();
-
-    // var achievements = steam.Achievement{
-    //     .pUserStats = steamInner.SteamUserStats_C().?,
-    //     .StoreStats = false,
-    // };
-    // achievements.UnlockAchievement(@ptrCast(&steam.g_rgAchievements[1]));
-    // achievements.StoreStatsIfNecessary();
-
     var stateBuffering: global.StateBufferingType = .init(allocator_t.*);
     defer stateBuffering.deinit();
 
@@ -148,7 +138,29 @@ pub fn main(init: std.process.Init) !void {
     defer Window.destroyWindow(window);
 
     var input1 = try input.init(allocator_t.*, window);
-    defer input1.deinit();
+    defer input1.deinit(allocator_t.*);
+
+    inputRegister.init(allocator_t.*);
+    defer inputRegister.deinit();
+
+    try setInput.setInput(null);
+
+    var router = try inputRouter.initFromRegister(io, allocator_t.*, &input1);
+    defer router.deinit(allocator_t.*);
+
+    // var test_router = try router.copyAndReset(allocator_t.*);
+    // defer test_router.deinit(allocator_t.*);
+
+    const typeInfo = @typeInfo(@TypeOf(input1));
+    inline for (typeInfo.@"struct".fields) |field| {
+        const info = @typeInfo(field.type);
+
+        if (info == .pointer) {
+            std.log.debug("{s}: {*}", .{ field.name, @field(input1, field.name) });
+        }
+    }
+
+    // @breakpoint();
     // assert(sdl.SDL_SetWindowRelativeMouseMode(window, true));
 
     var pTextureSet = textureSet.init(init.io, allocator_t.*, &handles);
@@ -237,6 +249,15 @@ pub fn main(init: std.process.Init) !void {
         }
     }
 
+    var gamepads: []u32 = &.{};
+    defer {
+        for (gamepads) |value| {
+            const gamepad = sdl.SDL_GetGamepadFromID(value);
+            sdl.SDL_CloseGamepad(gamepad);
+        }
+        allocator_t.free(gamepads);
+    }
+
     // for (vulkan.uboDynamicOffsets) |value| {
     //     std.log.debug("offset {d}", .{value});
     // }
@@ -290,6 +311,7 @@ pub fn main(init: std.process.Init) !void {
             .io = init.io,
             .gpa = allocator_t.*,
             .thread_count = update_thread,
+            .pInputRouter = &router,
             .pInput = &input1,
             .stateBuffering = &stateBuffering,
             .handles = &handles,
@@ -305,6 +327,9 @@ pub fn main(init: std.process.Init) !void {
     );
     defer update_t.join();
 
+    // assert(sdl.SDL_StartTextInput(window));
+    // global.textInput.store(1, .monotonic);
+
     while (true) {
         var e: sdl.SDL_Event = undefined;
         while (sdl.SDL_Event.SDL_PollEvent(&e)) {
@@ -312,8 +337,20 @@ pub fn main(init: std.process.Init) !void {
 
             switch (eventType) {
                 // be careful with there, should be sync with setInput
-                .SDL_EVENT_KEY_DOWN, .SDL_EVENT_KEY_UP, .SDL_EVENT_MOUSE_MOTION, .SDL_EVENT_MOUSE_BUTTON_DOWN, .SDL_EVENT_MOUSE_BUTTON_UP => {
-                    try input1.setInput(io, &e);
+                .SDL_EVENT_KEY_DOWN,
+                .SDL_EVENT_KEY_UP,
+                .SDL_EVENT_MOUSE_MOTION,
+                .SDL_EVENT_MOUSE_BUTTON_DOWN,
+                .SDL_EVENT_MOUSE_BUTTON_UP,
+                .SDL_EVENT_MOUSE_WHEEL,
+                .SDL_EVENT_GAMEPAD_AXIS_MOTION,
+                .SDL_EVENT_GAMEPAD_BUTTON_UP,
+                .SDL_EVENT_GAMEPAD_BUTTON_DOWN,
+                => {
+                    try input1.setInput(eventType, &e);
+                },
+                .SDL_EVENT_TEXT_INPUT => {
+                    std.log.debug("{s}", .{e.text.text});
                 },
                 .SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED => {
                     windowInfo.setWidth(@intCast(e.window.data1));
@@ -322,10 +359,17 @@ pub fn main(init: std.process.Init) !void {
                     global.pause.store(1, .release);
                     global.render.store(0, .release);
 
-                    std.log.info("SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED occured {d}", .{e.window.timestamp});
+                    // std.log.info("SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED occured {d}", .{e.window.timestamp});
                 },
                 .SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED => {
-                    std.log.info("SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED occured {d}", .{e.window.timestamp});
+                    var scale: f32 = 1.0;
+
+                    scale = SDL_GetWindowDisplayScale(window);
+                    std.log.debug("{d}", .{scale});
+
+                    windowInfo.setScale(scale);
+
+                    // std.log.info("SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED occured {d}", .{e.window.timestamp});
                 },
                 .SDL_EVENT_WINDOW_SHOWN => {
                     std.log.info("SDL_EVENT_WINDOW_SHOWN occured {d}", .{e.window.timestamp});
@@ -346,9 +390,11 @@ pub fn main(init: std.process.Init) !void {
                     std.log.info("SDL_EVENT_WINDOW_MOUSE_LEAVE occured {d}", .{e.window.timestamp});
                 },
                 .SDL_EVENT_WINDOW_MINIMIZED => {
+                    global.render.store(0, .release);
                     std.log.info("SDL_EVENT_WINDOW_MINIMIZED occured {d}", .{e.adevice.timestamp});
                 },
                 .SDL_EVENT_WINDOW_RESTORED => {
+                    global.render.store(1, .release);
                     std.log.info("SDL_EVENT_WINDOW_RESTORED occured {d}", .{e.adevice.timestamp});
                 },
                 .SDL_EVENT_WINDOW_MOVED => {
@@ -367,6 +413,30 @@ pub fn main(init: std.process.Init) !void {
                 .SDL_EVENT_AUDIO_DEVICE_ADDED => {
                     std.log.info("SDL_EVENT_AUDIO_DEVICE_ADDED occured {d}", .{e.adevice.timestamp});
                 },
+                .SDL_EVENT_GAMEPAD_ADDED => {
+                    const gamepad = sdl.SDL_OpenGamepad(e.gdevice.which);
+                    if (gamepad) |g| {
+                        _ = g;
+                        const idx = gamepads.len;
+                        gamepads = try allocator_t.realloc(gamepads, gamepads.len + 1);
+                        gamepads[idx] = e.gdevice.which;
+                    } else {
+                        std.log.err("open gamepad failed: {s}", .{sdl.SDL_GetError()});
+                    }
+                },
+                .SDL_EVENT_GAMEPAD_REMOVED => {
+                    const gamepad = sdl.SDL_GetGamepadFromID(e.gdevice.which);
+                    sdl.SDL_CloseGamepad(gamepad);
+                },
+                .SDL_EVENT_JOYSTICK_ADDED,
+                .SDL_EVENT_JOYSTICK_REMOVED,
+                .SDL_EVENT_JOYSTICK_AXIS_MOTION,
+                .SDL_EVENT_JOYSTICK_UPDATE_COMPLETE,
+                .SDL_EVENT_JOYSTICK_BUTTON_UP,
+                .SDL_EVENT_JOYSTICK_BUTTON_DOWN,
+                .SDL_EVENT_JOYSTICK_BATTERY_UPDATED,
+                .SDL_EVENT_GAMEPAD_UPDATE_COMPLETE,
+                => {},
                 inline else => |t| {
                     std.log.info("unsupported sdl event {s}", .{@tagName(t)});
                 },

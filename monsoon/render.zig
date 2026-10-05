@@ -23,6 +23,8 @@ const toStr2 = u8pack.toStr2;
 
 const VkStruct = @import("video");
 const vk = VkStruct.vk;
+const VkResultToError = @import("resultToError");
+const checkVkResult = VkResultToError.checkVkResult;
 const processRender = @import("processRender");
 const OneTimeCommand = processRender.oneTimeCommand;
 const Commands = processRender.commands;
@@ -329,6 +331,7 @@ fn initWriteDescriptorSetUbos(vulkan: *VkStruct) !void {
 }
 
 pub fn reCreateSwapchain(self: *VkStruct, io: Io, textureSets: *textureSet) !void {
+    try checkVkResult(vk.vkDeviceWaitIdle(self.device));
     try self.reCreateSwapchain(io, textureSets);
     std.log.debug("recreate swapchain", .{});
 }

@@ -12,6 +12,7 @@ const ComptimeAllocator = mstd.ComptimeAllocator;
 
 const setPass = @import("setPass");
 const setUbo = @import("setUbo");
+const setInput = @import("setInput");
 const renderFlow = @import("renderFlow");
 const file = @import("fileSystem");
 
@@ -40,7 +41,7 @@ pub fn HashMap(comptime V: type) type {
     return std.HashMap(Str, V, HashMapContext, 80);
 }
 
-const ctxMaps = [_][]const u8{ "buffers", "passes", "ubos" };
+const ctxMaps = [_][]const u8{ "buffers", "passes", "ubos", "inputActions" };
 const constructMaps = construct.maps;
 
 const totalMaps = l: {
@@ -96,6 +97,7 @@ pub const CTX = struct {
     passes: []const []const u8,
     buffers: []const []const u8,
     ubos: []const []const u8,
+    inputActions: []const []const u8,
 };
 
 const str_maps: StrMaps = l: {
@@ -105,6 +107,7 @@ const str_maps: StrMaps = l: {
         .buffers = &.{},
         .passes = &.{},
         .ubos = &.{},
+        .inputActions = &.{},
     };
 
     setUbo.setUbo(&ctx) catch {
@@ -114,6 +117,9 @@ const str_maps: StrMaps = l: {
         @compileError("error");
     };
     setPass.setting(&ctx) catch {
+        @compileError("error");
+    };
+    setInput.setInput(&ctx) catch {
         @compileError("error");
     };
 
