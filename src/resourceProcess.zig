@@ -121,11 +121,11 @@ pub const UserContext = struct {
         return uctx;
     }
 
-    pub fn deinitUserContext(self: *UserContext, gpa: Allocator) void {
+    pub fn deinitUserContext(self: *UserContext, gpa: Allocator, handles: *global.HandlesType) void {
         self.meshes.deinit();
         self.loadmaps.deinit(gpa);
         self.renderData.deinit();
-        self.vertices.deinit();
+        self.vertices.deinit(handles);
         self.passGroupMapping.deinit();
         self.instances1.deinit();
         self.layoutQueue.deinit();

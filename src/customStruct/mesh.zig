@@ -71,6 +71,11 @@ pub fn init(
 }
 
 pub fn deinit(self: *Self) void {
+    var it = self.meshMap.iterator();
+    while (it.next()) |e| {
+        self.handles.destroyHandle(@ptrCast(e.value_ptr.*));
+    }
+
     self.meshMap.deinit();
     self.meshs.deinit();
 }
@@ -82,6 +87,7 @@ pub fn addMesh(
     meshletVerticesSize: u64,
     meshletTrianglesSize: u64,
     verticeStride: u32,
+    handle: Handle,
 ) !u32 {
     // @breakpoint();
     const counts = [_]u64{
@@ -114,6 +120,7 @@ pub fn addMesh(
         .verticeStride = verticeStride,
     });
     const index = self.meshs.items.len - 1;
+    try self.meshMap.put(@intCast(index), @ptrCast(handle));
 
     self.updated = true;
 

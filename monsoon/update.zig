@@ -156,8 +156,11 @@ pub fn update_thread_func(args: Args) !void {
     var pos: vec2 = vec2{ 0, 0 };
     var vel: vec2 = vec2{ 0.1, 0.1 };
     var testHandle: Handle = undefined;
+    defer handles.destroyHandle(testHandle);
 
-    _ = try resource.readResource(&resourceCtx, resourceCtx.mainSqlite, &.{}, u8pack.toStr("test.lMap"));
+    const startHandle = try resource.readResource(&resourceCtx, resourceCtx.mainSqlite, &.{}, u8pack.toStr("test.lMap"));
+    defer handles.destroyHandle(startHandle);
+
     try Io.sleep(io, .fromMilliseconds(200), .real);
 
     out: while (true) {

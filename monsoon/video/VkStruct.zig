@@ -724,7 +724,7 @@ pub fn deinit(self: *Self) void {
     defer zone.deinit();
 
     self.samplers.destroySamplers(self.device, self.pAllocCallBacks);
-    self.buffers.deinit(&self.vmaS);
+    self.buffers.deinit(&self.vmaS, self.handles);
 
     self.writeDescriptorSets.deinit();
     self.descriptorImageInfos.deinit();
@@ -761,6 +761,8 @@ pub fn deinit(self: *Self) void {
         vk.vkDestroyPipelineLayout(self.device, pipe.pipelineLayout, self.pAllocCallBacks);
         self.allocator.free(val.key_ptr.*);
         self.allocator.free(pipe.outputs);
+
+        self.handles.destroyHandle(@ptrCast(val.value_ptr.*));
         // for (0..val.setCount) |i| {
         //     vk.vkDestroyDescriptorSetLayout(
         //         self.device,

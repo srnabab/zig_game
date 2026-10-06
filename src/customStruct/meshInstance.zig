@@ -23,6 +23,8 @@ const Instance = vertexStruct.Instance3D;
 pub const Instance_t = *opaque {};
 
 instances: std.array_list.Managed(Instance),
+instanceHandles: std.array_list.Managed(Instance_t),
+
 handles: *global.HandlesType,
 buffer: VkStruct.Buffer_t,
 
@@ -35,12 +37,17 @@ updateEnd: u32 = 0,
 pub fn init(allocator: std.mem.Allocator, handles: *global.HandlesType, buffer: VkStruct.Buffer_t) Self {
     return Self{
         .instances = .init(allocator),
+        .instanceHandles = .init(allocator),
         .handles = handles,
         .buffer = buffer,
     };
 }
 
 pub fn deinit(self: *Self) void {
+    for (self.instanceHandles.items) |value| {
+        self.handles.destroyHandle(@ptrCast(value));
+    }
+    self.instanceHandles.deinit();
     self.instances.deinit();
 }
 
@@ -57,6 +64,7 @@ pub fn add(
     defer self.mutex.unlock(io);
 
     const instance = try self.instances.addOne();
+    const finalHandle = try self.instanceHandles.addOne();
     const index: u32 = @intCast(self.instances.items.len - 1);
 
     instance.* = Instance{
@@ -80,13 +88,13 @@ pub fn add(
 
     instance.matrix = matrix;
 
-    const finalHandle = bl: {
+    finalHandle.* = bl: {
         if (handle) |h| {
             self.handles.setIndex(h, index);
 
-            break :bl h;
+            break :bl @ptrCast(h);
         } else {
-            break :bl self.handles.createHandle(index, .instance);
+            break :bl @ptrCast(self.handles.createHandle(index, .instance));
         }
     };
 
@@ -99,7 +107,7 @@ pub fn add(
         self.updateStart = @min(self.updateStart, index);
     }
 
-    return @ptrCast(finalHandle);
+    return @ptrCast(finalHandle.*);
 }
 
 pub fn upload(self: *Self, io: Io, vulkan: *VkStruct, commands: *Commands) !void {

@@ -22,7 +22,7 @@ pub const indexCount = 6;
 pub const LOGICAL_HEIGHT = 600;
 pub const LOGICAL_WEIGHT = 800;
 
-pub const HandlesType = Handles.Handles(1024, .Once);
+pub const HandlesType = Handles.Handles(1024, 8);
 
 pub const UpdateEventQueueType = mstd.DoubleBufferQueue(event.UpdateEvent);
 pub const RenderEventQueueType = mstd.DoubleBufferQueue(event.RenderEvent);

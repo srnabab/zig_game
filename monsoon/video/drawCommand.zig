@@ -237,7 +237,8 @@ pub const CopyBuffer = struct {
     srcBuffer: VkStruct.Buffer_t,
     dstBuffer: VkStruct.Buffer_t,
     regions: []vk.VkBufferCopy2,
-    clean: bool = true,
+    cleanSrc: bool = true,
+    cleanDst: bool = false,
 };
 
 pub const BindVertexBuffers = struct {

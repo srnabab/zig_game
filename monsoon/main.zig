@@ -3,6 +3,8 @@ const process = std.process;
 
 const assert = std.debug.assert;
 
+const windows = std.os.windows;
+
 const mstd = @import("ms_std");
 const Queue = mstd.Queue;
 
@@ -49,6 +51,23 @@ const ExternalCommands = @import("processRender").externalCommands;
 const resourceProcess = @import("resourceProcess");
 const u8pack = @import("u8pack");
 const toStr = u8pack.toStr;
+
+const win32 = struct {
+    pub const SUBCLASSPROC = *const fn (
+        hWnd: windows.HWND,
+        uMsg: windows.UINT,
+        wParam: usize, // WPARAM
+        lParam: windows.LPARAM,
+        uIdSubclass: usize, // UINT_PTR
+        dwRefData: windows.DWORD_PTR,
+    ) callconv(.winapi) isize;
+
+    pub extern "kernel32" fn DefSubclassProc(hWnd: windows.HWND, uMsg: windows.UINT, wParam: usize, lParam: windows.LPARAM) callconv(.winapi) isize;
+    pub extern "kernel32" fn SetWindowSubclass(hWnd: windows.HWND, pfnSubclass: SUBCLASSPROC, uIdSubclass: usize, dwRefData: windows.DWORD_PTR) callconv(.winapi) windows.BOOL;
+
+    const WM_SYSCOMMAND = 0x0112;
+    const SC_MINIMIZE = 0xF020;
+};
 
 // const cgltf = @import("cgltf");
 
@@ -265,12 +284,18 @@ pub fn main(init: std.process.Init) !void {
     defer allocator_t.destroy(uctx);
 
     uctx.* = try resourceProcess.UserContext.initUserContext(io, allocator_t.*, &vulkan, &handles, &passes, &externalCommands);
-    defer uctx.deinitUserContext(allocator_t.*);
+    defer uctx.deinitUserContext(allocator_t.*, &handles);
 
     uctx.pTextureSet = pTextureSet;
     defer uctx.pTextureSet.deinit(&vulkan);
 
     pTextureSet = undefined;
+
+    if (builtin.os.tag == .windows) {
+        const hwnd = sdl.SDL_GetPointerProperty(sdl.SDL_GetWindowProperties(window), sdl.SDL_PROP_WINDOW_WIN32_HWND_POINTER, null);
+        const res = win32.SetWindowSubclass(@ptrCast(hwnd.?), WindowSubclassProc, 0, 0);
+        assert(res.toBool());
+    }
 
     var renderQueue = try resource.ReaderQueue.init(allocator_t.*, io);
     defer renderQueue.deinit();
@@ -357,9 +382,9 @@ pub fn main(init: std.process.Init) !void {
                     windowInfo.setHeight(@intCast(e.window.data2));
 
                     global.pause.store(1, .release);
-                    global.render.store(0, .release);
+                    global.render.store(2, .release);
 
-                    // std.log.info("SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED occured {d}", .{e.window.timestamp});
+                    std.log.info("SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED occured {d}", .{e.window.timestamp});
                 },
                 .SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED => {
                     var scale: f32 = 1.0;
@@ -369,7 +394,7 @@ pub fn main(init: std.process.Init) !void {
 
                     windowInfo.setScale(scale);
 
-                    // std.log.info("SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED occured {d}", .{e.window.timestamp});
+                    std.log.info("SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED occured {d}", .{e.window.timestamp});
                 },
                 .SDL_EVENT_WINDOW_SHOWN => {
                     std.log.info("SDL_EVENT_WINDOW_SHOWN occured {d}", .{e.window.timestamp});
@@ -390,11 +415,10 @@ pub fn main(init: std.process.Init) !void {
                     std.log.info("SDL_EVENT_WINDOW_MOUSE_LEAVE occured {d}", .{e.window.timestamp});
                 },
                 .SDL_EVENT_WINDOW_MINIMIZED => {
-                    global.render.store(0, .release);
                     std.log.info("SDL_EVENT_WINDOW_MINIMIZED occured {d}", .{e.adevice.timestamp});
                 },
                 .SDL_EVENT_WINDOW_RESTORED => {
-                    global.render.store(1, .release);
+                    global.render.store(3, .release);
                     std.log.info("SDL_EVENT_WINDOW_RESTORED occured {d}", .{e.adevice.timestamp});
                 },
                 .SDL_EVENT_WINDOW_MOVED => {
@@ -449,4 +473,18 @@ pub fn main(init: std.process.Init) !void {
     endSemaphore.post(init.io);
 }
 
-// fn processInput(io: std.Io, in: *input) !void {}
+pub fn WindowSubclassProc(hWnd: windows.HWND, uMsg: windows.UINT, wParam: usize, lParam: windows.LPARAM, uIdSubclass: usize, dwRefData: windows.DWORD_PTR) callconv(.winapi) isize {
+    _ = uIdSubclass;
+    _ = dwRefData;
+    if (uMsg == win32.WM_SYSCOMMAND) {
+        std.log.debug("window command {d}", .{wParam & 0xFFF0});
+        if ((wParam & 0xFFF0) == win32.SC_MINIMIZE) {
+            global.render.store(0, .release);
+
+            while (global.render.cmpxchgWeak(1, 2, .release, .acquire)) |_| {
+                std.atomic.spinLoopHint();
+            }
+        }
+    }
+    return win32.DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}

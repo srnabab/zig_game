@@ -1102,7 +1102,8 @@ const garbageDataTag = enum {
 const garbageData = union(garbageDataTag) {
     buffer: VkStruct.Buffer_t,
     bufferAndRegion: struct {
-        buffer: VkStruct.Buffer_t,
+        srcBuffer: ?VkStruct.Buffer_t,
+        dstBuffer: ?VkStruct.Buffer_t,
         region: []vk.VkBufferCopy2,
     },
     regions: []vk.VkBufferCopy2,
@@ -1216,6 +1217,7 @@ pub const commands = struct {
     cachedCommands: [2]std.array_list.Managed(drawC.comm),
     cacheIdx: u32 = 0,
 
+    drawable: bool = true,
     end: bool = false,
 
     pub fn init(io: std.Io, allocator: std.mem.Allocator, buffers: []u8, vulkan: *VkStruct, pTextureSet: *texture) !Self {
@@ -4164,6 +4166,8 @@ pub const commands = struct {
                 try self.nodeConnect(linkNodeStart.?, node);
             },
             .drawMeshIndirect, .draw2D, .present, .drawMesh, .drawIndirect => {
+                if (!self.drawable) return;
+
                 node.data.commandPoolType = .graphic;
 
                 try self.drawCacheMap.put(ID, void{});
@@ -4975,6 +4979,10 @@ pub const commands = struct {
         try self.nodeDag.childrenAppend(parent, child);
         try child.parentsAppend(&parent.ID);
     }
+
+    pub fn setDrawable(self: *Self, enable: bool) void {
+        self.drawable = enable;
+    }
 };
 
 pub const externalCommands = struct {
@@ -5608,9 +5616,10 @@ pub const oneTimeCommand = struct {
             },
             .pipelineBarrier => break :rs garbageData{ .barriers = command.command.pipelineBarrier.barriers },
             .copyBuffer => {
-                if (command.command.copyBuffer.clean) {
+                if (command.command.copyBuffer.cleanSrc or command.command.copyBuffer.cleanDst) {
                     break :rs garbageData{ .bufferAndRegion = .{
-                        .buffer = command.command.copyBuffer.srcBuffer,
+                        .srcBuffer = if (command.command.copyBuffer.cleanSrc) command.command.copyBuffer.srcBuffer else null,
+                        .dstBuffer = if (command.command.copyBuffer.cleanDst) command.command.copyBuffer.dstBuffer else null,
                         .region = command.command.copyBuffer.regions,
                     } };
                 } else {
@@ -5656,9 +5665,15 @@ pub const oneTimeCommand = struct {
                 .barriers => {
                     self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
                 },
-                .bufferAndRegion => {
+                .bufferAndRegion => |bar| {
                     if (currentSemaphoreValue < g.semaphoreValue) continue;
-                    self.vulkan.destroyBuffer(g.data.bufferAndRegion.buffer);
+
+                    if (bar.srcBuffer) |b|
+                        self.vulkan.destroyBuffer(b);
+
+                    if (bar.dstBuffer) |b|
+                        self.vulkan.destroyBuffer(b);
+
                     self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
                 },
                 .regions => {
@@ -6109,5 +6124,21 @@ pub const oneTimeCommand = struct {
                 ctxA.commandPool.markSecondaryCommandBufferFree();
             }
         }
+    }
+
+    pub fn executeCommandsNoOp(self: *Self, pCommands: *commands) !void {
+        try self.mutex.lock(self.io);
+        defer self.mutex.unlock(self.io);
+
+        defer {
+            pCommands.clearRetainCapacity();
+
+            self.innerCommandBufferID = 0;
+            self.innerID = 0;
+        }
+
+        if (!pCommands.end) return;
+
+        try self.cleanGarbage();
     }
 };

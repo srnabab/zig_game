@@ -714,6 +714,7 @@ pub fn build(b: *std.Build) void {
     exe_mod.linkSystemLibrary("ole32", .{ .preferred_link_mode = .static });
     exe_mod.linkSystemLibrary("gdi32", .{ .preferred_link_mode = .static });
     exe_mod.linkSystemLibrary("OleAut32", .{ .preferred_link_mode = .static });
+    exe_mod.linkSystemLibrary("Comctl32", .{ .preferred_link_mode = .static });
     exe_mod.linkSystemLibrary("vulkan-1", .{});
     exe_mod.linkLibrary(tracy.artifact("tracy"));
 

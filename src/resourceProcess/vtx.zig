@@ -283,6 +283,7 @@ pub const VTX_Reader = struct {
                     .srcBuffer = buffers[i],
                     .dstBuffer = bufferAndOffset.buffer,
                     .regions = &copyRegion,
+                    .cleanDst = true,
                 },
             }) catch return ResourceError.Unavaliable;
             buffers[i] = bufferAndOffset.buffer;
@@ -303,7 +304,6 @@ pub const VTX_Reader = struct {
         _ = io;
         _ = gpa;
         _ = vulkan;
-        _ = handle;
         _ = commands;
 
         const index = uctx.meshes.addMesh(
@@ -312,6 +312,7 @@ pub const VTX_Reader = struct {
             pointer.sizes[2],
             pointer.sizes[3],
             pointer.stride,
+            handle,
         ) catch return Handles.Invalid;
 
         return index;

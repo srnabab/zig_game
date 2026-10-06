@@ -1,6 +1,8 @@
 const std = @import("std");
 const Io = std.Io;
 
+const global = @import("global");
+
 const VkStruct = @import("video");
 const vertexStruct = @import("vertexStruct");
 const processRender = @import("processRender");
@@ -8,11 +10,16 @@ const ExternalCommands = processRender.externalCommands;
 const Commands = processRender.commands;
 const vk = VkStruct.vk;
 
+const Handle = @import("handle").Handle;
+
 const Self = @This();
 
 instanceIDsBuffer: VkStruct.Buffer_t = undefined,
 indirectDrawCommandBuffer: VkStruct.Buffer_t = undefined,
+
 instances2D: std.array_list.Managed(vertexStruct.Instance) = undefined,
+instanceHandles: std.array_list.Managed(Handle) = undefined,
+
 instanceBuffer2D: VkStruct.Buffer_t = undefined,
 
 mutex: std.Io.Mutex = .init,
@@ -40,10 +47,15 @@ pub fn init(
         .indirectDrawCommandBuffer = indirectDrawCommandBuffer_t,
         .instanceBuffer2D = instanceBuffer_t,
         .instances2D = .init(allocator),
+        .instanceHandles = .init(allocator),
     };
 }
 
-pub fn deinit(self: *Self) void {
+pub fn deinit(self: *Self, handles: *global.HandlesType) void {
+    for (self.instanceHandles.items) |value| {
+        handles.destroyHandle(value);
+    }
+    self.instanceHandles.deinit();
     self.instances2D.deinit();
 }
 
@@ -56,6 +68,7 @@ pub fn addInstance(
     height: f32,
     depth: f32,
     textureIndex: u32,
+    handle: Handle,
 ) !u32 {
     try self.mutex.lock(io);
     defer self.mutex.unlock(io);
@@ -65,16 +78,20 @@ pub fn addInstance(
     // const scale_y = height / @as(f32, @floatFromInt(textureContent.source_height));
 
     const ptr = try self.instances2D.addOne();
+    const pHandle = try self.instanceHandles.addOne();
     ptr.* = .{
         .position = [3]f32{ x, y, depth },
         .scale = [2]f32{ width, height },
         .textureIndex = textureIndex,
     };
     self.instanceUpdated = true;
+    pHandle.* = handle;
 
     self.updateEnd = @intCast(self.instances2D.items.len);
 
-    return @intCast(self.instances2D.items.len - 1);
+    const index = self.instances2D.items.len - 1;
+
+    return @intCast(index);
 }
 
 pub fn updateInstance(

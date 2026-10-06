@@ -364,8 +364,14 @@ pub fn loadResource(
     var it2 = self.loadingItems.iterate();
     while (it2.next()) |item| {
         if (Handles.handleIsValid(item.ptr.handle)) {
-            std.log.debug("handle: {*}", .{item.ptr.handle});
+            // std.log.debug("handle: {*}", .{item.ptr.handle});
+
             _ = item.ptr.progress.fetchAdd(1, .seq_cst);
+
+            if (Handles.getIndex(item.ptr.handle) == Handles.WaitFill) {
+                ctx.handles.destroyHandle(item.ptr.handle);
+            }
+
             self.loadingItems.remove(item.index);
         }
     }

@@ -90,7 +90,7 @@ pub fn init(io: std.Io, allocator: std.mem.Allocator) Self {
     };
 }
 
-pub fn deinit(self: *Self, vmaa: *vmaStruct) void {
+pub fn deinit(self: *Self, vmaa: *vmaStruct, handles: *global.HandlesType) void {
     for (self.buffers.items.items) |value| {
         if (value == .data) {
             switch (value.data.allocation) {
@@ -126,6 +126,11 @@ pub fn deinit(self: *Self, vmaa: *vmaStruct) void {
         u8pack.free(self.names.allocator, value);
     }
     self.names.deinit();
+
+    var it = self.bufferMap.iterator();
+    while (it.next()) |e| {
+        handles.destroyHandle(@ptrCast(e.value_ptr.*));
+    }
     self.bufferMap.deinit();
 }
 
@@ -231,12 +236,20 @@ pub fn destroyBuffer(
     if (index == null) return;
 
     const ptr = self.buffers.get(index.?);
-
-    assert(ptr.allocation == .real);
-
-    vmaa.destroyBuffer(ptr.vkBuffer, ptr.allocation.real);
+    switch (ptr.allocation) {
+        .real => |all| {
+            vmaa.destroyBuffer(ptr.vkBuffer, all);
+        },
+        .virtual => |all| {
+            vma.vmaVirtualFree(ptr.virtualBlock, all);
+        },
+        .block => {
+            vma.vmaDestroyVirtualBlock(ptr.virtualBlock);
+        },
+    }
 
     self.buffers.remove(index.?);
+
     handles.destroyHandle(@ptrCast(buffer));
 }
 
@@ -590,24 +603,6 @@ pub fn createVirtualBuffer(
         .buffer = @ptrCast(handle),
         .offset = offset + ptr.offset,
     };
-}
-
-pub fn destroyVirtualBlockBuffer(self: *Self, buffer: Buffer_t) void {
-    const index = getIndex(buffer);
-    const ptr = self.buffers.get(index);
-
-    assert(ptr.allocation == .block);
-
-    vma.vmaDestroyVirtualBlock(ptr.virtualBlock);
-}
-
-pub fn destroyVirtualBuffer(self: *Self, buffer: Buffer_t) void {
-    const index = getIndex(buffer);
-    const ptr = self.buffers.get(index);
-
-    assert(ptr.allocation == .virtual);
-
-    vma.vmaVirtualFree(ptr.virtualBlock, ptr.allocation.virtual);
 }
 
 pub fn bufferHaveRef(self: *Self, buffer: Buffer_t) bool {

@@ -160,7 +160,7 @@ pub fn render_thread_func(args: Args) !void {
             try reCreateSwapchain(vulkan, io, pTextureSet);
 
             global.pause.store(0, .release);
-            global.render.store(1, .release);
+            global.render.store(3, .release);
         }
         // if (tests) @breakpoint();
 
@@ -237,9 +237,24 @@ pub fn render_thread_func(args: Args) !void {
 
         try upload(io, vulkan, passes, pTextureSet, args.uctx, &commands);
 
-        if (global.render.load(.acquire) == 0) continue;
+        const renderNum = global.render.load(.monotonic);
 
-        try vulkan.waitEndFence();
+        if (renderNum == 0) {
+            global.render.store(1, .monotonic);
+            continue;
+        }
+
+        if (renderNum == 1) {
+            continue;
+        }
+
+        if (renderNum == 2) {
+            commands.setDrawable(false);
+        }
+
+        if (renderNum == 3) {
+            commands.setDrawable(true);
+        }
 
         try commands.startCommand();
         try externalCommands.addExternalCommand(&commands);
@@ -266,11 +281,15 @@ pub fn render_thread_func(args: Args) !void {
 
         try commands.addCommandEnd();
 
+        try vulkan.waitEndFence();
+
         vulkan.writeCachedDescriptorSetResources();
 
         try graphic.executeCommands(&commands);
 
         vulkan.nextFrame();
+
+        // std.log.debug("frame: {d}", .{vulkan.currentFrame.load(.monotonic)});
 
         if (global.game_end.load(.acquire) == 1) {
             _ = renderStart;

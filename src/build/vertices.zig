@@ -13,6 +13,8 @@ pub fn build(cfg: Config) *std.Build.Module {
     m.addImport("video", cfg.video);
     m.addImport("vertexStruct", cfg.vertexStruct);
     m.addImport("processRender", cfg.processRender);
+    m.addImport("handle", cfg.handle);
+    m.addImport("global", cfg.global);
 
     cfg.exe.addImport("vertices", m);
     cfg.resourceProcess.addImport("vertices", m);

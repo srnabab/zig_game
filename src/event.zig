@@ -69,6 +69,7 @@ pub const test2d = struct {
             self.scale[1] * @as(f32, @floatFromInt(textureContent.source_height)),
             self.pos[2],
             uctx.pTextureSet.getDescriptorSetIndex(@ptrCast(rdata.textures[0])),
+            self.handle,
         );
         viewBoundsAndTotalSpriteCount.totalSpriteCount = uctx.vertices.getTotalCount();
         handles.setIndex(self.handle, index);

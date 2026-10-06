@@ -148,6 +148,11 @@ pub fn deinit(self: *Self, vulkan: *VkStruct) void {
 
     std.log.debug("texture count {d}", .{self.array.capacity});
 
+    var it = self.map.iterator();
+    while (it.next()) |e| {
+        self.handles.destroyHandle(@ptrCast(e.value_ptr.*));
+    }
+
     self.map.deinit();
     self.offsetRange.deinit();
     self.offsetsPool.deinit();
