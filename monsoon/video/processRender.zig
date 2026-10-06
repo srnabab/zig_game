@@ -384,10 +384,16 @@ fn Graph(T: type) type {
             if (self.ID == ID.*) return;
 
             if (global.nodeChildrenAppendBreakPoint) {
-                // if (self.ID == 49 and ID.* == 51) {
+                // if (self.ID == 2 and ID.* == 3) {
                 //     @breakpoint();
                 // }
-                // if (self.ID == 9 and ID.* == 10) {
+                // if (self.ID == 3 and ID.* == 1) {
+                //     @breakpoint();
+                // }
+                // if (self.ID == 1 and ID.* == 8) {
+                //     @breakpoint();
+                // }
+                // if (self.ID == 8 and ID.* == 9) {
                 //     @breakpoint();
                 // }
                 // if (self.ID == 15 and ID.* == 16) {
@@ -2900,6 +2906,7 @@ pub const commands = struct {
         };
     }
 
+    /// graphic, transfer, compute
     fn pipelineBarrierNodeConnect(
         self: *Self,
         nodes: []twoQueueNode,
@@ -3017,8 +3024,8 @@ pub const commands = struct {
             }
         }
         graphicCurrentNode.* = chains[0].lastA;
-        computeCurrentNode.* = chains[1].lastA;
-        transferCurrentNode.* = chains[2].lastA;
+        transferCurrentNode.* = chains[1].lastA;
+        computeCurrentNode.* = chains[2].lastA;
 
         // var result: [3]twoQueueNode = undefined;
         // @memset(&result, twoQueueNode{});
@@ -3048,8 +3055,8 @@ pub const commands = struct {
 
         if (graphicCurrentNode.* == null and computeCurrentNode.* == null and transferCurrentNode.* == null) {
             graphicCurrentNode.* = self.nodeDag.map.get(0).?;
-            computeCurrentNode.* = self.nodeDag.map.get(0).?;
             transferCurrentNode.* = self.nodeDag.map.get(0).?;
+            computeCurrentNode.* = self.nodeDag.map.get(0).?;
         }
 
         return chains;
@@ -4166,7 +4173,10 @@ pub const commands = struct {
                 try self.nodeConnect(linkNodeStart.?, node);
             },
             .drawMeshIndirect, .draw2D, .present, .drawMesh, .drawIndirect => {
-                if (!self.drawable) return;
+                if (!self.drawable) {
+                    node.data = .{};
+                    return;
+                }
 
                 node.data.commandPoolType = .graphic;
 
@@ -4571,7 +4581,26 @@ pub const commands = struct {
                     false,
                 );
 
-                allTwoNodes = @constCast(&[_]twoQueueNode{ srcBufferNode, dstBufferNode });
+                allTwoNodes = try allocator.alloc(twoQueueNode, 2);
+                allTwoNodes[0] = srcBufferNode;
+                allTwoNodes[1] = dstBufferNode;
+
+                // if (global.nodeChildrenAppendBreakPoint) {
+                //     if (srcBufferNode.a) |a| {
+                //         std.log.debug("src a ID: {d}", .{a.ID});
+                //     }
+                //     if (srcBufferNode.b) |b|
+                //         std.log.debug("src b ID: {d}", .{b.ID});
+
+                //     if (dstBufferNode.a) |a| {
+                //         std.log.debug("dst a ID: {d}", .{a.ID});
+                //     }
+                //     if (dstBufferNode.b) |b|
+                //         std.log.debug("dst b ID: {d}", .{b.ID});
+
+                //     std.log.debug("\n", .{});
+                // }
+
                 chains = try self.pipelineBarrierNodeConnect(
                     allTwoNodes,
                     &graphicCurrentNode,
@@ -4580,6 +4609,11 @@ pub const commands = struct {
                 );
 
                 for (chains) |value| {
+                    // if (global.nodeChildrenAppendBreakPoint) {
+                    // std.log.debug("bx {d}", .{value.bx});
+                    // @breakpoint();
+                    // }
+
                     if (value.lastB) |bb| {
                         try self.nodeConnect(bb, node);
                     } else if (value.midA) |bb| {
@@ -4815,10 +4849,15 @@ pub const commands = struct {
             }
 
             if (currentNode != null and currentNode.?.parentsLen == 0) {
+                // std.log.debug("cur node ID: {d}", .{currentNode.?.ID});
                 cha.midB = currentNode;
             }
             if (cha.bx != 0) {
                 for (cha.midBidxs[0..cha.bx]) |bidx| {
+                    if (global.nodeChildrenAppendBreakPoint and commandType == .copyBuffer) {
+                        // @breakpoint();
+                    }
+
                     const pairedA = allTwoNodes[@intCast(bidx)].a.?;
                     const qType = pairedA.data.commandPoolType;
 
@@ -4827,9 +4866,24 @@ pub const commands = struct {
                 }
             }
 
-            //     if (cha.midA != null and cha.midB != null) {
-            //         try self.nodeConnect(cha.midA.?, cha.midB.?);
-            //     }
+            // std.log.debug("\n", .{});
+            // if (cha.midA) |ma| {
+            //     std.log.debug("mid A id: {d}", .{ma.ID});
+            // }
+            // if (cha.midB) |ma| {
+            //     std.log.debug("mid B id: {d}", .{ma.ID});
+            // }
+            // if (cha.lastA) |ma| {
+            //     std.log.debug("last A id: {d}", .{ma.ID});
+            // }
+            // if (cha.lastB) |ma| {
+            //     std.log.debug("last B id: {d}", .{ma.ID});
+            // }
+            // std.log.debug("\n", .{});
+
+            // if (cha.midA != null and cha.midB != null) {
+            //     try self.nodeConnect(cha.midA.?, cha.midB.?);
+            // }
 
             if (cha.lastA != null) {
                 const srcStageMask = &self.queue.getPtr(cha.lastA.?.ID).?.command.pipelineBarrier.lastSrcStageMask;
@@ -5666,7 +5720,9 @@ pub const oneTimeCommand = struct {
                     self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
                 },
                 .bufferAndRegion => |bar| {
-                    if (currentSemaphoreValue < g.semaphoreValue) continue;
+                    if (currentSemaphoreValue < g.semaphoreValue) {
+                        continue;
+                    }
 
                     if (bar.srcBuffer) |b|
                         self.vulkan.destroyBuffer(b);

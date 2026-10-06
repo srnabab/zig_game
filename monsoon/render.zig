@@ -250,6 +250,11 @@ pub fn render_thread_func(args: Args) !void {
 
         if (renderNum == 2) {
             commands.setDrawable(false);
+
+            // global.nodeChildrenAppendBreakPoint = true;
+
+            // global.stopExecuteNodePrint = false;
+            // try std.Io.sleep(io, .fromMilliseconds(90), .awake);
         }
 
         if (renderNum == 3) {
@@ -284,6 +289,13 @@ pub fn render_thread_func(args: Args) !void {
         try vulkan.waitEndFence();
 
         vulkan.writeCachedDescriptorSetResources();
+
+        if (renderNum == 2) {
+            // renderDebug.printToDot();
+            // renderDebug.printAllInfoToTxt();
+
+            // break;
+        }
 
         try graphic.executeCommands(&commands);
 

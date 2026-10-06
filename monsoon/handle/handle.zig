@@ -108,29 +108,7 @@ pub fn Handles(comptime capacity: u32, comptime stack_depth: usize) type {
             allocator.free(self.array);
 
             if (builtin.mode == .Debug) {
-                if (self.createCount.load(.monotonic) != 0)
-                    for (self.stack_addresses, 0..) |*address, i| {
-                        if (address[0] == std.math.maxInt(usize)) continue;
-
-                        const stack_addresses = address;
-                        var len: usize = 0;
-                        while (len < stack_n and stack_addresses[len] != 0) {
-                            len += 1;
-                        }
-                        const stack_trace = std.debug.StackTrace{
-                            .return_addresses = stack_addresses[0..len],
-                            .skipped = if (len < stack_addresses.len) .none else .unknown,
-                        };
-
-                        std.log.err("-> handle {*} not destroyed", .{&self.array[i]});
-
-                        std.log.err("handle leaked: {f}", .{
-                            std.debug.FormatStackTrace{
-                                .stack_trace = stack_trace,
-                                .terminal_mode = std.log.terminalMode(),
-                            },
-                        });
-                    };
+                self.detectLeak();
 
                 allocator.free(self.stack_addresses);
             }
@@ -144,6 +122,8 @@ pub fn Handles(comptime capacity: u32, comptime stack_depth: usize) type {
                     self.createCount.load(.acquire),
                     self.cap.load(.acquire),
                 });
+                self.detectLeak();
+
                 std.process.abort();
             }
 
@@ -255,6 +235,34 @@ pub fn Handles(comptime capacity: u32, comptime stack_depth: usize) type {
             const ptr: *H = @ptrCast(@alignCast(handle));
 
             ptr.content.index = index;
+        }
+
+        pub fn detectLeak(self: *Self) void {
+            if (builtin.mode == .Debug) {
+                if (self.createCount.load(.monotonic) != 0)
+                    for (self.stack_addresses, 0..) |*address, i| {
+                        if (address[0] == std.math.maxInt(usize)) continue;
+
+                        const stack_addresses = address;
+                        var len: usize = 0;
+                        while (len < stack_n and stack_addresses[len] != 0) {
+                            len += 1;
+                        }
+                        const stack_trace = std.debug.StackTrace{
+                            .return_addresses = stack_addresses[0..len],
+                            .skipped = if (len < stack_addresses.len) .none else .unknown,
+                        };
+
+                        std.log.err("-> handle {*} not destroyed", .{&self.array[i]});
+
+                        std.log.err("handle leaked: {f}", .{
+                            std.debug.FormatStackTrace{
+                                .stack_trace = stack_trace,
+                                .terminal_mode = std.log.terminalMode(),
+                            },
+                        });
+                    };
+            }
         }
     };
 }
