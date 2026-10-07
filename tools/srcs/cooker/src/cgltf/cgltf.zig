@@ -18,24 +18,28 @@ const cgltf_result = enumFromC.generateEnumFromC(
     cgltf.cgltf_result,
     "cgltf_result_success",
     "cgltf_result_max_enum",
+    .nonexhaustive,
 );
 const cgltf_compent_type = enumFromC.generateEnumFromC(
     cgltf,
     cgltf.cgltf_component_type,
     "cgltf_component_type_invalid",
     "cgltf_component_type_max_enum",
+    .nonexhaustive,
 );
 const cgltf_type = enumFromC.generateEnumFromC(
     cgltf,
     cgltf.cgltf_type,
     "cgltf_type_invalid",
     "cgltf_type_max_enum",
+    .nonexhaustive,
 );
 const cgltf_attribute_type = enumFromC.generateEnumFromC(
     cgltf,
     cgltf.cgltf_attribute_type,
     "cgltf_attribute_type_invalid",
     "cgltf_attribute_type_max_enum",
+    .nonexhaustive,
 );
 
 const cgltf_error = error{
