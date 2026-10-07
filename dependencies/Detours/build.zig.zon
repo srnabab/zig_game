@@ -1,0 +1,16 @@
+.{
+    .name = .Detours_lib,
+    .fingerprint = 0x1db40008fc6e3e2a,
+    .version = "4.0.1",
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "compat_msvc.h",
+    },
+    .dependencies = .{
+        .Detours = .{
+            .url = "https://github.com/microsoft/Detours/archive/refs/tags/v4.0.1.zip",
+            .hash = "N-V-__8AAHUaJgCejkdSfEyIlp9KhksfiM-lgjPsdASRKh1P",
+        },
+    },
+}

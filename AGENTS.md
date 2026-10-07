@@ -85,6 +85,18 @@
 
 `build_script/` 下是**手动 fallback**（需要 PATH 上有 `glslc.exe`，并靠 `monsoon/selectModifiedFileToTxt` + `cache.json` 生成改动文件列表）：`shaderCompile.bat`、`pipelineParse.bat`、`samplerParse.bat`；另有 `pipelineConfig.py`、`samplerJson.py`、`feather_lut.py`、`showDag.py`。
 
+## autoDirHook (tools/srcs/autoDirHook)
+
+独立 Zig 包（与 watcher/cooker/loadmapConverter 并列），把 `tools/srcs/autoDirHook/*.cpp`（原 C++ 版）改写为 Zig，产出两个 Windows 产物并安装到 `tools/`：
+
+- `tools/srcs/autoDirHook/src/autodir_main.zig` → `autoDir.exe`：启动器。用法 `autoDir.exe <program> [args...]`。用 `GetCommandLineW` 跳过自身程序名（保留引号/空格）取到子命令，用 `GetModuleFileNameA` 取同目录 `autoDirHook.dll` 的 **ANSI** 路径，再 `DetourCreateProcessWithDllExW(..., lpDllName, null)` 强注入启动，`WaitForSingleObject` 等待并透传子进程退出码（`ExitProcess`）。
+- `tools/srcs/autoDirHook/src/dlmain.zig` → `autoDirHook.dll`：注入式 hook。导出 `DllMain`（`DLL_PROCESS_ATTACH/DETACH` 里 `DetourTransactionBegin/UpdateThread/Attach/Detach/Commit`）与 `AutoDirMarker`（Detours 要求 DLL 至少导出一个函数）。
+  - Hook `CreateFileW`：真函数地址由 `GetModuleHandleW("KernelBase.dll")`（回退 `"kernel32.dll"`）+ `GetProcAddress` 取得（kernel32 只是转发器，挂 KernelBase 才能连绕过转发器的调用一起捕获）；跳过空路径与 DOS 设备路径前缀后，用 `GetFullPathNameW` 求绝对路径 → 找父目录 → 线程安全缓存（`std.HashMapUnmanaged([]const u16, void, U16SliceContext, 80)`，因为 `std.AutoHashMap` 拒绝对 slice key 自动 hash，须自带按内容 hash/eql 的 context；锁用 `windows.SRWLOCK`，经 `std.os.windows.ntdll.RtlAcquireSRWLockExclusive/Release`，避免 `std.Io.Mutex` 需要 `Io` 参数）→ 未命中则调 `shell32.SHCreateDirectoryExW(null, parent, null)` 一次补齐整条父目录链（返回 `ERROR_SUCCESS(0)` / `ERROR_ALREADY_EXISTS(183)` 才算成功并写缓存）→ 透传调用真 `CreateFileW`。`build.zig` 给 DLL module `linkSystemLibrary("shell32", .{ .preferred_link_mode = .static })`。
+  - Hook `CreateProcessW`：调 `DetourCreateProcessWithDllExW(..., g_dllPath, TrueCreateProcessW)`，让后代进程继续继承本 DLL。
+  - **ABI 修正**：真实 Detours 4.0.1 的 `DetourCreateProcessWithDllExW` 形参 `lpDllName` 是 `LPCSTR`(ANSI，内部按 `%hs` 使用)，原 C++ 传 `wchar_t*` 是编译不过的；Zig 版统一用 `GetModuleFileNameA` 得到的 ANSI 路径。
+- 构建：`cd tools/srcs/autoDirHook && zig build`（安装到 `tools/`，DLL 与 exe 同目录）。依赖 `.Detours = .{ .path = "../../../dependencies/Detours" }`。
+- 两个 module 都 `link_libc = true`、`link_libcpp = true` 并 `linkLibrary(detours_lib)`；DLL 依赖 libc 的 CRT `DllMainCRTStartup` 调用我们导出的 `DllMain`（Zig 0.16 `std.start` 的 DLL 分支也会为动态库导出 `_DllMainCRTStartup` 并调用 `root.DllMain`）。
+
 ## External prerequisites
 
 - **Vulkan SDK** — headers in `include/vulkan/`，`lib/vulkan-1.lib` 已内置，运行时仍需 SDK
@@ -92,6 +104,7 @@
 - **glslc** — cooker/watcher 编译 shader 需要 PATH 上可执行的 `glslc.exe`（来自 Vulkan SDK / shaderc）；`shared/shaderc/shaderc.zig` 仍在但当前未被 cooker 使用
 - **Python** — `build_script/pipelineConfig.py`、`feather_lut.py`、`samplerJson.py`、`showDag.py` 需要
 - SDL3、cglm、Tracy、meshoptimizer、blake3 均从 `dependencies/` 源码构建
+- **Detours** — `dependencies/Detours` 包（其 `build.zig.zon` 通过 url+hash 拉取 Microsoft Detours 4.0.1 源码）编译出静态库 `libdetours.a`，供 `tools/srcs/autoDirHook` 使用。`dependencies/Detours/build.zig` 把 `src/Makefile` 的 OBJS 列表翻译为 Zig：编译 10 个 cpp（`uimports.cpp` 被 `creatwth.cpp` `#include`，不单编；`disol*.cpp` 是 2 行的 offline 变体），flags = `-std=c++17 -DWIN32_LEAN_AND_MEAN -include compat_msvc.h -D_AMD64_=1`（按架构）。**关键**：clang/mingw 不定义 `_MSC_VER`/`_AMD64_`——`compat_msvc.h` 先 `#include <windows.h>`（走 GNU 语义）再 `#define _MSC_VER 1299`，使 `detours.h` 走可移植的 `<dbghelp.h>` 分支（否则命中 `_MSC_VER < 1299` 的 MSVC-only 分支，与 mingw 的 `InterlockedCompareExchange` 宏冲突而编译失败）；`_AMD64_` 是 `detours.h` 判断架构所需。
 - `tools/srcs/cooker` 还用到 `include/UUID`、`include/cgltf`、`include/meshoptimizer.h`
 
 ## Architecture
