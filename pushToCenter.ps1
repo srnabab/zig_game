@@ -27,7 +27,7 @@ if ($LASTEXITCODE -ne 0) { throw "git clone 失败！" }
 Push-Location $TempExportDir
 try {
     Write-Host "==> [2/5] 检出 main 分支"
-    git checkout export2
+    git checkout main
     if ($LASTEXITCODE -ne 0) { throw "git checkout 失败！" }
 
     Write-Host "==> [3/5] 执行 filter-repo"
@@ -43,18 +43,19 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "git remote add 失败！" }
 
     Write-Host "==> [6/6] 强制推送至 center"
-    git push center export2:init --force
+    git push center main:incoming --force
     if ($LASTEXITCODE -ne 0) { throw "git push 失败！" }
 }
 finally {
     # 离开临时目录
     Pop-Location
+
+    # 清理临时目录
+    Write-Host "==> 清理临时目录: $TempExportDir"
+    if (Test-Path $TempExportDir) {
+        Remove-Item -Path $TempExportDir -Recurse -Force
+    }
+
+    Write-Host "==> 执行完毕！" -ForegroundColor Green
 }
 
-# 清理临时目录
-Write-Host "==> 清理临时目录: $TempExportDir"
-if (Test-Path $TempExportDir) {
-    Remove-Item -Path $TempExportDir -Recurse -Force
-}
-
-Write-Host "==> 执行完毕！" -ForegroundColor Green

@@ -5,7 +5,6 @@
     .paths = .{
         "build.zig",
         "build.zig.zon",
-        "compat_msvc.h",
     },
     .dependencies = .{
         .Detours = .{

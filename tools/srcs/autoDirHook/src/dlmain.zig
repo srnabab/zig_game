@@ -1,32 +1,17 @@
 const std = @import("std");
 const windows = std.os.windows;
-const ntdll = windows.ntdll;
 
-const CREATE_NEW: windows.DWORD = 1;
-const CREATE_ALWAYS: windows.DWORD = 2;
-const OPEN_EXISTING: windows.DWORD = 3;
-const OPEN_ALWAYS: windows.DWORD = 4;
-
-const GENERIC_READ = 0x80000000;
-const GENERIC_WRITE = 0x40000000;
-const GENERIC_EXECUTE = 0x20000000;
-const GENERIC_ALL = 0x10000000;
-
-const FILE_WRITE_DATA = 0x0002;
-const FILE_APPEND_DATA = 0x0004;
+const HANDLE = windows.HANDLE;
+const ULONG = windows.ULONG;
+const NTSTATUS = windows.NTSTATUS;
+const OBJECT_ATTRIBUTES = windows.OBJECT.ATTRIBUTES;
+const IO_STATUS_BLOCK = windows.IO_STATUS_BLOCK;
+const LARGE_INTEGER = windows.LARGE_INTEGER;
 
 const DLL_PROCESS_ATTACH: windows.DWORD = 1;
 const DLL_PROCESS_DETACH: windows.DWORD = 0;
 
-extern "kernel32" fn CreateFileW(
-    lpFileName: [*:0]const u16,
-    dwDesiredAccess: windows.DWORD,
-    dwShareMode: windows.DWORD,
-    lpSecurityAttributes: ?*windows.SECURITY_ATTRIBUTES,
-    dwCreationDisposition: windows.DWORD,
-    dwFlagsAndAttributes: windows.DWORD,
-    hTemplateFile: ?windows.HANDLE,
-) callconv(.winapi) windows.HANDLE;
+const FILE_ATTRIBUTE_DIRECTORY: windows.DWORD = 0x00000010;
 
 extern "kernel32" fn CreateProcessW(
     lpApplicationName: ?windows.LPCWSTR,
@@ -41,7 +26,7 @@ extern "kernel32" fn CreateProcessW(
     lpProcessInformation: *windows.PROCESS.INFORMATION,
 ) callconv(.winapi) windows.BOOL;
 
-extern "kernel32" fn GetCurrentThread() callconv(.winapi) windows.HANDLE;
+extern "kernel32" fn GetCurrentThread() callconv(.winapi) HANDLE;
 extern "kernel32" fn DisableThreadLibraryCalls(hLibModule: windows.HMODULE) callconv(.winapi) windows.BOOL;
 extern "kernel32" fn GetModuleHandleW(lpModuleName: ?windows.LPCWSTR) callconv(.winapi) ?windows.HMODULE;
 
@@ -49,20 +34,38 @@ extern "kernel32" fn GetModuleHandleW(lpModuleName: ?windows.LPCWSTR) callconv(.
 // *anyopaque) lets us `@ptrCast` between function pointers with matching alignment.
 const FARPROC = ?*const fn () callconv(.winapi) isize;
 extern "kernel32" fn GetProcAddress(hModule: windows.HMODULE, lpProcName: [*:0]const u8) callconv(.winapi) FARPROC;
+
 extern "kernel32" fn GetModuleFileNameA(hModule: ?windows.HMODULE, lpFilename: [*]u8, nSize: windows.DWORD) callconv(.winapi) windows.DWORD;
-extern "kernel32" fn GetFullPathNameW(lpFileName: [*:0]const u16, nBufferLength: windows.DWORD, lpBuffer: [*]u16, lpFilePart: ?*?[*:0]u16) callconv(.winapi) windows.DWORD;
+extern "kernel32" fn GetFinalPathNameByHandleW(hFile: HANDLE, lpszFilePath: [*]u16, cchFilePath: windows.DWORD, dwFlags: windows.DWORD) callconv(.winapi) windows.DWORD;
+extern "kernel32" fn GetFileAttributesW(lpFileName: [*:0]const u16) callconv(.winapi) windows.DWORD;
+
 // Creates the whole directory chain in one call. Returns ERROR_SUCCESS (0) or
 // ERROR_ALREADY_EXISTS (183) on success.
 extern "shell32" fn SHCreateDirectoryExW(hwnd: ?windows.HWND, pszPath: [*:0]const u16, psa: ?*const windows.SECURITY_ATTRIBUTES) callconv(.winapi) c_int;
-extern "Pathcch" fn PathCchRemoveFileSpec(pszPath: [*:0]u16, cchPath: usize) callconv(.winapi) c_long;
 
 extern fn DetourIsHelperProcess() callconv(.winapi) windows.BOOL;
 extern fn DetourRestoreAfterWith() callconv(.winapi) windows.BOOL;
 extern fn DetourTransactionBegin() callconv(.winapi) windows.LONG;
-extern fn DetourUpdateThread(hThread: windows.HANDLE) callconv(.winapi) windows.LONG;
+extern fn DetourUpdateThread(hThread: HANDLE) callconv(.winapi) windows.LONG;
 extern fn DetourTransactionCommit() callconv(.winapi) windows.LONG;
 extern fn DetourAttach(ppPointer: *anyopaque, pDetour: *const anyopaque) callconv(.winapi) windows.LONG;
 extern fn DetourDetach(ppPointer: *anyopaque, pDetour: *const anyopaque) callconv(.winapi) windows.LONG;
+
+// Raw C-style NtCreateFile prototype. The flag arguments are passed through
+// untouched, so plain ULONG is enough (the object-manager enums are ABI-compatible u32).
+const NtCreateFile_Fn = fn (
+    FileHandle: *HANDLE,
+    DesiredAccess: ULONG,
+    ObjectAttributes: ?*const OBJECT_ATTRIBUTES,
+    IoStatusBlock: *IO_STATUS_BLOCK,
+    AllocationSize: ?*LARGE_INTEGER,
+    FileAttributes: ULONG,
+    ShareAccess: ULONG,
+    CreateDisposition: ULONG,
+    CreateOptions: ULONG,
+    EaBuffer: ?*anyopaque,
+    EaLength: ULONG,
+) callconv(.winapi) NTSTATUS;
 
 const CreateProcessW_Fn = fn (
     ?windows.LPCWSTR,
@@ -93,116 +96,112 @@ extern fn DetourCreateProcessWithDllExW(
     pfCreateProcessW: ?*const CreateProcessW_Fn,
 ) callconv(.winapi) windows.BOOL;
 
-const CreateFileW_Fn = fn (
-    [*:0]const u16,
-    windows.DWORD,
-    windows.DWORD,
-    ?*windows.SECURITY_ATTRIBUTES,
-    windows.DWORD,
-    windows.DWORD,
-    ?windows.HANDLE,
-) callconv(.winapi) windows.HANDLE;
+const ntdll_dll = std.unicode.utf8ToUtf16LeStringLiteral("ntdll.dll");
 
-// CreateFileW is a forwarder in kernel32.dll; hook the real KernelBase.dll
-// implementation so that callers which bypass the forwarder are caught too.
-const kernel_base_dll = std.unicode.utf8ToUtf16LeStringLiteral("KernelBase.dll");
-const kernel32_dll = std.unicode.utf8ToUtf16LeStringLiteral("kernel32.dll");
-
-var TrueCreateFileW: *const CreateFileW_Fn = &CreateFileW;
+// Resolved from ntdll.dll in DLL_PROCESS_ATTACH, then replaced by Detours with the trampoline.
+var TrueNtCreateFile: ?*const NtCreateFile_Fn = null;
 var TrueCreateProcessW: *const CreateProcessW_Fn = &CreateProcessW;
 
 // ANSI path of this DLL, filled in DLL_PROCESS_ATTACH.
 var g_dllPath: [windows.MAX_PATH + 1]u8 = [_]u8{0} ** (windows.MAX_PATH + 1);
 
-// std.AutoHashMap rejects slice keys, so provide a content-based context for the
-// wide (UTF-16) parent-directory keys.
-const U16SliceContext = struct {
-    pub fn hash(_: U16SliceContext, s: []const u16) u64 {
-        return std.hash.Wyhash.hash(0, std.mem.sliceAsBytes(s));
-    }
+// Reentrancy guard: SHCreateDirectoryExW itself performs NtCreateFile calls, which
+// would otherwise re-enter HookedNtCreateFile and loop forever.
+threadlocal var g_inside_hook: bool = false;
 
-    pub fn eql(_: U16SliceContext, a: []const u16, b: []const u16) bool {
-        return std.mem.eql(u16, a, b);
-    }
-};
+fn HookedNtCreateFile(
+    FileHandle: *HANDLE,
+    DesiredAccess: ULONG,
+    ObjectAttributes: ?*const OBJECT_ATTRIBUTES,
+    IoStatusBlock: *IO_STATUS_BLOCK,
+    AllocationSize: ?*LARGE_INTEGER,
+    FileAttributes: ULONG,
+    ShareAccess: ULONG,
+    CreateDisposition: ULONG,
+    CreateOptions: ULONG,
+    EaBuffer: ?*anyopaque,
+    EaLength: ULONG,
+) callconv(.winapi) NTSTATUS {
+    if (!g_inside_hook) {
+        if (ObjectAttributes) |oa| {
+            if (oa.ObjectName) |uPath| {
+                if (uPath.Buffer != null and uPath.Length != 0) {
+                    g_inside_hook = true;
+                    defer g_inside_hook = false;
 
-// Memoized set of parent directories already confirmed to exist.
-// Guarded by a Slim Reader/Writer lock (no Io instance is available in a DLL hook).
-var g_knownDirs: std.HashMapUnmanaged([]const u16, void, U16SliceContext, std.hash_map.default_max_load_percentage) = .empty;
-var g_cacheLock: windows.SRWLOCK = windows.SRWLOCK_INIT;
+                    // Use Length (bytes) rather than relying on a NUL terminator.
+                    const raw_path = uPath.slice();
+                    const gpa = std.heap.c_allocator;
+                    var resolved: std.ArrayListUnmanaged(u16) = .empty;
+                    defer resolved.deinit(gpa);
 
-fn HookedCreateFileW(
-    lpFileName: [*:0]const u16,
-    dwDesiredAccess: windows.DWORD,
-    dwShareMode: windows.DWORD,
-    lpSecurityAttributes: ?*windows.SECURITY_ATTRIBUTES,
-    dwCreationDisposition: windows.DWORD,
-    dwFlagsAndAttributes: windows.DWORD,
-    hTemplateFile: ?windows.HANDLE,
-) callconv(.winapi) windows.HANDLE {
-    // Only act when the caller explicitly intends to create/overwrite.
-    // var isWrite = false;
+                    // Paths opened relative to an already-open directory handle.
+                    if (oa.RootDirectory) |root| {
+                        var root_buf: [windows.MAX_PATH * 2]u16 = undefined;
+                        const ret = GetFinalPathNameByHandleW(root, &root_buf, root_buf.len, 0);
+                        if (ret > 0 and ret < root_buf.len) {
+                            var root_path: []const u16 = root_buf[0..ret];
+                            // Drop the \\?\ prefix.
+                            if (root_path.len >= 4 and
+                                root_path[0] == '\\' and root_path[1] == '\\' and
+                                root_path[2] == '?' and root_path[3] == '\\')
+                            {
+                                root_path = root_path[4..];
+                            }
+                            resolved.appendSlice(gpa, root_path) catch {};
+                            if (resolved.items.len != 0 and resolved.items[resolved.items.len - 1] != '\\') {
+                                resolved.append(gpa, '\\') catch {};
+                            }
+                        }
+                    }
 
-    // if (dwCreationDisposition == CREATE_ALWAYS or
-    //     dwCreationDisposition == CREATE_NEW or
-    //     dwCreationDisposition == OPEN_ALWAYS)
-    // {
-    //     isWrite = true;
-    // }
+                    // NT native absolute prefix `\??\` (e.g. \??\C:\...) overrides the root.
+                    if (raw_path.len >= 4 and
+                        raw_path[0] == '\\' and raw_path[1] == '?' and
+                        raw_path[2] == '?' and raw_path[3] == '\\')
+                    {
+                        resolved.clearRetainingCapacity();
+                        resolved.appendSlice(gpa, raw_path[4..]) catch {};
+                    } else {
+                        resolved.appendSlice(gpa, raw_path) catch {};
+                    }
 
-    // std.log.debug("{d}", .{dwDesiredAccess});
-
-    // if (dwCreationDisposition == OPEN_EXISTING and dwDesiredAccess & (GENERIC_WRITE | FILE_WRITE_DATA | FILE_APPEND_DATA) != 0) {
-    //     isWrite = true;
-    // }
-
-    if (lpFileName[0] != 0 and !(lpFileName[0] == '\\' and lpFileName[1] == '\\' and lpFileName[2] == '.')) {
-        var initMem: [512:0]u16 = undefined;
-        const len = GetFullPathNameW(lpFileName, 512, &initMem, null);
-        var full: [:0]u16 = undefined;
-
-        if (len < 512) {
-            full = initMem[0..len :0];
-        } else {
-            full = std.heap.c_allocator.allocSentinel(u16, len, 0) catch return TrueCreateFileW(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
-            _ = GetFullPathNameW(lpFileName, len, full.ptr, null);
-        }
-
-        // const size = std.unicode.wtf16LeToWtf8Alloc(std.heap.c_allocator, full[0..len]) catch return TrueCreateFileW(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
-        // std.log.debug(" res {d}: {s}", .{ 0, size });
-        // std.log.debug("lpFileName: {s}", .{size});
-
-        if (len != 0 and len < windows.MAX_PATH) {
-
-            // Locate the parent directory (everything before the last separator).
-            const removeRes = PathCchRemoveFileSpec(full.ptr, len);
-
-            // S_OK
-            if (removeRes == 0) {
-                ntdll.RtlAcquireSRWLockExclusive(&g_cacheLock);
-                defer ntdll.RtlReleaseSRWLockExclusive(&g_cacheLock);
-
-                const newLen = std.mem.len(full.ptr);
-
-                if (!g_knownDirs.contains(full[0..newLen])) {
-                    // Temporarily NUL-terminate the parent path inside `full`,
-                    // then let shell32 create the whole chain at once.
-
-                    const res = SHCreateDirectoryExW(null, @ptrCast(full[0..newLen].ptr), null);
-
-                    // ERROR_SUCCESS (0) or ERROR_ALREADY_EXISTS (183) count as success.
-                    if (res == 0 or res == 183) {
-                        const key = std.heap.c_allocator.dupe(u16, full[0..newLen]) catch return TrueCreateFileW(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
-                        g_knownDirs.put(std.heap.c_allocator, key, {}) catch {
-                            std.heap.c_allocator.free(key);
-                        };
+                    // Strip the file name to obtain the parent directory.
+                    if (resolved.items.len != 0) {
+                        var last_slash: ?usize = null;
+                        var k = resolved.items.len;
+                        while (k > 0) {
+                            k -= 1;
+                            const c = resolved.items[k];
+                            if (c == '\\' or c == '/') {
+                                last_slash = k;
+                                break;
+                            }
+                        }
+                        if (last_slash) |ls| {
+                            // Skip drive roots such as "C:\".
+                            const is_drive_root = ls <= 2 and resolved.items.len >= 2 and resolved.items[1] == ':';
+                            if (!is_drive_root) {
+                                resolved.shrinkRetainingCapacity(ls);
+                                resolved.append(gpa, 0) catch {};
+                                if (resolved.items.len == ls + 1) {
+                                    const parent_path: [*:0]const u16 = @ptrCast(resolved.items.ptr);
+                                    const attrs = GetFileAttributesW(parent_path);
+                                    // Missing, or existing but not a directory.
+                                    if (attrs == windows.INVALID_FILE_ATTRIBUTES or (attrs & FILE_ATTRIBUTE_DIRECTORY) == 0) {
+                                        _ = SHCreateDirectoryExW(null, parent_path, null);
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
     }
 
-    return TrueCreateFileW(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
+    // Pass through to the original NtCreateFile.
+    return TrueNtCreateFile.?(FileHandle, DesiredAccess, ObjectAttributes, IoStatusBlock, AllocationSize, FileAttributes, ShareAccess, CreateDisposition, CreateOptions, EaBuffer, EaLength);
 }
 
 fn HookedCreateProcessW(
@@ -218,8 +217,18 @@ fn HookedCreateProcessW(
     lpProcessInformation: *windows.PROCESS.INFORMATION,
 ) callconv(.winapi) windows.BOOL {
     // Let grandchildren inherit the hook too.
+
+    if (lpApplicationName) |name| {
+        const len = std.mem.len(name);
+        const size = std.unicode.wtf16LeToWtf8Alloc(std.heap.c_allocator, name[0..len]) catch &.{};
+
+        defer std.heap.c_allocator.free(size);
+
+        std.log.debug("hook sub process {s}", .{size});
+    }
+
     const dllPathZ: [*:0]const u8 = @ptrCast(&g_dllPath);
-    return DetourCreateProcessWithDllExW(
+    const res = DetourCreateProcessWithDllExW(
         lpApplicationName,
         lpCommandLine,
         lpProcessAttributes,
@@ -233,6 +242,10 @@ fn HookedCreateProcessW(
         dllPathZ,
         TrueCreateProcessW,
     );
+
+    std.log.debug("hook {}", .{res.toBool()});
+
+    return res;
 }
 
 // The only reason this exists: Detours requires the injected DLL to export at
@@ -255,25 +268,28 @@ pub export fn DllMain(
         const n = GetModuleFileNameA(@as(?windows.HMODULE, @ptrCast(hinstDLL)), &g_dllPath, windows.MAX_PATH);
         if (n < windows.MAX_PATH) g_dllPath[n] = 0;
 
-        // Resolve CreateFileW from KernelBase.dll (fall back to kernel32.dll).
-        var h_kernel_base = GetModuleHandleW(kernel_base_dll);
-        if (h_kernel_base == null) h_kernel_base = GetModuleHandleW(kernel32_dll);
-        if (h_kernel_base) |mod| {
-            if (GetProcAddress(mod, "CreateFileW")) |proc| {
-                TrueCreateFileW = @ptrCast(proc);
+        // NtCreateFile is the syscall gate in ntdll.dll.
+        const h_ntdll = GetModuleHandleW(ntdll_dll);
+        if (h_ntdll) |mod| {
+            if (GetProcAddress(mod, "NtCreateFile")) |proc| {
+                TrueNtCreateFile = @ptrCast(proc);
             }
         }
 
         _ = DetourRestoreAfterWith();
         _ = DetourTransactionBegin();
         _ = DetourUpdateThread(GetCurrentThread());
-        _ = DetourAttach(@ptrCast(&TrueCreateFileW), @ptrCast(&HookedCreateFileW));
+        if (TrueNtCreateFile != null) {
+            _ = DetourAttach(@ptrCast(&TrueNtCreateFile), @ptrCast(&HookedNtCreateFile));
+        }
         _ = DetourAttach(@ptrCast(&TrueCreateProcessW), @ptrCast(&HookedCreateProcessW));
         _ = DetourTransactionCommit();
     } else if (ul_reason_for_call == DLL_PROCESS_DETACH) {
         _ = DetourTransactionBegin();
         _ = DetourUpdateThread(GetCurrentThread());
-        _ = DetourDetach(@ptrCast(&TrueCreateFileW), @ptrCast(&HookedCreateFileW));
+        if (TrueNtCreateFile != null) {
+            _ = DetourDetach(@ptrCast(&TrueNtCreateFile), @ptrCast(&HookedNtCreateFile));
+        }
         _ = DetourDetach(@ptrCast(&TrueCreateProcessW), @ptrCast(&HookedCreateProcessW));
         _ = DetourTransactionCommit();
     }

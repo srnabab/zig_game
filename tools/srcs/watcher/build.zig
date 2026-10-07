@@ -9,6 +9,9 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{ .default_target = .{ .abi = .gnu } });
     const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .Debug });
 
+    const autoDir_dep = b.dependency("autoDirHook", .{});
+    const autoDir = autoDir_dep.artifact("autoDir");
+
     const exe_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
@@ -50,10 +53,8 @@ pub fn build(b: *std.Build) void {
     const contentPath = b.pathResolve(&[_][]const u8{ root_path, "zig-out/bin/Content" });
     const cookerPath = b.pathResolve(&[_][]const u8{ root_path, "tools/cooker.exe" });
     const cookerRootPath = b.pathResolve(&[_][]const u8{ root_path, "tools/srcs/cooker/" });
-    const run_cmd = b.addRunArtifact(exe);
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
-    }
+    const run_cmd = b.addRunArtifact(autoDir);
+    run_cmd.addArtifactArg(exe);
     run_cmd.addArgs(&[_][]const u8{
         "--f",
         root_path,
@@ -89,6 +90,11 @@ pub fn build(b: *std.Build) void {
             .custom = "../../../",
         },
     } });
+    const install_autoDir = b.addInstallArtifact(autoDir_dep.artifact("autoDir"), .{ .dest_dir = .{
+        .override = .{
+            .custom = "../../../",
+        },
+    } });
 
     b.getInstallStep().dependOn(&install.step);
 
@@ -96,6 +102,7 @@ pub fn build(b: *std.Build) void {
 
     b.getInstallStep().dependOn(&install_cooker.step);
     b.getInstallStep().dependOn(&install_loadmapConverter.step);
+    b.getInstallStep().dependOn(&install_autoDir.step);
 
     run_cmd.step.dependOn(b.getInstallStep());
     run_step.dependOn(&run_cmd.step);
