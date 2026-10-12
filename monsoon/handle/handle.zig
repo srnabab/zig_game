@@ -95,7 +95,7 @@ pub fn Handles(comptime capacity: u32, comptime stack_depth: usize) type {
             } else void{};
 
             if (builtin.mode == .Debug) {
-                @memset(stack_addresses, [_]usize{std.math.maxInt(usize)} ** stack_n);
+                @memset(stack_addresses, @splat(std.math.maxInt(usize)));
             }
 
             return Self{

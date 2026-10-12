@@ -71,7 +71,7 @@ pub const LMap_Reader = struct {
 
         const stat = mapFile.stat(io) catch return ResourceError.Unavaliable;
 
-        var buffer = [_]u8{0} ** 256;
+        var buffer: [256]u8 = @splat(0);
         var fileReader = mapFile.reader(io, &buffer);
         const content = fileReader.interface.readAlloc(gpa, stat.size) catch |err| {
             std.log.err("{s}", .{@errorName(err)});

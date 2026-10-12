@@ -150,7 +150,7 @@ pub const Layout_Reader = struct {
             return ResourceError.Unavaliable;
         };
 
-        var readBuffer = [_]u8{0} ** 256;
+        var readBuffer: [256]u8 = @splat(0);
         var reader = layoutFile.reader(io, &readBuffer);
         const content = reader.interface.readAlloc(gpa, stat.size) catch |err| {
             std.log.err("layout readAlloc {s}", .{@errorName(err)});

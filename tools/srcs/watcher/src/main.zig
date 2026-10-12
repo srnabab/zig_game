@@ -158,7 +158,7 @@ var contentWatch: *DirectoryWatch = undefined;
 
 // var database: *db = undefined;
 var cooker: std.process.Child = undefined;
-var cookerWriterBuffer = [_]u8{0} ** 1024;
+var cookerWriterBuffer: [1024]u8 = @splat(0);
 var cookerWriter: std.Io.File.Writer = undefined;
 
 var forceUpdate = false;
@@ -283,7 +283,7 @@ pub fn main(init: std.process.Init) !void {
     };
 
     var watchingFilePos: u64 = 0;
-    var fileBuffer = [_]u8{0} ** 1024;
+    var fileBuffer: [1024]u8 = @splat(0);
     var watchingFileReader: std.Io.File.Reader = undefined;
     if (watchingFile) |file| {
         watchingFileReader = file.reader(io, &fileBuffer);

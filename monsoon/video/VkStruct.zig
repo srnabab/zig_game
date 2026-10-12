@@ -384,7 +384,7 @@ pub fn initVulkan(self: *Self, io: std.Io, db: file.sqlite3) !void {
         }
     }
 
-    var queueTypeArray = [_]i32{100} ** 3;
+    var queueTypeArray: [3]i32 = @splat(100);
     queueTypeArray[0] = self.graphicQueueFamily.familyIndice;
     queueTypeArray[1] = self.computeQueueFamily.familyIndice;
     queueTypeArray[2] = self.transferQueueFamily.familyIndice;
@@ -1477,7 +1477,7 @@ pub fn readPipelineFileAndAdd(self: *Self, io: std.Io, fileID: u32, sqlite: ?*fi
 
     const fileSize = (try pFile.stat(io)).size;
 
-    var fileBuffer = [_]u8{0} ** 256;
+    var fileBuffer: [256]u8 = @splat(0);
     var fileReader = pFile.reader(io, &fileBuffer);
     const fileContent = try fileReader.interface.readAlloc(self.allocator, fileSize);
     defer self.allocator.free(fileContent);

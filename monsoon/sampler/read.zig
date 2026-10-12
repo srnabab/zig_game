@@ -9,7 +9,7 @@ pub fn readSampler(io: std.Io, id: u32, db: fileSystem.sqlite3, allocator: std.m
     const zone = tracy.initZone(@src(), .{ .name = "read sampler" });
     defer zone.deinit();
 
-    var buffer = [_]u8{0} ** 256;
+    var buffer: [256]u8 = @splat(0);
 
     var file = try fileSystem.getFile(io, @intCast(id), db);
     defer file.close(io);

@@ -144,7 +144,7 @@ pub fn initManyDb(io: std.Io, databaseName: []const u8, openTimes: u32, rwSqlite
 }
 
 pub fn getFile(io: std.Io, id: i64, cwd: std.Io.Dir, db: ?*sqlite.sqlite3) packError!std.Io.File {
-    var buffer = [_]u8{0} ** 256;
+    var buffer: [256]u8 = @splat(0);
 
     try getRelativePath(id, &buffer, db);
     const ptr = @as([*c]u8, buffer[0..256]);
@@ -218,7 +218,7 @@ pub fn getImageLoadParam(id: u32, db: ?*sqlite.sqlite3) !imageLoad {
             var ImageLoadParameterT = ImageLoadParameter.init(db);
 
             var ptrs: [5]*anyopaque = undefined;
-            var buffer = [_]u8{0} ** 256;
+            var buffer: [256]u8 = @splat(0);
             var format: vk.VkFormat = vk.VK_FORMAT_UNDEFINED;
             var tiling: vk.VkImageTiling = vk.VK_IMAGE_TILING_OPTIMAL;
             var usage: vk.VkImageUsageFlags = undefined;
@@ -269,7 +269,7 @@ pub fn getMeshLoadParam(id: u32, db: ?*sqlite.sqlite3) !meshLoad {
             var ModelLoadParameterT = ModelLoadParameter.init(db);
 
             var ptrs: [6]*anyopaque = undefined;
-            var buffer = [_]u8{0} ** 256;
+            var buffer: [256]u8 = @splat(0);
             var vertexType: u32 = @intFromEnum(vertexStruct.VertexType.none);
             var verticesSize: u64 = 0;
             var meshletsSize: u64 = 0;

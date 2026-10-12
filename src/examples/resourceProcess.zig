@@ -275,7 +275,7 @@ fn sceneJsonInit(io: Io, gpa: Allocator, content: std.Io.Dir) !void {
         defer sceneFile.close(io);
 
         const sceneFileStat = try sceneFile.stat(io);
-        var cacheBuffer = [_]u8{0} ** 256;
+        var cacheBuffer: [256]u8 = @splat(0);
         var sceneFileReader = sceneFile.reader(io, &cacheBuffer);
         const sceneContent = try sceneFileReader.interface.readAlloc(gpa, sceneFileStat.size);
         defer gpa.free(sceneContent);

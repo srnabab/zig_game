@@ -489,7 +489,7 @@ pub fn pickPhysicalDevice(instance: vk.VkInstance, allocator: std.mem.Allocator,
     std.log.debug("device group count: {d}", .{deviceGroupCount});
     try checkVkResult(vk.vkEnumeratePhysicalDeviceGroups(instance, @ptrCast(&deviceGroupCount), @ptrCast(physicalDeviceGroups.ptr)));
 
-    var originalIndexes_ = [_]u32{0} ** featureOptional.len;
+    var originalIndexes_: [featureOptional.len]u32 = @splat(0);
     var originalCount: u32 = 0;
 
     var unsupportedList = try allocator.alloc(u32, featureTypeAndNames.len);
@@ -499,7 +499,7 @@ pub fn pickPhysicalDevice(instance: vk.VkInstance, allocator: std.mem.Allocator,
     var resIndex: u32 = 0;
     var gpuType: vk.VkPhysicalDeviceType = vk.VK_PHYSICAL_DEVICE_TYPE_OTHER;
     for (physicalDeviceGroups, 0..) |deviceGroup, i| {
-        var originalIndexes = [_]u32{0} ** featureOptional.len;
+        var originalIndexes: [featureOptional.len]u32 = @splat(0);
 
         const array = try chooseEnabledLayers(
             vk.VkExtensionProperties,
@@ -706,7 +706,7 @@ pub fn createDevice(
     // }
 
     const queueCreateInfo, const queueCount = blk: {
-        const queuePriorities = [_]f32{0.0} ** 16;
+        const queuePriorities: [16]f32 = @splat(0.0);
         var count: u32 = 0;
         var createInfos: [3]vk.VkDeviceQueueCreateInfo = undefined;
         const queueFamilies: [3]VkQueueFamily = .{ graphicQueueFamily, computeQueueFamily, transferQueueFamily };

@@ -95,7 +95,7 @@ pub fn ObserverRingBuffer(T: type, Capacity: usize) type {
             const start_idx = t_snap - count;
 
             var i = t_snap;
-            var res = [_]bool{false} ** 2;
+            var res: [2]bool = @splat(false);
             while (i > start_idx) : (i -= 1) {
                 const data = &self.buffer[(i - 1) & (Capacity - 1)];
 

@@ -141,7 +141,7 @@ const CommandPool = struct {
 const CommandPools = struct {
     const Self = @This();
 
-    commandPools: [3]?CommandPool = [_]?CommandPool{null} ** 3,
+    commandPools: [3]?CommandPool = @splat(null),
     secondarySizes: [3]u16,
     allocator: std.mem.Allocator,
 
@@ -232,11 +232,11 @@ fn SpecialThreadPool(maxThreads: u32) type {
     return struct {
         const Self = @This();
 
-        threads: [maxThreads]?Thread = [_]?Thread{null} ** maxThreads,
+        threads: [maxThreads]?Thread = @splat(null),
         threadCount: u32 = 0,
         freeList: [maxThreads]i32 = undefined,
         freeCount: u32 = 0,
-        info: [maxThreads]?ThreadContext = [_]?ThreadContext{null} ** maxThreads,
+        info: [maxThreads]?ThreadContext = @splat(null),
         allocator: std.mem.Allocator,
         mutex: std.Io.Mutex = .init,
         io: std.Io,
@@ -703,8 +703,8 @@ fn DAG(T: type) type {
             const zone = tracy.initZone(@src(), .{ .name = "dag print" });
             defer zone.deinit();
 
-            var buffer = [_]u8{0} ** 1024;
-            var buffer2 = [_]u8{0} ** 1024;
+            var buffer: [1024]u8 = @splat(0);
+            var buffer2: [1024]u8 = @splat(0);
             var writer = std.Io.Writer.fixed(&buffer);
             var writer2 = std.Io.Writer.fixed(&buffer2);
 
@@ -916,7 +916,7 @@ pub fn nodeDagPrint(self: *QueueNodes, self2: *commands) void {
 
         const frame = self2.vulkan.totalFrame.load(.monotonic);
 
-        var pathBuffer = [_]u8{0} ** 30;
+        var pathBuffer: [30]u8 = @splat(0);
         const path = std.fmt.bufPrint(&pathBuffer, "{d}-{s}-{d}-{d}_{d}_{d}-{d}", .{
             year,
             @tagName(month),
@@ -935,7 +935,7 @@ pub fn nodeDagPrint(self: *QueueNodes, self2: *commands) void {
         };
         defer dotFile.close(self2.io);
 
-        var writeBuffer = [_]u8{0} ** 1024;
+        var writeBuffer: [1024]u8 = @splat(0);
         var fileWriter = dotFile.writer(self2.io, &writeBuffer);
 
         fileWriter.interface.print(
@@ -991,8 +991,8 @@ pub fn nodeDagPrint(self: *QueueNodes, self2: *commands) void {
         };
         renderDebug.printAllInfoToTxt();
     } else {
-        var buffer = [_]u8{0} ** 1024;
-        var buffer2 = [_]u8{0} ** 1024;
+        var buffer: [1024]u8 = @splat(0);
+        var buffer2: [1024]u8 = @splat(0);
         var writer = std.Io.Writer.fixed(&buffer);
         var writer2 = std.Io.Writer.fixed(&buffer2);
 
@@ -1246,7 +1246,7 @@ pub const commands = struct {
 
         const allocator2 = fixedBufferAllocator.threadSafeAllocator();
 
-        const cachedCommands = [_]std.array_list.Managed(drawC.comm){.init(allocator2)} ** 2;
+        const cachedCommands: [2]std.array_list.Managed(drawC.comm) = @splat(.init(allocator2));
 
         return Self{
             .io = io,
@@ -5143,9 +5143,9 @@ pub const oneTimeCommand = struct {
             .threadPool = .init(io, allocator),
             .primaryCommandPool = .init(allocator, 0, 0, 0),
             .vulkan = vulkan,
-            .waitSemaphoreSubmitInfos = [_]std.array_list.Managed(vk.VkSemaphoreSubmitInfo){.init(allocator)} ** global.MaxFrameInFlight,
-            .signalSemaphoreSubmitInfos = [_]std.array_list.Managed(vk.VkSemaphoreSubmitInfo){.init(allocator)} ** global.MaxFrameInFlight,
-            .sumbitInfos = [_]std.array_list.Managed(vk.VkSubmitInfo2){.init(allocator)} ** global.MaxFrameInFlight,
+            .waitSemaphoreSubmitInfos = @splat(.init(allocator)),
+            .signalSemaphoreSubmitInfos = @splat(.init(allocator)),
+            .sumbitInfos = @splat(.init(allocator)),
             .garbageData = .init(allocator),
             .io = io,
         };
@@ -5581,7 +5581,7 @@ pub const oneTimeCommand = struct {
         tracy.setThreadName("record command");
         defer tracy.message("record command exit");
 
-        var stackMemory = [_]u8{0} ** global.OneStackMemorySize;
+        var stackMemory: [global.OneStackMemorySize]u8 = @splat(0);
         var stackAllocator = std.heap.FixedBufferAllocator.init(stackMemory[0..]);
         const sma = stackAllocator.allocator();
 

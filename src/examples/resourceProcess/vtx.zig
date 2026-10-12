@@ -156,7 +156,7 @@ pub const VTX_Reader = struct {
 
         const stat = res.file.stat(io) catch return ResourceError.Unavaliable;
 
-        var buffer = [_]u8{0} ** 256;
+        var buffer: [256]u8 = @splat(0);
         var fileReader = res.file.reader(io, &buffer);
         var content = fileReader.interface.readAlloc(gpa, stat.size) catch |err| {
             std.log.err("{s}", .{@errorName(err)});

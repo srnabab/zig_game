@@ -14,7 +14,7 @@ pub fn main(init: std.process.Init) !void {
 
     const allocator = arena.allocator();
 
-    var stdinReadBuffer = [_]u8{0} ** 1024;
+    var stdinReadBuffer: [1024]u8 = @splat(0);
 
     var databaseFilePath: [:0]const u8 = undefined;
     var contentDatabaseRelativePathStart: [:0]const u8 = undefined;
@@ -173,7 +173,7 @@ pub fn main(init: std.process.Init) !void {
 
                             if (idx) |i| {
                                 // std.log.debug("in in", .{});
-                                var parentUUID = [_]u8{0} ** db.UUID.len;
+                                var parentUUID: [db.UUID.len]u8 = @splat(0);
                                 var getValues: [1]*anyopaque = undefined;
                                 getValues[0] = @ptrCast(&parentUUID);
                                 var types = [_]db.innerType{.TEXT};
@@ -223,7 +223,7 @@ pub fn main(init: std.process.Init) !void {
                             // std.log.debug("not in content", .{});
                             const dotIndex = std.mem.findLast(u8, fileName, ".") orelse fileName.len;
 
-                            var readBuffer = [_]u8{0} ** 64;
+                            var readBuffer: [64]u8 = @splat(0);
                             var reader = f.reader(io, &readBuffer);
                             const content = try reader.interface.readAlloc(allocator, stat.size);
                             defer allocator.free(content);
@@ -291,7 +291,7 @@ pub fn main(init: std.process.Init) !void {
 
                                 if (idx) |i| {
                                     std.log.debug("in in", .{});
-                                    var parentUUID = [_]u8{0} ** db.UUID.len;
+                                    var parentUUID: [db.UUID.len]u8 = @splat(0);
                                     var getValues: [1]*anyopaque = undefined;
                                     getValues[0] = @ptrCast(&parentUUID);
                                     var types = [_]db.innerType{.TEXT};
@@ -422,7 +422,7 @@ fn renameNew(
             const idx = std.mem.findLast(u8, fullPath, "Content");
 
             if (idx) |i| {
-                var parentUUID = [_]u8{0} ** db.UUID.len;
+                var parentUUID: [db.UUID.len]u8 = @splat(0);
                 parentUUID[db.UUID.len - 2] = 0;
                 parentUUID[db.UUID.len - 1] = 0;
 
@@ -468,7 +468,7 @@ fn renameNew(
             defer file.close(io);
             const stat = try file.stat(io);
 
-            var readBuffer = [_]u8{0} ** 64;
+            var readBuffer: [64]u8 = @splat(0);
             var reader = file.reader(io, &readBuffer);
             const content = try reader.interface.readAlloc(allocator, stat.size);
             defer allocator.free(content);

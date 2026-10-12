@@ -118,7 +118,7 @@ pub const GLTF_Cooker = struct {
 
             const hashh = hash.blake3HashContent(meshMem);
 
-            var buffer = [_:0]u8{0} ** 256;
+            var buffer: [256:0]u8 = @splat(0);
             const primFileName = try std.fmt.bufPrintZ(&buffer, "{s}.vtx", .{value.name});
             checkGltfPrimitiveName(parmas.ContentPathT, value.name) catch {
                 var blob: sqlDB.BLOBForGet = undefined;
@@ -437,7 +437,7 @@ pub fn saveSceneJson(io: std.Io, content: std.Io.Dir) !void {
     if (resourceProcess.SceneJson.value.?.len > 0) {
         try sceneFile.setLength(io, 0);
 
-        var cacheBuffer = [_]u8{0} ** 1024;
+        var cacheBuffer: [1024]u8 = @splat(0);
         var sceneFileWriter = sceneFile.writer(io, &cacheBuffer);
         var sceneJsonWrite = std.json.Stringify{
             .writer = &sceneFileWriter.interface,

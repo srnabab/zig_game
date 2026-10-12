@@ -2,9 +2,9 @@ const std = @import("std");
 const Thread = std.Thread;
 const Mutex = std.Thread.Mutex;
 
-var carshListTest = [_]usize{0} ** 16;
-var queuesTest = [_]usize{0} ** 16;
-var mutexs = [_]Mutex{.{}} ** 16;
+var carshListTest: [16]usize = @splat(0);
+var queuesTest: [16]usize = @splat(0);
+var mutexs: [16]Mutex = @splat(.{});
 var gMutex: Mutex = .{};
 var done = false;
 

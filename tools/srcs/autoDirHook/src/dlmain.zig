@@ -103,7 +103,7 @@ var TrueNtCreateFile: ?*const NtCreateFile_Fn = null;
 var TrueCreateProcessW: *const CreateProcessW_Fn = &CreateProcessW;
 
 // ANSI path of this DLL, filled in DLL_PROCESS_ATTACH.
-var g_dllPath: [windows.MAX_PATH + 1]u8 = [_]u8{0} ** (windows.MAX_PATH + 1);
+var g_dllPath: [windows.MAX_PATH + 1]u8 = @splat(0);
 
 // Reentrancy guard: SHCreateDirectoryExW itself performs NtCreateFile calls, which
 // would otherwise re-enter HookedNtCreateFile and loop forever.

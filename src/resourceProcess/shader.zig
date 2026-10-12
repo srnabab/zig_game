@@ -39,7 +39,7 @@ pub const Shader_Cooker = struct {
         database: *db,
     ) !void {
         _ = content;
-        var readBuffer = [_]u8{0} ** 64;
+        var readBuffer: [64]u8 = @splat(0);
 
         const spvName = try std.fmt.allocPrintSentinel(
             gpa,
@@ -153,7 +153,7 @@ pub const Shader_Cooker = struct {
             };
 
             for (ToNodeIDs) |value| {
-                var pipelinePath = [_]u8{0} ** 256;
+                var pipelinePath: [256]u8 = @splat(0);
                 var pipelineGets = [_]*anyopaque{&pipelinePath};
                 var pipelineTypes = [_]db.innerType{.TEXT};
                 database.ShaderPipelineGraphNodeT.get(

@@ -12,7 +12,7 @@ pub fn MemoryPoolSlice(comptime Item: type) type {
         };
 
         arena: std.heap.ArenaAllocator,
-        free_lists: [8]?*Node = [_]?*Node{null} ** 8,
+        free_lists: [8]?*Node = @splat(null),
 
         pub fn init(allocator: std.mem.Allocator) Pool {
             return .{ .arena = std.heap.ArenaAllocator.init(allocator) };

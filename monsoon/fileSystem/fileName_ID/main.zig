@@ -98,13 +98,13 @@ pub fn main(init: std.process.Init) !void {
 
     var maxID: i32 = -1;
 
-    var buffer = [_]u8{0} ** 102400;
+    var buffer: [102400]u8 = @splat(0);
     const content = "const std = @import(\"std\");\n\npub const FileNameIdHashMap = map: {\nconst KV = struct {\n[]const u8,i64,\n};\nconst list = [_]KV{\n";
     var writer = std.Io.Writer.fixed(&buffer);
     _ = try writer.write(content);
     for (kvs) |value| {
         // std.log.info("name: {s}, ID: {d}", .{ value.fileName, value.ID });
-        var sBuffer = [_]u8{0} ** 256;
+        var sBuffer: [256]u8 = @splat(0);
         if (value.ID == -1) break;
         const cPtr = @as([*c]u8, @constCast(&value.fileName));
         const nameLen = std.mem.len(cPtr);
@@ -120,7 +120,7 @@ pub fn main(init: std.process.Init) !void {
     const func = " \n\n\npub fn comptimeGetID(comptime fileName: []const u8) u32 {\ncomptime {\n" ++ "return FileNameIdHashMap.get(fileName) orelse @compileError(\"not found\");\n}\n}\n\n" ++ "pub fn getID(fileName: []const u8) u32 {" ++ "    return FileNameIdHashMap.get(fileName) orelse std.debug.panic(\"ilegal name {s}\", .{fileName}); }";
     _ = try writer.write(func);
 
-    var sBuffer = [_]u8{0} ** 256;
+    var sBuffer: [256]u8 = @splat(0);
     const pubMaxID = try std.fmt.bufPrint(&sBuffer, "\npub const MaxID = {d};\n", .{maxID});
     _ = try writer.write(pubMaxID);
 
@@ -128,7 +128,7 @@ pub fn main(init: std.process.Init) !void {
     const nameLen = std.mem.len(cPtr);
 
     // _ = try file.write(buffer[0..nameLen]);
-    var buffer2 = [_]u8{0} ** 256;
+    var buffer2: [256]u8 = @splat(0);
     var fileWriter = file.writer(init.io, &buffer2);
     _ = try fileWriter.interface.write(buffer[0..nameLen]);
     try fileWriter.interface.flush();

@@ -74,7 +74,7 @@ pub fn main() noreturn {
     }
 
     // Build the ANSI path of the hook DLL that sits next to autoDir.exe.
-    var dllPath: [windows.MAX_PATH + 1]u8 = [_]u8{0} ** (windows.MAX_PATH + 1);
+    var dllPath: [windows.MAX_PATH + 1]u8 = @splat(0);
     {
         const n = GetModuleFileNameA(null, &dllPath, windows.MAX_PATH);
         if (n == 0 or n >= windows.MAX_PATH) {

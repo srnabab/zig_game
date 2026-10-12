@@ -97,7 +97,7 @@ pub fn printAllInfoToTxt() void {
 
     const frame = commands.vulkan.totalFrame.load(.monotonic);
 
-    var pathBuffer = [_]u8{0} ** 40;
+    var pathBuffer: [40]u8 = @splat(0);
     const path = std.fmt.bufPrint(&pathBuffer, "{d}-{s}-{d}-{d}_{d}_{d}-{d}.txt", .{
         year,
         @tagName(month),
@@ -116,7 +116,7 @@ pub fn printAllInfoToTxt() void {
     };
     defer file.close(io);
 
-    var writeBuffer = [_]u8{0} ** 1024;
+    var writeBuffer: [1024]u8 = @splat(0);
     var fileWriter = file.writer(io, &writeBuffer);
 
     var it = commands.nodeDag.map.iterator();
@@ -124,7 +124,7 @@ pub fn printAllInfoToTxt() void {
         const com = commands.queue.getPtr(entry.key_ptr.*);
         if (com == null) continue;
 
-        var infoBuffer = [_]u8{0} ** 10240;
+        var infoBuffer: [10240]u8 = @splat(0);
         var len: usize = 0;
         switch (com.?.command) {
             // .beginRendering => |r| {

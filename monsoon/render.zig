@@ -89,7 +89,7 @@ pub fn render_thread_func(args: Args) !void {
     const zone = tracy.initZone(@src(), .{ .name = "render" });
     defer zone.deinit();
 
-    var stackMemory = [_]u8{0} ** global.StackMemorySize;
+    var stackMemory: [global.StackMemorySize]u8 = @splat(0);
 
     var tracyAllocator = tracy.TracingAllocator.initNamed("render thread", gpa);
     defer tracyAllocator.deinit();

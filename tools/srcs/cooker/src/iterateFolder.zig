@@ -153,13 +153,13 @@ pub fn processFile(
 
     // std.log.debug("time {d} {s}", .{ time, name });
 
-    var fileBuffer = [_]u8{0} ** 256;
+    var fileBuffer: [256]u8 = @splat(0);
 
     var fType: FileType = .UNKNOWN;
 
     if (fileModifiedTime == -1) {
         std.log.debug("1", .{});
-        var uuidBuffer = [_]u8{0} ** UUID.len;
+        var uuidBuffer: [UUID.len]u8 = @splat(0);
         try UUID.createNewUUID(&uuidBuffer);
         const index = std.mem.lastIndexOf(u8, name, ".") orelse name.len;
 
@@ -427,10 +427,10 @@ pub fn processDirectory(
 fn iterateFolderUpdate(io: std.Io, dir: std.Io.Dir, dirName: []const u8, parentID: []const u8) !void {
     var contentIt = dir.iterate();
     while (try contentIt.next(io)) |entry| {
-        var relativePathBuffer = [_]u8{0} ** 256;
+        var relativePathBuffer: [256]u8 = @splat(0);
         const rPZ = try std.fmt.bufPrintZ(&relativePathBuffer, "{s}{s}{s}", .{ dirName, slash, entry.name });
 
-        var bufferZ = [_]u8{0} ** 128;
+        var bufferZ: [128]u8 = @splat(0);
         const nameZ = try std.fmt.bufPrintZ(&bufferZ, "{s}", .{entry.name});
 
         switch (entry.kind) {
@@ -515,7 +515,7 @@ pub fn processContentFolder(content: std.Io.Dir, io: std.Io, allocator: std.mem.
     _ = allocator;
     const exist = checkContent();
 
-    var buffer = [_]u8{0} ** UUID.len;
+    var buffer: [UUID.len]u8 = @splat(0);
     const time: i64 = @truncate(std.Io.Timestamp.now(io, .real).toNanoseconds());
 
     if (exist) {

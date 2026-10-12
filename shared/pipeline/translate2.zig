@@ -65,7 +65,7 @@ fn getPipelineShaderInfos(io: std.Io, shaders: [5][]const u8, count: u32, shader
     var infos = try allocator.alloc(PipelineShaderInfo, count);
     errdefer allocator.free(infos);
 
-    var nameBuffer = [_]u8{0} ** 128;
+    var nameBuffer: [128]u8 = @splat(0);
     var nameZ: [:0]u8 = undefined;
 
     var folder = try std.Io.Dir.openDirAbsolute(io, shaderFolder, .{});
@@ -90,7 +90,7 @@ fn getPipelineShaderInfos(io: std.Io, shaders: [5][]const u8, count: u32, shader
 
             const cc = try file.stat(io);
             // std.log.debug("file size {d}", .{cc.size});
-            var buffer = [_]u8{0} ** 256;
+            var buffer: [256]u8 = @splat(0);
             var fileReader = file.reader(io, &buffer);
 
             const content = try fileReader.interface.readAlloc(allocator, cc.size);

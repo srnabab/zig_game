@@ -74,7 +74,7 @@ pub fn main(init: std.process.Init) !void {
     };
     defer file.close(io);
 
-    var buffer = [_]u8{0} ** 256;
+    var buffer: [256]u8 = @splat(0);
     var reader = file.reader(io, &buffer);
     const stat = try file.stat(io);
 
@@ -162,7 +162,7 @@ pub fn main(init: std.process.Init) !void {
         }
     }
 
-    var writeBuffer = [_]u8{0} ** 10240;
+    var writeBuffer: [10240]u8 = @splat(0);
     var writer = resFile.writer(io, &writeBuffer);
 
     _ = try writer.interface.write(magic);

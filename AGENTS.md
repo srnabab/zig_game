@@ -54,6 +54,15 @@
   const gy = @as(u32, @intCast(cglm.abs(y - self.leftUp[1]))) / self.gridLength;
   ```
 
+## Zig 0.17.0 迁移笔记
+
+- **数组重复初始化改用 `@splat`**：`[_]T{v} ** N` 已废弃，统一写成带长度标注的 `var/const x: [N]T = @splat(v);`（结构体字段也可 `name: [N]T = @splat(v),`）。
+  - 哨兵数组：`[_:0]u8{0} ** 256` → `var buffer: [256:0]u8 = @splat(0);`（如 `src/resourceProcess/gltf.zig`）。
+  - 已有类型标注时只替换 RHS：`var dllPath: [MAX_PATH + 1]u8 = @splat(0);`。
+  - `@splat` 也接受 struct/optional/pointer 元素（std 里大量先例，如 `@splat(.{})`、`@splat(null)`、`@splat(.init(...))`），因此 `?*Node`/`?CommandPool`/`std.array_list.Managed(...)` 数组都能直接用。
+  - `@memset(dst, [_]usize{v} ** n)` 直接改为 `@memset(dst, @splat(v))`（`@memset` 的第二参类型已知）。
+  - 迁移已于本仓库全量完成（`monsoon/`、`src/`、`shared/`、`tools/srcs/`；`dependencies/` 无此模式）。新增代码不要再写 `[_]T{...} ** N`。
+
 ## Content pipeline (tools/srcs/ watcher + cooker)
 
 内容管线由三个独立 Zig 包协作（都在 `tools/srcs/`，各自有 `build.zig`/`build.zig.zon`）：

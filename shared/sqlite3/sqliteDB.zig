@@ -242,8 +242,8 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
         /// insert(.{.Key = value, .Key2 = value2 ...})
         pub fn insert(self: *Self, T: insertStruct) !void {
             const ssql = comptime blk: {
-                var buffer = [_]u8{0} ** 256;
-                var bufferq = [_]u8{0} ** 64;
+                var buffer: [256]u8 = @splat(0);
+                var bufferq: [64]u8 = @splat(0);
                 var writer = std.Io.Writer.fixed(buffer[0..buffer.len]);
                 var writerq = std.Io.Writer.fixed(bufferq[0..bufferq.len]);
 
@@ -319,7 +319,7 @@ pub fn Table(comptime SQL: []const u8, comptime tableName: []const u8, comptime 
             // comptime var ia = 0;
 
             const ssql = comptime ss: {
-                var buffer = [_]u8{0} ** 4096;
+                var buffer: [4096]u8 = @splat(0);
                 var writer = std.Io.Writer.fixed(buffer[0..buffer.len]);
                 var count: usize = 0;
 

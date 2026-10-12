@@ -6,7 +6,7 @@ const vk = @import("vulkan");
 var debug_allocator: std.heap.DebugAllocator(.{ .stack_trace_frames = 10 }) = .init;
 
 pub fn praseSampler(io: std.Io, content: []const u8, outputPath: []const u8, gpa: std.mem.Allocator) !void {
-    var buffer2 = [_]u8{0} ** 1024;
+    var buffer2: [1024]u8 = @splat(0);
 
     var output = try std.Io.Dir.createFileAbsolute(io, outputPath, .{});
     defer output.close(io);

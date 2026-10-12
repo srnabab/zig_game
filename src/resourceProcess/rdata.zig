@@ -156,7 +156,7 @@ pub const RData_Reader = struct {
             return ResourceError.Unavaliable;
         };
 
-        var readBuffer = [_]u8{0} ** 256;
+        var readBuffer: [256]u8 = @splat(0);
         var reader = rdataFile.reader(io, &readBuffer);
         const content = reader.interface.readAlloc(gpa, stat.size) catch |err| {
             std.log.err("rdata readAlloc {s}", .{@errorName(err)});

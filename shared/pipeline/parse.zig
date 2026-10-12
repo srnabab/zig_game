@@ -40,7 +40,7 @@ pub fn pipelineJsonParse(io: std.Io, pipelineContent: []const u8, shaderFolder: 
 
     // std.log.debug("total len {d}", .{totalLen});
 
-    var buffer = [_]u8{0} ** 20480;
+    var buffer: [20480]u8 = @splat(0);
     var writer = outputFile.writer(io, buffer[0..]);
     _ = try writer.interface.write(slice);
 

@@ -149,7 +149,7 @@ pub const PNG_Reader = struct {
             return ResourceError.Unavaliable;
         };
 
-        var buffer = [_]u8{0} ** 8;
+        var buffer: [8]u8 = @splat(0);
         var reader = img.file.reader(io, &buffer);
         reader.seekTo(0) catch return ResourceError.Unavaliable;
 

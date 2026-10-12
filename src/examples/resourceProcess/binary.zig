@@ -60,7 +60,7 @@ pub const Binary_Reader = struct {
 
         const stat = bin_file.stat(io) catch return ResourceError.Unavaliable;
 
-        var buffer = [_]u8{0} ** 256;
+        var buffer: [256]u8 = @splat(0);
         var fileReader = bin_file.reader(io, &buffer);
         const content = fileReader.interface.readAlloc(gpa, stat.size) catch |err| {
             std.log.err("{s}", .{@errorName(err)});

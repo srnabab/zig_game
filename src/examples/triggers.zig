@@ -6,7 +6,7 @@ const ProcessType = resourceProcess.ProcessType;
 
 const tableNames = [_][]const u8{ "ImageLoadParameter", "ModelLoadParameter" };
 pub const CreateTriggerContentPathOnInsertInsertIntoSubTable = tt: {
-    var buffer = [_]u8{0} ** 10240;
+    var buffer: [10240]u8 = @splat(0);
     var writer = std.Io.Writer.fixed(&buffer);
 
     var count: usize = 0;
@@ -56,7 +56,7 @@ pub const CreateTriggerContentPathOnInsertInsertIntoSubTable = tt: {
 };
 
 pub const createUniqueIndexFileNameAndContentHash = cu: {
-    var buffer = [_]u8{0} ** 10240;
+    var buffer: [10240]u8 = @splat(0);
     var writer = std.Io.Writer.fixed(&buffer);
     var count: usize = 0;
 
@@ -72,7 +72,7 @@ pub const createUniqueIndexFileNameAndContentHash = cu: {
 };
 
 pub const createTriggerOnDeleteContentPathUpdateTablesRelativePathWhereSameContentHash = cto: {
-    var buffer = [_]u8{0} ** 10240;
+    var buffer: [10240]u8 = @splat(0);
     var writer = std.Io.Writer.fixed(&buffer);
     var count: usize = 0;
 
@@ -102,12 +102,12 @@ fn getTableIndexForFileType(ft: ProcessType) ?u32 {
 }
 
 pub const createTriggerOnUpdateContentPathUpdateOrInsertTables = ct: {
-    var buffer = [_]u8{0} ** 20480;
+    var buffer: [20480]u8 = @splat(0);
     var writer = std.Io.Writer.fixed(&buffer);
     var count: usize = 0;
 
     for (tableNames, 0..) |tableName, idx| {
-        var id_list_buffer = [_]u8{0} ** 20480;
+        var id_list_buffer: [20480]u8 = @splat(0);
         var id_list_writer = std.Io.Writer.fixed(&id_list_buffer);
         var first = true;
 

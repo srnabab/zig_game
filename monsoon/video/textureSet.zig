@@ -310,7 +310,7 @@ pub fn createImageTexture(
 
         const imgStat = try img.file.stat(self.io);
 
-        var fileBuffer = [_]u8{0} ** 256;
+        var fileBuffer: [256]u8 = @splat(0);
         var fileReader = img.file.reader(self.io, &fileBuffer);
         const fileMem = try fileReader.interface.readAlloc(self.allocator, imgStat.size);
         defer self.allocator.free(fileMem);

@@ -16,10 +16,10 @@ var cacheMap: std.StringHashMap([]u8) = undefined;
 
 var debug_allocator: std.heap.DebugAllocator(.{ .stack_trace_frames = 10 }) = .init;
 pub fn main(init: std.process.Init) !void {
-    var buffer1 = [_]u8{0} ** 1024;
-    var buffer2 = [_]u8{0} ** 1024;
-    var buffer3 = [_]u8{0} ** 1024;
-    var buffer4 = [_]u8{0} ** 1024;
+    var buffer1: [1024]u8 = @splat(0);
+    var buffer2: [1024]u8 = @splat(0);
+    var buffer3: [1024]u8 = @splat(0);
+    var buffer4: [1024]u8 = @splat(0);
 
     const gpa, const is_debug = gpa: {
         break :gpa switch (builtin.mode) {
