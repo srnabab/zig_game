@@ -317,7 +317,7 @@ fn SpecialThreadPool(maxThreads: u32) type {
                 var end = drawC{
                     .ID = 1234124142,
                     // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
-                    .command = .{ .end = void{} },
+                    .command = .{ .end = {} },
                 };
                 var emptyQueueNode: QueueNode = .{
                     // .listID = null,
@@ -2734,7 +2734,7 @@ pub const commands = struct {
                 ptr.value_ptr.* = drawC{
                     .ID = rootNode.ID,
                     // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
-                    .command = .{ .endRendering = void{} },
+                    .command = .{ .endRendering = {} },
                 };
                 // rootNode.listID = self.nodeDag.currentListID;
                 rootNode.data.commandPoolType = .graphic;
@@ -3845,7 +3845,7 @@ pub const commands = struct {
             .ID = ID,
             // .timestamp = std.Io.Timestamp.now(self.io, .real).toNanoseconds(),
             // .command = command,
-            .command = .{ .empty = void{} },
+            .command = .{ .empty = {} },
         };
 
         var dependenciesArray: std.array_list.Managed(*anyopaque) = .init(allocator);
@@ -4180,7 +4180,7 @@ pub const commands = struct {
 
                 node.data.commandPoolType = .graphic;
 
-                try self.drawCacheMap.put(ID, void{});
+                try self.drawCacheMap.put(ID, {});
                 // putDrawCacheMapID = @intCast(ID);
 
                 var renderingNode: ?*QueueNode = null;
@@ -4305,7 +4305,7 @@ pub const commands = struct {
                     uboOffset = present.uboOffset;
 
                     ptr.value_ptr.command = .{
-                        .presentRecord = .{ .empty = void{} },
+                        .presentRecord = .{ .empty = {} },
                     };
 
                     rootCommand.command.start.present = true;
@@ -4927,7 +4927,7 @@ pub const commands = struct {
             ).?;
 
             const endRenderingTwoNode = try self.addCommand2(
-                .{ .endRendering = void{} },
+                .{ .endRendering = {} },
                 .empty,
                 0,
             );
@@ -5714,10 +5714,10 @@ pub const oneTimeCommand = struct {
                 .buffer => {
                     if (currentSemaphoreValue < g.semaphoreValue) continue;
                     self.vulkan.destroyBuffer(g.data.buffer);
-                    self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
+                    self.garbageData.items[i] = .{ .data = .{ .empty = {} }, .semaphoreValue = 0 };
                 },
                 .barriers => {
-                    self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
+                    self.garbageData.items[i] = .{ .data = .{ .empty = {} }, .semaphoreValue = 0 };
                 },
                 .bufferAndRegion => |bar| {
                     if (currentSemaphoreValue < g.semaphoreValue) {
@@ -5730,15 +5730,15 @@ pub const oneTimeCommand = struct {
                     if (bar.dstBuffer) |b|
                         self.vulkan.destroyBuffer(b);
 
-                    self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
+                    self.garbageData.items[i] = .{ .data = .{ .empty = {} }, .semaphoreValue = 0 };
                 },
                 .regions => {
-                    self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
+                    self.garbageData.items[i] = .{ .data = .{ .empty = {} }, .semaphoreValue = 0 };
                 },
                 .pValues => {
                     // if (currentSemaphoreValue < g.semaphoreValue) continue;
                     // self.allocator.free(g.data.pValues);
-                    self.garbageData.items[i] = .{ .data = .{ .empty = void{} }, .semaphoreValue = 0 };
+                    self.garbageData.items[i] = .{ .data = .{ .empty = {} }, .semaphoreValue = 0 };
                 },
                 .descriptorSets, .vertexBuffer, .empty => {},
             }

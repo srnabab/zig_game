@@ -762,7 +762,7 @@ fn debonuce(
                     }
                 }
 
-                std.sort.insertion(NotifyInformation, array.items, void{}, sortS.lessThan);
+                std.sort.insertion(NotifyInformation, array.items, {}, sortS.lessThan);
 
                 var end = array.items.len;
                 for (array.items, 0..) |value, i| {

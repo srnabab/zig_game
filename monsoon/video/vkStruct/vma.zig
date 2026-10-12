@@ -19,7 +19,7 @@ const AllocationCount = struct {
     const returnType = if (mode) u64 else void;
 
     count: if (mode) std.atomic.Value(u64) else void =
-        if (mode) .init(0) else void{},
+        if (mode) .init(0) else {},
 
     pub fn fetchAdd(self: *Count, operand: u64, comptime order: std.builtin.AtomicOrder) returnType {
         if (mode) return self.count.fetchAdd(operand, order);

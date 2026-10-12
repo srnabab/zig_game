@@ -63,6 +63,9 @@
   - `@memset(dst, [_]usize{v} ** n)` 直接改为 `@memset(dst, @splat(v))`（`@memset` 的第二参类型已知）。
   - 迁移已于本仓库全量完成（`monsoon/`、`src/`、`shared/`、`tools/srcs/`；`dependencies/` 无此模式）。新增代码不要再写 `[_]T{...} ** N`。
 
+- **void 值字面量 `void{}` 改为 `{}`**：`void{}` 已废弃，值上下文统一用 `{}`（如 `else {}`、`.{ .empty = {} }`、`getOrPutValue(name, {})`、`std.sort.insertion(..., {}, lessThan)`（`lessThan(_: void, ...)` 仍可推断））。
+  - **注意区分**：`fn f() void {}`、`!void {}` 这类“返回类型 `void` + 空函数体”**不要**动（有空格且是签名），只替换无空格的 `void{}` 值表达式；本仓库 20 处值上下文已全部迁移。
+
 ## Content pipeline (tools/srcs/ watcher + cooker)
 
 内容管线由三个独立 Zig 包协作（都在 `tools/srcs/`，各自有 `build.zig`/`build.zig.zon`）：

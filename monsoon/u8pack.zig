@@ -192,7 +192,7 @@ pub fn ID(comptime str: []const u8) u32 {
 
 pub fn toStr(comptime str: []const u8) Str {
     return comptime .{
-        .name = if (debug) str else void{},
+        .name = if (debug) str else {},
         .id = ID(str),
     };
 }
@@ -238,7 +238,7 @@ pub fn toStr2(str: Str2) Str {
         };
     } else {
         return .{
-            .name = void{},
+            .name = {},
             .id = str,
         };
     }

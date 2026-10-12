@@ -514,7 +514,7 @@ pub fn createVirtualBlockBuffer(
     pack.ptr.* = Buffer{
         .queue = .{ .ref = buffer },
         .vkBuffer = ptr.vkBuffer,
-        .allocation = .{ .block = void{} },
+        .allocation = .{ .block = {} },
         .size = size,
         .pMappedData = ptr.pMappedData,
         .usage = ptr.usage,

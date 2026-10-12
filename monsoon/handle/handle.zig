@@ -92,7 +92,7 @@ pub fn Handles(comptime capacity: u32, comptime stack_depth: usize) type {
         pub fn init(allocator: std.mem.Allocator) !Self {
             const stack_addresses = if (builtin.mode == .Debug) al: {
                 break :al try allocator.alloc([stack_n]usize, capacity);
-            } else void{};
+            } else {};
 
             if (builtin.mode == .Debug) {
                 @memset(stack_addresses, @splat(std.math.maxInt(usize)));

@@ -193,7 +193,7 @@ pub fn main(init: std.process.Init) !void {
         gridCount = l.gridCount;
         // std.log.debug("pos {d}", .{writer.logicalPos()});
 
-        std.sort.insertion(*Grid, gridsByLayer[d].items, void{}, leftUpLessThan);
+        std.sort.insertion(*Grid, gridsByLayer[d].items, {}, leftUpLessThan);
 
         var minX: i32 = std.math.maxInt(i32);
         var minY: i32 = std.math.maxInt(i32);
