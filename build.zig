@@ -395,6 +395,8 @@ pub fn build(b: *std.Build) void {
     inputRouter_mod.addImport("sdl", sdl_mod);
     inputRouter_mod.addImport("input", input_mod);
 
+    updateProcess_mod.addImport("inputUser", inputUser_mod);
+    updateProcess_mod.addImport("inputRouter", inputRouter_mod);
     updateProcess_mod.addImport("resourceProcess", resourceProcess_mod);
     updateProcess_mod.addImport("resource", resource_mod);
     updateProcess_mod.addImport("global", global_mod);
