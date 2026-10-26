@@ -2,7 +2,7 @@ const std = @import("std");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
-    // const optimize = b.standardOptimizeOption(.{});
+    const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .fast });
 
     const zig_triple = target.result.linuxTriple(b.allocator) catch |err| {
         std.log.err("Failed to get Zig triple: {s}", .{@errorName(err)});
@@ -88,4 +88,17 @@ pub fn build(b: *std.Build) void {
     cmake_install_cmd.step.dependOn(&cmake_build_cmd.step);
     cmake_build_cmd.step.dependOn(&cmake_configure_cmd.step);
     install_step.dependOn(&cmake_install_cmd.step);
+
+    const cglm_c = b.addTranslateC(.{
+        .root_source_file = cglm_dep.path("include/cglm/call.h"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    _ = cglm_c.addModule("cglm");
+
+    const lib_path = cmake_install_path.path(b, "lib");
+    lib_path.addStepDependencies(&cmake_install_cmd.step);
+
+    b.addNamedLazyPath("cglm_lib", lib_path);
 }

@@ -133,13 +133,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    const cglm_c = b.addTranslateC(.{
-        .root_source_file = cglm_dep.path("install/include/cglm/call.h"),
-        .target = target,
-        .optimize = optimize,
-        .link_libc = true,
-    });
-    const cglm_mod = cglm_c.createModule();
+    const cglm_mod = cglm_dep.module("cglm");
     const sampler_mod = b.createModule(.{
         .root_source_file = b.path("src/sampler/sampler.zig"),
         .target = target,
@@ -231,7 +225,7 @@ pub fn build(b: *std.Build) void {
     exe_mod.addLibraryPath(meshopt_dep.path("install/lib"));
     exe_mod.linkSystemLibrary("meshoptimizer", .{ .preferred_link_mode = .static });
 
-    exe_mod.addLibraryPath(cglm_dep.path("install/lib"));
+    exe_mod.addLibraryPath(cglm_dep.namedLazyPath("cglm_lib"));
     // exe_mod.addLibraryPath(shaderc_dep.path("install/lib"));
     exe_mod.linkSystemLibrary("setupapi", .{ .preferred_link_mode = .static });
     exe_mod.linkSystemLibrary("cglm", .{ .preferred_link_mode = .static });
