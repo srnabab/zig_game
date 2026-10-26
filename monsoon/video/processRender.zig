@@ -878,7 +878,7 @@ pub fn nodeDagPrint(self: *QueueNodes, self2: *commands) void {
                         const pipelineBarrier = c.command.pipelineBarrier;
                         std.log.debug("ID {d} {s}", .{ entry.key_ptr.*, @tagName(c.command) });
                         // std.log.debug("lastSrcStageMask {s}", .{
-                        //     @tagName(@as(vulkanType.VkPipelineStageFlagBits2, @enumFromInt(pipelineBarrier.lastSrcStageMask))),
+                        //     @tagName(@as(vulkanType.VkPipelineStageFlagBits2, @fromBackingInt(@intCast(pipelineBarrier.lastSrcStageMask)))),
                         // });
                         for (pipelineBarrier.barriers) |value| {
                             switch (value) {
@@ -1604,8 +1604,8 @@ pub const commands = struct {
 
             else => {
                 std.debug.panic("unsupported old layout {s} -> new layout {s}", .{
-                    @tagName(@as(vulkanType.VkImageLayout, @enumFromInt(command.transLayout.oldLayout))),
-                    @tagName(@as(vulkanType.VkImageLayout, @enumFromInt(command.transLayout.newLayout))),
+                    @tagName(@as(vulkanType.VkImageLayout, @fromBackingInt(@intCast(command.transLayout.oldLayout)))),
+                    @tagName(@as(vulkanType.VkImageLayout, @fromBackingInt(@intCast(command.transLayout.newLayout)))),
                 });
             },
         }
@@ -1643,8 +1643,8 @@ pub const commands = struct {
 
             else => {
                 std.debug.panic("unsupported old layout {s} -> new layout {s}", .{
-                    @tagName(@as(vulkanType.VkImageLayout, @enumFromInt(command.transLayout.oldLayout))),
-                    @tagName(@as(vulkanType.VkImageLayout, @enumFromInt(command.transLayout.newLayout))),
+                    @tagName(@as(vulkanType.VkImageLayout, @fromBackingInt(@intCast(command.transLayout.oldLayout)))),
+                    @tagName(@as(vulkanType.VkImageLayout, @fromBackingInt(@intCast(command.transLayout.newLayout)))),
                 });
             },
         }
@@ -2094,7 +2094,7 @@ pub const commands = struct {
                     }
                     releasePipelineBarrier.lastSrcStageMask = @min(releasePipelineBarrier.lastSrcStageMask, releaseFlags.sourceStage);
                     // std.log.debug("image release last src stageMask {s}", .{
-                    //     @tagName(@as(VkStruct.vulkanType.VkPipelineStageFlagBits2, @enumFromInt(releasePipelineBarrier.lastSrcStageMask))),
+                    //     @tagName(@as(VkStruct.vulkanType.VkPipelineStageFlagBits2, @fromBackingInt(@intCast(releasePipelineBarrier.lastSrcStageMask)))),
                     // });
 
                     const acquireFlags = inferAcquirePipelineBarrierInfoByImageUsage(
@@ -2185,7 +2185,7 @@ pub const commands = struct {
                     }
                     acquirePipelineBarrier.lastSrcStageMask = @min(acquirePipelineBarrier.lastSrcStageMask, acquireFlags.sourceStage);
                     // std.log.debug("image acquire last src stageMask {s}", .{
-                    //     @tagName(@as(VkStruct.vulkanType.VkPipelineStageFlagBits2, @enumFromInt(acquirePipelineBarrier.lastSrcStageMask))),
+                    //     @tagName(@as(VkStruct.vulkanType.VkPipelineStageFlagBits2, @fromBackingInt(@intCast(acquirePipelineBarrier.lastSrcStageMask)))),
                     // });
 
                     resNode = releaseNode;
@@ -2844,7 +2844,7 @@ pub const commands = struct {
         const oldQueue = textureContent.image.queueIndex;
         const dstImage: vk.VkImage = @ptrFromInt(textureContent.image.vkImage);
 
-        // std.log.debug("old layouts {s}", .{@tagName(@as(vulkanType.VkImageLayout, @enumFromInt(oldLayouts[0])))});
+        // std.log.debug("old layouts {s}", .{@tagName(@as(vulkanType.VkImageLayout, @fromBackingInt(@intCast(oldLayouts[0]))))});
 
         var currentLayout = oldLayouts[0];
         var currentBase = baseArrayLayer;
@@ -3806,7 +3806,7 @@ pub const commands = struct {
         const zone = tracy.initZone(@src(), .{ .name = "add command" });
         defer zone.deinit();
 
-        std.debug.assert(@as(u32, @intFromEnum(commandType)) == @as(u32, @intFromEnum(std.meta.activeTag(command))));
+        std.debug.assert(@as(u32, @backingInt(commandType)) == @as(u32, @backingInt(std.meta.activeTag(command))));
 
         // self.vulkan.logBufferPtr();
         // if (command == .drawMesh) return;
@@ -5349,10 +5349,10 @@ pub const oneTimeCommand = struct {
                             };
 
                             // std.log.debug("\nold layout {s} \nnew layout {s} \nold queue {d} \nnew queue {d}", .{
-                            //     @tagName(@as(vulkanType.VkImageLayout, @enumFromInt(ptr.oldLayout))),
-                            //     @tagName(@as(vulkanType.VkImageLayout, @enumFromInt(ptr.newLayout))),
-                            //     // @tagName(@as(VkStruct.CommandPoolType, @enumFromInt(ptr.srcQueueFamilyIndex))),
-                            //     // @tagName(@as(VkStruct.CommandPoolType, @enumFromInt(ptr.dstQueueFamilyIndex))),
+                            //     @tagName(@as(vulkanType.VkImageLayout, @fromBackingInt(@intCast(ptr.oldLayout)))),
+                            //     @tagName(@as(vulkanType.VkImageLayout, @fromBackingInt(@intCast(ptr.newLayout)))),
+                            //     // @tagName(@as(VkStruct.CommandPoolType, @fromBackingInt(@intCast(ptr.srcQueueFamilyIndex)))),
+                            //     // @tagName(@as(VkStruct.CommandPoolType, @fromBackingInt(@intCast(ptr.dstQueueFamilyIndex)))),
                             //     ptr.srcQueueFamilyIndex,
                             //     ptr.dstQueueFamilyIndex,
                             // });

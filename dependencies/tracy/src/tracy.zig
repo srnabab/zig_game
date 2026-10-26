@@ -176,7 +176,7 @@ pub inline fn plotConfig(comptime name: [:0]const u8, comptime config: PlotConfi
     if (!options.tracy_enable) return;
     c.___tracy_emit_plot_config(
         name,
-        @intFromEnum(config.plot_type),
+        @backingInt(config.plot_type),
         config.step,
         config.fill,
         config.color,

@@ -905,7 +905,7 @@ pub fn logKey(key: *Key) void {
         key.repeat,
         key.timestamp,
         // key.key,
-        @tagName(@as(SDL_Scancode, @enumFromInt(key.key))),
+        @tagName(@as(SDL_Scancode, @fromBackingInt(@intCast(key.key)))),
     });
 }
 

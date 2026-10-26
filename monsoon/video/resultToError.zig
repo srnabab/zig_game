@@ -14,7 +14,7 @@ pub fn checkVkResult(result: vk.VkResult) VkError!void {
     switch (result) {
         else => {
             VkResultToError(result) catch |err| {
-                std.log.err("error: {s}", .{@tagName(@as(VkResult, @enumFromInt(result)))});
+                std.log.err("error: {s}", .{@tagName(@as(VkResult, @fromBackingInt(@intCast(result))))});
                 renderDebug.printToDot();
                 // renderDebug.printAllInfoToTxt();
                 std.debug.dumpCurrentStackTrace(.{});

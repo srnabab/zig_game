@@ -80,6 +80,8 @@
   - `std.meta.fields` 在 0.17 已改成 `@compileError("deprecated in favor of @typeInfo")`（`lib/std/meta.zig:248`），必须换掉。
   - 本仓库迁移已完成：`build.zig`(tests)、`monsoon/{main,render,update}.zig`、`monsoon/input/{input,inputRouter}.zig`、`monsoon/video/{gen,textureSet}.zig`、`monsoon/video/vkStruct/instance_device.zig`、`shared/pipeline/pipeline.zig`、`src/{triggers,examples/triggers}.zig`、`tools/srcs/cooker/src/cgltf/cgltf.zig`；`shared/sqlite3/sqliteDB.zig` 本来就用 `field_names/field_types`。`decls`→`decl_names` 已完成：`src/resourceProcess.zig`、`src/examples/resourceProcess.zig`（`ReaderUnion` 枚举 reader decls）、`monsoon/ms_std/meta/logStructSize.zig`。`grep '\.fields\b'` / `'\.decls\b'` 在项目代码（非 `dependencies/`、非注释）中应为空。
 
+- **枚举与整数互转改名**：`@enumFromInt(x)` → `@fromBackingInt(@intCast(x))`（`@fromBackingInt` 只接受枚举的 backing 整数类型，所以要用 `@intCast` 先收到位）；反向的 `@intFromEnum(x)` → `@backingInt(x)`。两者在本仓库（`monsoon/`、`src/`、`shared/`、`tools/srcs/`）已全量替换，`grep '@enumFromInt\|@intFromEnum'` 应为空（`dependencies/` 不动）。注意 `monsoon/video/gen.zig` 里有一段**生成 Zig 代码的字符串**（`const func_end = "…"`），里面也用新写法，改这类字符串时别忘了同步。
+
 ## Content pipeline (tools/srcs/ watcher + cooker)
 
 内容管线由三个独立 Zig 包协作（都在 `tools/srcs/`，各自有 `build.zig`/`build.zig.zon`）：

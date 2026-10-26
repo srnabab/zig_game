@@ -89,7 +89,7 @@ pub const Shader_Cooker = struct {
             },
         }
 
-        const nodeType_u32: u32 = @intFromEnum(db.NodeType.Shader);
+        const nodeType_u32: u32 = @backingInt(db.NodeType.Shader);
         database.ShaderPipelineGraphNodeT.insert(.{
             .Name = fileName.ptr,
             .Path = fullPath.ptr,

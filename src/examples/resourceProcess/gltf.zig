@@ -164,7 +164,7 @@ pub const GLTF_Cooker = struct {
             const primFileParm = try gpa.alloc(u8, @sizeOf(VTX_Mem));
 
             var ptr = VTX_Mem{
-                .vType = @as(u32, @intFromEnum(vertex_opted.vType)),
+                .vType = @as(u32, @backingInt(vertex_opted.vType)),
                 .verticeBytesLen = verticeBytes.len,
                 .meshletsBytesLen = meshletsBytes.len,
                 .meshletVerticesBytesLen = meshletVerticesBytes.len,

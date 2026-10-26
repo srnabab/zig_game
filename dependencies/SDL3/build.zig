@@ -61,7 +61,7 @@ pub fn build(b: *std.Build) void {
         "-DSDL_STATIC=ON",
         "-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY",
         "-G",
-        "MinGW Makefiles",
+        "Ninja",
     });
     cmake_configure_cmd.setEnvironmentVariable(
         "CC",

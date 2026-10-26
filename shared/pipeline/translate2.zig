@@ -105,7 +105,7 @@ fn getPipelineShaderInfos(io: std.Io, shaders: [5][]const u8, count: u32, shader
             //             std.log.debug("location {d}, {d} {s}", .{
             //                 ss.location,
             //                 ss.varType,
-            //                 @tagName(@as(VkFormat, @enumFromInt(ss.varType))),
+            //                 @tagName(@as(VkFormat, @fromBackingInt(@intCast(ss.varType)))),
             //             });
             //         }
             //     }

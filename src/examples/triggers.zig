@@ -12,7 +12,7 @@ pub const CreateTriggerContentPathOnInsertInsertIntoSubTable = tt: {
     var count: usize = 0;
 
     for (@typeInfo(ProcessType).@"enum".field_values) |field_value| {
-        switch (@as(ProcessType, @enumFromInt(field_value))) {
+        switch (@as(ProcessType, @fromBackingInt(@intCast(field_value)))) {
             // .SPV => {
             //     count += writer.write(std.fmt.comptimePrint(
             //         "CREATE TRIGGER IF NOT EXISTS insertInto{s} AFTER INSERT ON ContentPath " ++
@@ -112,7 +112,7 @@ pub const createTriggerOnUpdateContentPathUpdateOrInsertTables = ct: {
         var first = true;
 
         for (@typeInfo(ProcessType).@"enum".field_values) |field_value| {
-            const val = @as(ProcessType, @enumFromInt(field_value));
+            const val = @as(ProcessType, @fromBackingInt(@intCast(field_value)));
             if (getTableIndexForFileType(val)) |i| {
                 if (i == idx) {
                     if (!first) _ = id_list_writer.write(", ") catch unreachable;

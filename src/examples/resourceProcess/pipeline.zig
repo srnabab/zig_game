@@ -85,7 +85,7 @@ pub const Pipeline_Cooker = struct {
         database.ShaderPipelineGraphNodeT.insert(.{
             .Name = fileName.ptr,
             .Path = fullPath.ptr,
-            .Type = @as(u32, @intFromEnum(db.NodeType.Pipeline)),
+            .Type = @as(u32, @backingInt(db.NodeType.Pipeline)),
         }) catch {};
 
         var nodeID: i32 = -1;
