@@ -451,7 +451,7 @@ pub fn useExample(comptime fType: ProcessType) bool {
     }
 }
 
-const Type = std.builtin.Type;
+const Type = std.lang.Type;
 
 pub const ReaderUnion = e: {
     const Self = @This();

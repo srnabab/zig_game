@@ -105,7 +105,7 @@ const ZoneContext = if (options.tracy_enable) extern struct {
     pub inline fn value(_: *const ZoneContext, _: u64) void {}
 };
 
-pub inline fn initZone(comptime src: std.builtin.SourceLocation, comptime opts: ZoneOptions) ZoneContext {
+pub inline fn initZone(comptime src: std.lang.SourceLocation, comptime opts: ZoneOptions) ZoneContext {
     if (!options.tracy_enable) return .{};
     const active: c_int = @intFromBool(opts.active);
 

@@ -193,15 +193,15 @@ const AllocationCount = struct {
     count: if (mode) std.atomic.Value(u64) else void =
         if (mode) .init(0) else {},
 
-    pub fn fetchAdd(self: *Count, operand: u64, comptime order: std.builtin.AtomicOrder) returnType {
+    pub fn fetchAdd(self: *Count, operand: u64, comptime order: std.lang.AtomicOrder) returnType {
         if (mode) return self.count.fetchAdd(operand, order);
     }
 
-    pub fn fetchSub(self: *Count, operand: u64, comptime order: std.builtin.AtomicOrder) returnType {
+    pub fn fetchSub(self: *Count, operand: u64, comptime order: std.lang.AtomicOrder) returnType {
         if (mode) return self.count.fetchSub(operand, order);
     }
 
-    pub fn load(sefl: *Count, comptime order: std.builtin.AtomicOrder) returnType {
+    pub fn load(sefl: *Count, comptime order: std.lang.AtomicOrder) returnType {
         if (mode) return sefl.count.load(order);
     }
 };

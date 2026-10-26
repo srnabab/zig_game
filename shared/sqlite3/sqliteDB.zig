@@ -165,7 +165,7 @@ fn getParamFromSQL(comptime SQL: []const u8, comptime skipID: bool) ParamsPack {
     return ParamsPack{ .ps = params, .count = paramsCount };
 }
 
-// std.builtin.Type.Struct;
+// std.lang.Type.Struct;
 fn createInsertStruct(comptime pack: ParamsPack) type {
     var fileds_name: [64][]const u8 = undefined;
     var fileds_type: [64]type = undefined;

@@ -1,5 +1,5 @@
 const std = @import("std");
-const Type = std.builtin.Type;
+const Type = std.lang.Type;
 
 fn comptime_print(comptime format: []const u8, comptime args: anytype) void {
     @compileLog(std.fmt.comptimePrint(format, args));
