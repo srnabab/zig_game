@@ -84,8 +84,13 @@ pub fn build(b: *std.Build) void {
         .linkage = .static,
         .name = "blake3",
     });
+    const blake3_c = b.addTranslateC(.{
+        .root_source_file = blake_src.path(b, "blake3.h"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    _ = blake3_c.addModule("blake3_c");
 
-    // no copy steps: sources/headers are consumed straight from the upstream
-    // BLAKE3 dependency, consumers use `blake_dep.path("c/blake3.h")`.
     b.installArtifact(lib);
 }
