@@ -250,10 +250,10 @@ pub fn main(init: std.process.Init) !void {
     if (cookerPath == null) return error.NoCookerPath;
     if (contentDatabaseRelativePathStart == null) return error.NoDatabaseRelativePathStart;
 
-    const dbPath = try std.fmt.allocPrint(allocator, "{s}?", .{databaseFilePath});
+    const dbPath = try allocator.print("{s}?", .{databaseFilePath});
     defer allocator.free(dbPath);
 
-    const dbPathStart = try std.fmt.allocPrint(allocator, "{s}?", .{contentDatabaseRelativePathStart.?});
+    const dbPathStart = try allocator.print("{s}?", .{contentDatabaseRelativePathStart.?});
     defer allocator.free(dbPathStart);
 
     var cookerArgv = [_][]const u8{cookerPath.?};
@@ -523,7 +523,7 @@ pub fn main(init: std.process.Init) !void {
                     // switchOnTerm(wRes);
 
                     const cookerBuildZig =
-                        try std.fmt.allocPrint(allocator, "{s}{s}build.zig", .{ cookerRootPath.?, "/" });
+                        try allocator.print("{s}{s}build.zig", .{ cookerRootPath.?, "/" });
                     defer allocator.free(cookerBuildZig);
 
                     const runRes = try std.process.run(allocator, io, .{ .argv = &[_][]const u8{
@@ -632,7 +632,7 @@ pub fn main(init: std.process.Init) !void {
                     action += 1000;
                 }
 
-                const cookerOut = try std.fmt.allocPrint(allocator, "{d}?{s}?{s}\n", .{ action, name_utf8, fullPath });
+                const cookerOut = try allocator.print("{d}?{s}?{s}\n", .{ action, name_utf8, fullPath });
                 defer allocator.free(cookerOut);
 
                 try cookerWriter.interface.writeAll(cookerOut);

@@ -4,7 +4,7 @@ const std = @import("std");
 pub const Config = struct {
     b: *std.Build,
     target: std.Build.ResolvedTarget,
-    optimize: std.lang.OptimizeMode,
+    optimize: std.lang.Optimize,
 
     // ---- required from engine ----
     video: *std.Build.Module,

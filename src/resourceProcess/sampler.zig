@@ -42,7 +42,7 @@ pub const Sampler_Cooker = struct {
     ) !void {
         _ = fullPath;
         _ = database;
-        const samplerName = try std.fmt.allocPrint(gpa, "{s}ler", .{fileName});
+        const samplerName = try gpa.print("{s}ler", .{fileName});
         defer gpa.free(samplerName);
 
         const samplerFullPath = try std.fs.path.joinZ(
