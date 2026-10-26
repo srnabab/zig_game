@@ -15,12 +15,8 @@ sometimes build may failed at first time, retry a few times will success
 git clone https://github.com/srnabab/zig_game.git
 cd zig_game
 git lfs pull
-cd tools/srcs/cooker
-zig build
-cd ..
-cd watcher
-zig build run 
-# until success run then terminate it or wahtever.
+cd tools/srcs/watcher
+zig build run
 cd ../../../
 zig build run
 ```
@@ -85,4 +81,5 @@ zig build run
 ```
 
 ### to see the example
-press D -> press B -> press C -> press E -> press E ->press Q
+press E -> press E ->press Q
+press A
