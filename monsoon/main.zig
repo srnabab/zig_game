@@ -69,8 +69,6 @@ const win32 = struct {
     const SC_MINIMIZE = 0xF020;
 };
 
-// const cgltf = @import("cgltf");
-
 var handles: global.HandlesType = undefined;
 
 var thread_count: usize = 0;
