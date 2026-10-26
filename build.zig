@@ -186,7 +186,7 @@ pub fn build(b: *std.Build) void {
     });
 
     const cglm_c = b.addTranslateC(.{
-        .root_source_file = b.path("include/cglm/call.h"),
+        .root_source_file = cglm_dep.path("install/include/cglm/call.h"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
@@ -521,8 +521,6 @@ pub fn build(b: *std.Build) void {
 
     vertexStruct_mod.addImport("cglm", cglm_mod);
 
-    // meshopt_mod.addIncludePath(b.path("include"));
-
     input_mod.addImport("global", global_mod);
     input_mod.addImport("ms_std", ms_mod);
     input_mod.addImport("sdl", sdl_mod);
@@ -535,7 +533,7 @@ pub fn build(b: *std.Build) void {
     resultToError_mod.addImport("renderDebug", renderDebug_mod);
     resultToError_mod.addImport("vulkanType", vulkanType_mod);
 
-    cglm_c.addIncludePath(b.path("include"));
+    cglm_c.addIncludePath(cglm_dep.path("install/include"));
 
     sampler_read_mod.addImport("vulkan", vk_c_mod);
     sampler_read_mod.addImport("fileSystem", fileSystem_mod);
@@ -573,9 +571,11 @@ pub fn build(b: *std.Build) void {
     // gen_mod.linkSystemLibrary("vulkan-1", .{});
 
     sdl_c.addIncludePath(sdl3Module.path(".cache_cmake/SDL3/install/include"));
+    sdl_c.addIncludePath(sdl3Module.path(".cache_cmake/SDL3/install/include/SDL3"));
     sdl_c.addIncludePath(b.path("include"));
 
     sdl_mod.addIncludePath(sdl3Module.path(".cache_cmake/SDL3/install/include"));
+    sdl_mod.addIncludePath(sdl3Module.path(".cache_cmake/SDL3/install/include/SDL3"));
     sdl_mod.addIncludePath(b.path("include"));
     sdl_mod.addImport("enumFromC", enum_c_mod);
     sdl_mod.addImport("sdl", sdl_c_mod);
