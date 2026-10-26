@@ -11,7 +11,7 @@ pub fn build(b: *std.Build) void {
 
     const cglm_dep = b.dependency("cglm", .{});
 
-    const cmake = b.findProgram(.{ .names = &.{"cmake"} }) orelse std.debug.panic("no cmake installed", .{});
+    const cmake = b.findProgramLazy(.{ .names = &.{"cmake"} });
 
     // var haveLib = true;
     // std.Io.Dir.accessAbsolute(b.graph.io, b.fmt("{s}/lib/libcglm.a", .{cglm_install_path_full}), .{}) catch |err| {
@@ -46,10 +46,8 @@ pub fn build(b: *std.Build) void {
     //     return;
     // }
 
-    const cmake_configure_cmd = b.addSystemCommand(&.{
-        cmake,
-        "-S",
-    });
+    const cmake_configure_cmd = b.addRunFile(cmake);
+    cmake_configure_cmd.addArg("-S");
     cmake_configure_cmd.addDirectoryArg2(cglm_dep.path("./"), .{});
     const cmake_build_path = cmake_configure_cmd.addOutputDirectoryArg2("build", .{ .prefix = "-B" });
     const cmake_install_path = cmake_configure_cmd.addOutputDirectoryArg2("install", .{ .prefix = "-DCMAKE_INSTALL_PREFIX=" });
@@ -69,17 +67,13 @@ pub fn build(b: *std.Build) void {
         b.fmt("zig c++ --target={s}", .{zig_triple}),
     );
 
-    const cmake_build_cmd = b.addSystemCommand(&.{
-        cmake,
-        "--build",
-    });
+    const cmake_build_cmd = b.addRunFile(cmake);
+    cmake_build_cmd.addArg("--build");
     cmake_build_cmd.addDirectoryArg2(cmake_build_path, .{ .prefix = "" });
     _ = cmake_build_cmd.captureStdOut(.{});
 
-    const cmake_install_cmd = b.addSystemCommand(&.{
-        cmake,
-        "--install",
-    });
+    const cmake_install_cmd = b.addRunFile(cmake);
+    cmake_install_cmd.addArg("--install");
     cmake_install_cmd.addDirectoryArg2(cmake_build_path, .{});
     cmake_install_cmd.addArg("--prefix");
     cmake_install_cmd.addDirectoryArg2(cmake_install_path, .{});
