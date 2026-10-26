@@ -1,18 +1,9 @@
 .zig-cache/
+.vscode/
 zig-out/bin/Content/Fonts/
 .VSCodeCounter/
 test*.zig
 testFeature/
-# dependencies/tracy/
-dependencies/SDL3/build
-dependencies/SDL3/install
-dependencies/blake3/c/
-dependencies/libgit2/build
-dependencies/libgit2/install/include
-dependencies/cglm/build
-dependencies/cglm/install
-dependencies/meshoptimizer/build
-dependencies/meshoptimizer/install
 dependencies/shaderc/build
 dependencies/shaderc/install
 pkgconfig/
@@ -23,9 +14,11 @@ build/
 *.pdb
 *.exe
 *.dll
-pipeline.txt
-shaders.txt
-sampler.txt
+AGENTS.md
+opencode.json
+path.txt
+pushToCenter.ps1
+Content.db
 config/
 zig-pkg/
 *.rdc
