@@ -185,13 +185,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const cglm_c = b.addTranslateC(.{
-        .root_source_file = cglm_dep.path("install/include/cglm/call.h"),
-        .target = target,
-        .optimize = optimize,
-        .link_libc = true,
-    });
-    const cglm_mod = cglm_c.createModule();
+    const cglm_mod = cglm_dep.module("cglm");
     const handle_mod = b.createModule(.{
         .root_source_file = b.path("monsoon/handle/handle.zig"),
         .target = target,
@@ -533,8 +527,6 @@ pub fn build(b: *std.Build) void {
     resultToError_mod.addImport("renderDebug", renderDebug_mod);
     resultToError_mod.addImport("vulkanType", vulkanType_mod);
 
-    cglm_c.addIncludePath(cglm_dep.path("install/include"));
-
     sampler_read_mod.addImport("vulkan", vk_c_mod);
     sampler_read_mod.addImport("fileSystem", fileSystem_mod);
     sampler_read_mod.addImport("tracy", tracy.module("tracy"));
@@ -706,7 +698,7 @@ pub fn build(b: *std.Build) void {
     // exe_mod.addLibraryPath(meshoptimizerModule.path("install/lib"));
     // exe_mod.linkSystemLibrary("meshoptimizer", .{ .preferred_link_mode = .static });
     exe_mod.addLibraryPath(sdl3Module.path(".cache_cmake/SDL3/install/lib"));
-    exe_mod.addLibraryPath(cglm_dep.path("install/lib"));
+    exe_mod.addLibraryPath(cglm_dep.namedLazyPath("cglm_lib"));
     exe_mod.linkSystemLibrary("cglm", .{ .preferred_link_mode = .static });
     exe_mod.linkSystemLibrary("ktx", .{ .preferred_link_mode = .dynamic });
     exe_mod.linkSystemLibrary("sdl3", .{ .preferred_link_mode = .static });
