@@ -93,6 +93,11 @@ pub fn build(b: *std.Build) void {
             .custom = "../../../",
         },
     } });
+    const install_autoDirHook = b.addInstallArtifact(autoDir_dep.artifact("autoDirHook"), .{ .dest_dir = .{
+        .override = .{
+            .custom = "../../../",
+        },
+    } });
 
     b.getInstallStep().dependOn(&install.step);
 
@@ -101,6 +106,7 @@ pub fn build(b: *std.Build) void {
     b.getInstallStep().dependOn(&install_cooker.step);
     b.getInstallStep().dependOn(&install_loadmapConverter.step);
     b.getInstallStep().dependOn(&install_autoDir.step);
+    b.getInstallStep().dependOn(&install_autoDirHook.step);
 
     run_cmd.step.dependOn(b.getInstallStep());
     run_step.dependOn(&run_cmd.step);
