@@ -11,13 +11,14 @@ pub fn build(b: *std.Build) void {
 
     const sdl_dep = b.dependency("sdl3", .{});
 
-    const sdl3_build_path = "build";
-    const sdl3_build_path_full = b.path(sdl3_build_path).getPath(b);
-    const sdl3_install_path = "install";
-    const sdl3_install_path_full = b.path(sdl3_install_path).getPath(b);
+    const root = b.root.root_dir.path orelse ".";
+    const cache_base = b.pathResolve(&.{ root, ".cache_cmake", "SDL3" });
+
+    const sdl3_build_path_full = b.pathResolve(&.{ cache_base, "build" });
+    const sdl3_install_path_full = b.pathResolve(&.{ cache_base, "install" });
 
     var haveLib = true;
-    std.Io.Dir.accessAbsolute(b.graph.io, b.fmt("{s}/lib/libSDL3.a", .{sdl3_install_path_full}), .{}) catch |err| {
+    std.Io.Dir.cwd().access(b.graph.io, b.pathResolve(&.{ sdl3_install_path_full, "lib", "libSDL3.a" }), .{}) catch |err| {
         if (err == error.FileNotFound) {
             haveLib = false;
             std.log.info("libSDL3.a not found, will build...", .{});
@@ -27,13 +28,6 @@ pub fn build(b: *std.Build) void {
         }
     };
 
-    const mkdir_cmake_build = b.addSystemCommand(&.{
-        "cmd", "/c", "mkdir", sdl3_build_path_full, "2>nul", "||", "exit", "/b", "0",
-    });
-    const mkdir_cmake_build2 = b.addSystemCommand(&.{
-        "cmd", "/c", "mkdir", sdl3_install_path_full, "2>nul", "||", "exit", "/b", "0",
-    });
-
     const clear_cmake_build = b.addSystemCommand(&.{
         "powershell", "rm", "-r", "-fo", sdl3_build_path_full,
     });
@@ -41,7 +35,14 @@ pub fn build(b: *std.Build) void {
     if (!std.mem.eql(u8, sdl_dep.builder.pkg_hash, "N-V-__8AAIBfjAMynWwoadl2SIwSsfVfJKbqzrpN21cmhmpR") or !haveLib) {
         haveLib = false;
         std.log.info("pkg hash updated, will build...", .{});
-        clear_cmake_build_step.dependOn(&clear_cmake_build.step);
+
+        var exist = true;
+        std.Io.Dir.cwd().access(b.graph.io, sdl3_build_path_full, .{}) catch {
+            exist = false;
+        };
+
+        if (exist)
+            clear_cmake_build_step.dependOn(&clear_cmake_build.step);
     }
 
     if (haveLib) {
@@ -49,15 +50,16 @@ pub fn build(b: *std.Build) void {
         return;
     }
 
-    const cmake_configure_cmd = b.addSystemCommand(&.{
-        "cmake",
-        "-S",
-        sdl_dep.path("./").getPath(sdl_dep.builder),
+    const cmake_configure_cmd = b.addSystemCommand(&.{ "cmake", "-S" });
+    cmake_configure_cmd.addDirectoryArg2(sdl_dep.path(""), .{});
+
+    cmake_configure_cmd.addArgs(&.{
         b.fmt("-B{s}", .{sdl3_build_path_full}),
         b.fmt("-DCMAKE_INSTALL_PREFIX={s}", .{sdl3_install_path_full}),
         "-DCMAKE_BUILD_TYPE=Release",
         "-DSDL_SHARED=OFF",
         "-DSDL_STATIC=ON",
+        "-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY",
         "-G",
         "MinGW Makefiles",
     });
@@ -82,16 +84,9 @@ pub fn build(b: *std.Build) void {
 
     const install_step = b.getInstallStep();
 
-    const copy_header = b.addSystemCommand(
-        if (target.result.os.tag == .windows) &.{ "cmd", "/c", "xcopy", b.path("install/include").getPath(b), b.path("../../include").getPath(b), "/s", "/y", "/q" } else unreachable,
-    );
-
     sdl3_build_step.dependOn(install_step);
 
-    install_step.dependOn(&copy_header.step);
-    copy_header.step.dependOn(&cmake_build_cmd.step);
+    install_step.dependOn(&cmake_build_cmd.step);
     cmake_build_cmd.step.dependOn(&cmake_configure_cmd.step);
     cmake_configure_cmd.step.dependOn(clear_cmake_build_step);
-    clear_cmake_build_step.dependOn(&mkdir_cmake_build.step);
-    clear_cmake_build_step.dependOn(&mkdir_cmake_build2.step);
 }

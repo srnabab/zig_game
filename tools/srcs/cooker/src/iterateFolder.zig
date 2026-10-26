@@ -178,12 +178,12 @@ pub fn processFile(
             .ParentUUID = @constCast(parentID.ptr),
             .RelativePath = @constCast(rPZ.ptr),
             .FileName = @constCast(name.ptr),
-            .TYPE = @intFromEnum(metadata.kind),
+            .TYPE = @backingInt(metadata.kind),
             .FileSize = @intCast(metadata.size),
             .ContentHash = sqlDB.BLOB{ .data = &hashh, .len = hash.blake3.BLAKE3_OUT_LEN },
             .ModifiedTime = @as(i64, @truncate(metadata.mtime.toNanoseconds())),
             .LastSeenTime = time,
-            .FileType = @intFromEnum(fType),
+            .FileType = @backingInt(fType),
         });
 
         try updateLoadParameter(
@@ -241,7 +241,7 @@ pub fn processFile(
                         time,
                         sqlDB.BLOB{ .data = &contentHash, .len = contentHash.len },
                         metadata.size,
-                        @intFromEnum(fType),
+                        @backingInt(fType),
                         name,
                     },
                 );
@@ -270,7 +270,7 @@ pub fn processFile(
                     &types,
                 );
 
-                fType = @enumFromInt(fType_u32);
+                fType = @fromBackingInt(@intCast(fType_u32));
 
                 try ContentPathT.update(
                     "RelativePath,ParentID,LastSeenTime",
@@ -298,7 +298,7 @@ pub fn processFile(
                         time,
                         sqlDB.BLOB{ .data = &contentHash, .len = contentHash.len },
                         metadata.size,
-                        @intFromEnum(fType),
+                        @backingInt(fType),
                         name,
                     },
                 );
@@ -328,7 +328,7 @@ pub fn processFile(
                     &types,
                 );
 
-                fType = @enumFromInt(fType_u32);
+                fType = @fromBackingInt(@intCast(fType_u32));
 
                 try ContentPathT.update("LastSeenTime", "FileName = ?", .{ time, name });
             }
@@ -376,12 +376,12 @@ pub fn processDirectory(
             .ParentUUID = @constCast(parentID.ptr),
             .RelativePath = @constCast(rPZ.ptr),
             .FileName = @constCast(name.ptr),
-            .TYPE = @intFromEnum(metadata.kind),
+            .TYPE = @backingInt(metadata.kind),
             .FileSize = @intCast(metadata.size),
             .ContentHash = null,
             .ModifiedTime = currentModifiedTime,
             .LastSeenTime = time,
-            .FileType = @intFromEnum(FileType.DIR),
+            .FileType = @backingInt(FileType.DIR),
         });
     } else {
         const isModified = (currentModifiedTime != fileModifiedTime) | forceUpdata;
@@ -428,10 +428,10 @@ fn iterateFolderUpdate(io: std.Io, dir: std.Io.Dir, dirName: []const u8, parentI
     var contentIt = dir.iterate();
     while (try contentIt.next(io)) |entry| {
         var relativePathBuffer: [256]u8 = @splat(0);
-        const rPZ = try std.fmt.bufPrintZ(&relativePathBuffer, "{s}{s}{s}", .{ dirName, slash, entry.name });
+        const rPZ = try std.mem.printSentinel(&relativePathBuffer, "{s}{s}{s}", .{ dirName, slash, entry.name }, 0);
 
         var bufferZ: [128]u8 = @splat(0);
-        const nameZ = try std.fmt.bufPrintZ(&bufferZ, "{s}", .{entry.name});
+        const nameZ = try std.mem.printSentinel(&bufferZ, "{s}", .{entry.name}, 0);
 
         switch (entry.kind) {
             .file => _ = try processFile(io, dir, nameZ, rPZ, parentID),
@@ -547,12 +547,12 @@ pub fn processContentFolder(content: std.Io.Dir, io: std.Io, allocator: std.mem.
             .ParentUUID = null,
             .RelativePath = @constCast("Content"),
             .FileName = @constCast("Content"),
-            .TYPE = @intFromEnum(cc.kind),
+            .TYPE = @backingInt(cc.kind),
             .FileSize = @intCast(cc.size),
             .ContentHash = null,
             .ModifiedTime = @as(i64, @truncate(cc.mtime.toNanoseconds())),
             .LastSeenTime = @as(i64, @truncate(time)),
-            .FileType = @intFromEnum(FileType.DIR),
+            .FileType = @backingInt(FileType.DIR),
         });
     }
 

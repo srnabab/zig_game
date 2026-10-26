@@ -441,8 +441,8 @@ pub fn init(allocator: std.mem.Allocator, window: *sdl.SDL_Window) !Self {
 
     const res = layoutIntoStruct(tempStruct, self.mem, 0);
     const typeInfo = @typeInfo(tempStruct);
-    inline for (typeInfo.@"struct".fields) |field| {
-        @field(self, field.name) = @field(res.slices, field.name);
+    inline for (typeInfo.@"struct".field_names) |field_name| {
+        @field(self, field_name) = @field(res.slices, field_name);
     }
     self.maxCount = @intCast(res.maxCount);
 
@@ -944,7 +944,8 @@ pub fn layoutIntoStruct(
     maxCount: usize,
     slices: Target,
 } {
-    const fields = std.meta.fields(Target);
+    const field_names = @typeInfo(Target).@"struct".field_names;
+    const field_types = @typeInfo(Target).@"struct".field_types;
 
     // 1. 编译期元数据收集与校验
     const FieldMeta = struct {
@@ -954,18 +955,18 @@ pub fn layoutIntoStruct(
         size: usize,
     };
 
-    comptime var metas: [fields.len]FieldMeta = undefined;
+    comptime var metas: [field_names.len]FieldMeta = undefined;
     comptime var max_align: usize = 1;
     comptime var unit_size: usize = 0;
 
-    inline for (fields, 0..) |f, i| {
+    inline for (field_names, field_types, 0..) |f_name, f_type, i| {
         // 提取切片的元素类型（如 []u64 -> u64）
-        const Elem = std.meta.Child(f.type);
+        const Elem = std.meta.Child(f_type);
         const elem_align = @alignOf(Elem);
         const elem_size = @sizeOf(Elem);
 
         metas[i] = .{
-            .name = f.name,
+            .name = f_name,
             .Elem = Elem,
             .alignment = elem_align,
             .size = elem_size,
@@ -997,8 +998,8 @@ pub fn layoutIntoStruct(
 
     // 边界情况：缓冲区不足
     if (start_offset >= buffer.len or unit_size == 0) {
-        inline for (fields) |f| {
-            @field(result_slices, f.name) = &.{};
+        inline for (field_names) |f_name| {
+            @field(result_slices, f_name) = &.{};
         }
         return .{ .maxCount = 0, .slices = result_slices };
     }

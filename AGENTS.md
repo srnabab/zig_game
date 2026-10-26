@@ -66,6 +66,20 @@
 - **void 值字面量 `void{}` 改为 `{}`**：`void{}` 已废弃，值上下文统一用 `{}`（如 `else {}`、`.{ .empty = {} }`、`getOrPutValue(name, {})`、`std.sort.insertion(..., {}, lessThan)`（`lessThan(_: void, ...)` 仍可推断））。
   - **注意区分**：`fn f() void {}`、`!void {}` 这类“返回类型 `void` + 空函数体”**不要**动（有空格且是签名），只替换无空格的 `void{}` 值表达式；本仓库 20 处值上下文已全部迁移。
 
+- **格式化进固定 buffer 改用 `std.mem.print` / `std.mem.printSentinel`**：`std.fmt.bufPrint` 已 deprecated（仅为 `mem.print` 的转发），`std.fmt.bufPrintZ` 在 0.17 **已删除**（`std.fmt.bufPrintSentinel` 是带显式 sentinel 的旧名）。统一写成：
+  - `std.fmt.bufPrint(buf, fmt, args)` → `std.mem.print(buf, fmt, args)`（返回 `[]u8`）
+  - `std.fmt.bufPrintZ(buf, fmt, args)` → `std.mem.printSentinel(buf, fmt, args, 0)`（返回 `[:0]u8`；第 4 参是 comptime sentinel，**放在 args 之后**）
+  - 两者均返回 `mem.PrintError!…`（= `NoSpaceLeft`），buffer 可以是 `&[N]u8`（自动降为 `[]u8`）；`printSentinel` 要求剩余空间能容纳 sentinel 自身。
+  - 迁移已于本仓库全量完成（`monsoon/`、`src/`、`shared/`、`tools/srcs/`；`grep bufPrint` 无残留），新增代码直接用 `std.mem.*`。
+
+- **静态反射改用 `field_names` / `field_types` / `field_values`**：0.17 的 `@typeInfo(T)` 返回 `std.lang.Type`（`lib/std/lang.zig`），**`Struct.fields` / `Union.fields` / `Enum.fields` 已不存在**，拆成平行切片（长度保证一致）：
+  - `Struct`：`field_names: []const [:0]const u8`、`field_types: []const type`、`field_attrs: []const FieldAttributes`（`FieldAttributes.defaultValue(field_type)` 取默认值，`default_value_ptr` 是 type-erased 指针）、`decl_names: []const [:0]const u8`。
+  - **`decls` 也已删除**，统一换成 `decl_names`（类型为 `[]const [:0]const u8`，不再是带 `.name`/`.is_pub`/`.data` 的 `Declaration` 结构体），调用处循环变量直接就是名字：`for (info.@"struct".decl_names) |decl_name| @field(T, decl_name)`。同时 `std.builtin.Type` 的 `StructField`/`UnionField`/`EnumField`/`Declaration` 也没了：union 字段属性类型是 `Type.Union.FieldAttributes`（`std.lang.Type.Union.FieldAttributes`），不是旧的 `Type.UnionField.Attributes`。
+  - `Union`：`field_names` / `field_types` / `field_attrs`；`Enum`：`field_names` / `field_values: []const comptime_int`；`ErrorSet`：`error_names: ?[]const [:0]const u8`。
+  - 按用法选：只要名字→`inline for (info.field_names) |f|`；只要类型→`inline for (info.field_types) |T|`；两者都要→`inline for (info.field_names, info.field_types) |f, T|`（需要下标再接 `, 0..) |f, T, i|`）。旧写法 `|field| … field.name / field.type / field.value` 逐项替换，`fields.len` → `field_names.len`。
+  - `std.meta.fields` 在 0.17 已改成 `@compileError("deprecated in favor of @typeInfo")`（`lib/std/meta.zig:248`），必须换掉。
+  - 本仓库迁移已完成：`build.zig`(tests)、`monsoon/{main,render,update}.zig`、`monsoon/input/{input,inputRouter}.zig`、`monsoon/video/{gen,textureSet}.zig`、`monsoon/video/vkStruct/instance_device.zig`、`shared/pipeline/pipeline.zig`、`src/{triggers,examples/triggers}.zig`、`tools/srcs/cooker/src/cgltf/cgltf.zig`；`shared/sqlite3/sqliteDB.zig` 本来就用 `field_names/field_types`。`decls`→`decl_names` 已完成：`src/resourceProcess.zig`、`src/examples/resourceProcess.zig`（`ReaderUnion` 枚举 reader decls）、`monsoon/ms_std/meta/logStructSize.zig`。`grep '\.fields\b'` / `'\.decls\b'` 在项目代码（非 `dependencies/`、非注释）中应为空。
+
 ## Content pipeline (tools/srcs/ watcher + cooker)
 
 内容管线由三个独立 Zig 包协作（都在 `tools/srcs/`，各自有 `build.zig`/`build.zig.zon`）：
@@ -116,6 +130,8 @@
 - **glslc** — cooker/watcher 编译 shader 需要 PATH 上可执行的 `glslc.exe`（来自 Vulkan SDK / shaderc）；`shared/shaderc/shaderc.zig` 仍在但当前未被 cooker 使用
 - **Python** — `build_script/pipelineConfig.py`、`feather_lut.py`、`samplerJson.py`、`showDag.py` 需要
 - SDL3、cglm、Tracy、meshoptimizer、blake3 均从 `dependencies/` 源码构建
+  - `dependencies/blake3/build.zig` 无任何 copy 步骤：C/ASM 源文件用 `addCSourceFiles(.{ .root = blake_dep.path("c"), .files = … })` 直接引用上游包，`Dependency`/`LazyPath` 消费方若要头文件用 `blake3_dep.path("c/blake3.h")`（cooker 的 `addTranslateC` 即如此，不再依赖被 build 刷新出来的 `include/blake3.h`；`dependencies/blake3/c/` 是旧的 gitignore 残留拷贝，可删）
+  - `dependencies/meshoptimizer/build.zig`、`dependencies/cglm/build.zig`、`dependencies/SDL3/build.zig` 都是 cmake 式：`b.findProgram(.{ .names = &.{"cmake"} })` 取 cmake + `CC/CXX = zig cc/c++ --target=<linuxTriple>` + `-G "MinGW Makefiles"`。用 `Run.addDirectoryArg2`/`addOutputDirectoryArg2` 拼参数，不再手工 `mkdir`/`powershell rm`/`pkg_hash` 判断。`-B`（build 目录）是 `addOutputDirectoryArg2("build", .{ .prefix = "-B" })`（落在 zig cache，参数变更即换目录，故无需清缓存），但 `-DCMAKE_INSTALL_PREFIX=`（以及需要时的 `cmake --install ... --prefix`）仍指向依赖包内 `b.path("install")`，否则下游 `dep.path("install/lib")` 会指向陈旧产物。SDL3 用单步 `cmake --build <build> --target install`（没有单独 `cmake --install`）。三者都不再 xcopy 头文件到 `../../include`（`include/blake3.h`、`include/meshoptimizer.h`、`include/cglm/`、`include/SDL3/` 是历史遗留的已提交拷贝，不会报错但会变旧）：cooker 已改成 `blake3_dep.path("c/blake3.h")`、`meshopt_dep.path("src/meshoptimizer.h")`；根 `build.zig` 仍用 `b.path("include/SDL3/SDL_namespace.h")` / `b.path("include/cglm/call.h")`（如果要彻底去拷贝，应改成 `<dep>.path("install/include/...")` 并补 `addIncludePath`）。注意 cglm 版把 `install_step.dependOn(cmake_install_cmd)` 丢了（`build_cglm` 只 `dependOn(install_step)`），meshoptimizer/SDL3 版保留该链，以保证 `dep.builder.getInstallStep()` 真的有内容。
 - **Detours** — `dependencies/Detours` 包（其 `build.zig.zon` 通过 url+hash 拉取 Microsoft Detours 4.0.1 源码）编译出静态库 `libdetours.a`，供 `tools/srcs/autoDirHook` 使用。`dependencies/Detours/build.zig` 把 `src/Makefile` 的 OBJS 列表翻译为 Zig：编译 10 个 cpp（`uimports.cpp` 被 `creatwth.cpp` `#include`，不单编；`disol*.cpp` 是 2 行的 offline 变体），flags = `-std=c++17 -DWIN32_LEAN_AND_MEAN -include compat_msvc.h -D_AMD64_=1`（按架构）。**关键**：clang/mingw 不定义 `_MSC_VER`/`_AMD64_`——`compat_msvc.h` 先 `#include <windows.h>`（走 GNU 语义）再 `#define _MSC_VER 1299`，使 `detours.h` 走可移植的 `<dbghelp.h>` 分支（否则命中 `_MSC_VER < 1299` 的 MSVC-only 分支，与 mingw 的 `InterlockedCompareExchange` 宏冲突而编译失败）；`_AMD64_` 是 `detours.h` 判断架构所需。
 - `tools/srcs/cooker` 还用到 `include/UUID`、`include/cgltf`、`include/meshoptimizer.h`
 

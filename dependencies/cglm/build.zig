@@ -11,55 +11,55 @@ pub fn build(b: *std.Build) void {
 
     const cglm_dep = b.dependency("cglm", .{});
 
-    const cglm_build_path = "build";
-    const cglm_build_path_full = b.path(cglm_build_path).getPath(b);
-    const cglm_install_path = "install";
-    const cglm_install_path_full = b.path(cglm_install_path).getPath(b);
+    const cmake = b.findProgram(.{ .names = &.{"cmake"} }) orelse std.debug.panic("no cmake installed", .{});
 
-    var haveLib = true;
-    std.Io.Dir.accessAbsolute(b.graph.io, b.fmt("{s}/lib/libcglm.a", .{cglm_install_path_full}), .{}) catch |err| {
-        if (err == error.FileNotFound) {
-            haveLib = false;
-            std.log.info("libcglm.a not found, will build...", .{});
-        } else {
-            std.log.err("Failed to access libcglm.a: {s}", .{@errorName(err)});
-            return;
-        }
-    };
+    // var haveLib = true;
+    // std.Io.Dir.accessAbsolute(b.graph.io, b.fmt("{s}/lib/libcglm.a", .{cglm_install_path_full}), .{}) catch |err| {
+    //     if (err == error.FileNotFound) {
+    //         haveLib = false;
+    //         std.log.info("libcglm.a not found, will build...", .{});
+    //     } else {
+    //         std.log.err("Failed to access libcglm.a: {s}", .{@errorName(err)});
+    //         return;
+    //     }
+    // };
 
-    const mkdir_cmake_build = b.addSystemCommand(&.{
-        "cmd", "/c", "mkdir", cglm_build_path_full, "2>nul", "||", "exit", "/b", "0",
-    });
-    const mkdir_cmake_build2 = b.addSystemCommand(&.{
-        "cmd", "/c", "mkdir", cglm_install_path_full, "2>nul", "||", "exit", "/b", "0",
-    });
+    // const mkdir_cmake_build = b.addSystemCommand(&.{
+    //     "cmd", "/c", "mkdir", cglm_build_path_full, "2>nul", "||", "exit", "/b", "0",
+    // });
+    // const mkdir_cmake_build2 = b.addSystemCommand(&.{
+    //     "cmd", "/c", "mkdir", cglm_install_path_full, "2>nul", "||", "exit", "/b", "0",
+    // });
 
-    const clear_cmake_build = b.addSystemCommand(&.{
-        "powershell", "rm", "-r", "-fo", cglm_build_path_full,
-    });
-    const clear_cmake_build_step = b.step("clear_cmake_build", "Clear cmake build");
-    if (!std.mem.eql(u8, cglm_dep.builder.pkg_hash, "N-V-__8AAGApJACv6OGRSLZEdwbH9P68sV3B96LAZsZ21_4C") or !haveLib) {
-        haveLib = false;
-        std.log.info("pkg hash updated, will build...", .{});
-        clear_cmake_build_step.dependOn(&clear_cmake_build.step);
-    }
+    // const clear_cmake_build = b.addSystemCommand(&.{
+    //     "powershell", "rm", "-r", "-fo", cglm_build_path_full,
+    // });
+    // const clear_cmake_build_step = b.step("clear_cmake_build", "Clear cmake build");
+    // if (!std.mem.eql(u8, cglm_dep.builder.pkg_hash, "N-V-__8AAGApJACv6OGRSLZEdwbH9P68sV3B96LAZsZ21_4C") or !haveLib) {
+    //     haveLib = false;
+    //     std.log.info("pkg hash updated, will build...", .{});
+    //     clear_cmake_build_step.dependOn(&clear_cmake_build.step);
+    // }
 
-    if (haveLib) {
-        std.log.info("have libcglmoptimizer.a, skipped\n", .{});
-        return;
-    }
+    // if (haveLib) {
+    //     std.log.info("have libcglm.a, skipped\n", .{});
+    //     return;
+    // }
 
     const cmake_configure_cmd = b.addSystemCommand(&.{
-        "cmake",
+        cmake,
         "-S",
-        cglm_dep.path("./").getPath(cglm_dep.builder),
-        b.fmt("-B{s}", .{cglm_build_path_full}),
-        b.fmt("-DCMAKE_INSTALL_PREFIX={s}", .{cglm_install_path_full}),
+    });
+    cmake_configure_cmd.addDirectoryArg2(cglm_dep.path("./"), .{});
+    const cmake_build_path = cmake_configure_cmd.addOutputDirectoryArg2("build", .{ .prefix = "-B" });
+    const cmake_install_path = cmake_configure_cmd.addOutputDirectoryArg2("install", .{ .prefix = "-DCMAKE_INSTALL_PREFIX=" });
+    cmake_configure_cmd.addArgs(&.{
         "-DCMAKE_BUILD_TYPE=Release",
         "-DCGLM_STATIC=ON",
         "-G",
-        "MinGW Makefiles",
+        "Ninja",
     });
+
     cmake_configure_cmd.setEnvironmentVariable(
         "CC",
         b.fmt("zig cc --target={s}", .{zig_triple}),
@@ -70,35 +70,28 @@ pub fn build(b: *std.Build) void {
     );
 
     const cmake_build_cmd = b.addSystemCommand(&.{
-        "cmake",
+        cmake,
         "--build",
-        cglm_build_path_full,
     });
+    cmake_build_cmd.addDirectoryArg2(cmake_build_path, .{ .prefix = "" });
+    _ = cmake_build_cmd.captureStdOut(.{});
 
     const cmake_install_cmd = b.addSystemCommand(&.{
-        "cmake",
+        cmake,
         "--install",
-        cglm_build_path_full,
-        "--prefix",
-        cglm_install_path_full,
     });
+    cmake_install_cmd.addDirectoryArg2(cmake_build_path, .{});
+    cmake_install_cmd.addArg("--prefix");
+    cmake_install_cmd.addDirectoryArg2(cmake_install_path, .{});
+    _ = cmake_install_cmd.captureStdOut(.{});
 
     const cglm_build_step = b.step("build_cglm", "Build cglm static library using Zig as compiler");
 
     const install_step = b.getInstallStep();
 
-    const copy_header = b.addSystemCommand(
-        if (target.result.os.tag == .windows) &.{ "cmd", "/c", "xcopy", b.path("install/include").getPath(b), b.path("../../include").getPath(b), "/s", "/y", "/q" } else unreachable,
-    );
-
     cglm_build_step.dependOn(install_step);
-
-    install_step.dependOn(&copy_header.step);
-    copy_header.step.dependOn(&cmake_install_cmd.step);
 
     cmake_install_cmd.step.dependOn(&cmake_build_cmd.step);
     cmake_build_cmd.step.dependOn(&cmake_configure_cmd.step);
-    cmake_configure_cmd.step.dependOn(clear_cmake_build_step);
-    clear_cmake_build_step.dependOn(&mkdir_cmake_build.step);
-    clear_cmake_build_step.dependOn(&mkdir_cmake_build2.step);
+    install_step.dependOn(&cmake_install_cmd.step);
 }

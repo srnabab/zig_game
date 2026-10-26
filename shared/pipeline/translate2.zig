@@ -74,7 +74,7 @@ fn getPipelineShaderInfos(io: std.Io, shaders: [5][]const u8, count: u32, shader
     var file: std.Io.File = undefined;
 
     for (0..count) |i| {
-        nameZ = try std.fmt.bufPrintZ(&nameBuffer, "{s}", .{shaders[i]});
+        nameZ = try std.mem.printSentinel(&nameBuffer, "{s}", .{shaders[i]}, 0);
 
         {
             var frag = false;

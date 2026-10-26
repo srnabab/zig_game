@@ -7,7 +7,7 @@ const c_flags = [_][]const u8{"-std=c11"};
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{ .default_target = .{ .abi = .gnu } });
-    const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .Debug });
+    const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .debug });
 
     const autoDir_dep = b.dependency("autoDirHook", .{});
     const autoDir = autoDir_dep.artifact("autoDir");
@@ -48,24 +48,22 @@ pub fn build(b: *std.Build) void {
         "0",
     } else unreachable);
 
-    const root_path = b.pathFromRoot("../../../");
-    const contentDbPath = b.pathResolve(&[_][]const u8{ root_path, "zig-out/bin/Content.db" });
-    const contentPath = b.pathResolve(&[_][]const u8{ root_path, "zig-out/bin/Content" });
-    const cookerPath = b.pathResolve(&[_][]const u8{ root_path, "tools/cooker.exe" });
-    const cookerRootPath = b.pathResolve(&[_][]const u8{ root_path, "tools/srcs/cooker/" });
+    const root_path = b.path("../../..");
+    const contentDbPath = b.path("../../../zig-out/bin/Content.db");
+    const contentPath = b.path("../../../zig-out/bin/Content");
+    const cookerPath = b.path("../../../tools/cooker.exe");
+    const cookerRootPath = b.path("../../../tools/srcs/cooker");
     const run_cmd = b.addRunArtifact(autoDir);
-    run_cmd.addArtifactArg(exe);
-    run_cmd.addArgs(&[_][]const u8{
-        "--f",
-        root_path,
-        "--d",
-        contentDbPath,
-        contentPath,
-        "--c",
-        cookerPath,
-        cookerRootPath,
-        "-force",
-    });
+    run_cmd.addArtifactArg2(exe, .{ .make_absolute = true });
+    run_cmd.addArg("--f");
+    run_cmd.addDirectoryArg2(root_path, .{ .make_absolute = true });
+    run_cmd.addArg("--d");
+    run_cmd.addDirectoryArg2(contentDbPath, .{ .make_absolute = true });
+    run_cmd.addDirectoryArg2(contentPath, .{ .make_absolute = true });
+    run_cmd.addArg("--c");
+    run_cmd.addDirectoryArg2(cookerPath, .{ .make_absolute = true });
+    run_cmd.addDirectoryArg2(cookerRootPath, .{ .make_absolute = true });
+    run_cmd.addArg("-force");
 
     const run_step = b.step("run", "Run the app");
 

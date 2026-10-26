@@ -4,7 +4,7 @@ const Thread = std.Thread;
 const Allocator = std.mem.Allocator;
 const builtin = @import("builtin");
 
-// const Debug = @import("debug");
+// const debug = @import("debug");
 const Descriptor = @import("vkStruct/descriptor.zig");
 const global = @import("global");
 const Handles = @import("handle");
@@ -187,7 +187,7 @@ const UboPack = struct {
 const AllocationCount = struct {
     const Count = @This();
 
-    const mode = if (builtin.mode == .Debug or builtin.mode == .ReleaseSafe) true else false;
+    const mode = if (builtin.mode == .debug or builtin.mode == .ReleaseSafe) true else false;
     const returnType = if (mode) u64 else void;
 
     count: if (mode) std.atomic.Value(u64) else void =
@@ -700,8 +700,8 @@ pub fn initVulkan(self: *Self, io: std.Io, db: file.sqlite3) !void {
     std.log.debug("--------------------------------------", .{});
     {
         const capabilityInfo = @typeInfo(VulkanCapability);
-        inline for (capabilityInfo.@"struct".decls) |field| {
-            std.log.debug("{s}: {}", .{ field.name, @field(VulkanCapability, field.name) });
+        inline for (capabilityInfo.@"struct".decl_names) |field| {
+            std.log.debug("{s}: {}", .{ field, @field(VulkanCapability, field) });
         }
     }
     std.log.debug("--------------------------------------", .{});
@@ -837,7 +837,7 @@ fn comptime_print(comptime format: []const u8, comptime args: anytype) void {
 
 fn showErrorWithMessageBox(window: *sdl.SDL_Window, err: []const u8) void {
     var buffer: [256]u8 = undefined;
-    const buffers: []const u8 = std.fmt.bufPrint(&buffer, "memory alloc failed\nERROR: {s}\n", .{err}) catch |err2| blk: {
+    const buffers: []const u8 = std.mem.print(&buffer, "memory alloc failed\nERROR: {s}\n", .{err}) catch |err2| blk: {
         std.log.warn("buffer is not big enough {s}\n", .{@errorName(err2)});
         const backupMessage = "error\n";
         break :blk backupMessage;

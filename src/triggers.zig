@@ -11,15 +11,15 @@ pub const CreateTriggerContentPathOnInsertInsertIntoSubTable = tt: {
 
     var count: usize = 0;
 
-    for (@typeInfo(ProcessType).@"enum".fields) |field| {
-        switch (@as(ProcessType, @enumFromInt(field.value))) {
+    for (@typeInfo(ProcessType).@"enum".field_values) |field_value| {
+        switch (@as(ProcessType, @fromBackingInt(@intCast(field_value)))) {
             // .SPV => {
             //     count += writer.write(std.fmt.comptimePrint(
             //         "CREATE TRIGGER IF NOT EXISTS insertInto{s} AFTER INSERT ON ContentPath " ++
             //             " FOR EACH ROW WHEN NEW.FileType={d} BEGIN INSERT INTO ShaderLoadParameter (FileName,ContentHash,RelativePath,FileSize,FileID) VALUES " ++
             //             "(NEW.FileName,NEW.ContentHash,NEW.RelativePath,NEW.FileSize,NEW.ID) ON CONFLICT(FileName,ContentHash) DO UPDATE SET " ++
             //             "FileID = NEW.ID, FileName = NEW.FileName, ContentHash = NEW.ContentHash, RelativePath = NEW.RelativePath, FileSize = NEW.FileSize; END;",
-            //         .{ tableNames[1], field.value },
+            //         .{ tableNames[1], field_value },
             //     )) catch |err| {
             //         @compileError(std.fmt.comptimePrint("{s}", .{@errorName(err)}));
             //     };
@@ -30,7 +30,7 @@ pub const CreateTriggerContentPathOnInsertInsertIntoSubTable = tt: {
                         "FOR EACH ROW WHEN NEW.FileType={d} BEGIN INSERT INTO ImageLoadParameter (ID,FileName,ContentHash,RelativePath,FileUUID) VALUES " ++
                         "(NEW.ID,NEW.FileName,NEW.ContentHash,NEW.RelativePath,NEW.UUID) ON CONFLICT(FileName,ContentHash) DO UPDATE SET " ++
                         "ID = NEW.ID, FileUUID = NEW.UUID, FileName = NEW.FileName, ContentHash = NEW.ContentHash, RelativePath = NEW.RelativePath; END;",
-                    .{ tableNames[0], field.value },
+                    .{ tableNames[0], field_value },
                 )) catch |err| {
                     @compileError(std.fmt.comptimePrint("{s}", .{@errorName(err)}));
                 };
@@ -41,7 +41,7 @@ pub const CreateTriggerContentPathOnInsertInsertIntoSubTable = tt: {
                         "FOR EACH ROW WHEN NEW.FileType={d} BEGIN INSERT INTO ModelLoadParameter (ID,FileName,ContentHash,RelativePath,FileUUID) VALUES " ++
                         "(NEW.ID,NEW.FileName,NEW.ContentHash,NEW.RelativePath,NEW.UUID) ON CONFLICT(FileName,ContentHash) DO UPDATE SET " ++
                         "ID = NEW.ID, FileUUID = NEW.UUID, FileName = NEW.FileName, ContentHash = NEW.ContentHash, RelativePath = NEW.RelativePath; END;",
-                    .{ tableNames[1], field.value },
+                    .{ tableNames[1], field_value },
                 )) catch |err| {
                     @compileError(std.fmt.comptimePrint("{s}", .{@errorName(err)}));
                 };
@@ -111,12 +111,12 @@ pub const createTriggerOnUpdateContentPathUpdateOrInsertTables = ct: {
         var id_list_writer = std.Io.Writer.fixed(&id_list_buffer);
         var first = true;
 
-        for (@typeInfo(ProcessType).@"enum".fields) |field| {
-            const val = @as(ProcessType, @enumFromInt(field.value));
+        for (@typeInfo(ProcessType).@"enum".field_values) |value| {
+            const val = @as(ProcessType, @fromBackingInt(@intCast(value)));
             if (getTableIndexForFileType(val)) |i| {
                 if (i == idx) {
                     if (!first) _ = id_list_writer.write(", ") catch unreachable;
-                    _ = id_list_writer.write(std.fmt.comptimePrint("{d}", .{field.value})) catch unreachable;
+                    _ = id_list_writer.write(std.fmt.comptimePrint("{d}", .{value})) catch unreachable;
                     first = false;
                 }
             }

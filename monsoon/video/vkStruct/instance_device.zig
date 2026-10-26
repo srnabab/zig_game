@@ -21,7 +21,7 @@ pub const VkError = vulkanType.VkError;
 
 const layerNeeded = layer: {
     break :layer switch (builtin.mode) {
-        .Debug, .ReleaseSafe => [_][*c]const u8{
+        .debug, .ReleaseSafe => [_][*c]const u8{
             "VK_LAYER_KHRONOS_validation",
             "VK_LAYER_LUNARG_crash_diagnostic",
         },
@@ -238,21 +238,23 @@ fn getSType(comptime T: type) vk.VkStructureType {
 
 fn initFeatures(allocator: std.mem.Allocator, skips: ?[]u32) !*Features {
     const self = try allocator.create(Features);
-    const fields = @typeInfo(Features).@"struct".fields;
+    const feature_info = @typeInfo(Features).@"struct";
+    const field_names = feature_info.field_names;
+    const field_types = feature_info.field_types;
 
     // assume features2 is last feature
-    inline for (fields, 0..) |field, i| {
-        const current_ptr = &@field(self.*, field.name);
+    inline for (field_names, field_types, 0..) |field_name, field_type, i| {
+        const current_ptr = &@field(self.*, field_name);
 
-        current_ptr.* = std.mem.zeroes(field.type);
+        current_ptr.* = std.mem.zeroes(field_type);
 
-        current_ptr.sType = getSType(field.type);
+        current_ptr.sType = getSType(field_type);
         current_ptr.pNext = null;
 
-        if (std.mem.eql(u8, field.name, "_Features2")) {
+        if (std.mem.eql(u8, field_name, "_Features2")) {
             // features2 is head, pNext to the first feature
-            current_ptr.pNext = &@field(self.*, fields[0].name);
-        } else if (i + 1 < fields.len and !std.mem.eql(u8, fields[i + 1].name, "_Features2")) el: {
+            current_ptr.pNext = &@field(self.*, field_names[0]);
+        } else if (i + 1 < field_names.len and !std.mem.eql(u8, field_names[i + 1], "_Features2")) el: {
             if (skips) |skip| {
                 for (skip) |s| {
                     if (s == i + 1) {
@@ -261,7 +263,7 @@ fn initFeatures(allocator: std.mem.Allocator, skips: ?[]u32) !*Features {
                 }
             }
 
-            current_ptr.pNext = &@field(self.*, fields[i + 1].name);
+            current_ptr.pNext = &@field(self.*, field_names[i + 1]);
         } else {
             // last node
             current_ptr.pNext = null;
@@ -270,7 +272,7 @@ fn initFeatures(allocator: std.mem.Allocator, skips: ?[]u32) !*Features {
 
     if (skips) |skip| {
         var ppNext: ?*?*anyopaque = null;
-        inline for (fields, 0..) |field, i| {
+        inline for (field_names, field_types, 0..) |field_name, field_type, i| {
             var ss = true;
             for (skip) |s| {
                 if (s == i) {
@@ -279,17 +281,17 @@ fn initFeatures(allocator: std.mem.Allocator, skips: ?[]u32) !*Features {
                 }
             }
 
-            if (field.type == vk.VkPhysicalDeviceFeatures2) {
+            if (field_type == vk.VkPhysicalDeviceFeatures2) {
                 ss = false;
             }
 
             if (ss) {
                 if (ppNext == null) {
-                    if (@field(self.*, field.name).pNext == null) {
-                        ppNext = &@field(self.*, field.name).pNext;
+                    if (@field(self.*, field_name).pNext == null) {
+                        ppNext = &@field(self.*, field_name).pNext;
                     }
                 } else {
-                    ppNext.?.* = &@field(self.*, field.name);
+                    ppNext.?.* = &@field(self.*, field_name);
                     ppNext = null;
                 }
             }
@@ -299,7 +301,7 @@ fn initFeatures(allocator: std.mem.Allocator, skips: ?[]u32) !*Features {
     return self;
 }
 
-var debugMessager: if (builtin.mode == .Debug or builtin.mode == .ReleaseSafe)
+var debugMessager: if (builtin.mode == .debug or builtin.mode == .ReleaseSafe)
     vk.VkDebugUtilsMessengerEXT
 else
     void = undefined;
@@ -380,7 +382,7 @@ pub fn createInstance(pAllocCallBacks: [*c]vk.VkAllocationCallbacks, allocator: 
     var instance: vk.VkInstance = null;
 
     try checkVkResult(vk.vkCreateInstance(&createInfo, pAllocCallBacks, @ptrCast(&instance)));
-    if (builtin.mode == .Debug or builtin.mode == .ReleaseSafe) {
+    if (builtin.mode == .debug or builtin.mode == .ReleaseSafe) {
         const func: vk.PFN_vkCreateDebugUtilsMessengerEXT = @ptrCast(
             vk.vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT") orelse return VkError.VkError,
         );
@@ -396,7 +398,7 @@ pub fn createInstance(pAllocCallBacks: [*c]vk.VkAllocationCallbacks, allocator: 
 }
 
 pub fn destroyInstance(instance: vk.VkInstance, pAllocCallBacks: [*c]vk.VkAllocationCallbacks) void {
-    if (builtin.mode == .Debug or builtin.mode == .ReleaseSafe) {
+    if (builtin.mode == .debug or builtin.mode == .ReleaseSafe) {
         const func: vk.PFN_vkDestroyDebugUtilsMessengerEXT = @ptrCast(
             vk.vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT") orelse return,
         );
@@ -556,12 +558,12 @@ pub fn pickPhysicalDevice(instance: vk.VkInstance, allocator: std.mem.Allocator,
             const featuresInfo = @typeInfo(Features);
             var isSupported = true;
 
-            inline for (featuresInfo.@"struct".fields, 0..) |field, j| {
-                var fff = featureNeededCheck(@field(features, field.name));
+            inline for (featuresInfo.@"struct".field_names, 0..) |field_name, j| {
+                var fff = featureNeededCheck(@field(features, field_name));
 
                 if (!fff) {
                     a: inline for (featureOptional, 0..) |feature, k| {
-                        if (@TypeOf(@field(features, field.name)) == feature) {
+                        if (@TypeOf(@field(features, field_name)) == feature) {
                             fff = true;
 
                             originalIndexes[innerOriginalCount] = @intCast(k);
@@ -596,7 +598,7 @@ pub fn pickPhysicalDevice(instance: vk.VkInstance, allocator: std.mem.Allocator,
                         originalIndexes_ = originalIndexes;
                         Capability.minUniformBufferOffsetAlignment = @intCast(deviceProperty2.properties.limits.minUniformBufferOffsetAlignment);
 
-                        std.log.debug("device: choosed {s}", .{@tagName(@as(VkPhysicalType, @enumFromInt(deviceProperty2.properties.deviceType)))});
+                        std.log.debug("device: choosed {s}", .{@tagName(@as(VkPhysicalType, @fromBackingInt(@intCast(deviceProperty2.properties.deviceType))))});
                     }
                 },
                 vk.VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU => {
@@ -612,7 +614,7 @@ pub fn pickPhysicalDevice(instance: vk.VkInstance, allocator: std.mem.Allocator,
                         originalIndexes_ = originalIndexes;
                         Capability.minUniformBufferOffsetAlignment = @intCast(deviceProperty2.properties.limits.minUniformBufferOffsetAlignment);
 
-                        std.log.debug("device: choosed {s}", .{@tagName(@as(VkPhysicalType, @enumFromInt(deviceProperty2.properties.deviceType)))});
+                        std.log.debug("device: choosed {s}", .{@tagName(@as(VkPhysicalType, @fromBackingInt(@intCast(deviceProperty2.properties.deviceType))))});
                     }
                 },
                 else => {
@@ -624,11 +626,11 @@ pub fn pickPhysicalDevice(instance: vk.VkInstance, allocator: std.mem.Allocator,
             const featuresInfo = @typeInfo(Features);
             var isSupported = false;
 
-            inline for (featuresInfo.@"struct".fields) |field| {
-                isSupported = featureNeededCheck(@field(features, field.name));
+            inline for (featuresInfo.@"struct".field_names) |field_name| {
+                isSupported = featureNeededCheck(@field(features, field_name));
 
                 if (!isSupported)
-                    std.log.debug("{s} {}", .{ field.name, isSupported });
+                    std.log.debug("{s} {}", .{ field_name, isSupported });
             }
             std.log.debug("\n", .{});
         }
@@ -677,20 +679,20 @@ pub fn createDevice(
         .pPhysicalDevices = physicalDevices,
     };
 
-    const featuresFields = @typeInfo(Features).@"struct".fields;
+    const featuresFields = @typeInfo(Features).@"struct";
     const features = try initFeatures(allocator, unSupportedList);
     defer allocator.destroy(features);
 
-    inline for (featuresFields) |field| {
+    inline for (featuresFields.field_names, featuresFields.field_types) |field_name, field_type| {
         inline for (featureTypeAndNames) |value| {
-            if (value.featureType == field.type) {
+            if (value.featureType == field_type) {
                 inline for (value.names) |name| {
-                    @field(@field(features.*, field.name), name) = 1;
+                    @field(@field(features.*, field_name), name) = 1;
                 }
             }
         }
-        if (@field(features.*, field.name).pNext == null) {
-            @field(features.*, field.name).pNext = &groupCreateInfo;
+        if (@field(features.*, field_name).pNext == null) {
+            @field(features.*, field_name).pNext = &groupCreateInfo;
         }
     }
     inline for (featureNeed) |feature| {

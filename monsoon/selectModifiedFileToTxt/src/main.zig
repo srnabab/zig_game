@@ -23,7 +23,7 @@ pub fn main(init: std.process.Init) !void {
 
     const gpa, const is_debug = gpa: {
         break :gpa switch (builtin.mode) {
-            .Debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
+            .debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
             .ReleaseFast, .ReleaseSmall => .{ std.heap.smp_allocator, false },
         };
     };

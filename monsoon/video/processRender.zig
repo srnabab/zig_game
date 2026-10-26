@@ -917,7 +917,7 @@ pub fn nodeDagPrint(self: *QueueNodes, self2: *commands) void {
         const frame = self2.vulkan.totalFrame.load(.monotonic);
 
         var pathBuffer: [30]u8 = @splat(0);
-        const path = std.fmt.bufPrint(&pathBuffer, "{d}-{s}-{d}-{d}_{d}_{d}-{d}", .{
+        const path = std.mem.print(&pathBuffer, "{d}-{s}-{d}-{d}_{d}_{d}-{d}", .{
             year,
             @tagName(month),
             day,

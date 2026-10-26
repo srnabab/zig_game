@@ -1402,7 +1402,7 @@ pub fn initFromRegister(io: Io, gpa: Allocator, inputs: *input) !Self {
             .canConsume = false,
         };
 
-        if (builtin.mode == .Debug) {
+        if (builtin.mode == .debug) {
             assert(std.mem.eql(u8, ctx.name.name, profile.actions[i].id));
         }
 
@@ -1571,19 +1571,19 @@ fn rebaseSlices(
 
     for (items) |*item| {
         // 编译期展开：遍历 T 的所有字段
-        inline for (struct_info.fields) |field| {
-            const field_info = @typeInfo(field.type);
+        inline for (struct_info.field_names, struct_info.field_types) |field_name, field_type| {
+            const field_info = @typeInfo(field_type);
 
             // 检查当前字段是否是切片（.slice）
             if (field_info == .pointer and field_info.pointer.size == .slice) {
-                const slice_val = @field(item, field.name);
+                const slice_val = @field(item, field_name);
                 const addr = @intFromPtr(slice_val.ptr);
 
                 // 核心安全检查：只有指针确实落在旧内存范围内时才偏移
                 // （避免误修改静态字面量如 "const str = \"hello\"" 或空切片）
                 if (addr >= old_start and addr < old_end) {
                     const new_addr: usize = @intCast(@as(isize, @intCast(addr)) + delta);
-                    @field(item, field.name).ptr = @ptrFromInt(new_addr);
+                    @field(item, field_name).ptr = @ptrFromInt(new_addr);
                 }
             }
         }

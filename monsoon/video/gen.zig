@@ -12,9 +12,9 @@ const funcs: struct { ctx: [20000]u8, len: u64 } = str: {
     var func_content: [20000]u8 = undefined;
     var stream_writer = std.Io.Writer.fixed(&func_content);
 
-    for (@typeInfo(VkResult).@"enum".fields) |field| {
-        if (field.value < 0)
-            stream_writer.print(".{s} => VkError.{s},\n", .{ field.name, field.name }) catch |err| {
+    for (@typeInfo(VkResult).@"enum".field_names, @typeInfo(VkResult).@"enum".field_values) |field_name, field_value| {
+        if (field_value < 0)
+            stream_writer.print(".{s} => VkError.{s},\n", .{ field_name, field_name }) catch |err| {
                 comptime_print("error: {s}\n", .{@errorName(err)});
             };
         // try writer.print(".{s} => VkError.{s},\n", .{ field.name, field.name });
@@ -27,7 +27,7 @@ var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
 pub fn main() !void {
     const gpa, const is_debug = gpa: {
         break :gpa switch (builtin.mode) {
-            .Debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
+            .debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
             .ReleaseFast, .ReleaseSmall => .{ std.heap.smp_allocator, false },
         };
     };

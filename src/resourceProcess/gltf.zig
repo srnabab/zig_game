@@ -119,7 +119,7 @@ pub const GLTF_Cooker = struct {
             const hashh = hash.blake3HashContent(meshMem);
 
             var buffer: [256:0]u8 = @splat(0);
-            const primFileName = try std.fmt.bufPrintZ(&buffer, "{s}.vtx", .{value.name});
+            const primFileName = try std.mem.printSentinel(&buffer, "{s}.vtx", .{value.name}, 0);
             checkGltfPrimitiveName(parmas.ContentPathT, value.name) catch {
                 var blob: sqlDB.BLOBForGet = undefined;
                 var anys = [_]*anyopaque{&blob};
@@ -164,7 +164,7 @@ pub const GLTF_Cooker = struct {
             const primFileParm = try gpa.alloc(u8, @sizeOf(VTX_Mem));
 
             var ptr = VTX_Mem{
-                .vType = @as(u32, @intFromEnum(vertex_opted.vType)),
+                .vType = @as(u32, @backingInt(vertex_opted.vType)),
                 .verticeBytesLen = verticeBytes.len,
                 .meshletsBytesLen = meshletsBytes.len,
                 .meshletVerticesBytesLen = meshletVerticesBytes.len,
@@ -174,7 +174,7 @@ pub const GLTF_Cooker = struct {
             };
             @memcpy(primFileParm, std.mem.asBytes(&ptr));
 
-            const dupePrimFileName = try gpa.dupeZ(u8, primFileName);
+            const dupePrimFileName = try gpa.dupeSentinel(u8, primFileName, 0);
 
             try resourceProcess.fileDbParamMap.put(dupePrimFileName, primFileParm);
         }
@@ -299,10 +299,11 @@ pub const GLTF_Cooker = struct {
                     const primitive_name_mem = try allocator.alloc(u8, mesh_name_len + 4 + 5);
                     defer allocator.free(primitive_name_mem);
 
-                    const primitive_name = try std.fmt.bufPrintZ(
+                    const primitive_name = try std.mem.printSentinel(
                         primitive_name_mem,
                         "{s}_{d}.vtx",
                         .{ mesh_name, l },
+                        0,
                     );
 
                     const have = try ContentPathT.have(

@@ -813,12 +813,12 @@ pub fn updateTexture(self: *Self, args: anytype, texture: Texture_t) void {
     const index = Handles.getIndex(texture);
     const temp = &self.array.items[index];
 
-    inline for (args_info.@"struct".fields) |field| {
-        if (!@hasField(Texture, field.name)) {
-            @compileError("struct has no field named '" ++ field.name ++ "'");
+    inline for (args_info.@"struct".field_names) |field_name| {
+        if (!@hasField(Texture, field_name)) {
+            @compileError("struct has no field named '" ++ field_name ++ "'");
         }
 
-        @field(temp, field.name) = @field(args, field.name);
+        @field(temp, field_name) = @field(args, field_name);
     }
 }
 

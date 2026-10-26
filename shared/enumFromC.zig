@@ -23,43 +23,43 @@ pub fn generateEnumFromC(
     @setEvalBranchQuota(100000);
     inline for (std.meta.declarations(import)) |decl| {
         if (begin == false) {
-            if (std.mem.eql(u8, decl.name, startEnumMember)) {
+            if (std.mem.eql(u8, decl, startEnumMember)) {
                 begin = true;
             } else {
                 continue;
             }
         }
-        // comptime_print("decl name: {s}", .{decl.name});
+        // comptime_print("decl name: {s}", .{decl});
 
         comptime var has = false;
         comptime var i = count;
         while (i > 0) {
             i -= 1;
-            if (enum_fields_values[i] == @field(import, decl.name)) {
+            if (enum_fields_values[i] == @field(import, decl)) {
                 has = true;
                 break;
             }
         }
         if (has == true) {
-            if (std.mem.eql(u8, decl.name, endEnumMember)) {
-                // comptime_print("{s}", .{decl.name});
+            if (std.mem.eql(u8, decl, endEnumMember)) {
+                // comptime_print("{s}", .{decl});
                 // comptime_print("{s}", .{endEnumMember});
                 break;
             }
             continue;
         }
 
-        enum_fields_names[count] = decl.name;
-        enum_fields_values[count] = @field(import, decl.name);
+        enum_fields_names[count] = decl;
+        enum_fields_values[count] = @field(import, decl);
 
         count += 1;
-        // comptime_print("decl name: {s}", .{decl.name});
+        // comptime_print("decl name: {s}", .{decl});
         if (count == 1024) {
             break;
         }
 
-        if (std.mem.eql(u8, decl.name, endEnumMember)) {
-            // comptime_print("{s}", .{decl.name});
+        if (std.mem.eql(u8, decl, endEnumMember)) {
+            // comptime_print("{s}", .{decl});
             // comptime_print("{s}", .{endEnumMember});
             break;
         }

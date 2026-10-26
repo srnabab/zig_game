@@ -87,14 +87,14 @@ pub fn Handles(comptime capacity: u32, comptime stack_depth: usize) type {
 
         createCount: atomic.Value(u32) = .init(0),
 
-        stack_addresses: if (builtin.mode == .Debug) [][stack_n]usize else void,
+        stack_addresses: if (builtin.mode == .debug) [][stack_n]usize else void,
 
         pub fn init(allocator: std.mem.Allocator) !Self {
-            const stack_addresses = if (builtin.mode == .Debug) al: {
+            const stack_addresses = if (builtin.mode == .debug) al: {
                 break :al try allocator.alloc([stack_n]usize, capacity);
             } else {};
 
-            if (builtin.mode == .Debug) {
+            if (builtin.mode == .debug) {
                 @memset(stack_addresses, @splat(std.math.maxInt(usize)));
             }
 
@@ -107,7 +107,7 @@ pub fn Handles(comptime capacity: u32, comptime stack_depth: usize) type {
         pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
             allocator.free(self.array);
 
-            if (builtin.mode == .Debug) {
+            if (builtin.mode == .debug) {
                 self.detectLeak();
 
                 allocator.free(self.stack_addresses);
@@ -218,7 +218,7 @@ pub fn Handles(comptime capacity: u32, comptime stack_depth: usize) type {
                 if (self.next.cmpxchgWeak(old_head, new_head, .seq_cst, .seq_cst)) |h| {
                     old_head = h;
                 } else {
-                    if (builtin.mode == .Debug)
+                    if (builtin.mode == .debug)
                         self.stack_addresses[destroyIndex][0] = std.math.maxInt(usize);
 
                     break;
@@ -238,7 +238,7 @@ pub fn Handles(comptime capacity: u32, comptime stack_depth: usize) type {
         }
 
         pub fn detectLeak(self: *Self) void {
-            if (builtin.mode == .Debug) {
+            if (builtin.mode == .debug) {
                 if (self.createCount.load(.monotonic) != 0)
                     for (self.stack_addresses, 0..) |*address, i| {
                         if (address[0] == std.math.maxInt(usize)) continue;

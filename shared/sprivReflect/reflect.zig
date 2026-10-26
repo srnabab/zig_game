@@ -76,7 +76,7 @@ pub fn reflect(allocator: std.mem.Allocator, content: []const u8) !shaderInfo {
     // std.log.debug("spv result {d}", .{spv_result});
     assert(spv_result == s.SPV_REFLECT_RESULT_SUCCESS);
 
-    _ = try std.fmt.bufPrintZ(&res.name, "{s}", .{module.entry_point_name});
+    _ = try std.mem.printSentinel(&res.name, "{s}", .{module.entry_point_name}, 0);
     res.stage = module.shader_stage;
 
     var biggerstSet: i32 = -1;

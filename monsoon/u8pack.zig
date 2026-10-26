@@ -5,7 +5,7 @@ const Wyhash = std.hash.Wyhash;
 
 const builtin = @import("builtin");
 
-const debug = (builtin.mode == .Debug) or (builtin.mode == .ReleaseSafe);
+const debug = (builtin.mode == .debug) or (builtin.mode == .ReleaseSafe);
 
 const mstd = @import("ms_std");
 const ComptimeAllocator = mstd.ComptimeAllocator;

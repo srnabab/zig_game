@@ -117,9 +117,9 @@ pub fn init(io: Io, allocator: std.mem.Allocator, content: Io.Dir, dbPath: []con
     try self.ContentPathT.createTable();
 
     const customInfo = @typeInfo(resourceProcess.CustomTablePack);
-    inline for (customInfo.@"struct".fields) |value| {
-        @field(self.customTablePack, value.name) = .init(self.db.?);
-        try @field(self.customTablePack, value.name).createTable();
+    inline for (customInfo.@"struct".field_names) |name| {
+        @field(self.customTablePack, name) = .init(self.db.?);
+        try @field(self.customTablePack, name).createTable();
     }
     // self.ImageLoadParameterT = ImageLoadParameter.init(self.db.?);
     // try self.ImageLoadParameterT.createTable();

@@ -62,18 +62,18 @@ fn cgltf_parse(
     arg_out_data: [*c][*c]cgltf.cgltf_data,
 ) !void {
     const res: cgltf_result =
-        @enumFromInt(
+        @fromBackingInt(@intCast(
             cgltf.cgltf_parse(option, buffer, arg_size, arg_out_data),
-        );
+        ));
 
     if (res == .cgltf_result_success) {
         return;
     }
 
     const fields = @typeInfo(cgltf_error);
-    inline for (fields.error_set.?) |field| {
-        if (res == @field(cgltf_result, field.name)) {
-            return @field(cgltf_error, field.name);
+    inline for (fields.error_set.error_names.?) |field| {
+        if (res == @field(cgltf_result, field)) {
+            return @field(cgltf_error, field);
         }
     }
 }
@@ -109,10 +109,10 @@ fn setTransform(node: [*c]cgltf.cgltf_node, nodePtr: *Node) void {
     if (node.*.has_matrix == 1) {
         for (0..nodePtr.transform.len, 0..) |i, k| {
             // @compileLog(std.fmt.comptimePrint("{s}", .{@typeName(@TypeOf(node.*.matrix[0][0]))}));
-            nodePtr.transform[i][0] = node.*.matrix[0][k * 4 + 0];
-            nodePtr.transform[i][1] = node.*.matrix[0][k * 4 + 1];
-            nodePtr.transform[i][2] = node.*.matrix[0][k * 4 + 2];
-            nodePtr.transform[i][3] = node.*.matrix[0][k * 4 + 3];
+            nodePtr.transform[i][0] = node.*.matrix[k * 4 + 0];
+            nodePtr.transform[i][1] = node.*.matrix[k * 4 + 1];
+            nodePtr.transform[i][2] = node.*.matrix[k * 4 + 2];
+            nodePtr.transform[i][3] = node.*.matrix[k * 4 + 3];
         }
     } else {
         var matrix: vertexStruct.mat3 align(16) = undefined;
@@ -124,15 +124,15 @@ fn setTransform(node: [*c]cgltf.cgltf_node, nodePtr: *Node) void {
         }
 
         if (node.*.has_scale == 1) {
-            vertexStruct.cglm.glmc_vec3_scale(&matrix[0], node.*.scale[0][0], &matrix[0]);
-            vertexStruct.cglm.glmc_vec3_scale(&matrix[1], node.*.scale[0][1], &matrix[1]);
-            vertexStruct.cglm.glmc_vec3_scale(&matrix[2], node.*.scale[0][2], &matrix[2]);
+            vertexStruct.cglm.glmc_vec3_scale(&matrix[0], node.*.scale[0], &matrix[0]);
+            vertexStruct.cglm.glmc_vec3_scale(&matrix[1], node.*.scale[1], &matrix[1]);
+            vertexStruct.cglm.glmc_vec3_scale(&matrix[2], node.*.scale[2], &matrix[2]);
         }
 
         if (node.*.has_translation == 1) {
-            nodePtr.transform[3][0] = node.*.translation[0][0];
-            nodePtr.transform[3][1] = node.*.translation[0][1];
-            nodePtr.transform[3][2] = node.*.translation[0][2];
+            nodePtr.transform[3][0] = node.*.translation[0];
+            nodePtr.transform[3][1] = node.*.translation[1];
+            nodePtr.transform[3][2] = node.*.translation[2];
         } else {
             nodePtr.transform[3][0] = 0.0;
             nodePtr.transform[3][1] = 0.0;
@@ -225,7 +225,7 @@ pub fn loadGltfFile(fileMem: []const u8, allocator: std.mem.Allocator) !struct {
             for (0..primitives_count) |l| {
                 const primitive = &primitives[l];
                 const primitive_name_mem = try arena.alloc(u8, mesh_name.len + 4);
-                const primitive_name = try std.fmt.bufPrint(primitive_name_mem, "{s}_{d}", .{ mesh_name, l });
+                const primitive_name = try std.mem.print(primitive_name_mem, "{s}_{d}", .{ mesh_name, l });
 
                 try name_array.append(primitive_name);
 
@@ -247,7 +247,7 @@ pub fn loadGltfFile(fileMem: []const u8, allocator: std.mem.Allocator) !struct {
                 primPtr.vertex = try allocVertex(vType, arena, @intCast(vertexCount));
 
                 for (0..attributes_count) |o| {
-                    const type_enum: cgltf_attribute_type = @enumFromInt(attributes[o].type);
+                    const type_enum: cgltf_attribute_type = @fromBackingInt(@intCast(attributes[o].type));
                     switch (type_enum) {
                         .cgltf_attribute_type_position => {
                             for (0..attributes[o].data.*.count) |p| {
@@ -365,7 +365,7 @@ pub fn judgePrimitiveVertexType(primitives: [*c]cgltf.cgltf_primitive) vertexStr
     const WeightStart = JointStart - 8;
 
     const FlagType = std.bit_set.IntegerBitSet(FlagLength);
-    var flag = FlagType.initEmpty();
+    var flag = FlagType.empty;
 
     // const p = 0x8000000000000000;
     // const pn = 0xC000000000000000;
@@ -381,7 +381,7 @@ pub fn judgePrimitiveVertexType(primitives: [*c]cgltf.cgltf_primitive) vertexStr
     var weightsCount: u32 = 0;
 
     for (0..attributes_count) |i| {
-        const type_enum: cgltf_attribute_type = @enumFromInt(attributes[i].type);
+        const type_enum: cgltf_attribute_type = @fromBackingInt(@intCast(attributes[i].type));
         std.log.debug("type {s}", .{@tagName(type_enum)});
         switch (type_enum) {
             .cgltf_attribute_type_position => {
@@ -566,12 +566,12 @@ fn setValue(vertex: vertexStruct.Vertex, index: usize, value: *anyopaque, compti
         inline else => |v| {
             const ElementType = std.meta.Child(@TypeOf(v));
 
-            const fields = @typeInfo(ElementType).@"struct".fields;
+            const ElementInfo = @typeInfo(ElementType).@"struct";
 
-            inline for (fields) |f| {
-                if (std.mem.eql(u8, f.name, field_name)) {
-                    const T = f.type;
-                    @field(v[index], f.name) = @as(*T, @ptrCast(@alignCast(value))).*;
+            inline for (ElementInfo.field_names, ElementInfo.field_types) |f_name, f_type| {
+                if (std.mem.eql(u8, f_name, field_name)) {
+                    const T = f_type;
+                    @field(v[index], f_name) = @as(*T, @ptrCast(@alignCast(value))).*;
 
                     return;
                 }

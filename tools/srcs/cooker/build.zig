@@ -68,7 +68,8 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     const blake3_c = b.addTranslateC(.{
-        .root_source_file = b.path("../../../include/blake3.h"),
+        // 直接用 blake3 包内的头文件，不再依赖 blake3 的 build 往 include/ 里 copy
+        .root_source_file = blake3_dep.path("c/blake3.h"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
@@ -101,7 +102,8 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     const meshopt_c = b.addTranslateC(.{
-        .root_source_file = b.path("../../../include/meshoptimizer.h"),
+        // 用 meshoptimizer 包内的头文件，不再依赖 build 往 include/ 里 xcopy
+        .root_source_file = meshopt_dep.path("install/include/meshoptimizer.h"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
@@ -139,7 +141,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     const cglm_c = b.addTranslateC(.{
-        .root_source_file = b.path("../../../include/cglm/call.h"),
+        .root_source_file = cglm_dep.path("install/include/cglm/call.h"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,

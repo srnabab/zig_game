@@ -29,7 +29,7 @@ fn vkValueName(
     const Tag = EnumInfo.tag_type;
 
     if (val == 0) {
-        return @tagName(@as(E, @enumFromInt(0)));
+        return @tagName(@as(E, @fromBackingInt(@intCast(0))));
     }
 
     var bitArr: [64]Tag = undefined;
@@ -44,7 +44,7 @@ fn vkValueName(
 
     var len: usize = 0;
     for (bitArr[0..count]) |b| {
-        const name = @tagName(@as(E, @enumFromInt(b)));
+        const name = @tagName(@as(E, @fromBackingInt(@intCast(b))));
 
         if (len + name.len + 3 > scratch.len) {
             std.debug.panic("vkValueName: scratch too small for {s}", .{@typeName(E)});
@@ -98,7 +98,7 @@ pub fn printAllInfoToTxt() void {
     const frame = commands.vulkan.totalFrame.load(.monotonic);
 
     var pathBuffer: [40]u8 = @splat(0);
-    const path = std.fmt.bufPrint(&pathBuffer, "{d}-{s}-{d}-{d}_{d}_{d}-{d}.txt", .{
+    const path = std.mem.print(&pathBuffer, "{d}-{s}-{d}-{d}_{d}_{d}-{d}.txt", .{
         year,
         @tagName(month),
         day,
@@ -131,21 +131,21 @@ pub fn printAllInfoToTxt() void {
             //     _ = r;
             // },
             .copyBufferToImageRecord => |r| {
-                const info = std.fmt.bufPrint(
+                const info = std.mem.print(
                     &infoBuffer,
                     "ID: {d}\nbuffer = {*}, texture = {*}, dst image layout = {s}({d})\n\n",
                     .{
                         entry.key_ptr.*,
                         commands.vulkan.buffers.getVkBuffer(r.buffer),
                         commands.pTextureSet.getVkImage(r.texture),
-                        @tagName(@as(VulkanType.VkImageLayout, @enumFromInt(r.dstImageLayout))),
+                        @tagName(@as(VulkanType.VkImageLayout, @fromBackingInt(@intCast(r.dstImageLayout)))),
                         r.dstImageLayout,
                     },
                 ) catch continue;
                 len = info.len;
             },
             .computeRecord => |r| {
-                const info = std.fmt.bufPrint(
+                const info = std.mem.print(
                     &infoBuffer,
                     "ID: {d}\ngroup count = {d}\n\n",
                     .{ entry.key_ptr.*, r.groupCount },
@@ -153,7 +153,7 @@ pub fn printAllInfoToTxt() void {
                 len = info.len;
             },
             .computeIndirectRecord => |r| {
-                const info = std.fmt.bufPrint(
+                const info = std.mem.print(
                     &infoBuffer,
                     "ID: {d}\nbuffer = {*}, offset = {d}\n\n",
                     .{ entry.key_ptr.*, r.buffer, r.offset },
@@ -161,7 +161,7 @@ pub fn printAllInfoToTxt() void {
                 len = info.len;
             },
             .copyBuffer => |r| {
-                const info = std.fmt.bufPrint(
+                const info = std.mem.print(
                     &infoBuffer,
                     "ID: {d}\nsrc: {*}, size {d}\ndst: {*}, size {d}\nregion: src offset {d}, dst offset {d}, size {d}\n\n",
                     .{
@@ -186,7 +186,7 @@ pub fn printAllInfoToTxt() void {
                             var srcAccessName: [512]u8 = undefined;
                             var dstStageName: [512]u8 = undefined;
                             var dstAccessName: [512]u8 = undefined;
-                            info = std.fmt.bufPrint(
+                            info = std.mem.print(
                                 infoBuffer[len..],
                                 "ID: {d}\nsrcStageMask = {s}({d}), srcAccessMask = {s}({d}), dstStageMask = {s}({d}), dstAccessMask = {s}({d}), srcQueueFamilyIndex = {s}" ++
                                     ", dstQueueFamilyIndex = {s}, buffer = {*}, offset = {d}, size = {d}\n\n",
@@ -213,7 +213,7 @@ pub fn printAllInfoToTxt() void {
                             var srcAccessName: [512]u8 = undefined;
                             var dstStageName: [512]u8 = undefined;
                             var dstAccessName: [512]u8 = undefined;
-                            info = std.fmt.bufPrint(
+                            info = std.mem.print(
                                 infoBuffer[len..],
                                 "ID: {d}\nsrcStageMask = {s}({d}), srcAccessMask = {s}({d}), dstStageMask = {s}({d}), dstAccessMask = {s}({d}), oldLayout = {s}({d})" ++
                                     ", newLayout = {s}({d}), srcQueueFamilyIndex = {s}, dstQueueFamilyIndex = {s}, image = {*}, subresourceRange ={}\n\n",
@@ -227,9 +227,9 @@ pub fn printAllInfoToTxt() void {
                                     b.dstStageMask,
                                     vkValueName(VulkanType.VkAccessFlagBits2, &dstAccessName, b.dstAccessMask),
                                     b.dstAccessMask,
-                                    @tagName(@as(VulkanType.VkImageLayout, @enumFromInt(b.oldLayout))),
+                                    @tagName(@as(VulkanType.VkImageLayout, @fromBackingInt(@intCast(b.oldLayout)))),
                                     b.oldLayout,
-                                    @tagName(@as(VulkanType.VkImageLayout, @enumFromInt(b.newLayout))),
+                                    @tagName(@as(VulkanType.VkImageLayout, @fromBackingInt(@intCast(b.newLayout)))),
                                     b.newLayout,
                                     @tagName(commands.vulkan.getQueueType(b.srcQueueFamilyIndex)),
                                     @tagName(commands.vulkan.getQueueType(b.dstQueueFamilyIndex)),
@@ -244,7 +244,7 @@ pub fn printAllInfoToTxt() void {
                 }
             },
             .fillBuffer => |f| {
-                const info = std.fmt.bufPrint(
+                const info = std.mem.print(
                     &infoBuffer,
                     "ID: {d}\nbuffer: {*}, size {d}, offset {d}, value {d}\n\n",
                     .{
@@ -258,7 +258,7 @@ pub fn printAllInfoToTxt() void {
                 len = info.len;
             },
             .bindDescriptorSets => |r| {
-                const info = std.fmt.bufPrint(
+                const info = std.mem.print(
                     &infoBuffer,
                     "ID: {d}\ndescriptor set count: {d}\n\n",
                     .{
@@ -348,7 +348,7 @@ pub fn setObjectName(
     handle: u64,
     name: [:0]const u8,
 ) void {
-    if (builtin.mode == .Debug or builtin.mode == .ReleaseSafe) {
+    if (builtin.mode == .debug or builtin.mode == .ReleaseSafe) {
         var info = vk.VkDebugUtilsObjectNameInfoEXT{
             .sType = vk.VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
             .pNext = null,

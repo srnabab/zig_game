@@ -168,7 +168,7 @@ pub fn getFileType(id: u32, db: ?*sqlite.sqlite3) sqlDB.sqliteError!FileType {
 
     try ContentPathT.get("FileType", null, "ID = ?", .{id}, &ptrs, &types);
 
-    return @enumFromInt(res);
+    return @fromBackingInt(@intCast(res));
 }
 
 const vk = @import("vulkan");
@@ -270,7 +270,7 @@ pub fn getMeshLoadParam(id: u32, db: ?*sqlite.sqlite3) !meshLoad {
 
             var ptrs: [6]*anyopaque = undefined;
             var buffer: [256]u8 = @splat(0);
-            var vertexType: u32 = @intFromEnum(vertexStruct.VertexType.none);
+            var vertexType: u32 = @backingInt(vertexStruct.VertexType.none);
             var verticesSize: u64 = 0;
             var meshletsSize: u64 = 0;
             var meshletVerticesSize: u64 = 0;
@@ -297,7 +297,7 @@ pub fn getMeshLoadParam(id: u32, db: ?*sqlite.sqlite3) !meshLoad {
             return meshLoad{
                 .relativePath = buffer,
                 .mesh = .{
-                    .vertexType = @enumFromInt(vertexType),
+                    .vertexType = @fromBackingInt(@intCast(vertexType)),
                     .meshletsSize = meshletsSize,
                     .meshletTrianglesSize = meshletTrianglesSize,
                     .meshletVerticesSize = meshletVerticesSize,

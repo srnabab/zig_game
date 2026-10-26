@@ -185,8 +185,8 @@ pub fn update_thread_func(args: Args) !void {
                         if (@hasDecl(field, "updateLoad")) {
                             var uctx: field.Ctx = undefined;
                             const ctxInfo = @typeInfo(field.Ctx);
-                            inline for (ctxInfo.@"struct".fields) |f| {
-                                @field(uctx, f.name) = &@field(args.uctx, f.name);
+                            inline for (ctxInfo.@"struct".field_names) |f| {
+                                @field(uctx, f) = &@field(args.uctx, f);
                             }
 
                             const index: u32 = try field.updateLoad(io, gpa, args.vulkan, undefined, &uctx, v.handle, &pt.child);

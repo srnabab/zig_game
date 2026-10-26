@@ -134,7 +134,7 @@ const DirectoryWatch = struct {
             null,
         );
         if (success == windows.BOOL.FALSE) {
-            std.log.debug("{s} {d}", .{ self.path, @as(u32, @intFromEnum(windows.GetLastError())) });
+            std.log.debug("{s} {d}", .{ self.path, @as(u32, @backingInt(windows.GetLastError())) });
         }
         // std.log.debug("watch {s}", .{self.path});
     }
@@ -203,7 +203,7 @@ pub fn main(init: std.process.Init) !void {
             );
         }
         while (argsIt.next()) |arg| {
-            // std.log.debug("{s}", .{arg});
+            std.log.debug("{s}", .{arg});
             if (arg.len >= 6) {
                 if (std.mem.eql(u8, arg[0..6], "-force")) {
                     // db.iterateFolder.forceUpdata = true;
@@ -214,21 +214,28 @@ pub fn main(init: std.process.Init) !void {
             } else if (arg.len >= 3) {
                 if (std.mem.eql(u8, arg[0..3], "--f")) {
                     path = argsIt.next() orelse return error.NoFolder;
+                    std.log.debug("{s}", .{path.?});
 
                     folder = try std.unicode.wtf8ToWtf16LeAllocZ(allocator, path.?);
                     errdefer allocator.free(folder.?);
                     continue;
                 } else if (std.mem.eql(u8, arg[0..3], "--w")) {
                     watchingFilePath = argsIt.next() orelse configFile;
+                    std.log.debug("{s}", .{watchingFilePath});
+
                     continue;
                 } else if (std.mem.eql(u8, arg[0..3], "--d")) {
                     databaseFilePath = argsIt.next() orelse databaseFile;
+                    std.log.debug("{s}", .{databaseFilePath});
                     contentDatabaseRelativePathStart = argsIt.next() orelse return error.NoDatabaseRelativePathStart;
+                    std.log.debug("{s}", .{contentDatabaseRelativePathStart.?});
 
                     continue;
                 } else if (std.mem.eql(u8, arg[0..3], "--c")) {
                     cookerPath = argsIt.next() orelse return error.NoCookerPath;
+                    std.log.debug("{s}", .{cookerPath.?});
                     cookerRootPath = argsIt.next() orelse return error.NoCookerPath;
+                    std.log.debug("{s}", .{cookerRootPath.?});
 
                     continue;
                 }
@@ -269,6 +276,8 @@ pub fn main(init: std.process.Init) !void {
         watchingFileFullPath = try std.fs.path.join(allocator, &[_][]const u8{ path.?, watchingFilePath });
     }
     defer allocator.free(watchingFileFullPath);
+
+    std.log.debug("{s}", .{watchingFileFullPath});
 
     const watchingFile: ?std.Io.File = std.Io.Dir.openFileAbsolute(
         io,

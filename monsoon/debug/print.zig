@@ -10,11 +10,11 @@ const VkFormat = vulkanType.VkFormat;
 const VkColorSpaceKHR = vulkanType.VkColorSpaceKHR;
 
 pub fn printVkSurfaceFormatKHR(surfaceFormat: vk.VkSurfaceFormatKHR) void {
-    const format: VkFormat = @enumFromInt(surfaceFormat.format);
-    const colorSpace: VkColorSpaceKHR = @enumFromInt(surfaceFormat.colorSpace);
+    const format: VkFormat = @fromBackingInt(@intCast(surfaceFormat.format));
+    const colorSpace: VkColorSpaceKHR = @fromBackingInt(@intCast(surfaceFormat.colorSpace));
 
     switch (builtin.mode) {
-        .Debug, .ReleaseSafe => std.log.debug("format: {s}, colorSpace: {s}", .{ @tagName(format), @tagName(colorSpace) }),
+        .debug, .ReleaseSafe => std.log.debug("format: {s}, colorSpace: {s}", .{ @tagName(format), @tagName(colorSpace) }),
         else => {},
     }
 }

@@ -104,7 +104,7 @@ pub fn main(init: std.process.Init) !void {
     }
 
     const index = std.mem.lastIndexOf(u8, args[0], "\\").?;
-    const temp = try std.Io.Dir.openDirAbsolute(init.io, args[0][0..index], .{});
+    const temp = try std.Io.Dir.cwd().openDir(init.io, args[0][0..index], .{});
     try std.process.setCurrentDir(init.io, temp);
 
     handles = try .init(allocator_t.*);
@@ -171,11 +171,11 @@ pub fn main(init: std.process.Init) !void {
     // defer test_router.deinit(allocator_t.*);
 
     const typeInfo = @typeInfo(@TypeOf(input1));
-    inline for (typeInfo.@"struct".fields) |field| {
-        const info = @typeInfo(field.type);
+    inline for (typeInfo.@"struct".field_names, typeInfo.@"struct".field_types) |field_name, field_type| {
+        const info = @typeInfo(field_type);
 
         if (info == .pointer) {
-            std.log.debug("{s}: {*}", .{ field.name, @field(input1, field.name) });
+            std.log.debug("{s}: {*}", .{ field_name, @field(input1, field_name) });
         }
     }
 
@@ -358,7 +358,7 @@ pub fn main(init: std.process.Init) !void {
     while (true) {
         var e: sdl.SDL_Event = undefined;
         while (sdl.SDL_Event.SDL_PollEvent(&e)) {
-            const eventType: SDL_EventType = @enumFromInt(e.type);
+            const eventType: SDL_EventType = @fromBackingInt(@intCast(e.type));
 
             switch (eventType) {
                 // be careful with there, should be sync with setInput

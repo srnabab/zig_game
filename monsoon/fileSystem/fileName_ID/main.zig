@@ -47,9 +47,11 @@ pub fn main(init: std.process.Init) !void {
     const index = std.mem.findLast(u8, &root, slash) orelse 0;
     @memset(root[index..root.len], 0);
 
-    std.log.debug("{s}", .{root});
+    const index2 = std.mem.find(u8, &root, slash) orelse 0;
 
-    const cwd = try std.Io.Dir.openDirAbsolute(init.io, &root, .{});
+    std.log.debug("{s}", .{root[index2 + 1 ..]});
+
+    const cwd = try std.Io.Dir.cwd().openDir(init.io, root[index2 + 1 .. index], .{});
     try std.process.setCurrentDir(init.io, cwd);
 
     var db: ?*sqlite.sqlite3 = null;
@@ -108,7 +110,7 @@ pub fn main(init: std.process.Init) !void {
         if (value.ID == -1) break;
         const cPtr = @as([*c]u8, @constCast(&value.fileName));
         const nameLen = std.mem.len(cPtr);
-        const cc = try std.fmt.bufPrint(&sBuffer, ".{{ \"{s}\", {d} }},\n", .{ value.fileName[0..nameLen], value.ID });
+        const cc = try std.mem.print(&sBuffer, ".{{ \"{s}\", {d} }},\n", .{ value.fileName[0..nameLen], value.ID });
 
         _ = try writer.write(cc);
 
@@ -121,7 +123,7 @@ pub fn main(init: std.process.Init) !void {
     _ = try writer.write(func);
 
     var sBuffer: [256]u8 = @splat(0);
-    const pubMaxID = try std.fmt.bufPrint(&sBuffer, "\npub const MaxID = {d};\n", .{maxID});
+    const pubMaxID = try std.mem.print(&sBuffer, "\npub const MaxID = {d};\n", .{maxID});
     _ = try writer.write(pubMaxID);
 
     const cPtr = @as([*c]u8, &buffer);

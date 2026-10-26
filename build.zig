@@ -5,9 +5,9 @@ const builtin = @import("builtin");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{ .default_target = .{ .abi = .gnu } });
-    const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .Debug });
+    const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .debug });
 
-    const root_path = b.build_root.path orelse "";
+    // const root_path = b.root.root_dir.path orelse "";
 
     // modules
     const tracy_enable = b.option(bool, "tracy_enable", "Enable profiling") orelse false;
@@ -572,8 +572,10 @@ pub fn build(b: *std.Build) void {
     // gen_mod.addImport("vulkanType", vulkanType_mod);
     // gen_mod.linkSystemLibrary("vulkan-1", .{});
 
+    sdl_c.addIncludePath(sdl3Module.path(".cache_cmake/SDL3/install/include"));
     sdl_c.addIncludePath(b.path("include"));
 
+    sdl_mod.addIncludePath(sdl3Module.path(".cache_cmake/SDL3/install/include"));
     sdl_mod.addIncludePath(b.path("include"));
     sdl_mod.addImport("enumFromC", enum_c_mod);
     sdl_mod.addImport("sdl", sdl_c_mod);
@@ -703,7 +705,7 @@ pub fn build(b: *std.Build) void {
     exe_mod.addLibraryPath(b.path("lib/"));
     // exe_mod.addLibraryPath(meshoptimizerModule.path("install/lib"));
     // exe_mod.linkSystemLibrary("meshoptimizer", .{ .preferred_link_mode = .static });
-    exe_mod.addLibraryPath(sdl3Module.path("install/lib"));
+    exe_mod.addLibraryPath(sdl3Module.path(".cache_cmake/SDL3/install/lib"));
     exe_mod.addLibraryPath(cglm_dep.path("install/lib"));
     exe_mod.linkSystemLibrary("cglm", .{ .preferred_link_mode = .static });
     exe_mod.linkSystemLibrary("ktx", .{ .preferred_link_mode = .dynamic });
@@ -753,7 +755,8 @@ pub fn build(b: *std.Build) void {
 
     const runGenFileNameIdExe = b.step("create hash map", "create filename id static string hash map");
     const runGenFileNameIdExe_cmd = b.addRunArtifact(genFileNameIDexe);
-    runGenFileNameIdExe_cmd.addArg(b.fmt("{s}/{s}", .{ root_path, "monsoon/fileSystem/fileNameID.zig" }));
+    runGenFileNameIdExe_cmd.addArg(b.root.joinString(b.allocator, b.pathResolve(&.{ "monsoon", "fileSystem", "fileNameID.zig" })) catch
+        std.debug.panic("Out Of Memory", .{}));
 
     const waf = b.addWriteFiles();
     _ = waf.addCopyFile(exe.getEmittedAsm(), "main.asm");
@@ -763,9 +766,7 @@ pub fn build(b: *std.Build) void {
     pre_run_message_cmd.addArg(b.fmt("tracy-callstack: {d}", .{tracy_callstack}));
 
     const run_cmd = b.addRunArtifact(exe);
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
-    }
+    run_cmd.addPassthruArgs();
     const run_step = b.step("run", "Run the app");
 
     // run task dependency
@@ -790,13 +791,11 @@ pub fn build(b: *std.Build) void {
 
     // const test_filters = b.option([]const []const u8, "test-filter", "Skip tests not matching filter") orelse &.{};
 
-    const testsInfo = @typeInfo(@TypeOf(tests));
-
-    inline for (testsInfo.@"struct".fields) |value| {
-        const test_name = std.fmt.comptimePrint("test-{s}", .{value.name});
+    inline for (@typeInfo(@TypeOf(tests)).@"struct".field_names) |test_module_name| {
+        const test_name = std.fmt.comptimePrint("test-{s}", .{test_module_name});
         const inner_test_step = b.step(test_name, test_name);
 
-        const mod: *std.Build.Module = @field(tests, value.name);
+        const mod: *std.Build.Module = @field(tests, test_module_name);
 
         const exe_unit_tests = b.addTest(.{
             .root_module = mod,

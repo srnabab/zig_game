@@ -17,21 +17,21 @@ pub fn createStaticStringMap(
         @setEvalBranchQuota(100000);
         inline for (std.meta.declarations(import)) |decl| {
             if (begin == false) {
-                if (std.mem.eql(u8, decl.name, startEnumMember)) {
+                if (std.mem.eql(u8, decl, startEnumMember)) {
                     begin = true;
                 } else {
                     continue;
                 }
             }
 
-            const key = decl.name[prefix.len..];
-            const value = @field(import, decl.name);
+            const key = decl[prefix.len..];
+            const value = @field(import, decl);
 
             entries[count].@"0" = key;
             entries[count].@"1" = value;
             count += 1;
 
-            if (std.mem.eql(u8, decl.name, endEnumMember)) {
+            if (std.mem.eql(u8, decl, endEnumMember)) {
                 break;
             }
         }

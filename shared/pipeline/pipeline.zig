@@ -188,9 +188,9 @@ fn parseName(jsonValue: json.Value, info: *pipelineInfo) void {
 fn parsePipelineType(jsonValue: json.Value, info: *pipelineInfo) void {
     const pipelineType_field = jsonValue.object.get("PipelineType").?;
     const pipelineTypeName = pipelineType_field.string;
-    inline for (@typeInfo(pipelineType).@"enum".fields) |field| {
-        if (std.mem.eql(u8, pipelineTypeName, field.name)) {
-            info.pipeType = @enumFromInt(field.value);
+    inline for (@typeInfo(pipelineType).@"enum".field_names) |field_name| {
+        if (std.mem.eql(u8, pipelineTypeName, field_name)) {
+            info.pipeType = @enumFromInt(@intFromEnum(@field(pipelineType, field_name)));
             break;
         }
     }

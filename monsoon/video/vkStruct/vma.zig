@@ -15,7 +15,7 @@ const tracy = @import("tracy");
 const AllocationCount = struct {
     const Count = @This();
 
-    const mode = if (builtin.mode == .Debug or builtin.mode == .ReleaseSafe) true else false;
+    const mode = if (builtin.mode == .debug or builtin.mode == .ReleaseSafe) true else false;
     const returnType = if (mode) u64 else void;
 
     count: if (mode) std.atomic.Value(u64) else void =

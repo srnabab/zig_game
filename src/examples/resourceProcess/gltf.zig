@@ -119,7 +119,7 @@ pub const GLTF_Cooker = struct {
             const hashh = hash.blake3HashContent(meshMem);
 
             var buffer: [256:0]u8 = @splat(0);
-            const primFileName = try std.fmt.bufPrintZ(&buffer, "{s}.vtx", .{value.name});
+            const primFileName = try std.mem.printSentinel(&buffer, "{s}.vtx", .{value.name}, 0);
             checkGltfPrimitiveName(parmas.ContentPathT, value.name) catch {
                 var blob: sqlDB.BLOBForGet = undefined;
                 var anys = [_]*anyopaque{&blob};

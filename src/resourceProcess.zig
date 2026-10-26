@@ -467,25 +467,25 @@ pub const ReaderUnion = e: {
     // var union_field_names: []const []const u8 = &.{};
 
     var union_types: [maxLen]type = undefined;
-    var union_attrs: [maxLen]Type.UnionField.Attributes = undefined;
+    var union_attrs: [maxLen]Type.Union.FieldAttributes = undefined;
     var count = 0;
 
-    for (selfInfo.@"struct".decls) |field| {
-        if (std.mem.endsWith(u8, field.name, "_Reader")) {
-            if (std.mem.eql(u8, field.name, "Example_Reader")) continue;
+    for (selfInfo.@"struct".decl_names) |decl_name| {
+        if (std.mem.endsWith(u8, decl_name, "_Reader")) {
+            if (std.mem.eql(u8, decl_name, "Example_Reader")) continue;
 
-            // @compileLog(field.name);
+            // @compileLog(decl_name);
 
-            const enumName = std.fmt.comptimePrint("{s}_Child", .{field.name[0 .. field.name.len - 7]});
+            const enumName = std.fmt.comptimePrint("{s}_Child", .{decl_name[0 .. decl_name.len - 7]});
             enum_field_names = enum_field_names ++ .{enumName};
 
-            // const unionName = std.fmt.comptimePrint("{s}_Child", .{field.name[0 .. field.name.len - 7]});
+            // const unionName = std.fmt.comptimePrint("{s}_Child", .{decl_name[0 .. decl_name.len - 7]});
             // union_field_names = union_field_names ++ .{unionName};
 
             union_types[count] =
                 *struct {
                     count: std.atomic.Value(u32),
-                    child: @field(Self, field.name).Child,
+                    child: @field(Self, decl_name).Child,
                 };
             union_attrs[count] = .{ .@"align" = null };
             count += 1;

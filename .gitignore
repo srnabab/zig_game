@@ -19,8 +19,6 @@ pkgconfig/
 trace/
 windbg/
 build/
-!src/build/
-!src/examples/build/
 *.rdi
 *.pdb
 *.exe
@@ -30,6 +28,10 @@ shaders.txt
 sampler.txt
 config/
 zig-pkg/
-# .watching
-!steam_api64.dll
 *.rdc
+.cache_cmake/
+# .watching
+
+!src/build/
+!steam_api64.dll
+!src/examples/build/
