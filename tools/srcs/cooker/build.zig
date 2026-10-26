@@ -94,14 +94,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    const meshopt_c = b.addTranslateC(.{
-        // 用 meshoptimizer 包内的头文件，不再依赖 build 往 include/ 里 xcopy
-        .root_source_file = meshopt_dep.path("install/include/meshoptimizer.h"),
-        .target = target,
-        .optimize = optimize,
-        .link_libc = true,
-    });
-    const meshopt_c_mod = meshopt_c.createModule();
+    const meshopt_c_mod = meshopt_dep.module("meshopt_c");
     const meshopt_mod = b.createModule(.{
         .root_source_file = b.path("src/meshoptimizer/meshopt.zig"),
         .target = target,
@@ -180,9 +173,7 @@ pub fn build(b: *std.Build) void {
 
     vertexStruct_mod.addImport("cglm", cglm_mod);
 
-    meshopt_mod.addIncludePath(b.path("../../../include"));
     meshopt_mod.addImport("meshopt", meshopt_c_mod);
-    meshopt_c.addIncludePath(b.path("../../../include"));
 
     cgltf_mod.addImport("cgltf", cgltf_c_mod);
     cgltf_mod.addImport("vertexStruct", vertexStruct_mod);
@@ -222,7 +213,7 @@ pub fn build(b: *std.Build) void {
 
     exe_mod.addImport("resourceProcess", resourceProcess_mod);
     exe_mod.addImport("db", db_mod);
-    exe_mod.addLibraryPath(meshopt_dep.path("install/lib"));
+    exe_mod.addLibraryPath(meshopt_dep.namedLazyPath("meshoptimizer_lib"));
     exe_mod.linkSystemLibrary("meshoptimizer", .{ .preferred_link_mode = .static });
 
     exe_mod.addLibraryPath(cglm_dep.namedLazyPath("cglm_lib"));
