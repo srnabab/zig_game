@@ -113,6 +113,12 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .link_libc = true,
     });
+    {
+        const toplevel = sdl3Module.builder.top_level_steps.get("build_sdl3");
+        if (toplevel) |l| {
+            sdl_c.step.dependOn(&l.step);
+        }
+    }
     const sdl_c_mod = sdl_c.createModule();
     const sdl_mod = b.createModule(.{
         .root_source_file = b.path("monsoon/sdl.zig"),
